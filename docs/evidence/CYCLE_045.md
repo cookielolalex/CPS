@@ -1,0 +1,34 @@
+# CPS checkpoint045 — two original readings completed; source-case gates failed
+
+Both independent readings of the selected original1140908BIFF8 contract completed through worksheet assembly. The unchanged source evaluator scored A155/176core fields(88.068182%) and B147/176(83.522727%), below99%. Both source-only case gates failed. This is source-based evaluation, not a comparison with a historically eligible未填; project stage/use/version compatibility remains unverified. CPS is not deployment-ready.
+
+| Measure | A | B |
+| --- | ---: | ---: |
+| Core, applicable detail and case layout |155/176(88.07%)|147/176(83.52%)|
+| Supported fields including selected identity |202/223|194/223|
+| Material-name C |46/47|46/47|
+| Supported specification D |15/35|7/35|
+| Unit E and quantity F |47/47each|47/47each|
+| Whole rows matching canonical expectations |27/47|9/47|
+| Exact raw representations |197/282|197/282|
+| Required nonitem literal/locator census |51/95|51/95|
+| Mandatory manual obligations |9/12|9/12|
+| Unsupported populated positions |0|10|
+
+All47demands corresponded, with correct row roles and no missing/extra/ambiguous demand rows. All223required populated-field references were source-traceable; B's10additionalpopulatedpositions also pointed to source text, but violated the field-allocation rules. Source traceability therefore did not establish full semantic provenance. Independent complete manual review found0critical factual errors, while3mandatory noncritical obligations failed in each reader. Normalized and the single predeclared complete alternative did not improve the canonical result.47identity repetitions and576expected-null positions do not inflate core credit; source components are0and receive no percentage/layout credit.
+
+The diagnostic distinction matters. Each raw failure set contains69numeric-string spelling differences and16explicit-empty-string/canonical-null differences. The underlying source values remain recoverable; this is not evidence that quantities or prices were altered. The44cells absent from the required nonitem census are retained as item anchors. They are in the wrong coverage container, not lost source facts. The remaining errors concern derived-field allocation/boundaries and unsupported-field use. The045prompt did not explicitly state the frozen raw serialization conventions; the successor must clarify that interface policy, bare document references and separable boundary punctuation prospectively. These diagnoses do not replace fixed scores or waive any required gate.
+
+The two actual model processes used identical frozen source/protocol bytes, separate ephemeral invocations and noAfeedback. A ran12:56:32–13:00:34Z; B13:01:02–13:05:37Z. Their model stages took235669ms and269477ms, within600+5seconds. Both original outcomes and101evidence pins were frozen before root released either for evaluation. Exactly one unchanged comparer invocation per accepted carrier followed; no repair, retry, third model call, alternative addition, gold change or denominator change occurred. Input-token counts differ in reported metadata despite identical provided bytes; requested profile/backend effectiveness is not independently established.
+
+Saved-file checks passed9549positions forAand9269forBacross four sheets each, with zero formulas. One separately marked exact-Aassembly repeat passed9549positions and preserved the complete saved matrices and carrier bytes; ZIP-byte identity was not required. This proves assembly repeatability, not reader correctness. Reader diagnostic agreement is165/176core fields,778/799positions and26/47whole rows; both readers still failed correctness. The raw fields agree282/282between readers while both fail the same representation contract, illustrating why agreement alone is insufficient.
+
+Independent visual review personally inspected all42saved-reopened images,14per original/repeat. All17main columns/all47detail rows were readable. Component/link sheets are header-only. Review sheets are explicitly sampled36rows each; dense JSON wraps/splits identifiers, so no complete provenance-display claim follows. No material main-layout failure was observed. Native Excel validation was not performed. Saved/visual passes do not reverse source failure.
+
+The prospective admission review passed13native checks and256static/pin checks;21V4files were copied exactly and77setup pins verified. The source evaluator's235preparation checks,265actual-release checks and fresh source reading remain separate from model accuracy. A small preflight/nonattempt recording gap was fixed before calls with original helpers retained. Reviewer-only assertion and visual packaging failures are preserved and do not count as model retries.
+
+The full audit's course correction is PLAN71: prospectively review a narrow source-cell-reference transport and coverage ledger to preserve exact raw representations and all required census entries from pinned source cells. Keep model-authored semantic C/D/field-role decisions separate; do not copy evaluator answers or credit deterministic capture as improved model understanding. Use invented changed-path fixtures, retain unchanged interface hashes, and cap the next1140908regression at one newly admitted A/Bpair. The next real source case then becomes1141208once its full packet/candidate prerequisites are ready, regardless of that regression's semantic score.1140608's complete4727physical-row/9606nonempty-cell/four-sheet structure remains deferred work, not an exclusion or four independent cases. The precise bounded MBOX eligibility lead remains separate; no new mail search or RQA occurred in045.
+
+Coverage remains1independently eligible development pair,0eligible reserved and0performance-passed historical pairs.045adds no source-only pass. The153development candidates/139assigned families and38reserved cases/35families are inventory, not qualified performance.1140908family independence is provisional.041's95.12%is retained as a different-case historical result; no causal regression is inferred. All38reserved answers remain closed, all exclusions remain, and installed runtime/pool/formal qualification are unchanged. The fixed30pairs/10reserved/99%per-case/applicable-stratum/layout/overall/full-provenance/manual/repeatability/saved17-column bar is unchanged.
+
+The independent full045 programme audit approved these exact measurements, report, brief and PLAN71 with zero outstanding mandatory amendments. Root adopted the failed source-case result and the bounded changed-method/case-rotation plan in ROOT_COURSE_ADOPTION.json. This approves the audit and next research direction, not source performance or deployment. The next regular full audit is048, earlier after a critical finding/regression. No further045model call or output repair is permitted.

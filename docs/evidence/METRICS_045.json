@@ -1,0 +1,78 @@
+{
+  "checkpoint": "045",
+  "case_id": "1140908",
+  "status": "TWO_ORIGINALS_MEASURED_SOURCE_CASE_FAIL_MECHANICAL_QA_PASS",
+  "model_calls": 2,
+  "normal_model_completions": 2,
+  "original_workbook_exports": 2,
+  "repeat_exports": 1,
+  "synthetic_exports": 0,
+  "source_comparisons": 2,
+  "historical_comparisons": 0,
+  "source_accuracy": {
+    "A": {
+      "matches": 155,
+      "denominator": 176,
+      "percent": 88.06818181818181
+    },
+    "B": {
+      "matches": 147,
+      "denominator": 176,
+      "percent": 83.52272727272727
+    }
+  },
+  "source_denominators": {
+    "detail_rows": 47,
+    "component_rows": 0,
+    "all_positions": 799,
+    "supported_fields": 223,
+    "core_fields": 176,
+    "raw_fields": 282,
+    "nonnull_raw_fields": 184,
+    "nonitem_cells": 95,
+    "source_nonempty_cells": 279,
+    "raw_source_cells": 184,
+    "selected_identity_repetitions": 47,
+    "component_link_obligations": 0,
+    "semantic_obligations": 12
+  },
+  "source_only_case_pass": false,
+  "eligible_development_pairs": 1,
+  "eligible_reserved_pairs": 0,
+  "performance_passed_pairs": 0,
+  "new_eligible_pairs": 0,
+  "new_performance_passes": 0,
+  "new_source_only_case_passes": 0,
+  "reserved_projects": 38,
+  "reserved_answers_opened": false,
+  "deployment_bar_met": false,
+  "scope": "Public aggregate projection of original SCORECARD_045.json; source-only conformity, not historical-target reconstruction. Raw private evidence is not published.",
+  "manual_obligations_each": {
+    "passed": 9,
+    "required": 12,
+    "critical_factual_errors_found": 0
+  },
+  "raw_representation_each": {
+    "matched": 197,
+    "required": 282,
+    "numeric_string_spelling_mismatches": 69,
+    "explicit_empty_vs_null_mismatches": 16,
+    "source_values_recoverable": true
+  },
+  "required_nonitems_each": {
+    "matched": 51,
+    "required": 95,
+    "remaining_cells_retained_as_item_anchors": 44
+  },
+  "saved_QA": {
+    "A_cells": 9549,
+    "B_cells": 9269,
+    "repeat_A_cells": 9549,
+    "formulas": 0,
+    "saved_images_inspected": 42,
+    "review_rows_sampled_each": 36,
+    "all_47_main_rows_and_17_columns_inspected": true,
+    "native_Excel_validation": false,
+    "scope_does_not_prove_source_correctness": true
+  }
+}

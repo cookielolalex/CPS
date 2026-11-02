@@ -1,0 +1,264 @@
+{
+  "snapshot_date": "2026-11-02",
+  "placeholder_definition": "../../PUBLICATION_SCOPE.md",
+  "records": [
+    {
+      "role": "installed-guideline",
+      "local_path": "{WORKSPACE}/CPS/GUIDELINE_V4.md",
+      "bytes": 13369,
+      "sha256": "c9bb7e0ab4cddf9363d94f567fb63a5005bcd76784b6923b74f025fcf49e6e95",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "installed-qualification",
+      "local_path": "{WORKSPACE}/CPS/QUALIFICATION.json",
+      "bytes": 4287,
+      "sha256": "3cbf50fc6f296085f4ec26952c17ec7bfb19d1f925412495ab620bbb28fcae0e",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "installed-pool",
+      "local_path": "{WORKSPACE}/CPS/ACTIVE_POOL.json",
+      "bytes": 1848,
+      "sha256": "ec92d42b43cf2d26df54290108b5f99232a721ea8831e784566fa43d7afa5d59",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "installed-source-policy",
+      "local_path": "{WORKSPACE}/CPS/SOURCE_POLICY.md",
+      "bytes": 2054,
+      "sha256": "3d67046c3e0b7b1ae1a7f70ebd90bd666b777a70c80754d6c784cd480b82cb61",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "installed-target-eligibility",
+      "local_path": "{WORKSPACE}/CPS/TARGET_ELIGIBILITY.md",
+      "bytes": 4144,
+      "sha256": "4b327f935b5d987a755e21570f1e8ff1ff480d63e53d1a8368138f3204a1e737",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "current-paused-state",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/STATE.json",
+      "bytes": 55763,
+      "sha256": "3fabcf6b122c9637a7e91150e69c76c6c375ecea26f82671156de84325a9f5e2",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "installed-paused-programme",
+      "local_path": "{WORKSPACE}/CPS/REFINEMENT_PROGRAMME.json",
+      "bytes": 13633,
+      "sha256": "726e8e8a3f7e19014e9621823ab12ce49617fba085aca94896cecde6e19a1303",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "pause-after045",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/pause_after045_001/RECORD.json",
+      "bytes": 3684,
+      "sha256": "fe8c9930336c7ac4bd9598276c379c9627309d090c06d85ec959f67e6521f82f",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "reviewed-next-plan",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/PLAN_v71.md",
+      "bytes": 12456,
+      "sha256": "8e30eb14294a5724fe494f8d721931c24492fc50cc55f4a778c0098ad9451898",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "next-cycle-brief",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/NEXT_CYCLE_BRIEF.md",
+      "bytes": 3423,
+      "sha256": "800cde47dfd2b8b472589efcf67669619d0bb6fae2d3f33ba55d7394c2223bd2",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "cycle045-report",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/REPORT.md",
+      "bytes": 6814,
+      "sha256": "f3d93cd15b33cffd9a211eb9a62abcb8d01bdd08890737f01b83bf01f732c0f6",
+      "content_in_repository": true,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "scorecard045",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/SCORECARD_045.json",
+      "bytes": 16713,
+      "sha256": "87d3b3a7d7590aab5216423e61b2acb962b52accdfc104c6a183c28ffd4685e8",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "closure045-verification",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/FINAL_VERIFICATION_045.json",
+      "bytes": 19177,
+      "sha256": "ab3a7459afc220f64dd7bcd8c59b0447cce3711bcad3d834ec251a41dd54c099",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "closure045-manifest",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/checkpoint_045/MANIFEST.json",
+      "bytes": 5230,
+      "sha256": "9fee46a02b4f860a512860eb3257911ab5b9ba6f30193e92458947cbfc5e3582",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "closure045-root-freeze",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/qualification045_001/ROOT_FREEZE.json",
+      "bytes": 10133,
+      "sha256": "43aadbe5742f22bce98763cd2c407c27c87c15c4ec12b024c7c62ffa874059bc",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "full-audit045",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/course045_review001/DECISION.json",
+      "bytes": 4784,
+      "sha256": "dcfb109e7c7cbe87c46d34bf626fb7e0366bd6875010e7a62ab40358c1f17688",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "full-audit045-safe-report",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/course045_review001/SAFE_REPORT.md",
+      "bytes": 11048,
+      "sha256": "d99be111500ffab6840cf8816b512c3bca28c02210188be55aededc0b4a9af81",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "source-evaluation045-freeze",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/source_evaluation045_001/FREEZE.json",
+      "bytes": 2200,
+      "sha256": "454b78a33877efad16b939d2b490a300b3c16652b7d0174de63558a6379d2d16",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "source-evaluation045-safe-report",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/source_evaluation045_001/SAFE_REPORT.md",
+      "bytes": 3573,
+      "sha256": "4b583861120c1ccbc3a8c9db5296143b271e31eaf97e92cfb3d3108774396242",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "source-evaluation045-safe-metrics",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/source_evaluation045_001/SAFE_MEASUREMENTS.json",
+      "bytes": 35050,
+      "sha256": "3ef59bfe2fcc91c5816bd24e1d2cdc525898eb11d4aa8ecea1ab07d9bc767287",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "source-evaluation045-next-method",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/source_evaluation045_001/SAFE_NEXT_METHOD.md",
+      "bytes": 1640,
+      "sha256": "a27632b4f5520b9748c4e703747fab7c986c121cde06d8c569e29b05b313a713",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "visual045-freeze",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/visual_audit045_001/FREEZE.json",
+      "bytes": 1951,
+      "sha256": "b564a1d6112386fb76d0a463086b8363e5b54f500507b6985e78eb4537d46204",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "visual045-report",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/visual_audit045_001/REPORT.md",
+      "bytes": 2917,
+      "sha256": "b77bdde3f0805f86a7d91f16d2f02380952360dc5e7a0568d1f95b3cae88c84f",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "generated-output045-freeze",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/qualification045_001/GENERATED_OUTPUT_FREEZE.json",
+      "bytes": 40652,
+      "sha256": "a18b5e83dea6d87be5e06e50541c6d8442d1108293a3375de25758527db84de2",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "generated-output045-release",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/qualification045_001/GENERATED_ACCESS_RELEASE.json",
+      "bytes": 4921,
+      "sha256": "302e8a9e5cbb6dc18eace625061fb344354e489a4f266447923555b63a26d529",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "source043-preparation-freeze",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/source_preparation043_002/FREEZE.json",
+      "bytes": 690,
+      "sha256": "964748bc52ea1e8c1d930299541cf6e6a023e2655b2ae6eaf5d67a97bc848359",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "source043-expectations-freeze",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/source_expectations043_001/FREEZE.json",
+      "bytes": 825,
+      "sha256": "ba1d13753c32accc383114ab93f43e53d328eb01e7cc91973ccd5dc3040e53b0",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "tuning-split",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/inputs/generation_tuning.json",
+      "bytes": 139830,
+      "sha256": "2a514913f12f3fa143b6efd76b50d586213dc72fae0cf2c512fab8c4a448b0c6",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "rolling-split",
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/cps_refinement_001/inputs/generation_rolling_validation.json",
+      "bytes": 41469,
+      "sha256": "f9f76da5e459b4173cf3499fb67f824aad66f01986cbeaba6e61331ce46d2a9f",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "codex-rqa-v1.4",
+      "local_path": "{WORKSPACE}/codex/RQA_REQUIREMENTS_LATEST.md",
+      "bytes": 21495,
+      "sha256": "caea6e5c7305671e7935cb328085215007041b09d2f2c4e0ac68562f08990871",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "inherited-rqa-v1.0",
+      "local_path": "{WORKSPACE}/codex/references/CLAUDE_RQA_REQUIREMENTS_v1.0_20261002.md",
+      "bytes": 9606,
+      "sha256": "c0d47bf19134a07069f930a652781d042c81d6c4ceaa7a0c5bc3d5089786d609",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    },
+    {
+      "role": "inherited-qa-v2.24",
+      "local_path": "{WORKSPACE}/codex/references/QUESTIONNAIRE_REQUIREMENTS_v2.24.md",
+      "bytes": 99824,
+      "sha256": "4a93446d1ca1e21429b7efb1e50ccd5ba9e1d179a6a86512d25bb710d8004aca",
+      "content_in_repository": false,
+      "note": "Local-only original unless explicitly included. Hash is identity, not semantic verification or permission."
+    }
+  ],
+  "reserved_target_contents_accessed_for_publication": false,
+  "originals_modified": false
+}

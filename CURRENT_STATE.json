@@ -1,0 +1,96 @@
+{
+  "project": "CPS - Contract Parsing System",
+  "snapshot_date": "2026-11-02",
+  "timezone": "Asia/Taipei",
+  "status": "PAUSED_BY_USER",
+  "deployment_status": "NOT_READY_FOR_UNATTENDED_DEPLOYMENT",
+  "completed_checkpoint": "045",
+  "plan_version": 71,
+  "automation": {
+    "id": "cps-refinement-cycles",
+    "status": "PAUSED"
+  },
+  "development_allowed": false,
+  "resume_requires_explicit_user_request": true,
+  "upload_is_not_resume_authorization": true,
+  "source_only_case": {
+    "case_id": "1140908",
+    "A": {
+      "matches": 155,
+      "denominator": 176,
+      "percent": 88.06818181818181
+    },
+    "B": {
+      "matches": 147,
+      "denominator": 176,
+      "percent": 83.52272727272727
+    },
+    "passed": false
+  },
+  "eligible_development_pairs": 1,
+  "eligible_reserved_pairs": 0,
+  "performance_passed_historical_pairs": 0,
+  "inventory": {
+    "development_candidates": 153,
+    "assigned_development_families": 139,
+    "tuning": 118,
+    "rolling": 35,
+    "reserved_cases": 38,
+    "assigned_reserved_families": 35
+  },
+  "reserved_answers_opened": false,
+  "reserved_release_requires": [
+    "frozen final candidate",
+    "frozen evaluator",
+    "frozen complete source expectations and input manifests",
+    "all 38 generated outputs frozen"
+  ],
+  "historical_pool": {
+    "current_candidates": 23,
+    "candidate_count_is_not_eligibility": true,
+    "original_holdouts_are_exposed": true
+  },
+  "excluded_cases": [
+    "1110106",
+    "1110201",
+    "1110909",
+    "1111101",
+    "1121102",
+    "1130309",
+    "1130906"
+  ],
+  "fixed_deployment_bar": {
+    "independently_eligible_revision_compatible_pairs": 30,
+    "reserved_pairs_minimum": 10,
+    "source_core_percent_minimum": 99,
+    "applies_per": [
+      "case",
+      "applicable detail stratum",
+      "applicable component stratum",
+      "claimed layout",
+      "overall"
+    ],
+    "required": [
+      "complete raw records",
+      "complete semantic provenance",
+      "complete required nonitem census",
+      "all mandatory manual obligations",
+      "zero unresolved critical errors",
+      "two original readers passing correctness",
+      "assembly repeatability",
+      "saved 17-column workbook QA",
+      "visual QA"
+    ]
+  },
+  "next_after_explicit_resume": {
+    "checkpoint": "046",
+    "method": "Narrow source-reference/coverage transport and generic field-role clarification; preserve immutable source and current gold",
+    "exposed_regression_case": "1140908",
+    "maximum_new_regression_pairs": 1,
+    "next_real_source_case": "1141208",
+    "deferred_complete_structure_case": "1140608",
+    "next_regular_full_audit": "048"
+  },
+  "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
+  "read_first": "AGENTS.md"
+}

@@ -1,0 +1,73 @@
+{
+  "scope": "Public policy documentation adaptation. Not the original frozen references and not a replacement for mandatory full RQA inheritance reading. Original sources unchanged.",
+  "sources": [
+    {
+      "local_path": "{WORKSPACE}/CPS/GUIDELINE_V4.md",
+      "bytes": 13369,
+      "sha256": "c9bb7e0ab4cddf9363d94f567fb63a5005bcd76784b6923b74f025fcf49e6e95"
+    },
+    {
+      "local_path": "{WORKSPACE}/CPS/SOURCE_POLICY.md",
+      "bytes": 2054,
+      "sha256": "3d67046c3e0b7b1ae1a7f70ebd90bd666b777a70c80754d6c784cd480b82cb61"
+    },
+    {
+      "local_path": "{WORKSPACE}/CPS/TARGET_ELIGIBILITY.md",
+      "bytes": 4144,
+      "sha256": "4b327f935b5d987a755e21570f1e8ff1ff480d63e53d1a8368138f3204a1e737"
+    },
+    {
+      "local_path": "{WORKSPACE}/codex/RQA_REQUIREMENTS_LATEST.md",
+      "bytes": 21495,
+      "sha256": "caea6e5c7305671e7935cb328085215007041b09d2f2c4e0ac68562f08990871"
+    },
+    {
+      "local_path": "{WORKSPACE}/codex/references/CLAUDE_RQA_REQUIREMENTS_v1.0_20261002.md",
+      "bytes": 9606,
+      "sha256": "c0d47bf19134a07069f930a652781d042c81d6c4ceaa7a0c5bc3d5089786d609"
+    },
+    {
+      "local_path": "{WORKSPACE}/codex/references/QUESTIONNAIRE_REQUIREMENTS_v2.24.md",
+      "bytes": 99824,
+      "sha256": "4a93446d1ca1e21429b7efb1e50ccd5ba9e1d179a6a86512d25bb710d8004aca"
+    },
+    {
+      "local_path": "{WORKSPACE}/codex/REFERENCE_PROVENANCE.json",
+      "bytes": 2293,
+      "sha256": "fc696417832a94b282ee77dc8c39f0a4e7fcb9ac71e53d7407909b5fb5b467c6"
+    },
+    {
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/rqa034_response_001/ROOT_ADOPTION.json",
+      "bytes": 6562,
+      "sha256": "398ba607ee3d01bc1053b71d501fbbfc9cebc49f91ec20af9aefee1290d3b74a"
+    },
+    {
+      "local_path": "{WORKSPACE}/runs/CONTRACT-WEITIAN-20261030-001/rqa034_response_001/ELIGIBILITY_UPDATE.json",
+      "bytes": 1256,
+      "sha256": "8232eb1d9de484606b57424c93befd4ccbcae8827e3e82838f6ced10b0ef0d46"
+    }
+  ],
+  "exports": [
+    {
+      "path": "docs/policy/GUIDELINE_V4.md",
+      "bytes": 14203,
+      "sha256": "ecf3479a1e7990f1394a86a86b27ae71f1c90f7d2b27a21d6e118641f04bf15f"
+    },
+    {
+      "path": "docs/policy/SOURCE_AND_ELIGIBILITY.md",
+      "bytes": 9461,
+      "sha256": "9804552b940e76cfe5a141f5cf9ac545c779d25522cb09ed57542f47921218e2"
+    },
+    {
+      "path": "docs/policy/RQA.md",
+      "bytes": 16377,
+      "sha256": "c92e8436be5696b4e471b09c876693e8dd22800c12f51b71fcaf8ba633c7a1fc"
+    }
+  ],
+  "transformations": [
+    "Add explicit public-export/baseline/pause notice to guideline",
+    "Convert respondent-specific condition quote to the same impersonal two-condition policy",
+    "Summarize source/eligibility and RQA rules; omit customer details, exact private source filenames/prices and raw respondent answers",
+    "Retain required local reference paths and original hashes; distinguish general rules, CPS corrections, superseded rules and scope-limited human gate notice"
+  ]
+}

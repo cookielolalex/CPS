@@ -1,0 +1,296 @@
+{
+  "schema": "cps.publication.v1",
+  "snapshot_date": "2026-11-02",
+  "timezone": "Asia/Taipei",
+  "repository": "cookielolalex/CPS",
+  "status": "PAUSED_BY_USER_NOT_DEPLOYED",
+  "scope": "Public technical handoff; not a byte-complete private experiment archive",
+  "manifest_self_excluded": true,
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 241,
+      "sha256": "845ab5932d5c1dda27a612a224ece7e1a2fae32663f02a89adaedf81db9d0674"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 5151,
+      "sha256": "24168c2fb813dce79020ceace93c5c7a0448ea1c6b6265982e3e441938597f8f"
+    },
+    {
+      "path": "CURRENT_STATE.json",
+      "bytes": 2833,
+      "sha256": "b9a163da173da29703c834f3472b55aba45a9fe19e62ea4769831317909d8b1d"
+    },
+    {
+      "path": "docs/evidence/CYCLE_045.md",
+      "bytes": 6814,
+      "sha256": "f3d93cd15b33cffd9a211eb9a62abcb8d01bdd08890737f01b83bf01f732c0f6"
+    },
+    {
+      "path": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
+      "bytes": 14053,
+      "sha256": "69df65454298fd193dcdd0d509fb1ad50b10c070203aa0dabdaf4d8db48f1bf1"
+    },
+    {
+      "path": "docs/evidence/METRICS_045.json",
+      "bytes": 2300,
+      "sha256": "b667c7c3024fea919a9b6af47000b9caa8fd299ede52b8a815ce4478da30293a"
+    },
+    {
+      "path": "docs/evidence/PUBLICATION_VALIDATION.json",
+      "bytes": 1792,
+      "sha256": "ee4f99118a6b8aba691ab3a56d4096d3edd0580673635e5550c9098d2eb9fd1e"
+    },
+    {
+      "path": "docs/handoff/CURRENT_STATUS.md",
+      "bytes": 7100,
+      "sha256": "11b51865be9803bd994dd9adeedd4f22a5a338bf81ebacad342c3d88b0a04ecd"
+    },
+    {
+      "path": "docs/handoff/DECISIONS.md",
+      "bytes": 8359,
+      "sha256": "e72ed1c77020866a52d464337567c9881203132ce4a173ebb95c0cb21abb702f"
+    },
+    {
+      "path": "docs/handoff/EVALUATION.md",
+      "bytes": 8704,
+      "sha256": "12daa452d7073731f08b5c1e35fb222bb733cb21b7e30b12fb47ba51303db1d2"
+    },
+    {
+      "path": "docs/handoff/RESUME_PLAN.md",
+      "bytes": 9322,
+      "sha256": "4e371b31dd3998412c6bd5ed80b9f416f8a828aef5743f602ef3a1fac7dfde2e"
+    },
+    {
+      "path": "docs/implementation/ARCHITECTURE.md",
+      "bytes": 9151,
+      "sha256": "104f4af2edec324eaa3f061429d712cdf3f0d1830e427eea00ff4c14c2dc822e"
+    },
+    {
+      "path": "docs/implementation/LOCAL_SETUP.md",
+      "bytes": 5895,
+      "sha256": "455af90c69f58ca25d63947f487edacc41f82ce4c9430426315a5fcb1576d993"
+    },
+    {
+      "path": "docs/implementation/SOURCE_EXPORT_MANIFEST.json",
+      "bytes": 22017,
+      "sha256": "d10d2885a1be6a9d173ba6e4c98d19ecb59277987bc5d720818b7038c2664414"
+    },
+    {
+      "path": "docs/policy/EXPORT_PROVENANCE.json",
+      "bytes": 3046,
+      "sha256": "52d584b99dfd87cd7f9dcd797535f900e71024386dbf9a2db0b35929c9bf85de"
+    },
+    {
+      "path": "docs/policy/GUIDELINE_V4.md",
+      "bytes": 14203,
+      "sha256": "ecf3479a1e7990f1394a86a86b27ae71f1c90f7d2b27a21d6e118641f04bf15f"
+    },
+    {
+      "path": "docs/policy/RQA.md",
+      "bytes": 16377,
+      "sha256": "c92e8436be5696b4e471b09c876693e8dd22800c12f51b71fcaf8ba633c7a1fc"
+    },
+    {
+      "path": "docs/policy/SOURCE_AND_ELIGIBILITY.md",
+      "bytes": 9461,
+      "sha256": "9804552b940e76cfe5a141f5cf9ac545c779d25522cb09ed57542f47921218e2"
+    },
+    {
+      "path": "PUBLICATION_SCOPE.md",
+      "bytes": 3854,
+      "sha256": "65c3b14d19715d937c818457f50bd86c8d8940a6824a90259801394088fc4127"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4010,
+      "sha256": "8dfbefe26c4c219d86c93d66543fe1beccf79bd5da96d46f8a89e12f9beefdb6"
+    },
+    {
+      "path": "research/checkpoint045/check_proposed_admission.ps1.txt",
+      "bytes": 6166,
+      "sha256": "ebb0dad295da195e4c629ed3fd26b446261b3ab67203719ce9507517c85ef0b1"
+    },
+    {
+      "path": "research/checkpoint045/child_capture.ps1",
+      "bytes": 4780,
+      "sha256": "f3fe889aaa10a0139f61195f0e47c8ef8903d4bba944ec570ca5dd48935fd5fc"
+    },
+    {
+      "path": "research/checkpoint045/compact_expand.py",
+      "bytes": 7000,
+      "sha256": "556cac0c90119494917a4a224a35bc52466efd6d45adbb8e5459c78ae9047afd"
+    },
+    {
+      "path": "research/checkpoint045/COMPACT_TRANSPORT.md",
+      "bytes": 5179,
+      "sha256": "daa274aaa78f73205d42ffa42d78cd2e2d708ff288e9843144665587bbceb040"
+    },
+    {
+      "path": "research/checkpoint045/inline_null_profile.py",
+      "bytes": 1985,
+      "sha256": "5245a22493d908bd8bd0a0ef3e4d8e006182422c6727ee8cd66771cf4161f385"
+    },
+    {
+      "path": "research/checkpoint045/postprocess.py",
+      "bytes": 4817,
+      "sha256": "b8a6e3fabf59088b992ba235532a02c5b562177d6039bba727ea63626bfe2e46"
+    },
+    {
+      "path": "research/checkpoint045/postqa/compare_repeat.py",
+      "bytes": 1727,
+      "sha256": "55d90a6b2c02bca02019441527b438755c354aff12372abf5aad636da579c6e7"
+    },
+    {
+      "path": "research/checkpoint045/postqa/frozen_inputs.ps1",
+      "bytes": 1341,
+      "sha256": "53faf74d31e84857a37ed0662a46c725780310f3997861a81b0d381bf376e17c"
+    },
+    {
+      "path": "research/checkpoint045/postqa/qa_saved_external.py",
+      "bytes": 4078,
+      "sha256": "6180b9df3e7a4b3de11122dfb92ab7b67882343670a703743dbedf8ca5e52b7e"
+    },
+    {
+      "path": "research/checkpoint045/postqa/render_saved_ranges.mjs",
+      "bytes": 3254,
+      "sha256": "53cac078b40df80e4bc415850d508e94af1fb671211b907fcf20ffab719998d6"
+    },
+    {
+      "path": "research/checkpoint045/postqa/run_postqa.ps1.txt",
+      "bytes": 10289,
+      "sha256": "f7467bbd7e3e31a81dc6aac08423effe2579652f24656eec5e6825ee0547de0c"
+    },
+    {
+      "path": "research/checkpoint045/PROMPT_CONTRACT.md",
+      "bytes": 1544,
+      "sha256": "950bff19a24391596eb0652a64dd5bdef2907d97140904435dde97113dfc9dc9"
+    },
+    {
+      "path": "research/checkpoint045/qa_saved.py",
+      "bytes": 3993,
+      "sha256": "5357254b7ae34b5ec26645cad2490f7223c238d412b158e4cbb55ffc151f2cd5"
+    },
+    {
+      "path": "research/checkpoint045/reader_packet_v2.py",
+      "bytes": 5096,
+      "sha256": "7181052f48a0d15e58042e80bf7d9c08bc5b7ea529344f876a7af8097938741d"
+    },
+    {
+      "path": "research/checkpoint045/RESPONSE_SCHEMA.json",
+      "bytes": 123,
+      "sha256": "53c816e86de80f835aada17c5f14aefa2020e1e4dd5c4a633cd16506f8dea9d6"
+    },
+    {
+      "path": "research/checkpoint045/run_integration.ps1.txt",
+      "bytes": 9749,
+      "sha256": "52d54d54fadc48b48751c666cb391b63247a4120dd6c629aed6f3cf7ea71a7fc"
+    },
+    {
+      "path": "research/checkpoint045/source_verify.py",
+      "bytes": 8231,
+      "sha256": "ecc098b6074b1db1303de070fcfac711e774375fd34f881b836f07e2901697eb"
+    },
+    {
+      "path": "research/checkpoint045/strict_input.py",
+      "bytes": 9538,
+      "sha256": "df9de43f4abc20ff08452c6750a2425e91f11c77daa78889cf35a6de1f034a8b"
+    },
+    {
+      "path": "research/checkpoint045/TimedCapture.cs",
+      "bytes": 1993,
+      "sha256": "36e3ec645596364fd1707993c9599b4d7e1b6c0e8d63f4ef9c272cf694509eee"
+    },
+    {
+      "path": "research/checkpoint045/writer/receipt_bytes.mjs",
+      "bytes": 744,
+      "sha256": "b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c"
+    },
+    {
+      "path": "research/checkpoint045/writer/validate_carrier_v4.mjs",
+      "bytes": 1121,
+      "sha256": "984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013"
+    },
+    {
+      "path": "research/checkpoint045/writer/validate_source_v4.mjs",
+      "bytes": 1099,
+      "sha256": "f737b465fb8b0b3687f2e48af0077366258712a89323be04b5afc0209f511952"
+    },
+    {
+      "path": "research/checkpoint045/writer/writer004.mjs",
+      "bytes": 24011,
+      "sha256": "70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7"
+    },
+    {
+      "path": "research/checkpoint045/XLSX_READING_PROTOCOL.md",
+      "bytes": 6360,
+      "sha256": "8261def958e9404f847e2a8c6c5ed33d65a9f3bccea414e161cf219da5ddad27"
+    },
+    {
+      "path": "research/evaluation/compare_source043.py",
+      "bytes": 10949,
+      "sha256": "1ececf30b034495bff049a629a15ccfa430f76a769d8f651d122be00aa069cb1"
+    },
+    {
+      "path": "research/README.md",
+      "bytes": 942,
+      "sha256": "df9a322174209b2823f004551f3eead9abbe5071a54ec06a2987d9c42b9e74d4"
+    },
+    {
+      "path": "src/installed_baseline/cps.ps1.txt",
+      "bytes": 3600,
+      "sha256": "d931a7bf5f9525fbda62c2b0b8f38faffe60f1d9604032c32b13644217383235"
+    },
+    {
+      "path": "src/installed_baseline/eligibility/screen_targets.py",
+      "bytes": 18456,
+      "sha256": "d29a82810508ce487148f46de34c0d7549df255dbd0354f9d083fafbb8129177"
+    },
+    {
+      "path": "src/installed_baseline/eligibility/test_screen_targets.py",
+      "bytes": 7194,
+      "sha256": "31c1d8651e152aba36734f5b1da3551f3cfafe46b23b61ad3671e83d6f56c003"
+    },
+    {
+      "path": "src/installed_baseline/README.md",
+      "bytes": 1042,
+      "sha256": "9ec1a3b4bde8c3b9b46bfb473bd7a3626a72480888cc2f7b23c8bf3783610d57"
+    },
+    {
+      "path": "src/installed_baseline/runtime/cps.py",
+      "bytes": 33384,
+      "sha256": "e9d25b479b41d437c7c1d1ef64ba8d607491099010e7ce5c073fb974a246cd6b"
+    },
+    {
+      "path": "src/installed_baseline/runtime/export_workbooks.mjs",
+      "bytes": 3782,
+      "sha256": "993491bb1af1b232e39b348507a1cf8073e303c463099443724032268c609af7"
+    },
+    {
+      "path": "src/installed_baseline/runtime/README.md",
+      "bytes": 6651,
+      "sha256": "35fc22903386c8855a4965fc540e026730e0e3b4e404f474f268723c5d2096ed"
+    },
+    {
+      "path": "src/installed_baseline/runtime/test_cps.py",
+      "bytes": 16320,
+      "sha256": "82658fc890b2fe0884628c068850f66960ce4f283c5485c640b4eeb12b03f6c4"
+    },
+    {
+      "path": "src/installed_baseline/runtime/verify_run.py",
+      "bytes": 4701,
+      "sha256": "fe0eb1728bed5ff5a73f2ac650f90ab741d0177e438feb5d3e728b2063f33a91"
+    },
+    {
+      "path": "tests/README.md",
+      "bytes": 1556,
+      "sha256": "f4f164c076e40690b6e6dd4bf84be936daa05bbb5b5f37a1094636915e91be07"
+    },
+    {
+      "path": "tools/verify_handoff.py",
+      "bytes": 2314,
+      "sha256": "b7d4509808d69b674f1ce22d2df6c0b61e8d9c22b37ccfa7ef139590ee769d74"
+    }
+  ]
+}

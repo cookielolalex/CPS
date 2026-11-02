@@ -1,0 +1,7 @@
+# Generic output construction contract — inline-null-reasons001
+
+Use the enforced `cps.compact-cached-xls.inline-null-reasons.v1` subprofile of the existing compact carrier. Return the unchanged outer compact_json envelope and base inner schema. The reasons member must be exactly {}. For every null A–Q field, write its nonempty literal explanation directly as the proof string in that row or in an explicitly selected shared fieldset. Do not create reason-reference objects or a standalone reason library. Share repeated explanations through explicit fieldsets when appropriate; never omit a required field, create a default explanation, overlap field declarations, or infer a source value.
+
+Evidence dictionaries and fieldsets retain their existing reference rules: every referenced ID exists, every declaration is used, and evidence remains source-backed. Place non-field notes only in the declared metadata, limitations, review-reason or nonitem locations, under their existing constraints. Before returning, check the actual declared/referenced evidence and fieldset IDs and the complete17-field union for every item/component. Do not prune or repair a previous response. Preserve all raw characters and all source obligations.
+
+This is generic transport guidance only. It contains no case identity, source packet, expected cell, failed-row example or scoring hint. The separate042 C/D reading candidate is retained byte-identically and remains unmeasured. A future source packet and fresh exact admission are separate prerequisites.

@@ -1,0 +1,104 @@
+[CmdletBinding()]
+param(
+  [switch]$Execute,
+  [Parameter(Mandatory=$true)][ValidateSet('A','B')][string]$RunId,
+  [Parameter(Mandatory=$true)][string]$SourceWorkbook,
+  [Parameter(Mandatory=$true)][string[]]$Images
+)
+$ErrorActionPreference='Stop'
+$root=[IO.Path]::GetFullPath($PSScriptRoot)
+$utf8=[Text.UTF8Encoding]::new($false)
+function Hash([string]$p) { (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() }
+function SaveJson([string]$p,$v) {
+  $f=[IO.File]::Open($p,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+  try { $b=$utf8.GetBytes(($v|ConvertTo-Json -Depth 20)+[Environment]::NewLine);$f.Write($b,0,$b.Length) } finally {$f.Dispose()}
+}
+$freeze=Get-Content -LiteralPath (Join-Path $root 'SETUP_FREEZE.json') -Raw -Encoding utf8 | ConvertFrom-Json
+foreach($pin in $freeze.pins) {
+  if ((Hash $pin.path) -cne $pin.sha256 -or (Get-Item -LiteralPath $pin.path).Length -ne $pin.bytes) {throw "SETUP_PIN_CHANGED: $($pin.path)"}
+}
+$manifest=Get-Content -LiteralPath (Join-Path $root 'SOURCE_MANIFEST.json') -Raw -Encoding utf8 | ConvertFrom-Json
+if($manifest.allowed_generation_inputs.Count -ne 4 -or $manifest.images.Count -ne 3){throw 'EXACT_FOUR_READER_INPUTS_REQUIRED'}
+$readerPins=@($manifest.literal_reader_data)+@($manifest.images)
+for($i=0;$i -lt $readerPins.Count;$i++) {
+  $pin=$readerPins[$i]
+  if($manifest.allowed_generation_inputs[$i] -cne $pin.path -or (Hash $pin.path) -cne $pin.sha256 -or (Get-Item -LiteralPath $pin.path).Length -ne $pin.bytes){throw 'READER_PIN_CHANGED'}
+}
+if ($SourceWorkbook -cne $manifest.source.path -or (Hash $SourceWorkbook) -cne $manifest.source.sha256) { throw 'SOURCE_NOT_ADMITTED' }
+if ($Images.Count -ne $manifest.images.Count) {throw 'IMAGE_COUNT_MISMATCH'}
+for($i=0;$i -lt $Images.Count;$i++) {if($Images[$i] -cne $manifest.images[$i].path -or (Hash $Images[$i]) -cne $manifest.images[$i].sha256){throw 'IMAGE_NOT_ADMITTED'}}
+$binary='C:\CPS_LOCAL_USER\AppData\Roaming\npm\node_modules\@openai\codex\node_modules\@openai\codex-win32-x64\vendor\x86_64-pc-windows-msvc\bin\codex.exe'
+$node='C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
+$python='C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+$destination=Join-Path $root ('run'+$RunId)
+$output=Join-Path $root ('writer\output'+$RunId)
+if (Test-Path -LiteralPath $destination) {throw 'RUN_EXISTS_PRESERVE_FIRST_PASS'}
+if (Test-Path -LiteralPath $output) {throw 'WORKBOOK_EXISTS_PRESERVE_FIRST_PASS'}
+$response=Join-Path $destination 'response.json'
+$prompt=Join-Path $root 'PROMPT_v4.txt'
+$schema=Join-Path $root 'RESPONSE_SCHEMA.json'
+$argv=@('exec','--ephemeral','--ignore-user-config','--sandbox','read-only','--skip-git-repo-check','--model','gpt-6.1-sol','--config','model_reasoning_effort="medium"','--json','--color','never','--cd',$destination,'--output-schema',$schema,'--output-last-message',$response)
+foreach($imagePath in $Images){$argv+=@('--image',$imagePath)}
+$argv+='-'
+$plan=[ordered]@{schema='cps.real-development-integration045.v1';mode=$(if($Execute){'EXECUTE_REQUESTED'}else{'PLAN_ONLY_NO_PROCESS'});run_id=$RunId;executable=$binary;argv=$argv;source=$manifest.source;images=$manifest.images;prompt_sha256=(Hash $prompt);schema_sha256=(Hash $schema);reader_manifest_sha256=(Hash (Join-Path $root 'SOURCE_MANIFEST.json'));literal_reader_sha256=(Hash $manifest.literal_reader_data.path);generation_inputs=$manifest.allowed_generation_inputs;checkpoint045_root_execution_only=$true;requested_model='gpt-6.1-sol';requested_reasoning_effort='medium';effective_backend_profile='UNOBSERVED';generation_runtime_ms=600000;own_child_cleanup_ms=5000;generation_total_budget_ms=605000;normal_access='Existing CLI authentication internally; no direct account/config reads or edits';enforcement_limit='Prompt prohibits tools; JSONL rejects unexpected item/event types after execution. This is not OS-enforced no-tool isolation.';expected_inputs_provided=$false;real_source_inputs=1;repairs_allowed=$false;output=$output}
+if(-not $Execute){$plan|ConvertTo-Json -Depth 10;return}
+$admission=Join-Path $root 'ROOT_ADMISSION.json'
+if(-not(Test-Path -LiteralPath $admission)){throw 'ROOT_ADMISSION_REQUIRED'}
+$approved=Get-Content -LiteralPath $admission -Raw -Encoding utf8 | ConvertFrom-Json -DateKind String
+if($approved.setup_sha256 -cne (Hash (Join-Path $root 'SETUP_FREEZE.json')) -or $approved.status -cne 'ADMITTED' -or $RunId -cnotin $approved.allowed_runs){throw 'ROOT_ADMISSION_BINDING_REQUIRED'}
+if($RunId -eq 'B'){
+  $aresult=Join-Path $root 'runA\RESULT.json'
+  if(-not(Test-Path -LiteralPath $aresult)){throw 'RUN_A_COMPLETION_REQUIRED'}
+  $prior=Get-Content -LiteralPath $aresult -Raw -Encoding utf8 | ConvertFrom-Json
+  if($prior.status -cne 'MODEL_TO_WORKBOOK_ASSEMBLED_REVIEW_HELD'){throw 'STOP_AFTER_FAILED_FIRST_PASS'}
+}
+# Preparation-only pure boundary. No process, workbook, source or filesystem actions.
+function Assert-RootDateBoundary {
+  param($Approved,[ValidateSet('A','B')][string]$RunId,[DateTimeOffset]$FixedStop,[DateTimeOffset]$ObservedNow)
+  # Admission JSON must be read with ConvertFrom-Json -DateKind String.
+  if($Approved.root_stop_utc -isnot [string] -or $Approved.root_stop_utc -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$'){throw 'EXPLICIT_OFFSET_ROOT_STOP_STRING_REQUIRED'}
+  try {$admittedStop=[DateTimeOffset]::Parse($Approved.root_stop_utc,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None)} catch {throw 'INVALID_ROOT_STOP_INSTANT'}
+  if($admittedStop -ne $FixedStop){throw 'ROOT_STOP_BINDING_REQUIRED'}
+  if($Approved.min_remaining_A_seconds -isnot [long] -and $Approved.min_remaining_A_seconds -isnot [int]){throw 'A_RESERVE_INTEGER_REQUIRED'}
+  if($Approved.min_remaining_B_seconds -isnot [long] -and $Approved.min_remaining_B_seconds -isnot [int]){throw 'B_RESERVE_INTEGER_REQUIRED'}
+  if($Approved.min_remaining_A_seconds -lt 2130 -or $Approved.min_remaining_B_seconds -lt 1395){throw 'MINIMUM_PHASE_RESERVE_REQUIRED'}
+  $requiredReserve=if($RunId -eq 'A'){$Approved.min_remaining_A_seconds}else{$Approved.min_remaining_B_seconds}
+  if(($FixedStop-$ObservedNow).TotalSeconds -lt $requiredReserve){throw 'ROOT_PHASE_RESERVE_REACHED'}
+}
+
+$fixedStop=[DateTimeOffset]::Parse('2026-11-01T13:39:48Z',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None)
+Assert-RootDateBoundary -Approved $approved -RunId $RunId -FixedStop $fixedStop -ObservedNow ([DateTimeOffset]::UtcNow)
+New-Item -ItemType Directory -Path $destination -ErrorAction Stop | Out-Null
+SaveJson (Join-Path $destination 'INVOCATION.json') $plan
+
+Add-Type -Path (Join-Path $root 'TimedCapture.cs')
+. (Join-Path $root 'child_capture.ps1')
+
+$result=[ordered]@{status='STARTED';run_id=$RunId;started_utc=[DateTime]::UtcNow.ToString('o');first_pass_preserved=$true;repairs=0;model_invocations=0;semantic_approval=$false;deployment_credit=0}
+try {
+  $null=Child 'source_packet' $python @('-X','utf8','-B',(Join-Path $root 'reader_packet_v2.py'),'--manifest',(Join-Path $root 'SOURCE_MANIFEST.json'),'--report',(Join-Path $destination 'READER_PACKET_RESULT.json')) '' 10000 5000
+  $result.model_invocations=1
+  $null=Child 'model' $binary $argv $prompt 600000 5000 $response
+  if(-not(Test-Path -LiteralPath $response)){throw 'MODEL_RESPONSE_MISSING'}
+  $result.untouched_response_sha256=Hash $response
+  $null=Child 'boundary' $python @('-X','utf8','-B',(Join-Path $root 'postprocess.py'),'--run',$destination) '' 10000 5000
+  $carrier=Join-Path $destination 'carrier.json';$carrierHash=Hash $carrier
+  $null=Child 'strict' $python @('-X','utf8','-B',(Join-Path $root 'strict_input.py'),'--carrier',$carrier,'--allowlist',(Join-Path $root 'SOURCE_ALLOWLIST.json'),'--report',(Join-Path $destination 'STRICT_RESULT.json'),'--verify-source') '' 10000 5000
+  $null=Child 'validator' $node @((Join-Path $root 'writer\validate_carrier_v4.mjs'),'--carrier',$carrier) '' 15000 5000
+  if((Hash $carrier) -cne $carrierHash){throw 'CARRIER_CHANGED_BEFORE_WRITER'}
+  $markerReceipt=Join-Path $root 'SPREADSHEET_ARTIFACT_MARKER_RECEIPT.json'
+  if(-not(Test-Path -LiteralPath $markerReceipt)) {
+    $marker='C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\plugins\openai-primary-runtime\plugins\spreadsheets\skills\spreadsheets\container_tools\mark_artifact_operation_started.mjs'
+    $mr=Child 'artifact_marker' $node @($marker,'--operation-kind','create','--expected-output-count','2','--output-format','xlsx') '' 10000 5000
+    SaveJson $markerReceipt ([ordered]@{format='xlsx';operation='create';expected_output_count=2;run_id=$RunId;marker=$marker;result=$mr})
+  }
+  $null=Child 'writer' $node @((Join-Path $root 'writer\writer004.mjs'),'--carrier',$carrier,'--allowlist',(Join-Path $root 'SOURCE_ALLOWLIST.json'),'--out',$output) '' 45000 5000
+  if((Hash $carrier) -cne $carrierHash -or (Hash (Join-Path $output 'source-carrier.json')) -cne $carrierHash){throw 'CARRIER_BYTE_PRESERVATION_FAILED'}
+  $result.status='MODEL_TO_WORKBOOK_ASSEMBLED_REVIEW_HELD';$result.carrier_sha256=$carrierHash;$result.xlsx_sha256=Hash (Join-Path $output 'research-draft.xlsx');$result.saved_file_and_all_sheet_QA='REQUIRED_SEPARATELY'
+} catch {$result.status='HELD_FIRST_PASS_PRESERVED';$result.reason=$_.Exception.Message} finally {
+  $result.ended_utc=[DateTime]::UtcNow.ToString('o')
+  $result.pins=@(Get-ChildItem -LiteralPath $destination -File|ForEach-Object{[ordered]@{path=$_.FullName;bytes=$_.Length;sha256=(Hash $_.FullName)}})
+  SaveJson (Join-Path $destination 'RESULT.json') $result
+  $result|ConvertTo-Json -Depth 12
+}
+if($result.status -ne 'MODEL_TO_WORKBOOK_ASSEMBLED_REVIEW_HELD'){exit 1}

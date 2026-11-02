@@ -1,0 +1,39 @@
+{
+  "snapshot_date": "2026-11-02",
+  "scope": "Publication packaging only; no CPS development resumed",
+  "syntax_checks": {
+    "python": 16,
+    "json": 5,
+    "javascript": 6,
+    "markdown_links": 53
+  },
+  "powershell_scripts_or_documentary_texts_parsed": 6,
+  "syntax_errors": 0,
+  "existing_source_export_hashes_verified": 33,
+  "original_local_evidence_records_unchanged": 32,
+  "documentation_review": {
+    "decision": "APPROVE_REVIEWED_DOCUMENTATION_WITH_LIMITS",
+    "files": 20,
+    "mandatory_amendments": 0,
+    "local_record": "{WORKSPACE}/exports/CPS_github_20261102/review_docs_001.json",
+    "sha256": "2cab33cb9800782c476b0df9fb5b59d3cc72d2524e2e43b9f65b310c4c37eb38"
+  },
+  "code_publication_review": {
+    "decision": "APPROVE_PUBLICATION_BOUNDARY_WITH_STATED_LIMITS",
+    "files": 35,
+    "mandatory_redactions": 0,
+    "local_record": "{WORKSPACE}/exports/CPS_github_20261102/review_code_public_001.json",
+    "sha256": "f4e696dbdc049dcbf35c07340e4276de6b8c4475966ce883ed6730b4e4df1e31"
+  },
+  "focused_sensitive_content_scan_findings": 0,
+  "programme_and_automation_remain_paused": true,
+  "limits": [
+    "No behavioral software or comprehensive security certification",
+    "No model calls, source evaluations, workbook exports, dependency installation or runtime imports",
+    "No native Excel validation or C# compilation",
+    "Private contracts, historical targets and reserved answers were not accessed for publication",
+    "Code privacy scan is focused review, not proof of absence of every possible sensitive value",
+    "Four handoff prose documents were root-reviewed; their author did not independently approve their own work",
+    "Remote file-byte verification is performed after upload and saved locally"
+  ]
+}

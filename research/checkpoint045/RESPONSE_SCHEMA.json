@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"properties":{"compact_json":{"type":"string"}},"required":["compact_json"]}

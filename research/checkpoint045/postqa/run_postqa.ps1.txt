@@ -1,0 +1,106 @@
+[CmdletBinding()]
+param([switch]$Execute,[string]$OutcomeFreeze,[string]$OutcomeFreezeSha256)
+$ErrorActionPreference='Stop'
+$qaRoot=[IO.Path]::GetFullPath($PSScriptRoot)
+$integration='D:\CPS_LOCAL_WORKSPACE\runs\CONTRACT-WEITIAN-20261030-001\cps_refinement_001\integration045_001'
+$utf8=[Text.UTF8Encoding]::new($false)
+$deadline=[DateTime]::Parse('2026-11-01T13:39:48Z').ToUniversalTime()
+function Hash([string]$p){(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()}
+function SaveJson([string]$p,$v){$b=$utf8.GetBytes(($v|ConvertTo-Json -Depth 20)+[Environment]::NewLine);$f=[IO.File]::Open($p,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read);try{$f.Write($b,0,$b.Length)}finally{$f.Dispose()}}
+function TimeFor([int]$runtime,[int]$cleanup){if([DateTime]::UtcNow.AddMilliseconds($runtime+$cleanup) -ge $deadline){throw 'ROOT_STOP_BUDGET_INSUFFICIENT'}}
+$node='C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
+$python='C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+$destination=Join-Path $qaRoot 'run'
+$repeat=Join-Path $integration 'writer\outputRepeatA'
+$plan=[ordered]@{mode=$(if($Execute){'ROOT_RELEASED_EXECUTION'}else{'PLAN_ONLY_NO_OUTPUT_ACCESS'});condition='Both outcomes frozen and explicit root output release';QA_condition='Every accepted output, including A when B failed';maximum_extra_exports=1;repeat_condition='Both first passes assembled and their saved-cell QA passed';marker_expected_count=1;repeat_writer_runtime_ms=45000;cleanup_ms=5000;qa_each_runtime_ms=15000;render_each_runtime_ms=60000;root_stop_utc=$deadline.ToString('o');repeat=$repeat;main_visual_coverage='All17 columns/all main and component rows in12-row ranges';link_visual_coverage='All8columns/all linkrows';saved_matrix_coverage='All4sheets, everyvalue/type, noformula/externalrels';review_visual_coverage='First/middle/last up to12rows each, explicitly sampled';model_calls=0}
+if(-not $Execute){$plan|ConvertTo-Json -Depth 10;return}
+# Root supplies the current both-outcomes freeze after generation; no author access before release.
+if(-not $OutcomeFreeze -or $OutcomeFreezeSha256 -cnotmatch '^[a-f0-9]{64}$' -or (Hash $OutcomeFreeze) -cne $OutcomeFreezeSha256){throw 'CURRENT_OUTCOME_FREEZE_BINDING_REQUIRED'}
+$outcomes=Get-Content -LiteralPath $OutcomeFreeze -Raw -Encoding utf8|ConvertFrom-Json
+if(-not $outcomes.attempts.A -or -not $outcomes.attempts.B){throw 'BOTH_OUTCOMES_REQUIRED'}
+$helperFreeze=Get-Content -LiteralPath (Join-Path $qaRoot 'HELPER_FREEZE.json') -Raw -Encoding utf8|ConvertFrom-Json
+foreach($pin in $helperFreeze.pins){if((Hash $pin.path) -cne $pin.sha256 -or (Get-Item -LiteralPath $pin.path).Length -ne $pin.bytes){throw 'POSTQA_HELPER_PIN_CHANGED'}}
+$setup=Get-Content -LiteralPath (Join-Path $integration 'SETUP_FREEZE.json') -Raw -Encoding utf8|ConvertFrom-Json
+foreach($pin in $setup.pins){if((Hash $pin.path) -cne $pin.sha256 -or (Get-Item -LiteralPath $pin.path).Length -ne $pin.bytes){throw 'GENERATION_SETUP_PIN_CHANGED'}}
+. (Join-Path $qaRoot 'frozen_inputs.ps1')
+$frozenPins=Get-VerifiedFrozenPinMap $outcomes.pins
+$accepted=@();$outcomeSummary=@()
+foreach($id in @('A','B')){
+  $declared=$outcomes.attempts.$id
+  $op=$declared.outcome
+  $frozenOutcome=Require-FrozenInput $frozenPins $op.path
+  if($frozenOutcome.bytes -ne $op.bytes -or $frozenOutcome.sha256 -cne $op.sha256){throw 'OUTCOME_PIN_CENSUS_DISAGREEMENT'}
+  if(-not $op -or (Hash $op.path) -cne $op.sha256 -or (Get-Item -LiteralPath $op.path).Length -ne $op.bytes){throw ('OUTCOME_PIN_CHANGED:'+ $id)}
+  $r=Get-Content -LiteralPath $op.path -Raw -Encoding utf8|ConvertFrom-Json
+  if($r.status -cne $declared.status){throw ('OUTCOME_STATUS_MISMATCH:'+ $id)}
+  $outcomeSummary+=@([ordered]@{id=$id;status=$r.status;attempted=$declared.attempted})
+  if($r.status -ceq 'MODEL_TO_WORKBOOK_ASSEMBLED_REVIEW_HELD'){
+    foreach($p in @((Join-Path $integration ('run'+$id+'\carrier.json')),(Join-Path $integration ('writer\output'+$id+'\source-carrier.json')),(Join-Path $integration ('writer\output'+$id+'\research-draft.xlsx')))){$null=Require-FrozenInput $frozenPins $p}
+    if((Hash (Join-Path $integration ('run'+$id+'\carrier.json'))) -cne $r.carrier_sha256 -or (Hash (Join-Path $integration ('writer\output'+$id+'\source-carrier.json'))) -cne $r.carrier_sha256 -or (Hash (Join-Path $integration ('writer\output'+$id+'\research-draft.xlsx'))) -cne $r.xlsx_sha256){throw ('FIRST_PASS_OUTPUT_PIN_CHANGED:'+ $id)}
+    $accepted+=@($id)
+  }
+}
+if($accepted -contains 'B' -and $accepted -notcontains 'A'){throw 'B_SUCCESS_WITHOUT_A_CONTRADICTS_RUN_GATE'}
+if((Test-Path -LiteralPath $destination) -or (Test-Path -LiteralPath $repeat)){throw 'POSTQA_OR_REPEAT_EXISTS_PRESERVE_FIRST_ATTEMPT'}
+TimeFor 1000 0
+$inputPaths=@()
+foreach($id in $accepted){$out=Join-Path $integration ('writer\output'+$id);foreach($name in @('research-draft.xlsx','EXPECTED_SAVED_VALUES.json','source-carrier.json','BUILD_RESULT.json')){$inputPaths+=Join-Path $out $name}}
+$inputPins=@($inputPaths|ForEach-Object{Require-FrozenInput $frozenPins $_})
+New-Item -ItemType Directory -Path $destination -ErrorAction Stop|Out-Null
+SaveJson (Join-Path $destination 'PLAN.json') $plan
+SaveJson (Join-Path $destination 'FROZEN_OUTCOMES.json') ([ordered]@{freeze_path=$OutcomeFreeze;freeze_sha256=$OutcomeFreezeSha256;verified_outcome_pin_count=$frozenPins.Count;outcomes=$outcomeSummary;accepted=$accepted})
+SaveJson (Join-Path $destination 'INPUT_PINS.json') $inputPins
+Add-Type -Path (Join-Path $integration 'TimedCapture.cs')
+. (Join-Path $integration 'child_capture.ps1')
+$repeatPins=@()
+$result=[ordered]@{status='STARTED';started_utc=[DateTime]::UtcNow.ToString('o');accepted_outputs=$accepted;saved_QA_passed=@();renders_completed=@();extra_exports_attempted=0;repeat_status='NOT_ELIGIBLE_UNLESS_BOTH_SUCCESS';failures=@();model_calls=0;semantic_accuracy_claim=$false;deployment_credit=$false}
+try{
+  foreach($id in $accepted){
+    try{
+      $out=Join-Path $integration ('writer\output'+$id);TimeFor 15000 5000
+      $null=Child ('saved_qa_'+$id) $python @('-X','utf8','-B',(Join-Path $qaRoot 'qa_saved_external.py'),'--output',$out,'--report',(Join-Path $destination ('SAVED_QA_'+$id+'.json'))) '' 15000 5000
+      $result.saved_QA_passed+=@($id)
+    }catch{$result.failures+=@([ordered]@{phase=('saved_qa_'+$id);reason=$_.Exception.Message})}
+  }
+  if($accepted.Count -eq 2 -and $result.saved_QA_passed.Count -eq 2){
+    try{
+      TimeFor 10000 5000
+      $marker='C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\plugins\openai-primary-runtime\plugins\spreadsheets\skills\spreadsheets\container_tools\mark_artifact_operation_started.mjs'
+      $mr=Child 'repeat_artifact_marker' $node @($marker,'--operation-kind','create','--expected-output-count','1','--output-format','xlsx') '' 10000 5000
+      SaveJson (Join-Path $destination 'REPEAT_MARKER_RECEIPT.json') ([ordered]@{operation='create';format='xlsx';expected_output_count=1;result=$mr})
+      TimeFor 45000 5000
+      $carrier=Join-Path $integration 'runA\carrier.json';$carrierHash=Hash $carrier
+      $result.extra_exports_attempted=1
+      $null=Child 'repeat_writer' $node @((Join-Path $integration 'writer\writer004.mjs'),'--carrier',$carrier,'--allowlist',(Join-Path $integration 'SOURCE_ALLOWLIST.json'),'--out',$repeat) '' 45000 5000
+      if((Hash $carrier) -cne $carrierHash -or (Hash (Join-Path $repeat 'source-carrier.json')) -cne $carrierHash){throw 'REPEAT_SOURCE_BYTES_CHANGED'}
+      $repeatPins=@('research-draft.xlsx','EXPECTED_SAVED_VALUES.json','source-carrier.json','BUILD_RESULT.json'|ForEach-Object{$p=Join-Path $repeat $_;[ordered]@{path=$p;bytes=(Get-Item -LiteralPath $p).Length;sha256=(Hash $p)}})
+      SaveJson (Join-Path $destination 'REPEAT_CREATED_PINS.json') ([ordered]@{utc=[DateTime]::UtcNow.ToString('o');source_carrier_sha256=$carrierHash;provenance='New repeat artifacts created after original outcome freeze; not claimed as earlier-frozen members';pins=$repeatPins})
+      foreach($pin in $repeatPins){Assert-FrozenFile $pin}
+      TimeFor 15000 5000
+      $null=Child 'saved_qa_RepeatA' $python @('-X','utf8','-B',(Join-Path $qaRoot 'qa_saved_external.py'),'--output',$repeat,'--report',(Join-Path $destination 'SAVED_QA_RepeatA.json')) '' 15000 5000
+      TimeFor 10000 5000
+      $null=Child 'compare_repeat' $python @('-X','utf8','-B',(Join-Path $qaRoot 'compare_repeat.py'),'--original',(Join-Path $integration 'writer\outputA'),'--repeat',$repeat,'--qa-original',(Join-Path $destination 'SAVED_QA_A.json'),'--qa-repeat',(Join-Path $destination 'SAVED_QA_RepeatA.json'),'--report',(Join-Path $destination 'REPEATABILITY.json')) '' 10000 5000
+      $result.repeat_status='SAVED_DATA_REPEATABILITY_PASS'
+    }catch{$result.repeat_status='FAILED_PARTIAL_REPEAT_PRESERVED';$result.failures+=@([ordered]@{phase='repeat';reason=$_.Exception.Message})}
+  }elseif($accepted.Count -eq 2){$result.repeat_status='HELD_SAVED_QA_FAILURE'}
+  $renderIds=@($accepted)
+  if($result.repeat_status -ceq 'SAVED_DATA_REPEATABILITY_PASS'){$renderIds+=@('RepeatA')}
+  foreach($id in $renderIds){
+    try{
+      TimeFor 60000 5000
+      $out=Join-Path $integration ('writer\output'+$id)
+      $null=Child ('render_'+$id) $node @((Join-Path $qaRoot 'render_saved_ranges.mjs'),'--output',$out,'--dest',(Join-Path $destination ('visuals_'+$id))) '' 60000 5000
+      $result.renders_completed+=@($id)
+    }catch{$result.failures+=@([ordered]@{phase=('render_'+$id);reason=$_.Exception.Message})}
+  }
+  foreach($pin in $inputPins){Assert-FrozenFile $pin}
+  foreach($pin in $repeatPins){Assert-FrozenFile $pin}
+  if($accepted.Count -eq 0){$result.status='NO_ACCEPTED_OUTPUT_QA_NOT_APPLICABLE'}
+  elseif($result.failures.Count){$result.status='HELD_PARTIAL_POSTQA_PRESERVED'}
+  else{$result.status='ACCEPTED_OUTPUT_MECHANICAL_QA_DONE_VISUAL_INSPECTION_PENDING'}
+}catch{$result.status='HELD_PARTIAL_POSTQA_PRESERVED';$result.failures+=@([ordered]@{phase='overall';reason=$_.Exception.Message})}finally{
+  $result.ended_utc=[DateTime]::UtcNow.ToString('o')
+  SaveJson (Join-Path $destination 'RESULT.json') $result
+  $result|ConvertTo-Json -Depth 10
+}
+if($result.status -ceq 'HELD_PARTIAL_POSTQA_PRESERVED'){exit 1}

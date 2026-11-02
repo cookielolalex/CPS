@@ -1,0 +1,60 @@
+[CmdletBinding()]
+param([Parameter(Mandatory=$true)][string]$Proposal,[Parameter(Mandatory=$true)][string]$ProposalSha256,[Parameter(Mandatory=$true)][string]$Report)
+$ErrorActionPreference='Stop'
+$root=[IO.Path]::GetFullPath($PSScriptRoot)
+function Hash([string]$p){(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()}
+if((Hash $Proposal) -cne $ProposalSha256){throw 'PROPOSAL_PIN_MISMATCH'}
+if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Report)) -cne $root -or (Test-Path -LiteralPath $Report)){throw 'NEW_OWNED_REPORT_REQUIRED'}
+$setupPath=Join-Path $root 'SETUP_FREEZE.json'
+$freeze=Get-Content -LiteralPath $setupPath -Raw -Encoding utf8|ConvertFrom-Json
+foreach($pin in $freeze.pins){if((Hash $pin.path) -cne $pin.sha256 -or (Get-Item -LiteralPath $pin.path).Length -ne $pin.bytes){throw 'SETUP_PIN_CHANGED'}}
+$runnerPath=Join-Path $root 'run_integration.ps1'
+$text=Get-Content -LiteralPath $runnerPath -Raw -Encoding utf8
+$errors=$null;$tokens=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($text,[ref]$tokens,[ref]$errors)
+if($errors.Count){throw 'RUNNER_SYNTAX_ERROR'}
+$functions=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Assert-RootDateBoundary'},$true))
+if($functions.Count -ne 1){throw 'EXACT_SHARED_GUARD_REQUIRED'}
+. ([scriptblock]::Create($functions[0].Extent.Text))
+$assignments=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true))
+$deserialize=@($assignments|Where-Object {$_.Left.Extent.Text -ceq '$approved'})
+$stop=@($assignments|Where-Object {$_.Left.Extent.Text -ceq '$fixedStop'})
+if($deserialize.Count -ne 1 -or $stop.Count -ne 1 -or $deserialize[0].Extent.Text -cnotmatch 'ConvertFrom-Json -DateKind String$'){throw 'EXACT_DECLARED_CONSUMER_REQUIRED'}
+$admission=$Proposal
+. ([scriptblock]::Create($deserialize[0].Extent.Text))
+. ([scriptblock]::Create($stop[0].Extent.Text))
+if($approved.root_stop_utc -isnot [string]){throw 'ACTUAL_PRODUCER_DID_NOT_REMAIN_STRING'}
+$checks=[Collections.Generic.List[object]]::new()
+function Check([string]$Name,[bool]$Want,[scriptblock]$Action,[string]$Code=''){
+ $passed=$false;$errorText=$null;try{& $Action;$passed=$true}catch{$errorText=$_.Exception.Message}
+ if($passed -ne $Want -or (-not $Want -and $Code -and $errorText -cne $Code)){throw "CHECK_FAILED $Name $errorText"}
+ $checks.Add([ordered]@{name=$Name;expected_pass=$Want;observed_pass=$passed;error=$errorText})
+}
+$bindingLines=@($text -split "`n"|Where-Object {$_.StartsWith('if($approved.setup_sha256')})
+if($bindingLines.Count -ne 1){throw 'EXACT_BINDING_EXPRESSION_REQUIRED'}
+$binding=[scriptblock]::Create($bindingLines[0])
+$nativeObserved=[DateTimeOffset]::UtcNow
+$actual=$approved
+foreach($RunId in @('A','B')){
+ Check ('actual proposal '+$RunId+' setup/status/allowed-run binding') $true {& $binding}
+ Check ('actual proposal '+$RunId+' current native-clock date/reserve') $true {Assert-RootDateBoundary $approved $RunId $fixedStop $nativeObserved}
+}
+Check 'A exact2130second boundary' $true {Assert-RootDateBoundary $approved A $fixedStop $fixedStop.AddSeconds(-2130)}
+Check 'B exact1395second boundary' $true {Assert-RootDateBoundary $approved B $fixedStop $fixedStop.AddSeconds(-1395)}
+Check 'A1millisecond below reserve' $false {Assert-RootDateBoundary $approved A $fixedStop $fixedStop.AddMilliseconds(-2129999)} 'ROOT_PHASE_RESERVE_REACHED'
+Check 'B1millisecond below reserve' $false {Assert-RootDateBoundary $approved B $fixedStop $fixedStop.AddMilliseconds(-1394999)} 'ROOT_PHASE_RESERVE_REACHED'
+function FreshProposal {Get-Content -LiteralPath $Proposal -Raw -Encoding utf8|ConvertFrom-Json -DateKind String}
+$bad=FreshProposal;$bad.root_stop_utc=$fixedStop.AddSeconds(1).ToString('o')
+Check 'wrong instant rejected' $false {Assert-RootDateBoundary $bad A $fixedStop $fixedStop.AddSeconds(-3000)} 'ROOT_STOP_BINDING_REQUIRED'
+$bad=FreshProposal;$bad.root_stop_utc=$fixedStop.ToString('yyyy-MM-ddTHH:mm:ss')
+Check 'missing zone rejected' $false {Assert-RootDateBoundary $bad A $fixedStop $fixedStop.AddSeconds(-3000)} 'EXPLICIT_OFFSET_ROOT_STOP_STRING_REQUIRED'
+$bad=FreshProposal;$bad.root_stop_utc='invalid'
+Check 'invalid timestamp rejected' $false {Assert-RootDateBoundary $bad A $fixedStop $fixedStop.AddSeconds(-3000)} 'EXPLICIT_OFFSET_ROOT_STOP_STRING_REQUIRED'
+$bad=FreshProposal;$bad.min_remaining_A_seconds=2129
+Check 'minimum reserve retained' $false {Assert-RootDateBoundary $bad A $fixedStop $fixedStop.AddSeconds(-3000)} 'MINIMUM_PHASE_RESERVE_REQUIRED'
+$approved=FreshProposal;$approved.setup_sha256='0'*64;$RunId='A'
+Check 'wrong setup rejected' $false {& $binding} 'ROOT_ADMISSION_BINDING_REQUIRED'
+$approved=$actual
+if((Hash $Proposal) -cne $ProposalSha256){throw 'PROPOSAL_CHANGED_DURING_CHECK'}
+$result=[ordered]@{schema='cps.native-producer-consumer045.v1';status='PASS';utc=[DateTimeOffset]::UtcNow.ToString('o');host_version=$PSVersionTable.PSVersion.ToString();proposal_path=$Proposal;proposal_sha256=$ProposalSha256;setup_sha256=(Hash $setupPath);runner_sha256=(Hash $runnerPath);actual_deserializer=$deserialize[0].Extent.Text;actual_consumer_guard='Exact AST-extracted Assert-RootDateBoundary from frozen045 runner';actual_fixed_stop_statement=$stop[0].Extent.Text;actual_value_type=$actual.root_stop_utc.GetType().FullName;actual_value=$actual.root_stop_utc;native_observed_utc=$nativeObserved.ToString('o');remaining_seconds=($fixedStop-$nativeObserved).TotalSeconds;checks=$checks.Count;results=$checks;full_runner_invocations=0;model_calls=0;exports=0;admission_installed=$false;B_prior_A_gate='Unchanged and not invoked by pure boundary checks';install_requirement='Root must install these identical proposed bytes only after independent review and final admission.'}
+$utf8=[Text.UTF8Encoding]::new($false);$f=[IO.File]::Open($Report,[IO.FileMode]::CreateNew);try{$b=$utf8.GetBytes(($result|ConvertTo-Json -Depth 15)+[Environment]::NewLine);$f.Write($b,0,$b.Length)}finally{$f.Dispose()}
+[ordered]@{status='PASS';checks=$checks.Count;report=$Report;report_sha256=(Hash $Report);full_runner_invocations=0;models=0;exports=0}|ConvertTo-Json

@@ -1,0 +1,56 @@
+param(
+    [Parameter(Position=0)][ValidateSet('status','validate','generate','test','screen-targets')][string]$Action = 'status',
+    [string]$Manifest,
+    [string]$OutputDirectory,
+    [switch]$Worksheets
+)
+$ErrorActionPreference = 'Stop'
+$CpsRoot = $PSScriptRoot
+$CpsPython = 'C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+$CpsNode = 'C:\CPS_LOCAL_USER\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
+$CpsRuntime = Join-Path $CpsRoot 'runtime'
+$CpsLegacyDependency = Join-Path (Split-Path -Parent $CpsRoot) 'runs\CONTRACT-WEITIAN-20261030-001\deps'
+if ($Action -eq 'status') {
+    Get-Content -LiteralPath (Join-Path $CpsRoot 'QUALIFICATION.json') -Raw
+    return
+}
+if (-not (Test-Path -LiteralPath $CpsPython -PathType Leaf)) { throw 'Configured Python runtime is unavailable.' }
+if ($Action -eq 'screen-targets') {
+    if (-not $Manifest) { throw 'Provide -Manifest with the target worksheet paths to screen.' }
+    if (-not $OutputDirectory) { throw 'Provide a fresh -OutputDirectory for the eligibility report.' }
+    if ($Worksheets) { throw '-Worksheets applies only to contract draft generation.' }
+    $CpsTargetManifest = (Resolve-Path -LiteralPath $Manifest).Path
+    $CpsScreenOutput = [System.IO.Path]::GetFullPath($OutputDirectory)
+    & $CpsPython -X utf8 -B (Join-Path $CpsRoot 'eligibility\screen_targets.py') --manifest $CpsTargetManifest --output-dir $CpsScreenOutput
+    if ($LASTEXITCODE -ne 0) { throw 'Target screening did not complete. Preserve its output for inspection.' }
+    Write-Output 'Read each file status in inventory.json. A completed screen does not approve a target as gold or supply generation data.'
+    return
+}
+if ($Action -eq 'test') {
+    Push-Location -LiteralPath $CpsRuntime
+    try {
+        & $CpsPython -X utf8 -B -m unittest -v test_cps
+        if ($LASTEXITCODE -ne 0) { throw 'CPS regression tests failed.' }
+    } finally { Pop-Location }
+    return
+}
+if (-not $Manifest) { throw 'Provide -Manifest with explicit original contract paths and hashes.' }
+$CpsManifestPath = (Resolve-Path -LiteralPath $Manifest).Path
+if ($Action -eq 'validate') {
+    & $CpsPython -X utf8 -B (Join-Path $CpsRuntime 'cps.py') validate-manifest --manifest $CpsManifestPath
+    if ($LASTEXITCODE -ne 0) { throw 'Contract manifest validation failed.' }
+    return
+}
+if (-not $OutputDirectory) { throw 'Provide a fresh -OutputDirectory.' }
+$CpsOutputPath = [System.IO.Path]::GetFullPath($OutputDirectory)
+& $CpsPython -X utf8 -B (Join-Path $CpsRuntime 'cps.py') generate --manifest $CpsManifestPath --output-dir $CpsOutputPath --dependency-dir $CpsLegacyDependency
+if ($LASTEXITCODE -ne 0) { throw 'CPS draft generation failed. Preserve its output for inspection.' }
+if ($Worksheets) {
+    if (-not (Test-Path -LiteralPath $CpsNode -PathType Leaf)) { throw 'Configured Node runtime is unavailable.' }
+    $CpsExportScript = Join-Path (Split-Path -Parent $CpsRoot) 'runs\CONTRACT-WEITIAN-20261030-001\cps_qualification_001\runtime\export_workbooks.mjs'
+    $CpsInstalledExport = Join-Path $CpsRuntime 'export_workbooks.mjs'
+    if ((Get-FileHash -LiteralPath $CpsExportScript).Hash -ne (Get-FileHash -LiteralPath $CpsInstalledExport).Hash) { throw 'Bound workbook exporter differs from installed candidate.' }
+    & $CpsNode $CpsExportScript --input $CpsOutputPath --output (Join-Path $CpsOutputPath 'workbooks')
+    if ($LASTEXITCODE -ne 0) { throw 'Draft workbook export failed.' }
+}
+Write-Output 'CPS produced review-required drafts. This version is not approved for unattended deployment.'
