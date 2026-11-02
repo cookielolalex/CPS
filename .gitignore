@@ -1,0 +1,27 @@
+# Private business evidence and local outputs
+private/
+data/
+outputs/
+secrets/
+.env
+.env.*
+!.env.example
+*.xlsx
+*.xls
+*.ods
+*.pdf
+*.dwg
+*.dxf
+*.mbox
+*.pst
+*.eml
+*.zip
+*.7z
+*.db
+*.sqlite*
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.codex/
