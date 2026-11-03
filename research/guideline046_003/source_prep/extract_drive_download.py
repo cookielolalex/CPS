@@ -3,7 +3,7 @@
 The Drive connector returns file bytes as base64 inside a tool result. This script scans a
 transcript JSONL (main session or subagent), finds download_file_content results for the given
 Drive file ids, decodes them and writes the bytes, verifying an expected SHA-256 when given.
-It never prints file content. Usage:
+It never prints file content. Usage (T may also be a saved tool-result .txt file):
   python3 -I -B extract_drive_download.py --transcript T.jsonl --file-id ID --out PATH [--sha256 HEX]
 """
 import argparse, base64, hashlib, json, sys
@@ -40,7 +40,16 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--sha256')
     a = ap.parse_args()
-    hits = [r for r in iter_results(a.transcript) if isinstance(r, dict) and r.get('id') == a.file_id and isinstance(r.get('content'), str)]
+    src = Path(a.transcript)
+    if src.suffix == '.txt':            # a saved tool-result file holding the JSON result
+        try:
+            one = json.loads(src.read_text(encoding='utf-8'))
+            results = [one] if isinstance(one, dict) else []
+        except json.JSONDecodeError:
+            results = []
+    else:
+        results = list(iter_results(src))
+    hits = [r for r in results if isinstance(r, dict) and r.get('id') == a.file_id and isinstance(r.get('content'), str)]
     if not hits:
         print(json.dumps({'status': 'NOT_FOUND', 'file_id': a.file_id}))
         return 1
