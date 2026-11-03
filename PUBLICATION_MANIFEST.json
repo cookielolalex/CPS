@@ -19,8 +19,8 @@
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 4743,
-      "sha256": "f796e6f270c1ca906d5d116d1b74133d692ba1fbdfec44f7b70c4a55ac51e237"
+      "bytes": 5912,
+      "sha256": "4a4904aa6bc2cd0db7f36738e5fe41c76a111f59e8fc46256d5391e8c8d702bc"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -774,8 +774,93 @@
     },
     {
       "path": "research/guideline046_003/REVIEW_046c.md",
-      "bytes": 2043,
-      "sha256": "d9913481265d34bb1f874c2a19d6801f8a26eb375b40771eeffa1bc787b06729"
+      "bytes": 2753,
+      "sha256": "b5ab8f7262952cf3f76ad2177ae5ac4e5b32556607bb80e78b5f499e8640d10f"
+    },
+    {
+      "path": "docs/handoff/RESULTS_046C_1141210.md",
+      "bytes": 2949,
+      "sha256": "eb7f570d5bb1ca1efb7d9468e93ecd06db4d47df002d2c7eb5868b9fc4ef979a"
+    },
+    {
+      "path": "research/guideline046_003/POLICY_BACKLOG_046d.md",
+      "bytes": 3119,
+      "sha256": "3be0de2e87645325b92f51dc88683bacb34de292b99432360c7df345260f6b6d"
+    },
+    {
+      "path": "research/guideline046_003/ADMISSION_046c.json",
+      "bytes": 6794,
+      "sha256": "f8daf3d8a58297dc8bfd46dbeee3a74397ac81c9795863ab3c8f460204128900"
+    },
+    {
+      "path": "research/guideline046_003/harness/EVALUATOR_BRIEF_TEMPLATE.md",
+      "bytes": 3750,
+      "sha256": "c2032ada5e6dad1ac65d050651684e0951d85ed7464a588326f1636e0c26f71d"
+    },
+    {
+      "path": "research/guideline046_003/harness/GENERATOR_PROMPT_TEMPLATE.md",
+      "bytes": 1933,
+      "sha256": "58b4ff5c1479c556087eed8dd7bd63673f3fd1db1f5a3c0eb05a230a1000d518"
+    },
+    {
+      "path": "research/guideline046_003/harness/audit_transcript.py",
+      "bytes": 3932,
+      "sha256": "fe02c1ae0409a6c01a93fa7f96d227f44e3b9d0ce0f9238a868f7aad46934dbb"
+    },
+    {
+      "path": "research/guideline046_003/harness/freeze_admission.py",
+      "bytes": 1451,
+      "sha256": "89c29f78df38e6344cc66b888b740577234bc7e6ec67f83f96b041736ef4817b"
+    },
+    {
+      "path": "research/guideline046_003/harness/freeze_outputs.py",
+      "bytes": 1928,
+      "sha256": "0f1f85ca8400219a60f7c1e71fe6c645bdc784ab67f146e356173d35da691c7b"
+    },
+    {
+      "path": "research/guideline046_003/harness/make_release.py",
+      "bytes": 2173,
+      "sha256": "4143196e0c911f9de5d342ddc1dabc463868a5f74195c8ff21a3cf31d778be85"
+    },
+    {
+      "path": "research/guideline046_003/harness/prepare_run.py",
+      "bytes": 2095,
+      "sha256": "2f0382525377d3ef66ec102460f78c4dd38b75086e3bd95bb8b0cadbc8a289cd"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/DRIVE_RETRIEVAL.md",
+      "bytes": 861,
+      "sha256": "7f731e4f7243c6928a303264168683a37783a110e597a787633e99875e36aba7"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/auto_views.py",
+      "bytes": 2283,
+      "sha256": "1c7cd22a84f69fc9cb53b15181f888f40f705a851a45dfb8b3420d291a3c84d0"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/build_inventory_v2.py",
+      "bytes": 10904,
+      "sha256": "9a3a1fbb8cab54552b4129c710f5e45b9a01a539e1f6b913b3dd905e56dc490c"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/build_inventory_xlsx_v2.py",
+      "bytes": 10696,
+      "sha256": "01d6b12db4de3e06cbf7fc001e1b0695fb8bd8771330e167f32507cc4aa34d5f"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/extract_drive_download.py",
+      "bytes": 3001,
+      "sha256": "662e7369dd45fbe7887d366aea8762d42b3fc2d9dd3ce5f5b2ecb5d5bfc9b1b3"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/render_views.py",
+      "bytes": 4745,
+      "sha256": "27815f117467e08f1fe6ef6498e40a17e5fa650cc31b2f8c1901ccb065222381"
+    },
+    {
+      "path": "research/guideline046_003/source_prep/screenshot_views.cjs",
+      "bytes": 723,
+      "sha256": "8107dab2386e9ae9c3b57979d24d8c6424eafe5f8c633a26e90610cc3725b892"
     }
   ]
 }

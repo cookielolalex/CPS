@@ -91,7 +91,7 @@
   },
   "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
   "read_first": "AGENTS.md",
-  "latest_candidate": "046b",
+  "latest_candidate": "046c",
   "deployment_artifact": "Markdown guideline and supplementary resources used by an AI agent",
   "proposed_model": "sol6.1/xhigh; actual model/effort and tool route must be recorded in future tests",
   "latest_preparation": {
@@ -150,5 +150,53 @@
       "numeric_gate_passed": true,
       "source_case_passed": false
     }
+  },
+  "latest_trials_046c": {
+    "results": "docs/handoff/RESULTS_046C_1141210.md",
+    "case": "1141210 (exposed at 041)",
+    "observed_model": "claude-opus-5-5",
+    "A": {
+      "governing_core": [
+        93,
+        121
+      ],
+      "component_core": [
+        26,
+        54
+      ],
+      "gate": false
+    },
+    "B": {
+      "governing_core": [
+        121,
+        121
+      ],
+      "component_core": [
+        54,
+        54
+      ],
+      "links": [
+        14,
+        14
+      ],
+      "gate": true
+    },
+    "case_passed": false,
+    "reason": "two-reader correctness fails (A: package example taught empty component unit/quantity/identity); export/visual QA unattempted; exposed case"
+  },
+  "owner_decisions_2026_11_03": {
+    "supply_basis_qualifiers": "D",
+    "party_role_inference_from_document_furniture": "critical error",
+    "runtime": "claude-opus-5-5"
+  },
+  "development_batch_1": {
+    "cases": [
+      "1130803",
+      "1150107",
+      "1141002",
+      "1140506"
+    ],
+    "status": "expectations authored; independent reviews in progress",
+    "source": "contracts fetched from Drive and verified against cohort registry SHA-256"
   }
 }
