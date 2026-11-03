@@ -1,0 +1,475 @@
+{
+  "schema": "cps.naming-examples.draft.v1",
+  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
+  "case_count": 30,
+  "all_examples_invented": true,
+  "private_project_inputs": false,
+  "cases": [
+    {
+      "id": "N01",
+      "synthetic": true,
+      "input": {
+        "description": "3P125A端子台"
+      },
+      "proposed_expected": {
+        "C": "端子台",
+        "D_contains": [
+          "3P125A"
+        ],
+        "I": null,
+        "reason": "Leading pole/current rating is not a model."
+      }
+    },
+    {
+      "id": "N02",
+      "synthetic": true,
+      "input": {
+        "description": "端子台3P125A"
+      },
+      "proposed_expected": {
+        "C": "端子台",
+        "D_contains": [
+          "3P125A"
+        ],
+        "I": null,
+        "reason": "Same supported identity despite suffix order."
+      }
+    },
+    {
+      "id": "N03",
+      "synthetic": true,
+      "input": {
+        "description": "QX-620電磁接觸器 AC110V"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "D_contains": [
+          "AC110V"
+        ],
+        "I": null,
+        "unresolved_tokens": [
+          "QX-620"
+        ],
+        "reason": "Recognize later noun without asserting unproven model role."
+      }
+    },
+    {
+      "id": "N04",
+      "synthetic": true,
+      "input": {
+        "description": "型號QX-620 電磁接觸器 AC110V"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "I": "QX-620",
+        "D_contains": [
+          "AC110V"
+        ]
+      }
+    },
+    {
+      "id": "N05",
+      "synthetic": true,
+      "input": {
+        "description": "電磁接觸器",
+        "model_column": "QX-620",
+        "specification": "AC110V"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "I": "QX-620",
+        "D_contains": [
+          "AC110V"
+        ]
+      }
+    },
+    {
+      "id": "N06",
+      "synthetic": true,
+      "input": {
+        "description": "QX-620",
+        "specification": "電磁接觸器 AC110V",
+        "unit": "只",
+        "quantity": 2
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "I": null,
+        "unresolved_tokens": [
+          "QX-620"
+        ],
+        "must_not_drop": true
+      }
+    },
+    {
+      "id": "N07",
+      "synthetic": true,
+      "input": {
+        "description": null,
+        "specification": "電磁接觸器 AC110V",
+        "unit": "只",
+        "quantity": 2,
+        "item_boundary": "verified numbered detail item"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "must_not_drop": true,
+        "proof_cell_role": "specification"
+      }
+    },
+    {
+      "id": "N08",
+      "synthetic": true,
+      "input": {
+        "description": "QX-620",
+        "continuation": "電磁接觸器 AC110V",
+        "continuation_ownership": "proven same logical item"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "I": null,
+        "unresolved_tokens": [
+          "QX-620"
+        ]
+      }
+    },
+    {
+      "id": "N09",
+      "synthetic": true,
+      "input": {
+        "description": "產品，3P125A端子台"
+      },
+      "proposed_expected": {
+        "C": "產品，端子台",
+        "D_contains": [
+          "3P125A"
+        ],
+        "reason": "Current draft explicitly preserves generic source prefix."
+      }
+    },
+    {
+      "id": "N10",
+      "synthetic": true,
+      "input": {
+        "description": "\"BX-07\"低壓配電盤",
+        "source_label": "盤號 BX-07"
+      },
+      "proposed_expected": {
+        "C_contains": [
+          "低壓配電盤"
+        ],
+        "I": null,
+        "token_role": {
+          "BX-07": "panel_tag"
+        },
+        "no_group_assignment_without_relationship": true
+      }
+    },
+    {
+      "id": "N11",
+      "synthetic": true,
+      "input": {
+        "description": "SUS316控制箱 t:1.5mm"
+      },
+      "proposed_expected": {
+        "C": "控制箱",
+        "D_contains": [
+          "SUS316",
+          "t:1.5mm"
+        ],
+        "I": null
+      }
+    },
+    {
+      "id": "N12",
+      "synthetic": true,
+      "input": {
+        "description": "RS-485通訊隔離器"
+      },
+      "proposed_expected": {
+        "C_contains": [
+          "通訊隔離器"
+        ],
+        "I": null,
+        "retained_token_role": {
+          "RS-485": "protocol"
+        },
+        "reason": "Exact C/D placement prospectively declared; protocol never discarded."
+      }
+    },
+    {
+      "id": "N13",
+      "synthetic": true,
+      "input": {
+        "description": "NFB 2P63A"
+      },
+      "proposed_expected": {
+        "C": "NFB",
+        "D_contains": [
+          "2P63A"
+        ],
+        "no_translation": true
+      }
+    },
+    {
+      "id": "N14",
+      "synthetic": true,
+      "input": {
+        "description": "自動切換開關(ATS) 3P160A"
+      },
+      "proposed_expected": {
+        "C_contains": [
+          "自動切換開關"
+        ],
+        "D_contains": [
+          "3P160A"
+        ],
+        "retain_acronym": "ATS",
+        "I": null,
+        "no_alias_replacement": true
+      }
+    },
+    {
+      "id": "N15",
+      "synthetic": true,
+      "input": {
+        "description": "QX-620接觸器用端子蓋"
+      },
+      "proposed_expected": {
+        "C": "接觸器用端子蓋",
+        "I": null,
+        "unresolved_tokens": [
+          "QX-620"
+        ],
+        "identity": "accessory",
+        "must_not_name_as": "接觸器"
+      }
+    },
+    {
+      "id": "N16",
+      "synthetic": true,
+      "input": {
+        "description": "水量計安裝費 DN250"
+      },
+      "proposed_expected": {
+        "C": "水量計安裝費",
+        "D_contains": [
+          "DN250"
+        ],
+        "identity": "service",
+        "must_not_name_as": "水量計"
+      }
+    },
+    {
+      "id": "N17",
+      "synthetic": true,
+      "input": {
+        "description": "照明燈+門控開關",
+        "unit": "組",
+        "quantity": 1
+      },
+      "proposed_expected": {
+        "C": "照明燈+門控開關",
+        "no_quantity_split": true,
+        "plus_is_not_panel_dimension": true
+      }
+    },
+    {
+      "id": "N18",
+      "synthetic": true,
+      "input": {
+        "description": "接觸器三個及控制箱，含2只底座",
+        "unit": "組",
+        "quantity": 1
+      },
+      "proposed_expected": {
+        "C": "接觸器三個及控制箱",
+        "D_contains": [
+          "含2只底座"
+        ],
+        "composition_count_attached_to": "接觸器",
+        "quantity_unchanged": 1
+      }
+    },
+    {
+      "id": "N19",
+      "synthetic": true,
+      "input": {
+        "description": "電磁接觸器",
+        "model_column": "QX-620",
+        "brand_column": "示例廠牌甲"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "I": "QX-620",
+        "J": "示例廠牌甲"
+      }
+    },
+    {
+      "id": "N20",
+      "synthetic": true,
+      "input": {
+        "description": "QX-620 電磁接觸器"
+      },
+      "proposed_expected": {
+        "C": "電磁接觸器",
+        "I": null,
+        "J": null,
+        "unresolved_tokens": [
+          "QX-620"
+        ],
+        "no_manufacturer_lookup": true
+      }
+    },
+    {
+      "id": "N21",
+      "synthetic": true,
+      "input": {
+        "description": null,
+        "specification": "詳配電盤規範",
+        "unit": "式",
+        "quantity": 1,
+        "item_boundary": "candidate only; no identified supplied object"
+      },
+      "proposed_expected": {
+        "status": "REVIEW_REQUIRED",
+        "must_not_invent_C": "配電盤"
+      }
+    },
+    {
+      "id": "N22",
+      "synthetic": true,
+      "input": {
+        "description": "產品，低壓配電盤，計量箱，不銹鋼"
+      },
+      "proposed_expected": {
+        "C": "產品，低壓配電盤，計量箱",
+        "D_contains": [
+          "不銹鋼"
+        ],
+        "reason": "Do not lose the specific identifying noun after category."
+      }
+    },
+    {
+      "id": "N23",
+      "synthetic": true,
+      "input": {
+        "description": "電纜托架，45度彎頭，W250"
+      },
+      "proposed_expected": {
+        "C_contains": [
+          "電纜托架",
+          "彎頭"
+        ],
+        "retain_attributes": [
+          "45度",
+          "W250"
+        ],
+        "reason": "Angle is not permission to drop the elbow noun; exact approved span allocation required."
+      }
+    },
+    {
+      "id": "N24",
+      "synthetic": true,
+      "input": {
+        "description": "PLC-CPU模組"
+      },
+      "proposed_expected": {
+        "C": "PLC-CPU模組",
+        "I": null,
+        "reason": "Compound lexical name is not a model merely because it has a hyphen."
+      }
+    },
+    {
+      "id": "N25",
+      "synthetic": true,
+      "input": {
+        "description": "STD-X42驗收試驗",
+        "source_label": "適用標準 STD-X42"
+      },
+      "proposed_expected": {
+        "C_contains": [
+          "驗收試驗"
+        ],
+        "I": null,
+        "retained_token_role": {
+          "STD-X42": "standard_reference"
+        },
+        "identity": "service"
+      }
+    },
+    {
+      "id": "N26",
+      "synthetic": true,
+      "input": {
+        "description": "不含估價",
+        "unit": "式",
+        "quantity": 1
+      },
+      "proposed_expected": {
+        "status": "REVIEW_REQUIRED",
+        "I": null,
+        "J": null,
+        "must_not_treat_as_product": true
+      }
+    },
+    {
+      "id": "N27",
+      "synthetic": true,
+      "input": {
+        "description": "濾網",
+        "remarks": "不含估價"
+      },
+      "proposed_expected": {
+        "C": "濾網",
+        "D_must_not_include": [
+          "不含估價"
+        ],
+        "commercial_note_retained": true,
+        "not_automatically_excluded": true
+      }
+    },
+    {
+      "id": "N28",
+      "synthetic": true,
+      "input": {
+        "description": "控制器",
+        "specification": "DC24V",
+        "next_numbered_item": "電源模組"
+      },
+      "proposed_expected": {
+        "C": "控制器",
+        "D_contains": [
+          "DC24V"
+        ],
+        "must_not_join_next_item": "電源模組"
+      }
+    },
+    {
+      "id": "N29",
+      "synthetic": true,
+      "input": {
+        "description": "三段式選擇開關 AC110V"
+      },
+      "proposed_expected": {
+        "C": "三段式選擇開關",
+        "D_contains": [
+          "AC110V"
+        ],
+        "reason": "Functional position count retained in name; voltage allocated to specification."
+      }
+    },
+    {
+      "id": "N30",
+      "synthetic": true,
+      "input": {
+        "description": "污水導流管"
+      },
+      "proposed_expected": {
+        "C": "污水導流管",
+        "no_spelling_normalization": true,
+        "no_alias_replacement": true
+      }
+    }
+  ]
+}
