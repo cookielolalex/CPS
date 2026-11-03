@@ -102,11 +102,21 @@
     "adapter_implemented": false,
     "new1140908_model_calls": 0,
     "new1141208_model_calls": 0,
-    "source1141208_preparation": "PARTIAL_UNFROZEN_NO_FINAL_EXPECTATIONS"
+    "source1141208_preparation": "FULL_SAVED_CACHE_INVENTORY_AND_VIEWS_AVAILABLE_NO_FROZEN_SEMANTIC_EXPECTATIONS_OR_ADMISSION"
   },
   "publication": {
     "public": "Code, generic guideline, aggregate status and handoff docs",
     "private": "Selected project evidence only in downloadable ZIP",
     "secrets_included": false
+  },
+  "portability": {
+    "zip": "CPS_handoff_20261103_portable.zip",
+    "verified_source_cases": [
+      "1140908",
+      "1141208"
+    ],
+    "replayed_saved_evaluation": "045 A/B",
+    "external_project_reads": 0,
+    "new_model_tests": 0
   }
 }

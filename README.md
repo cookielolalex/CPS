@@ -4,12 +4,14 @@ CPS turns authorized contracts into a17-column **未填** draft for drafters. Th
 
 **2026-11-03 handoff: candidate046a is prepared; independent review and fixes are incomplete. CPS is not deployment-ready.** The previous chat was interrupted before new model tests on1140908 or1141208. Publishing this snapshot does not run CPS or restart the paused automation.
 
+**Portable handoff verified:** use the [offline continuation guide](docs/handoff/PORTABILITY.md) and the revised private ZIP. No original Data Center folders are needed for the next two source-only cases.
+
 ## Continue from here
 
 1. Read [AGENTS.md](AGENTS.md), [current state](CURRENT_STATE.json) and [current status](docs/handoff/CURRENT_STATUS.md).
 2. Read the [candidate guideline](research/guideline046_001/package/CPS_GUIDELINE.md) and its pinned supplementary resources. The proposed source-reference adapter has not been implemented.
 3. Read the [naming study summary](docs/handoff/NAMING_STUDY.md), [preliminary review findings](docs/handoff/INTERRUPTED_REVIEW_046.json) and [next steps](docs/handoff/RESUME_046.md).
-4. Use the [handoff prompt](docs/handoff/HANDOFF_PROMPT.md) and [resource bundle guide](docs/handoff/RESOURCE_BUNDLE.md) with the separately supplied private ZIP. That ZIP contains selected originals, historical evaluation targets, saved outputs, source/evaluator evidence and local working files for four projects.
+4. Use the [handoff prompt](docs/handoff/HANDOFF_PROMPT.md) and [resource bundle guide](docs/handoff/RESOURCE_BUNDLE.md) with the separately supplied private ZIP. That ZIP contains selected originals, historical evaluation targets, saved outputs, source/evaluator evidence and local working files for four selected projects plus the deferred structure-study original.
 
 ## Latest actual performance
 

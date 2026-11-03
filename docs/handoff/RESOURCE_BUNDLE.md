@@ -1,6 +1,8 @@
 # Private resource ZIP
 
-The separately delivered `CPS_handoff_20261103.zip` includes a copy of this repository plus private selected-case evidence and local working files. It contains contract/workbook values and should be shared as private project data. Credentials/authentication files and reserved-project documents are excluded.
+The separately delivered `CPS_handoff_20261103_portable.zip` includes a copy of this repository plus private selected-case evidence and local working files. It contains contract/workbook values and should be shared as private project data. Credentials/authentication files and reserved-project documents are excluded.
+
+Start with [offline verification](PORTABILITY.md). The revised ZIP includes portable source/evaluator binding files, the complete1141208saved-cache inventory and two views, and offline workbook-reading libraries.
 
 ## Layout
 
@@ -20,4 +22,4 @@ On the original computer use `D:\STMS Price Quote\CPS\LOCAL_DIRECTION_LATEST.md`
 
 Use a configured Codex/AI session with authorized account access; no API key or auth store is included. The existing runtime uses Python, Node and `@oai/artifact-tool`; source reads also usexlrd. Bundled software runtimes/node_modules are omitted. Same-computer runtime paths and dependency provenance are in the private handoff environment note. Missing capabilities must be installed/located explicitly, not inferred from a successful import elsewhere.
 
-This ZIP covers four selected projects and the immediate continuation. It does not duplicate the entire Data Center, all153development projects, mailbox archives or38reserved projects. Those remain external future data requirements. Case inventory metadata is retained to preserve cohort/exclusion rules. The user-provided prompt is continuation authority; opening this ZIP alone is not.
+This ZIP covers four selected projects, the original1140608backlog workbook, and the immediate continuation. It does not duplicate the entire Data Center, all153development projects, mailbox archives or38reserved projects. Those remain external future data requirements. Case inventory metadata is retained to preserve cohort/exclusion rules. The user-provided prompt is continuation authority; opening this ZIP alone is not.

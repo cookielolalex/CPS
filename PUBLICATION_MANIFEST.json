@@ -4,7 +4,7 @@
   "timezone": "Asia/Taipei",
   "repository": "cookielolalex/CPS",
   "status": "IDLE_HANDOFF_REQUESTED_REVIEW_INCOMPLETE",
-  "scope": "Code/generic docs public; actual project evidence only in private ZIP",
+  "scope": "Public technical handoff with verified offline continuation; private evidence remains ZIP-only",
   "manifest_self_excluded": true,
   "files": [
     {
@@ -14,13 +14,13 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 5590,
-      "sha256": "9ba3931098470e6481174253dec60ee698606949fa333453106543a79c466f9e"
+      "bytes": 5751,
+      "sha256": "5378674ef4153592b9509e462695cc01e1f0c014db324dfdb4829732ed6fc801"
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 3614,
-      "sha256": "d9fbed28752cba30db952bfd16f1b10cfd3f9898b3c094dcbec92125f2259277"
+      "bytes": 3922,
+      "sha256": "3fad1653859ac89dc30f1d8bb1e96ca79dc8ba904ec0fe700a9ae345cf3b5761"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/handoff/CURRENT_STATUS.md",
-      "bytes": 2490,
-      "sha256": "9ff8ee21c3facd6e0ed1f65b473fd9e483a8ee37c87ed4c4125730d785e3ca23"
+      "bytes": 2775,
+      "sha256": "70e95d0209b420d0082fc8d1af132d8613397e554b7cf3973119b91a15d81bc6"
     },
     {
       "path": "docs/handoff/DECISIONS.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/handoff/HANDOFF_PROMPT.md",
-      "bytes": 2705,
-      "sha256": "5ac92e77d450003ad7962d977632c2cc4eb7f53f4c1e1229872d7351aa45fa52"
+      "bytes": 1925,
+      "sha256": "e578affc3846a38e1aed219ca7065917b52a3924d9894920fed6960988c2fcf8"
     },
     {
       "path": "docs/handoff/INTERRUPTED_REVIEW_046.json",
@@ -73,14 +73,19 @@
       "sha256": "4c640cb8e26bfbb77b3dab090e7d712a76edaacf07214a13a1ee0512030b6994"
     },
     {
+      "path": "docs/handoff/PORTABILITY.md",
+      "bytes": 3813,
+      "sha256": "502fecf26336adda4a5e9d8bdec06dce80c330e9be562b096202f064393eaae9"
+    },
+    {
       "path": "docs/handoff/RESOURCE_BUNDLE.md",
-      "bytes": 3025,
-      "sha256": "c332a34faeeb78079c5b5e271f8549ca3599bc62332777931e76115e92657223"
+      "bytes": 3288,
+      "sha256": "e4155cbec38c29fdeb26d2e0dff111b1c1341a04d22136039ef60dbef02cd149"
     },
     {
       "path": "docs/handoff/RESUME_046.md",
-      "bytes": 2949,
-      "sha256": "234cc4b757817805e8ab0be2d626bfff1c2cd466887c16bf777b7f261d84a4ea"
+      "bytes": 3181,
+      "sha256": "b52bff3b68673c5927f51bd382dbc2362e68f8decb25a650c64065d7f0b8500f"
     },
     {
       "path": "docs/handoff/RESUME_PLAN.md",
@@ -94,8 +99,8 @@
     },
     {
       "path": "docs/implementation/LOCAL_SETUP.md",
-      "bytes": 6151,
-      "sha256": "3a04650dfcd82e24ab236ba6a712b885f3d91302ffed95d84796d24342b06484"
+      "bytes": 6318,
+      "sha256": "70f3a92815d93b09c3e4348a54498e9832f15998b8f63de01212cce976dcc47f"
     },
     {
       "path": "docs/implementation/SOURCE_EXPORT_MANIFEST.json",
@@ -129,8 +134,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 3068,
-      "sha256": "8bfd49ced4c2702c133ffccc7e98967a0e1adc0b37122dec42364916b3193a13"
+      "bytes": 3328,
+      "sha256": "ef0b961cc56079d45712c552369828dfdc195628af456700e080bb36fd026cea"
     },
     {
       "path": "research/checkpoint045/check_proposed_admission.ps1.txt",
@@ -436,6 +441,11 @@
       "path": "tools/verify_handoff.py",
       "bytes": 2409,
       "sha256": "11636b8996d6075f8867716fcb0bf2e502f7115d52ace7d6e4a7633e477b8d10"
+    },
+    {
+      "path": "tools/verify_portable_bundle.py",
+      "bytes": 8663,
+      "sha256": "cfb4d0da515b5b5d7c84340e81a0c371a49c17aa00c81f5e34bd57c3ae930cb7"
     }
   ]
 }

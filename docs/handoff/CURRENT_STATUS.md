@@ -1,5 +1,7 @@
 # Current status —2026-11-03
 
+The later [portable supplement](PORTABILITY.md) adds exact missing project dependencies, a complete1141208saved-cache inventory and two reconstructed views. It did not finish independent expectations or any new model trial. The interruption state below remains historical evidence.
+
 ## What exists
 
 The completed naming study reviewed292 saved output observations/146distinct source items across045,041,039 and153development source profiles. Many apparent translations were source-language names versus historical abbreviations. It also identified leading-code/rating, cross-column and compound/accessory/service naming gaps. The full study is private; this repository has a generic summary and resources.

@@ -1,3 +1,5 @@
+> For continuation without the original Data Center, follow [the verified portable setup](../handoff/PORTABILITY.md). The old machine details below are historical.
+
 > Historical045 snapshot retained. For the later agent-run Markdown candidate and interrupted046review, start with [current status](../handoff/CURRENT_STATUS.md) and [046next steps](../handoff/RESUME_046.md).
 
 # Local continuation prerequisites

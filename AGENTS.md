@@ -8,6 +8,8 @@ Read `CURRENT_STATE.json`, `README.md`, `docs/handoff/CURRENT_STATUS.md`, `docs/
 
 The semantic product is the Markdown guideline plus its resources. The deterministic installed parser is a baseline. Read the separate private bundle only in the appropriate source or evaluation role; never pass private study/targets/gold into a fresh generator context.
 
+For continuation without the original machine, follow `docs/handoff/PORTABILITY.md` and the ZIP's `START_HERE.md`. Use a fresh bundle-relative input binding.
+
 ## Scope and authority
 
 - This is the CPS contract-to-未填 side project. Do not import or reopen unrelated historical Price Quote M1a/M1b jobs, their deadlines, or their admission procedures.
