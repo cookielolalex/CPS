@@ -1041,6 +1041,11 @@
       "path": "research/guideline046_004/REVIEW_046d.md",
       "bytes": 3605,
       "sha256": "50cf70e5f33628dd0bd3d46d2f583b2a546fc0707e72b7145950cc7cdf90efb9"
+    },
+    {
+      "path": "docs/handoff/RESULTS_046C_BATCH1.md",
+      "bytes": 5340,
+      "sha256": "d3839cf531d8085cdc612b2499843f17010e0870a2a499bf7f4af2cfe68cc7a5"
     }
   ]
 }
