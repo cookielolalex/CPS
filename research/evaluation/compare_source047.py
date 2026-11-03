@@ -11,8 +11,9 @@ Generalized:
   location on that sheet contains the anchor cell.
 - Expected rows may be category "component". A component pairs only with a generated
   component (role check); its link is scored separately: the generated composition parent must
-  be the generated row paired with the expected parent row, basis_quantity must equal and
-  basis_unit must be literally equal.
+  be the generated row paired with the expected parent row; basis_quantity must equal; basis_unit
+  and basis_raw must be literally equal; basis_location must be on the expected basis sheet and
+  contain every declared expected basis cell.
 - Numeric 99% gates require detail, component (when expected components exist) and overall core
   >= 99%, and every expected link correct. Generated components with no expected counterpart are
   extras, as in 043 (row-role completeness stays in case_gate, as in 043).
@@ -119,8 +120,13 @@ def evaluate(expected, carrier):
         ok_parent = isinstance(comp, dict) and parent is not None and comp.get('parent_id') == parent.get('id')
         ok_basis = isinstance(comp, dict) and same(comp.get('basis_quantity'), exp['basis_quantity'])
         ok_unit = isinstance(comp, dict) and same(comp.get('basis_unit'), exp['basis_unit'])
+        ok_raw = isinstance(comp, dict) and same(comp.get('basis_raw'), exp['basis_raw'])
+        loc = comp.get('basis_location', {}) if isinstance(comp, dict) else {}
+        want = exp.get('basis_cells', [])
+        ok_loc = isinstance(loc, dict) and loc.get('sheet') == exp.get('basis_sheet', e['sheet']) and all(c in loc.get('cells', []) for c in want)
         link_results.append({'id': e['id'], 'parent_pass': ok_parent, 'basis_quantity_pass': ok_basis, 'basis_unit_pass': ok_unit,
-                             'pass': ok_parent and ok_basis and ok_unit})
+                             'basis_raw_pass': ok_raw, 'basis_location_pass': ok_loc,
+                             'pass': ok_parent and ok_basis and ok_unit and ok_raw and ok_loc})
     metrics = {}
     has_comp = any(e['category'] == 'component' for e in rr)
     for cat in ['detail', 'component', 'overall']:

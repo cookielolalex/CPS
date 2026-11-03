@@ -42,7 +42,7 @@ def main():
     # components
     crow = lambda eid, gid, cell, parent, bq, bu: {'id': eid, 'category': 'component', 'sheet': '單價分析', 'anchor_cell': cell,
         'expected_values': byid[gid]['values'], 'raw': byid[gid]['raw'], 'supported_columns': ['C'], 'core_columns': ['C'],
-        'link': {'parent_expected_id': parent, 'basis_quantity': bq, 'basis_unit': bu}}
+        'link': {'parent_expected_id': parent, 'basis_quantity': bq, 'basis_unit': bu, 'basis_raw': str(bq), 'basis_sheet': '單價分析', 'basis_cells': [cell.replace('A', 'C'), cell.replace('A', 'B')]}}
     rows2 = [dict(r) for r in rows]
     rows2[1] = dict(rows2[1], expected_values=byid['R002']['values'])
     rows2 += [crow('EC1', 'C001', 'A3', 'ER003', 2, '工'), crow('EC2', 'C002', 'A4', 'ER003', 1, '式')]
@@ -56,6 +56,10 @@ def main():
     results.append(('wrong_parent_fails_link_and_gate', rb['component_links']['matches'] == 1 and rb['numeric_99_percent_gates']['canonical'] is False))
     bad2 = copy.deepcopy(carrier); next(x for x in bad2['components'] if x['id'] == 'C002')['composition']['basis_unit'] = '組'
     results.append(('wrong_basis_unit_fails_link', c047.evaluate(exp2, bad2)['component_links']['matches'] == 1))
+    bad3 = copy.deepcopy(carrier); next(x for x in bad3['components'] if x['id'] == 'C001')['composition']['basis_location']['cells'] = ['D3']
+    results.append(('wrong_basis_location_fails_link', c047.evaluate(exp2, bad3)['component_links']['matches'] == 1))
+    bad4 = copy.deepcopy(carrier); next(x for x in bad4['components'] if x['id'] == 'C001')['composition']['basis_raw'] = '2.0'
+    results.append(('wrong_basis_raw_fails_link', c047.evaluate(exp2, bad4)['component_links']['matches'] == 1))
     moved = copy.deepcopy(carrier); comp = moved['components'].pop(0); comp.pop('composition'); moved['items'].append(comp)
     rm = c047.evaluate(exp2, moved)
     results.append(('component_as_detail_is_role_defect', 'EC1' in rm['role_defects']))

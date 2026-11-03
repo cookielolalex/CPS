@@ -78,3 +78,22 @@ Cautions:
 - Any retry or repair of the scored outputs.
 
 Private evidence is in the separately delivered `CPS_046b_results_20261103_PRIVATE.zip` (sha256 `d6dad4f7…df74`). It holds the packets, expectations, frozen responses, carriers, ledgers, comparisons, manual reviews and transcripts. None of that material is on GitHub.
+
+## Addendum, 2026-11-03: audit 048 corrections (no rescoring)
+
+The full [audit 048](../evidence/AUDIT_048.md) was brought forward by the regression. It reproduced every score above exactly. It also records the following process facts, which this report originally omitted or overstated:
+
+- **P-1 (high).** The independent reviews of 046b were **interface and mechanics reviews only**. PLAN71 required an independent *semantic* review of the field-role rules (C/D boundaries, document references, commercial versus specification text) before admission, and that review did not take place. "APPROVE_FOR_BOUNDED_SOURCE_TRIAL" above means interface approval, not semantic approval. The 1140908 regression sits mainly in that unreviewed text:
+  - package-text changes account for A −12 and B −2 of the change against 045;
+  - runtime or reader variance on unchanged text accounts for A −2 and B −5;
+  - most misses rest on evaluator conventions that the 046b text omits, contradicts or leaves unclear.
+- **P-2.** `harness/audit_transcript.py` was changed after admission, to stop misreading relative paths. That was before the 1141208 transcript audits, and the change was not disclosed. Outcomes are unaffected.
+- **P-3.** The two 046b policy declarations (P1/P2) came from questions asked by the 1141208 expectation author. They entered the generator package before any 1141208 reading.
+- **P-4.** The 1141208 section above says FIELD_ROLES requires role recording on 4 rows. Generator-visible text covers 2 of them. The other 2 depend on the evaluation-side class extension E3.
+- **P-5.** PLAN71's prospective timing, fixed model bound and A-before-B assembly were not applied, and this was not declared. A and B ran at the same time; concurrent runs exclude feedback between readers. Wall-clock durations: 1140908 A 611 s, B 587 s; 1141208 A 295 s, B 317 s.
+- **P-6 to P-8.**
+  - AGENTS.md was injected into every generator context and was not pinned.
+  - The rise in raw and census scores is a property of the deterministic adapter, not of reading accuracy.
+  - The evaluator brief template was not pinned.
+
+Next steps are revised in [RESUME_047.md](RESUME_047.md): a semantic review gate, a policy–expectation consistency gate (R13), and owner decisions on supply-basis qualifier placement and on customer-role inference.

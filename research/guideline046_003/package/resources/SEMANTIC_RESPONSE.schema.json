@@ -1,0 +1,872 @@
+{
+ "type": "object",
+ "properties": {
+  "schema": {
+   "const": "cps.semantic-source-refs.v2"
+  },
+  "case_id": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+  },
+  "family_id": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+  },
+  "inventory_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "status": {
+   "enum": [
+    "research_draft",
+    "partial",
+    "held"
+   ]
+  },
+  "groups": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/group"
+   }
+  },
+  "items": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/item"
+   },
+   "minItems": 1,
+   "maxItems": 4000
+  },
+  "component_links": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/component_link"
+   }
+  },
+  "source_roles": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/source_role"
+   }
+  },
+  "limitations": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 30000
+   },
+   "maxItems": 400
+  }
+ },
+ "required": [
+  "schema",
+  "case_id",
+  "family_id",
+  "inventory_sha256",
+  "status",
+  "groups",
+  "items",
+  "component_links",
+  "source_roles",
+  "limitations"
+ ],
+ "additionalProperties": false,
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "urn:cps:semantic-source-refs:v2",
+ "$defs": {
+  "nonnull_proof": {
+   "type": "object",
+   "properties": {
+    "refs": {
+     "type": "array",
+     "items": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+       },
+       {
+        "type": "string",
+        "pattern": "^context:[a-z0-9_]{1,64}$"
+       }
+      ]
+     },
+     "minItems": 1,
+     "uniqueItems": true
+    },
+    "transformation": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 30000
+    },
+    "role_basis": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 30000
+    }
+   },
+   "required": [
+    "refs",
+    "transformation",
+    "role_basis"
+   ],
+   "additionalProperties": false
+  },
+  "null_proof": {
+   "type": "object",
+   "properties": {
+    "reason": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 30000
+    }
+   },
+   "required": [
+    "reason"
+   ],
+   "additionalProperties": false
+  },
+  "item": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+    },
+    "role": {
+     "enum": [
+      "demand",
+      "analysis_component"
+     ]
+    },
+    "group_id": {
+     "anyOf": [
+      {
+       "type": "string",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "status": {
+     "enum": [
+      "research_draft",
+      "held"
+     ]
+    },
+    "values": {
+     "type": "array",
+     "prefixItems": [
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      {
+       "type": "null"
+      },
+      {
+       "type": "null"
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ],
+       "maxLength": 30000
+      },
+      {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      {
+       "type": [
+        "number",
+        "null"
+       ]
+      }
+     ],
+     "items": false,
+     "minItems": 17,
+     "maxItems": 17
+    },
+    "proofs": {
+     "type": "object",
+     "properties": {
+      "A": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "B": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "C": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "D": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "E": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "F": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "G": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "H": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "I": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "J": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "K": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "L": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "M": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "N": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "O": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "P": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      },
+      "Q": {
+       "oneOf": [
+        {
+         "$ref": "#/$defs/nonnull_proof"
+        },
+        {
+         "$ref": "#/$defs/null_proof"
+        }
+       ]
+      }
+     },
+     "required": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L",
+      "M",
+      "N",
+      "O",
+      "P",
+      "Q"
+     ],
+     "additionalProperties": false
+    },
+    "raw_refs": {
+     "type": "object",
+     "properties": {
+      "description": {
+       "type": "object",
+       "properties": {
+        "refs": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+         },
+         "uniqueItems": true
+        },
+        "reason_if_empty": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "minLength": 1
+        }
+       },
+       "required": [
+        "refs",
+        "reason_if_empty"
+       ],
+       "additionalProperties": false
+      },
+      "unit": {
+       "type": "object",
+       "properties": {
+        "refs": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+         },
+         "uniqueItems": true,
+         "maxItems": 1
+        },
+        "reason_if_empty": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "minLength": 1
+        }
+       },
+       "required": [
+        "refs",
+        "reason_if_empty"
+       ],
+       "additionalProperties": false
+      },
+      "quantity": {
+       "type": "object",
+       "properties": {
+        "refs": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+         },
+         "uniqueItems": true,
+         "maxItems": 1
+        },
+        "reason_if_empty": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "minLength": 1
+        }
+       },
+       "required": [
+        "refs",
+        "reason_if_empty"
+       ],
+       "additionalProperties": false
+      },
+      "unit_price": {
+       "type": "object",
+       "properties": {
+        "refs": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+         },
+         "uniqueItems": true,
+         "maxItems": 1
+        },
+        "reason_if_empty": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "minLength": 1
+        }
+       },
+       "required": [
+        "refs",
+        "reason_if_empty"
+       ],
+       "additionalProperties": false
+      },
+      "amount": {
+       "type": "object",
+       "properties": {
+        "refs": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+         },
+         "uniqueItems": true,
+         "maxItems": 1
+        },
+        "reason_if_empty": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "minLength": 1
+        }
+       },
+       "required": [
+        "refs",
+        "reason_if_empty"
+       ],
+       "additionalProperties": false
+      },
+      "remarks": {
+       "type": "object",
+       "properties": {
+        "refs": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+         },
+         "uniqueItems": true
+        },
+        "reason_if_empty": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "minLength": 1
+        }
+       },
+       "required": [
+        "refs",
+        "reason_if_empty"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "required": [
+      "description",
+      "unit",
+      "quantity",
+      "unit_price",
+      "amount",
+      "remarks"
+     ],
+     "additionalProperties": false
+    },
+    "anchor_refs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+     },
+     "minItems": 1,
+     "uniqueItems": true
+    },
+    "review_reasons": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30000
+     },
+     "maxItems": 500
+    }
+   },
+   "required": [
+    "id",
+    "role",
+    "group_id",
+    "status",
+    "values",
+    "proofs",
+    "raw_refs",
+    "anchor_refs",
+    "review_reasons"
+   ],
+   "additionalProperties": false
+  },
+  "group": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+    },
+    "name": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 30000
+    },
+    "specification": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 30000
+    },
+    "relationship": {
+     "enum": [
+      "contractual_group",
+      "physical_enclosure",
+      "contractual_and_physical",
+      "unresolved"
+     ]
+    },
+    "anchor_refs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+     },
+     "minItems": 1,
+     "uniqueItems": true
+    },
+    "name_refs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+     },
+     "uniqueItems": true
+    },
+    "specification_refs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+     },
+     "uniqueItems": true
+    },
+    "quantity_basis": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 30000
+    },
+    "limitations": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30000
+     }
+    }
+   },
+   "required": [
+    "id",
+    "name",
+    "specification",
+    "relationship",
+    "anchor_refs",
+    "name_refs",
+    "specification_refs",
+    "quantity_basis",
+    "limitations"
+   ],
+   "additionalProperties": false
+  },
+  "component_link": {
+   "type": "object",
+   "properties": {
+    "component_id": {
+     "type": "string",
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+    },
+    "parent_id": {
+     "anyOf": [
+      {
+       "type": "string",
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "status": {
+     "enum": [
+      "supported",
+      "held"
+     ]
+    },
+    "basis_quantity": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "exclusiveMinimum": 0
+    },
+    "basis_raw_ref": {
+     "anyOf": [
+      {
+       "type": "string",
+       "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "basis_unit_ref": {
+     "anyOf": [
+      {
+       "type": "string",
+       "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "refs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+     },
+     "uniqueItems": true
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 30000
+    }
+   },
+   "required": [
+    "component_id",
+    "parent_id",
+    "status",
+    "basis_quantity",
+    "basis_raw_ref",
+    "basis_unit_ref",
+    "refs",
+    "reason"
+   ],
+   "additionalProperties": false
+  },
+  "source_role": {
+   "type": "object",
+   "properties": {
+    "role": {
+     "enum": [
+      "demand_content",
+      "analysis_content",
+      "item_identifier",
+      "header",
+      "section",
+      "financial_summary",
+      "commercial_note",
+      "document_reference",
+      "footer",
+      "unresolved"
+     ]
+    },
+    "refs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^cell:S[1-9][0-9]{0,3}![A-Z]{1,3}[1-9][0-9]{0,6}$"
+     },
+     "minItems": 1,
+     "uniqueItems": true
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 30000
+    }
+   },
+   "required": [
+    "role",
+    "refs",
+    "reason"
+   ],
+   "additionalProperties": false
+  }
+ },
+ "description": "Candidate 046b structural contract. values[0..16] map A..Q. Schema conformance is necessary, not sufficient: tools/cps046b_route.py check enforces reference identity, value/proof consistency, writer004 compatibility, group/component/census rules. Neither is semantic acceptance."
+}

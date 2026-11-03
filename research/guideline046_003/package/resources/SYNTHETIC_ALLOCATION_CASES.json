@@ -1,0 +1,274 @@
+{
+ "schema": "cps.allocation-examples.draft.v1",
+ "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
+ "candidate": "046c",
+ "case_count": 20,
+ "all_examples_invented": true,
+ "private_project_inputs": false,
+ "cases": [
+  {
+   "id": "A01",
+   "rule": "R1/R1b/R8",
+   "input": {
+    "description": "發電機（租用）100KW"
+   },
+   "proposed_expected": {
+    "C_contains": [
+     "發電機"
+    ],
+    "D_contains": [
+     "100KW"
+    ],
+    "supply_basis_qualifier": "租用",
+    "placement": "undecided: exactly one of C or D; class named in proof"
+   },
+   "reason": "Hired-instead-of-bought is a supply-basis qualifier, not a financial annotation."
+  },
+  {
+   "id": "A02",
+   "rule": "R1",
+   "input": {
+    "description": "抽水機",
+    "remarks": "不含估價"
+   },
+   "proposed_expected": {
+    "C": "抽水機",
+    "D_must_not_include": [
+     "不含估價"
+    ],
+    "review_reason_mentions": "estimate status"
+   },
+   "reason": "Estimate status is a financial annotation; never C or D."
+  },
+  {
+   "id": "A03",
+   "rule": "R2",
+   "input": {
+    "description": "鋁製線槽 W100"
+   },
+   "proposed_expected": {
+    "C": "鋁製線槽",
+    "D": "W100"
+   },
+   "reason": "Fused material word with no delimiter stays in C; the measurable width goes to D."
+  },
+  {
+   "id": "A04",
+   "rule": "R2",
+   "input": {
+    "description": "控制箱 SUS304 t=1.5mm"
+   },
+   "proposed_expected": {
+    "C": "控制箱",
+    "D": "SUS304 t=1.5mm"
+   },
+   "reason": "Grade code and thickness are separated and measurable: D."
+  },
+  {
+   "id": "A05",
+   "rule": "R3",
+   "input": {
+    "description": "按鈕開關三只組合盒"
+   },
+   "proposed_expected": {
+    "C": "按鈕開關三只組合盒",
+    "quantity_unchanged": true
+   },
+   "reason": "Composition count stays attached to the sub-object noun in C."
+  },
+  {
+   "id": "A06",
+   "rule": "R3/R8",
+   "input": {
+    "description": "電錶箱安裝（新設1只）"
+   },
+   "proposed_expected": {
+    "C_contains": [
+     "電錶箱安裝"
+    ],
+    "scope_count": "新設1只",
+    "placement": "undecided: exactly one of C or D; class named in proof"
+   },
+   "reason": "A count limiting service scope is a scope count; placement undecided."
+  },
+  {
+   "id": "A07",
+   "rule": "R4",
+   "input": {
+    "description": "（防水）電纜接頭 φ20"
+   },
+   "proposed_expected": {
+    "C": "電纜接頭",
+    "D": "防水；φ20"
+   },
+   "reason": "Non-contiguous spans join with U+FF1B; separable wrapping parentheses removed."
+  },
+  {
+   "id": "A08",
+   "rule": "R4",
+   "input": {
+    "description": "電纜 3.5mm² 600V",
+    "continuation": "PVC絕緣"
+   },
+   "proposed_expected": {
+    "C": "電纜",
+    "D": "3.5mm² 600V PVC絕緣"
+   },
+   "reason": "One continuous span across a continuation boundary uses U+0020, not U+FF1B."
+  },
+  {
+   "id": "A09",
+   "rule": "R5",
+   "input": {
+    "description": "沉水抽水機 詳規範"
+   },
+   "proposed_expected": {
+    "C": "沉水抽水機",
+    "D": null,
+    "review_reason_mentions": "document reference"
+   },
+   "reason": "A bare reference to an unavailable specification never enters C or D."
+  },
+  {
+   "id": "A10",
+   "rule": "R5",
+   "input": {
+    "description": "接地線 依示例標準 22mm²"
+   },
+   "proposed_expected": {
+    "C": "接地線",
+    "D": "22mm²"
+   },
+   "reason": "Only the explicit technical value enters D; the reference clause stays in raw/review."
+  },
+  {
+   "id": "A11",
+   "rule": "R6",
+   "input": {
+    "page_header": "示例工程有限公司 估價單",
+    "description": "控制盤"
+   },
+   "proposed_expected": {
+    "K": null,
+    "M": null,
+    "N": null,
+    "null_reason_mentions": "name appears only in the page header; no role stated"
+   },
+   "reason": "Letterhead names do not establish party roles."
+  },
+  {
+   "id": "A12",
+   "rule": "R6",
+   "input": {
+    "label": "訂購單位：示例自來水處",
+    "description": "控制盤"
+   },
+   "proposed_expected": {
+    "M": "示例自來水處"
+   },
+   "reason": "An explicitly labelled role may fill the field."
+  },
+  {
+   "id": "A13",
+   "rule": "R7",
+   "input": {
+    "description": "可程式控制器，PLC，16點輸入"
+   },
+   "proposed_expected": {
+    "C": "可程式控制器",
+    "D": "PLC，16點輸入"
+   },
+   "reason": "Acronym in a delimited attribute list stays in D; the full name is C."
+  },
+  {
+   "id": "A14",
+   "rule": "R7",
+   "input": {
+    "description": "PLC"
+   },
+   "proposed_expected": {
+    "C": "PLC"
+   },
+   "reason": "An acronym that is the only name is C; never expanded."
+  },
+  {
+   "id": "A15",
+   "rule": "R8",
+   "input": {
+    "description": "RS-485轉換器"
+   },
+   "proposed_expected": {
+    "C_contains": [
+     "轉換器"
+    ],
+    "protocol_token": "RS-485",
+    "placement": "undecided: exactly one of C or D; proof names 'protocol/interface designation; placement undecided'"
+   },
+   "reason": "Protocol class; both placements acceptable; class must be recorded."
+  },
+  {
+   "id": "A16",
+   "rule": "R8",
+   "input": {
+    "description": "光纖收發器"
+   },
+   "proposed_expected": {
+    "C_contains": [
+     "收發器"
+    ],
+    "medium_token": "光纖",
+    "placement": "undecided; class recorded"
+   },
+   "reason": "A transmission-medium word fused to a device noun is in the protocol/interface class."
+  },
+  {
+   "id": "A17",
+   "rule": "R9",
+   "input": {
+    "description": "電磁接觸器 AC220V"
+   },
+   "proposed_expected": {
+    "if_D_null": "invalid; D has a rating",
+    "if_rating_kept_in_C": "D null reason must say the rating was kept in C and why"
+   },
+   "reason": "Null reasons must be true of the whole source."
+  },
+  {
+   "id": "A18",
+   "rule": "R10",
+   "input": {
+    "rows": "three amounts 100, 200, 300 and a cached subtotal 500"
+   },
+   "proposed_expected": {
+    "limitations_mention": "subtotal 500 differs from the sum of the listed amounts",
+    "no_output_field_changed": true
+   },
+   "reason": "Discrepancies are recorded, never repaired."
+  },
+  {
+   "id": "A19",
+   "rule": "R11",
+   "input": {
+    "description": "營業稅 5%",
+    "amount": "cached figure"
+   },
+   "proposed_expected": {
+    "source_role": "financial_summary",
+    "demand_item": false
+   },
+   "reason": "Tax rows and their labels are financial summary cells."
+  },
+  {
+   "id": "A20",
+   "rule": "R12",
+   "input": {
+    "description": "token matched by two rules sending it to different fields"
+   },
+   "proposed_expected": {
+    "apply": "more specific rule; cite both",
+    "if_equal": "treat as undecided class and record in limitations"
+   },
+   "reason": "Explicit precedence."
+  }
+ ]
+}

@@ -1,0 +1,93 @@
+{
+  "schema": "cps.guideline-package.manifest.v2",
+  "candidate": "046c",
+  "parent_candidate": "046b",
+  "parent_manifest_sha256": "7748be1de62683f57a57398ba6a89dd6cd50c4b925471291f3839a2ab4e559f4",
+  "status": "DRAFT_UNDER_SEMANTIC_REVIEW",
+  "target_runtime": "User-proposed sol6.1/xhigh is not selectable from Claude Code; every run records the actual model, effort and tools.",
+  "files": [
+    {
+      "path": "CPS_GUIDELINE.md",
+      "bytes": 8798,
+      "sha256": "c6858d21298bbf8d46c5f284a0231a6ab9920a85bd9849b89aa6e3ef797dd552"
+    },
+    {
+      "path": "resources/COLUMNS.json",
+      "bytes": 1497,
+      "sha256": "550fd6c36d710e79d5a4877c4019643d658f1657808c569a6e8c478df597142e"
+    },
+    {
+      "path": "resources/EXAMPLE_INVENTORY.json",
+      "bytes": 53447,
+      "sha256": "ba31092c745e9b3f12fe7ead7c889758b348c3c3e26f1f2d8b0fc254f4f68d09"
+    },
+    {
+      "path": "resources/EXAMPLE_RESPONSE.json",
+      "bytes": 32740,
+      "sha256": "ea4d7bad31dba1c2dd51e6ee5a698e9dadfc5746ea8d09c0265c501b4318325f"
+    },
+    {
+      "path": "resources/FIELD_ROLES.md",
+      "bytes": 12984,
+      "sha256": "e140dcf97aa8e0e88e4b4cb9f0b423bd9dacc48385cfa2f9b1be4396ed88ac6f"
+    },
+    {
+      "path": "resources/NAME_POLICY.json",
+      "bytes": 1186,
+      "sha256": "dc9605cc473100e9c358a8c3668d998db961d0914e7a08a22c198a33748dfd8b"
+    },
+    {
+      "path": "resources/NAMING_RULES.md",
+      "bytes": 7055,
+      "sha256": "d3c84312371a25f387fbb114a7e63af8005676566bc3e9472ee70866a30b1fc2"
+    },
+    {
+      "path": "resources/OUTPUT_CONTRACT.md",
+      "bytes": 5514,
+      "sha256": "43414571cc315559d6c64d0d3eceb82a776a1a9cb354bd2af311f851debbacee"
+    },
+    {
+      "path": "resources/REVIEW_CHECKLIST.md",
+      "bytes": 3290,
+      "sha256": "3d3b847726c0317cc11e32d587ceb3f971c53d913832f2a88b3418ecf1181fd0"
+    },
+    {
+      "path": "resources/SEMANTIC_RESPONSE.schema.json",
+      "bytes": 15868,
+      "sha256": "5b4aa5a171365984593dbbadc0521b3ee1d08aa4f6ba6f9e5b51c8e7671752b0"
+    },
+    {
+      "path": "resources/SOURCE_INVENTORY.schema.json",
+      "bytes": 9247,
+      "sha256": "9250f130e7c8bca66a755ca6ade1c02a3f028db204ad1729fca844f0fc785358"
+    },
+    {
+      "path": "resources/SOURCE_READING.md",
+      "bytes": 4685,
+      "sha256": "11baafe0652775097bb239a628848986000ca68eb916fc68d988ac4383ec1456"
+    },
+    {
+      "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
+      "bytes": 14883,
+      "sha256": "b5b4f6cf27d38a30ac60c95f8148cf0f6ca154ea6a2d81eed9b662c7a5f03824"
+    },
+    {
+      "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
+      "bytes": 6652,
+      "sha256": "9afc0b477c6b3a40b350f5b3942207a303eefbd2e42ef88f0cdda87a9db0c372"
+    },
+    {
+      "path": "resources/SYNTHETIC_NAMING_CASES.json",
+      "bytes": 11385,
+      "sha256": "08a5bf123e40b8b4efb420eb7da673091df5f393853544c51fe2f9ac8df0efa9"
+    },
+    {
+      "path": "tools/cps046b_route.py",
+      "bytes": 59920,
+      "sha256": "926a9255a8c199634cc99fd600f1c2490b5c3fe6e2a55ddc71a695247883b9bb"
+    }
+  ],
+  "utf8_bytes": 249151,
+  "manifest_self_excluded": true,
+  "deployment_approved": false
+}
