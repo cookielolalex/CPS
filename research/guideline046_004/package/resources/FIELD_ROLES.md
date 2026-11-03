@@ -96,7 +96,38 @@ These answer generic questions raised during independent source-expectation auth
 
 **R24 Remaining doubt.** Any C/D question these rules still leave open is recorded in limitations with the cells involved (R12). Evaluators exclude it from C/D correctness obligations unless complete alternatives were declared before generation; the next policy version decides it.
 
+
+## Decisions R25–R38 (046d, declared before any 046d generation)
+
+R25 corrects the analysis-component example found misleading in a 046c trial. R26–R38 decide the questions that independent source-expectation authors raised under 046c (policy backlog Q1–Q13). They are generic and cite no contract. They rank with the rule each one refines (named in brackets); where one disagrees with an older sentence, it governs. The undecided classes of R8 are unchanged.
+
 **R25 Analysis component rows.** An `analysis_component` item carries its own row's literal unit in E and its own literal per-unit quantity in F: the same cells as its link's `basis_unit_ref` and `basis_raw_ref` (R21). Never multiply them by the parent quantity and never copy the parent's unit or quantity. Project-level values that apply to every item of the order (K, L, M, N, O, each only with the support the field table and R6 require) apply to component rows exactly as to demand rows. P stays null unless the component row itself states a required quantity; G and H stay null; Q stays null, because an analysis price is not an accepted contract rate. Example: a 單價分析 row 組立工資 | 工 | 2 under a heading that links it to a 式 item gives C 組立工資, E 工, F 2, and the same L as the demand rows.
+
+**R26 One delimiter after a middle removal [R4, R15].** When text removed from the middle of C leaves two or more separators between two retained spans, C keeps exactly one: the separator that immediately followed the left retained span (產品甲，100V，附件乙 with 100V to D → C 產品甲，附件乙).
+
+**R27 Priced service lines without an item number [guideline §3, R11].** A line with its own unit or quantity that names a service or work (設計, 安裝, 測試, 搬運) is a demand item even without an item number, and even when it also names a fee or management word (試運轉及管理費 | 式 | 1 → demand, C 試運轉及管理費). A line that names only an allocation, levy or percentage of other amounts (管理費, 保險費, 利潤, 營業稅, 5%) is financial_summary.
+
+**R28 Purpose and application phrases [R1, D].** A phrase that only says what the object is for or where it is used (供加藥機使用, 機房用, 於二樓) is not a technical attribute: keep it in raw text, never in D. Written as part of the product name with no delimiter (加藥機用泵浦), it stays in C (R2).
+
+**R29 Formula caches outside an item's own cells [R11, R22].** A formula cache, zero or not, on a continuation row of an item in that item's price or amount column is the item's `demand_content` (or `analysis_content`). A formula cache on a row that carries no item and no label is `unresolved` with the reason "formula cache on a row without an item; no listed role fits". A cache in a subtotal or total row is financial_summary.
+
+**R30 Delimited kind or type words [R2].** A word written after a delimiter that classifies the preceding product (沉水式, 蝶型, 立式, 防爆型) is a type attribute and goes to D. A delimited noun that names another object follows R3 (含/附 accessory → D) or, when the source writes it as a co-equal part of the name with no attribute meaning, stays in C.
+
+**R31 Bracketed tokens directly after a name [R7, R16].** A bracketed token directly after a name is an acronym gloss (R7, undecided class) only when it contains no digit. With a digit it is a measurable value, size or attribute designation (D, R2/R17/R34) when it is one, otherwise an unidentified code token (R16: raw text and a review reason).
+
+**R32 Undecided-class tokens moved to D [R4, R8, R14].** Such a token joins the maximal moved run (R14) unless R4 makes it non-contiguous, for example when its removed wrapping brackets lie between it and the next D text. Then it is its own span, joined by U+FF1B (N14: 自動切換開關(ATS) 3P160A → D ATS；3P160A). R1b qualifiers remain separate spans.
+
+**R33 Panel names in section headings [A, B, P1].** A heading establishes a contractual panel group for the items under it only when its whole noun phrase names one panel (optionally with that panel's own specification) and the items under it are that panel's contents or accessories (三、控制盤 followed by its breakers and relays → group 控制盤). A heading that names a work category, a location, or a panel together with other work (控制盤及配線工程, 機房設備工程) does not. A and B then stay null, and the heading text is named in the A null reason. A line supplying the enclosure itself still follows P1.
+
+**R34 Size designations are measurable values [R2, R17].** A size or dimension designation, with or without a unit (W100, DN250, φ50, 2"), counts as a measurable value. Fused or delimited, it goes to D.
+
+**R35 Standard numbers fused to a service name [R5, C].** When a document or standard number is written directly before a service or test name (CNS1234耐壓試驗), the number is a document reference (R5, raw text and a review reason) and the service name alone is C (耐壓試驗).
+
+**R36 Mixed inclusion clauses [R1].** In an inclusion or exclusion clause, words naming specific objects or work (底座, 安裝) are D attributes (R1). Cost words (工資, 運費, 費用) are financial annotations, as are generic cost categories such as 材料 in 含材料及工資 or 連工帶料. Split a mixed clause accordingly (含底座及工資 → D 含底座; 工資 to raw text and a review reason).
+
+**R37 Continuation boundaries [R4].** A newline or continuation boundary inside a span always becomes exactly one U+0020, even when it falls inside a word. Do not judge word breaks.
+
+**R38 Verbatim copying [C, D].** Text that no rule moves is copied verbatim, including stored leading or trailing spaces and an unpaired bracket at a field edge. Transformations apply only where a rule moves or removes text.
 
 ## Commercial and quantity distinctions
 

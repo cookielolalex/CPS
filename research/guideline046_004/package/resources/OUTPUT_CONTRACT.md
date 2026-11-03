@@ -1,4 +1,4 @@
-# Output contract (candidate 046c)
+# Output contract (candidate 046d)
 
 Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semantic-source-refs.v2`) and to every rule in `SOURCE_REFERENCE_CONTRACT.md`. The response states your semantic decisions and points at exact inventory cells. The adapter later copies the source text and builds the writer carrier. It cannot fix or complete your response.
 

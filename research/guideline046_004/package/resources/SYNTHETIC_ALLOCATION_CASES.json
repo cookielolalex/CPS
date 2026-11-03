@@ -1,8 +1,8 @@
 {
  "schema": "cps.allocation-examples.draft.v1",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
- "candidate": "046c",
- "case_count": 32,
+ "candidate": "046d",
+ "case_count": 48,
  "all_examples_invented": true,
  "private_project_inputs": false,
  "cases": [
@@ -413,10 +413,10 @@
    },
    "proposed_expected": {
     "raw_amount": "anchor-row amount cell (另計)",
-    "continuation_amount_role": "its own role (financial_summary only if it is a subtotal or total) or unresolved naming the possible roles (R11)",
+    "continuation_amount_role": "demand_content: a formula cache in the item's own amount column on its continuation row belongs to the item (R29); it is not the raw amount cell",
     "review_reason_mentions": "另計 financial annotation (R1)"
    },
-   "reason": "Single-cell raw roles come from the anchor row."
+   "reason": "Single-cell raw roles come from the anchor row; the continuation-row cache stays with the item (R22, R29)."
   },
   {
    "id": "A32",
@@ -430,6 +430,225 @@
     "D": null
    },
    "reason": "A cost-line code stays in raw text only."
+  },
+  {
+   "id": "A33",
+   "rule": "R25",
+   "input": {
+    "analysis_row": "組立工資 | 工 | 2",
+    "link": "heading links the block to demand item 盤體組立費 | 式 | 1"
+   },
+   "proposed_expected": {
+    "C": "組立工資",
+    "E": "工",
+    "F": 2,
+    "L": "same project-level value as the demand rows",
+    "P": null,
+    "Q": null
+   },
+   "reason": "Component rows carry their own unit and per-unit quantity, never multiplied."
+  },
+  {
+   "id": "A34",
+   "rule": "R26",
+   "input": {
+    "description": "產品甲，100V，附件乙"
+   },
+   "proposed_expected": {
+    "C": "產品甲，附件乙",
+    "D": "100V"
+   },
+   "reason": "One separator remains after a middle removal."
+  },
+  {
+   "id": "A35",
+   "rule": "R27",
+   "input": {
+    "row": "試運轉及管理費 | 式 | 1 | 50000 (no item number)"
+   },
+   "proposed_expected": {
+    "role": "demand",
+    "C": "試運轉及管理費",
+    "E": "式",
+    "F": 1
+   },
+   "reason": "A priced service line is a demand item even without an item number."
+  },
+  {
+   "id": "A36",
+   "rule": "R27",
+   "input": {
+    "row": "管理費 5% | 12000 (no unit, no quantity)"
+   },
+   "proposed_expected": {
+    "role": "financial_summary",
+    "demand_item": false
+   },
+   "reason": "An allocation or percentage line is financial_summary."
+  },
+  {
+   "id": "A37",
+   "rule": "R28",
+   "input": {
+    "description": "沉水泵浦",
+    "remarks": "供加藥機使用"
+   },
+   "proposed_expected": {
+    "C": "沉水泵浦",
+    "D": null,
+    "remarks_kept_in": "raw text only"
+   },
+   "reason": "Purpose phrases are not technical attributes."
+  },
+  {
+   "id": "A38",
+   "rule": "R29",
+   "input": {
+    "rows": "an empty row (no description, no label) whose amount cell holds a formula cache 0"
+   },
+   "proposed_expected": {
+    "role": "unresolved",
+    "reason": "formula cache on a row without an item; no listed role fits"
+   },
+   "reason": "Formula residue on an empty row has a fixed unresolved reason."
+  },
+  {
+   "id": "A39",
+   "rule": "R30",
+   "input": {
+    "description": "抽水機，沉水式"
+   },
+   "proposed_expected": {
+    "C": "抽水機",
+    "D": "沉水式"
+   },
+   "reason": "A delimited type word is a D attribute."
+  },
+  {
+   "id": "A40",
+   "rule": "R31",
+   "input": {
+    "description": "流量計(FM100)"
+   },
+   "proposed_expected": {
+    "C": "流量計",
+    "D": null,
+    "review_reason_mentions": "unidentified code token FM100 (R16)"
+   },
+   "reason": "A bracketed token with digits that is not a value or size is a code token."
+  },
+  {
+   "id": "A41",
+   "rule": "R32",
+   "input": {
+    "description": "電力監視器 RS485 220V"
+   },
+   "proposed_expected": {
+    "placement": "protocol/interface designation, undecided (R8)",
+    "option_C": {
+     "C": "電力監視器 RS485",
+     "D": "220V"
+    },
+    "option_D": {
+     "C": "電力監視器",
+     "D": "RS485 220V"
+    },
+    "note": "moved to D, the token joins the maximal run because nothing removed lies between it and 220V (R32)"
+   },
+   "reason": "Undecided-class tokens join the maximal run unless R4 separates them."
+  },
+  {
+   "id": "A42",
+   "rule": "R33",
+   "input": {
+    "heading": "三、控制盤",
+    "items_under": "無熔絲開關 3P50A; 電驛 AC110V"
+   },
+   "proposed_expected": {
+    "group": "控制盤",
+    "A": "控制盤 on both items"
+   },
+   "reason": "A heading naming one panel whose contents follow establishes a group."
+  },
+  {
+   "id": "A43",
+   "rule": "R33",
+   "input": {
+    "heading": "二、控制盤及配線工程",
+    "items_under": "控制盤; 電纜 3.5mm²"
+   },
+   "proposed_expected": {
+    "group": null,
+    "A": null,
+    "A_null_reason_mentions": "heading 二、控制盤及配線工程 names a work category, not one panel"
+   },
+   "reason": "A work-category heading does not establish a group; the enclosure line follows P1."
+  },
+  {
+   "id": "A44",
+   "rule": "R34",
+   "input": {
+    "description": "W100線槽"
+   },
+   "proposed_expected": {
+    "C": "線槽",
+    "D": "W100"
+   },
+   "reason": "A size designation is a measurable value, fused or delimited."
+  },
+  {
+   "id": "A45",
+   "rule": "R35",
+   "input": {
+    "description": "CNS1234耐壓試驗"
+   },
+   "proposed_expected": {
+    "C": "耐壓試驗",
+    "D": null,
+    "review_reason_mentions": "document reference CNS1234 (R5)"
+   },
+   "reason": "A standard number fused before a test name is a document reference."
+  },
+  {
+   "id": "A46",
+   "rule": "R36",
+   "input": {
+    "description": "控制箱 含底座及工資"
+   },
+   "proposed_expected": {
+    "C": "控制箱",
+    "D": "含底座",
+    "review_reason_mentions": "工資 cost word, financial annotation (R1)"
+   },
+   "reason": "Split mixed inclusion clauses into object and cost parts."
+  },
+  {
+   "id": "A47",
+   "rule": "R37",
+   "input": {
+    "description": "電磁接觸器",
+    "remarks_rows": [
+     "附端子",
+     "蓋"
+    ]
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "附端子 蓋"
+   },
+   "reason": "A continuation boundary is always one U+0020."
+  },
+  {
+   "id": "A48",
+   "rule": "R38",
+   "input": {
+    "description": "端子台 ",
+    "note": "stored trailing space; no rule moves any text"
+   },
+   "proposed_expected": {
+    "C": "端子台 "
+   },
+   "reason": "Unmoved text is copied verbatim, including a trailing space."
   }
  ]
 }
