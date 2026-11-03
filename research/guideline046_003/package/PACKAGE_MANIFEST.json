@@ -3,7 +3,7 @@
   "candidate": "046c",
   "parent_candidate": "046b",
   "parent_manifest_sha256": "7748be1de62683f57a57398ba6a89dd6cd50c4b925471291f3839a2ab4e559f4",
-  "status": "SEMANTIC_FIXES_APPLIED_PENDING_FINAL_CHECK",
+  "status": "FROZEN_FOR_BOUNDED_SOURCE_TRIAL_NOT_DEPLOYED",
   "target_runtime": "User-proposed sol6.1/xhigh is not selectable from Claude Code; every run records the actual model, effort and tools.",
   "files": [
     {
