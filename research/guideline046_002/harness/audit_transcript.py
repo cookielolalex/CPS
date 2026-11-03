@@ -8,7 +8,8 @@ import argparse, json, re, sys
 from collections import Counter
 from pathlib import Path
 
-PATH_RE = re.compile(r'(/(?:[^\s\'"`;|&<>(){}]+))')
+# absolute paths only: a '/' at the start of a shell word (not the tail of a relative path like ../x or a/b)
+PATH_RE = re.compile(r'(?:(?<=^)|(?<=[\s\'"=:(]))(/[^\s\'"`;|&<>(){}]+)')
 
 
 def main():
