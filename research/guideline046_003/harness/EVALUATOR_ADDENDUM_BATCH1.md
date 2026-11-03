@@ -1,0 +1,9 @@
+Addendum to `EVALUATOR_BRIEF_TEMPLATE.md` for 046c development batch 1. It is written and pinned before any batch-1 generation, and it applies every decision in `research/guideline046_003/DECISIONS_BATCH1.md`.
+
+1. **Excluded scope.** Some frozen expectations carry an `excluded_scope` record. It covers either a whole row or a column on listed rows, each removed prospectively because frozen 046c does not decide the question.
+   - Extra rows. A generated row that pairs with no expected row and that corresponds to an excluded whole row must be identified from its cited source cells. Report it under `excluded_scope_extras`, not as an unexplained extra. It does not by itself make `complete_row_roles` false. The manual obligation that names the excluded scope decides whether the output passes: the cells are classified, nothing is invented, and an accepted reading is used.
+   - Every other extra generated row is still an extra and still makes `complete_row_roles` false.
+   - Excluded columns are already out of core and supported. Report all-position and whole-row figures from the comparator unchanged, labelled as non-scoring diagnostics wherever an excluded column feeds them.
+2. **Census locators for excluded cells.** These cells are not in the required census, so a census locator found for them is neither credited nor penalized. They must still be classified somewhere, as items or as nonitems, under the governing obligation.
+3. **Timing.** Read each run's wall-clock duration from its `STARTED_UTC.txt` and `ENDED_UTC.txt` against the bound declared in the batch admission. A run over its bound is a recorded timing failure. It is still scored and labelled over-bound.
+4. **Aggregation for 046d.** The final report must also give the generic error classes in the form used by `POLICY_BACKLOG_046d.md`. Where a class matches a backlog question (Q1–Q13), give its ID. Where it does not, write a new generic sentence with no case content.
