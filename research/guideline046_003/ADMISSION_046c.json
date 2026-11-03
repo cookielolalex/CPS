@@ -1,0 +1,191 @@
+{
+ "schema": "cps.admission.046b.v1",
+ "frozen_utc": "2026-11-03T09:01:06.886982+00:00",
+ "pins": {
+  "package_manifest": {
+   "file": "PACKAGE_MANIFEST.json",
+   "bytes": 3150,
+   "sha256": "4d8602db470169cdd31647ef2d2dfce3b732643d350d3b15f03fd5fcbf00961e"
+  },
+  "package_guideline": {
+   "file": "CPS_GUIDELINE.md",
+   "bytes": 8811,
+   "sha256": "1b566aadc3913a2a869541ab92865d5b81032787e13ee3a468cd0e2d8f76d98c"
+  },
+  "package_field_roles": {
+   "file": "FIELD_ROLES.md",
+   "bytes": 19303,
+   "sha256": "079fbcf22e4a452306090ac00585c0b8e926b6f5a176ed4fd772cb2043963c34"
+  },
+  "route_tool": {
+   "file": "cps046b_route.py",
+   "bytes": 59920,
+   "sha256": "926a9255a8c199634cc99fd600f1c2490b5c3fe6e2a55ddc71a695247883b9bb"
+  },
+  "packet_1141210_inventory": {
+   "file": "SOURCE_INVENTORY.json",
+   "bytes": 741489,
+   "sha256": "e7a0a757ea0b54e15c213698befe6577500f41528c815bc8052772588e0a4a2c"
+  },
+  "writer004_archived_original": {
+   "file": "writer004.mjs",
+   "bytes": 24008,
+   "sha256": "85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7"
+  },
+  "validate_carrier_v4_archived": {
+   "file": "validate_carrier_v4.mjs",
+   "bytes": 1121,
+   "sha256": "984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013"
+  },
+  "receipt_bytes_archived": {
+   "file": "receipt_bytes.mjs",
+   "bytes": 744,
+   "sha256": "b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c"
+  },
+  "artifact_tool_validation_stub": {
+   "file": "index.mjs",
+   "bytes": 451,
+   "sha256": "67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4"
+  },
+  "evaluator_compare_source047": {
+   "file": "compare_source047.py",
+   "bytes": 19800,
+   "sha256": "d0959cb22fc67ca75798645127c070346a3ee148c183d03c3a0844ce03889dad"
+  },
+  "evaluator_compare_source043_frozen": {
+   "file": "compare_source043.py",
+   "bytes": 10949,
+   "sha256": "1ececf30b034495bff049a629a15ccfa430f76a769d8f651d122be00aa069cb1"
+  },
+  "expectations_1141210": {
+   "file": "EXPECTATIONS_FREEZE_CANDIDATE.json",
+   "bytes": 95685,
+   "sha256": "f8718a4e87bc965db0016b747371a77f444ed7a1dfdcc458d3825511296757c7"
+  },
+  "agents_md_injected_into_contexts": {
+   "file": "AGENTS.md",
+   "bytes": 6006,
+   "sha256": "66d4e86665f0c9f0e38d6772810c1c0a011ebb3392c4e93a33dc130df4adca22"
+  },
+  "harness_prepare_run": {
+   "file": "prepare_run.py",
+   "bytes": 2095,
+   "sha256": "2f0382525377d3ef66ec102460f78c4dd38b75086e3bd95bb8b0cadbc8a289cd"
+  },
+  "harness_freeze_outputs": {
+   "file": "freeze_outputs.py",
+   "bytes": 1928,
+   "sha256": "0f1f85ca8400219a60f7c1e71fe6c645bdc784ab67f146e356173d35da691c7b"
+  },
+  "harness_audit_transcript": {
+   "file": "audit_transcript.py",
+   "bytes": 3932,
+   "sha256": "fe02c1ae0409a6c01a93fa7f96d227f44e3b9d0ce0f9238a868f7aad46934dbb"
+  },
+  "harness_make_release": {
+   "file": "make_release.py",
+   "bytes": 2173,
+   "sha256": "4143196e0c911f9de5d342ddc1dabc463868a5f74195c8ff21a3cf31d778be85"
+  },
+  "harness_generator_prompt_template": {
+   "file": "GENERATOR_PROMPT_TEMPLATE.md",
+   "bytes": 1933,
+   "sha256": "58b4ff5c1479c556087eed8dd7bd63673f3fd1db1f5a3c0eb05a230a1000d518"
+  },
+  "harness_evaluator_brief_template": {
+   "file": "EVALUATOR_BRIEF_TEMPLATE.md",
+   "bytes": 3750,
+   "sha256": "c2032ada5e6dad1ac65d050651684e0951d85ed7464a588326f1636e0c26f71d"
+  },
+  "source_prep_build_inventory_xlsx_v2": {
+   "file": "build_inventory_xlsx_v2.py",
+   "bytes": 10355,
+   "sha256": "8af38d74881fd672c624f62eb5ee7864cba6a1ae0aa6aa7ecd5b87501932df04"
+  },
+  "source_prep_render_views": {
+   "file": "render_views.py",
+   "bytes": 4745,
+   "sha256": "27815f117467e08f1fe6ef6498e40a17e5fa650cc31b2f8c1901ccb065222381"
+  },
+  "packet_1141210_view_01.png": {
+   "file": "view_01.png",
+   "bytes": 68167,
+   "sha256": "8e2be87d5f85e37ac4ac8d9a848b8ed4012f499b9b5f9786d955e5aa8282f916"
+  },
+  "packet_1141210_view_02.png": {
+   "file": "view_02.png",
+   "bytes": 108889,
+   "sha256": "3374fed6d0dbcba6ec7efd38f7a9ee744e21c5eecf2f037aaff0898e829bf1bb"
+  },
+  "packet_1141210_view_03.png": {
+   "file": "view_03.png",
+   "bytes": 145424,
+   "sha256": "53e923e7803ab904e0b154dbc7dcfdfcadd3ca0a16a144fb42bcbbe0fb30c6a0"
+  },
+  "packet_1141210_view_04.png": {
+   "file": "view_04.png",
+   "bytes": 34036,
+   "sha256": "1cec8a7243026cc45502c657faa7fcff2fda3e471d3596c60be577f0ccaac76f"
+  },
+  "packet_1141210_view_05.png": {
+   "file": "view_05.png",
+   "bytes": 127660,
+   "sha256": "b3d8abdec5d8bec2926c653ababae5dd702453b7e570e71cabea36a1678f97c5"
+  },
+  "packet_1141210_view_06.png": {
+   "file": "view_06.png",
+   "bytes": 111565,
+   "sha256": "1c9249a2de7edb36ccec1705f3a1379489474692b46559934f10868b65b74b6d"
+  },
+  "packet_1141210_view_07.png": {
+   "file": "view_07.png",
+   "bytes": 14214,
+   "sha256": "583eecde88de56398d158ae0f8d35e41076b274bad1f071192b6bf537b6103dd"
+  }
+ },
+ "candidate": "046c",
+ "status": "ADMITTED_FOR_BOUNDED_SOURCE_ONLY_TRIAL_NOT_DEPLOYMENT",
+ "admission_valid_until": "2026-11-04T05:59:59+08:00",
+ "runs": [
+  {
+   "order": 1,
+   "case": "1141210",
+   "readers": [
+    "A",
+    "B"
+   ],
+   "role": "exposed development regression (exposed at checkpoint 041); first component-bearing 046 trial; no eligibility credit"
+  }
+ ],
+ "sequence": "Reader A generates, A outcome is frozen and A is assembled (route convert + writer004 validation) before reader B starts; then B; no feedback between readers.",
+ "timing": {
+  "bound_seconds_per_reader_wall_clock": 1500,
+  "rule": "A run exceeding the bound is recorded as a timing failure (outcome still frozen and evaluated, labelled over-bound); declared before generation."
+ },
+ "generator_invocation": {
+  "mechanism": "Claude Code Agent tool, fresh non-fork subagent per reader (general-purpose), one prompt, no follow-ups",
+  "requested_model": "inherit session model; owner-adopted qualification runtime claude-opus-5-5 (decision 2026-11-03)",
+  "requested_effort": "not set",
+  "tools": "general-purpose tool set; instructed to use only Read/Bash(python3)/Write inside its run directory; no web, no agents",
+  "inputs": "exact 046c package copy + exact 1141210 packet only",
+  "isolation": "instruction-based; post-run transcript audit; AGENTS.md is injected by the harness and pinned here"
+ },
+ "evaluation": "separate evaluation-role context; compare_source047 frozen; governing gate per expectations gate_reading; manual obligations reviewed; K/M/N furniture inference counted critical",
+ "no_retries": true,
+ "no_repair_of_scored_outputs": true,
+ "freeze_before_evaluation": true,
+ "unattempted_by_design": [
+  "workbook export",
+  "saved 17-column QA",
+  "visual QA",
+  "saved-assembly repeatability"
+ ],
+ "unchanged": [
+  "deployment bar",
+  "38 reserved projects closed",
+  "case exclusions",
+  "dimension-plus exclusion rule",
+  "WT-A5 closed"
+ ],
+ "heartbeat": "paused"
+}
