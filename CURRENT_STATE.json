@@ -2,9 +2,9 @@
   "project": "CPS - Contract Parsing System",
   "snapshot_date": "2026-11-03",
   "timezone": "Asia/Taipei",
-  "status": "IDLE_HANDOFF_REQUESTED_REVIEW_INCOMPLETE",
+  "status": "IDLE_HANDOFF_AFTER_046B_SOURCE_TRIALS",
   "deployment_status": "NOT_READY_FOR_UNATTENDED_DEPLOYMENT",
-  "completed_checkpoint": "045",
+  "completed_checkpoint": "046b",
   "plan_version": 71,
   "automation": {
     "id": "cps-refinement-cycles",
@@ -83,26 +83,26 @@
     ]
   },
   "next_after_explicit_resume": {
-    "step": "Finish independent046review, fix exact interface findings in a new candidate, implement/review narrow adapter, meaningful actual-route fixtures, freeze then test",
-    "exposed_regression_case": "1140908",
-    "maximum_new_regression_pairs": 1,
-    "next_real_source_case": "1141208",
-    "next_regular_full_audit": "048"
+    "step": "Audit 048 brought forward after the 1140908 regression; fix generic gaps only in a new candidate (046c) with independent review; export/visual QA on frozen carriers in an admitted export runtime",
+    "exposed_regression_case": "1140908 (pair used; do not repeat)",
+    "next_real_source_case": "choose under plan and eligibility rules",
+    "next_regular_full_audit": "048 (brought forward)",
+    "resume_doc": "docs/handoff/RESUME_047.md"
   },
   "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
   "read_first": "AGENTS.md",
-  "latest_candidate": "046a",
+  "latest_candidate": "046b",
   "deployment_artifact": "Markdown guideline and supplementary resources used by an AI agent",
   "proposed_model": "sol6.1/xhigh; actual model/effort and tool route must be recorded in future tests",
   "latest_preparation": {
-    "package_files": 12,
-    "authoring_checks_passed": 33,
-    "independent_review": "PRELIMINARY_FINDINGS_ONLY",
-    "fixes_completed": false,
-    "adapter_implemented": false,
-    "new1140908_model_calls": 0,
-    "new1141208_model_calls": 0,
-    "source1141208_preparation": "FULL_SAVED_CACHE_INVENTORY_AND_VIEWS_AVAILABLE_NO_FROZEN_SEMANTIC_EXPECTATIONS_OR_ADMISSION"
+    "package_files": 15,
+    "route_tests_passed": 113,
+    "independent_review": "APPROVE_FOR_BOUNDED_SOURCE_TRIAL (two rounds)",
+    "fixes_completed": true,
+    "adapter_implemented": true,
+    "new1140908_model_calls": 2,
+    "new1141208_model_calls": 2,
+    "source1141208_preparation": "INDEPENDENT_EXPECTATIONS_FROZEN_0b974752"
   },
   "publication": {
     "public": "Code, generic guideline, aggregate status and handoff docs",
@@ -117,6 +117,38 @@
     ],
     "replayed_saved_evaluation": "045 A/B",
     "external_project_reads": 0,
-    "new_model_tests": 0
+    "new_model_tests": 4,
+    "private_results_zip": "CPS_046b_results_20261103_PRIVATE.zip (sha256 d6dad4f7af7ef694e47b80284ddb4d459cfdf7b74624a9d78c74eb3166d8df74)"
+  },
+  "latest_trials_046b": {
+    "evidence": "docs/evidence/METRICS_046B.json",
+    "results": "docs/handoff/RESULTS_046B.md",
+    "observed_model": "claude-opus-5-5",
+    "1140908": {
+      "A": {
+        "matches": 141,
+        "denominator": 176
+      },
+      "B": {
+        "matches": 140,
+        "denominator": 176
+      },
+      "passed": false,
+      "regression_vs_045": true
+    },
+    "1141208": {
+      "A": {
+        "governing_matches": 107,
+        "denominator": 107,
+        "canonical_matches": 107
+      },
+      "B": {
+        "governing_matches": 107,
+        "denominator": 107,
+        "canonical_matches": 105
+      },
+      "numeric_gate_passed": true,
+      "source_case_passed": false
+    }
   }
 }

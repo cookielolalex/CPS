@@ -1,0 +1,221 @@
+{
+  "schema": "cps.metrics.046b.v1",
+  "date": "2026-11-03",
+  "timezone": "Asia/Taipei",
+  "candidate": "046b",
+  "package_manifest_sha256": "7748be1de62683f57a57398ba6a89dd6cd50c4b925471291f3839a2ab4e559f4",
+  "admission_sha256": "db84dce97ff4a82fbc047b1c18aedbc2d89d40c33cb51b35343e056f521b7c8e",
+  "runtime": {
+    "mechanism": "Claude Code Agent tool fresh subagent per reader",
+    "requested_model": "inherit (no override)",
+    "requested_effort": "not set",
+    "observed_model": "claude-opus-5-5",
+    "proposed_product_runtime_sol6_1_xhigh_used": false
+  },
+  "cases": {
+    "1140908": {
+      "role": "exposed regression",
+      "expectations_sha256": "04b5f42cd0ea5b198dce6a1b2cb7cda624315395b099d077989c5bf1476935ea",
+      "governing": "canonical core (045-comparable)",
+      "A": {
+        "core_canonical": [
+          141,
+          176
+        ],
+        "core_declared": [
+          141,
+          176
+        ],
+        "supported": [
+          188,
+          223
+        ],
+        "all_positions": [
+          764,
+          799
+        ],
+        "whole_rows": [
+          28,
+          47
+        ],
+        "raw_literal": [
+          282,
+          282
+        ],
+        "raw_nonnull": [
+          184,
+          184
+        ],
+        "census": [
+          95,
+          95
+        ],
+        "incidents": 0,
+        "critical_errors": 0,
+        "obligations": [
+          10,
+          12
+        ],
+        "gate_pass": false
+      },
+      "B": {
+        "core_canonical": [
+          140,
+          176
+        ],
+        "core_declared": [
+          140,
+          176
+        ],
+        "supported": [
+          187,
+          223
+        ],
+        "all_positions": [
+          716,
+          799
+        ],
+        "whole_rows": [
+          0,
+          47
+        ],
+        "raw_literal": [
+          282,
+          282
+        ],
+        "raw_nonnull": [
+          184,
+          184
+        ],
+        "census": [
+          95,
+          95
+        ],
+        "incidents": 0,
+        "critical_errors": 0,
+        "critical_errors_if_customer_role_inference_critical": 47,
+        "obligations": [
+          9,
+          12
+        ],
+        "gate_pass": false
+      },
+      "prior_045": {
+        "A": [
+          155,
+          176
+        ],
+        "B": [
+          147,
+          176
+        ]
+      },
+      "regression": true
+    },
+    "1141208": {
+      "role": "next real source case",
+      "expectations_sha256": "0b974752a5639f16797be8a08ae8e292db7b9fcc2479d2aa343fcd85e11d7905",
+      "governing": "declared_alternatives core; canonical reported",
+      "A": {
+        "core_declared": [
+          107,
+          107
+        ],
+        "core_canonical": [
+          107,
+          107
+        ],
+        "supported": [
+          137,
+          137
+        ],
+        "all_positions": [
+          510,
+          510
+        ],
+        "whole_rows": [
+          30,
+          30
+        ],
+        "raw_literal": [
+          180,
+          180
+        ],
+        "raw_nonnull": [
+          136,
+          136
+        ],
+        "census": [
+          68,
+          68
+        ],
+        "incidents": 0,
+        "critical_errors": 0,
+        "obligations": [
+          9,
+          10
+        ],
+        "obligations_strict": [
+          8,
+          10
+        ],
+        "numeric_gate_pass": true,
+        "source_case_gate_pass": false
+      },
+      "B": {
+        "core_declared": [
+          107,
+          107
+        ],
+        "core_canonical": [
+          105,
+          107
+        ],
+        "supported": [
+          137,
+          137
+        ],
+        "all_positions": [
+          510,
+          510
+        ],
+        "whole_rows": [
+          30,
+          30
+        ],
+        "raw_literal": [
+          180,
+          180
+        ],
+        "raw_nonnull": [
+          136,
+          136
+        ],
+        "census": [
+          68,
+          68
+        ],
+        "incidents": 0,
+        "critical_errors": 0,
+        "obligations": [
+          9,
+          10
+        ],
+        "numeric_gate_pass": true,
+        "source_case_gate_pass": false
+      }
+    }
+  },
+  "not_attempted": [
+    "workbook export",
+    "saved 17-column QA",
+    "visual QA",
+    "saved-assembly repeatability",
+    "historical target evaluation"
+  ],
+  "eligible_development_pairs": 1,
+  "eligible_reserved_pairs": 0,
+  "performance_passed_historical_pairs": 0,
+  "reserved_answers_opened": false,
+  "note": "Source-only measurements; not historical reconstruction accuracy; not a reliability rate; deployment bar unchanged."
+}

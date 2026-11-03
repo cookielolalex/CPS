@@ -1,4 +1,17 @@
-# Current status —2026-11-03
+# Current status — 2026-11-03 (after the 046b trials)
+
+The resumed session finished the interrupted review and built candidate 046b, with the source-reference adapter (route v2), a writer-port parity check and invented-fixture route tests (113/113). An independent reviewer approved 046b for bounded source trials after two rounds. Independent 1141208 source expectations were authored, reviewed and frozen. One exposed 1140908 A/B pair and one 1141208 A/B pair then ran in fresh contexts. All outcomes were frozen before evaluation, and evaluation ran in separate contexts.
+
+- 1140908: A 141/176, B 140/176 canonical core. This is a regression against 045 (155 and 147), with a different runtime (observed `claude-opus-5-5`). Failed.
+- 1141208: A and B both 107/107 declared-alternatives core (canonical: A 107, B 105). Both failed the source-case gate on obligation S05. No critical errors.
+- Saved-workbook QA, visual QA and assembly repeatability were not attempted, because no export runtime is available here.
+- 1 eligible development pair, 0 eligible reserved pairs, 0 performance-passed historical pairs. All 38 reserved answers stay closed.
+
+Details: [RESULTS_046B.md](RESULTS_046B.md). Next steps: [RESUME_047.md](RESUME_047.md). The section below is the earlier interrupted-handoff status, kept as history.
+
+---
+
+## Earlier status (interrupted handoff, 2026-11-03)
 
 The later [portable supplement](PORTABILITY.md) adds exact missing project dependencies, a complete1141208saved-cache inventory and two reconstructed views. It did not finish independent expectations or any new model trial. The interruption state below remains historical evidence.
 
