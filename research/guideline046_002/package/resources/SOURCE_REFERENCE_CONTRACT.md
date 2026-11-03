@@ -69,6 +69,9 @@ Proof rules:
 **Anchors and location.** `anchor_refs` (at least one) are the cells that carry the item's identity on its first physical row, normally its item-number cell.
 
 - When an item has no item-number cell, its first description cell is the anchor.
+- When one cell holds both the item number and the description text, classify it as `demand_content` (or `analysis_content`), cite it in the description, and use it as the anchor.
+- A cell used as one item's anchor or description cell cannot be another item's anchor or description cell.
+- At most 2000 demand items and 2000 analysis components are allowed.
 - Anchors are all on one row, and that row is the first row of the item's cells.
 - The item's carrier location is the ordered union of its anchor and raw-field cells. All of these cells must be on one sheet and inside the inventory views.
 
@@ -88,7 +91,7 @@ Proof rules:
 
 - Every content cell has **exactly one** primary role, and empty cells take no role.
 - An item's own description, unit, quantity, price, amount and remark cells are `demand_content` (or `analysis_content`), even when a remark is commercial in tone.
-- Every `demand_content`/`analysis_content` cell must be cited by some item (raw, proof, anchor or basis). This detects dropped items.
+- Every `demand_content`/`analysis_content` cell must be cited by some item or group (raw, proof, anchor, group proof or basis). This detects dropped items.
 - An item's cell that no raw field can carry, such as a second text cell in its quantity column, is classified by its own nonitem role, for example `commercial_note`, and stays in the census.
 - Secondary uses (raw, proof, anchor, group, basis) are recorded by the route and do not change the primary role.
 

@@ -387,6 +387,7 @@ def mutations(base):
         ('desc_includes_unit', 'DESCRIPTION_INCLUDES_EXCLUDED_CELL', m(lambda r: item(r, 'R002')['raw_refs'].update(description={'refs': [S + 'B6', S + 'C6'], 'reason_if_empty': None}))),
         ('anchor_not_first_row', 'ANCHOR_NOT_ON_FIRST_ROW', m(lambda r: item(r, 'R001').update(anchor_refs=[S + 'G5']))),
         ('anchor_shared', 'ANCHOR_SHARED_ACROSS_ITEMS', m(lambda r: item(r, 'R002').update(anchor_refs=[S + 'A4']))),
+        ('anchor_on_other_description', 'ANCHOR_SHARED_ACROSS_ITEMS', m(lambda r: item(r, 'R004').update(anchor_refs=[S + 'B6']))),
         ('basis_unit_number_cell', 'BASIS_UNIT_MUST_BE_TEXT_CELL', m(lambda r: r['component_links'][0].update(basis_unit_ref='cell:S2!C3'))),
         ('desc_shared', 'DESCRIPTION_CELL_SHARED_ACROSS_ITEMS', m(lambda r: item(r, 'R002')['raw_refs'].update(description={'refs': [S + 'B4', S + 'B6'], 'reason_if_empty': None}))),
         ('group_id_list', 'UNKNOWN_GROUP_ID', m(lambda r: item(r, 'R002').update(group_id=[]))),

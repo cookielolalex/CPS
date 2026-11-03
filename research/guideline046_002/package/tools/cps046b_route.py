@@ -775,7 +775,7 @@ def _check(inv, resp_raw, rep):
 
     # items
     items, demand_ids, component_ids = {}, set(), set()
-    desc_owner, anchor_owner, raw_owner, desc_anchor = {}, {}, {}, []
+    ident_owner, raw_owner, desc_anchor = {}, {}, []
     for i, it in enumerate(r['items']):
         w = f'items[{i}]'
         if not exact_keys(it, ('id', 'role', 'group_id', 'status', 'values', 'proofs', 'raw_refs',
@@ -815,9 +815,9 @@ def _check(inv, resp_raw, rep):
         anchors = ref_list(it['anchor_refs'], w + '.anchor_refs', rep, inv, min_items=1)
         for x in anchors:
             use(x, f'{iid}.anchor')
-            if x in anchor_owner and anchor_owner[x] != iid:
+            if x in ident_owner and ident_owner[x] != iid:
                 rep.bad('ANCHOR_SHARED_ACROSS_ITEMS', w, x)
-            anchor_owner[x] = iid
+            ident_owner.setdefault(x, iid)
         if anchors and len({inv.rc(x)[0] for x in anchors}) != 1:
             rep.bad('ANCHORS_NOT_ON_ONE_ROW', w)
         raw_vals, loc_refs, raw_cells = {}, list(anchors), {}
@@ -849,9 +849,9 @@ def _check(inv, resp_raw, rep):
                     if x not in loc_refs:
                         loc_refs.append(x)
                     if k == 'description':
-                        if x in desc_owner and desc_owner[x] != iid:
+                        if x in ident_owner and ident_owner[x] != iid:
                             rep.bad('DESCRIPTION_CELL_SHARED_ACROSS_ITEMS', sw, x)
-                        desc_owner[x] = iid
+                        ident_owner.setdefault(x, iid)
                     elif x in raw_owner and raw_owner[x] != iid:
                         rep.warn('RAW_CELL_SHARED_ACROSS_ITEMS', sw, x)
                     raw_owner.setdefault(x, iid)
@@ -985,8 +985,11 @@ def _check(inv, resp_raw, rep):
         for x in extra:
             use(x, f'{cid}.basis')
         if len(refs) == 2:
-            t = copy_text(inv, refs[0], w + '.basis_raw_ref', rep, 'BASIS')
-            u = copy_text(inv, refs[1], w + '.basis_unit_ref', rep, 'BASIS')
+            sub = Report()
+            t = copy_text(inv, refs[0], w + '.basis_raw_ref', sub, 'BASIS')
+            u = copy_text(inv, refs[1], w + '.basis_unit_ref', sub, 'BASIS')
+            for v in sub.violations:     # a link has no field to leave null: uncarriable basis holds the export
+                rep.add(v['code'], v['where'], v.get('detail'), 'invalid' if v['category'] == 'invalid' else 'unrepresentable_hold')
             if t is not None and bq is not None:
                 n = writer_numeric_raw(t)
                 if n is None:

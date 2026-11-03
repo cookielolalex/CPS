@@ -3,7 +3,7 @@
   "candidate": "046b",
   "parent_candidate": "046a",
   "parent_manifest_sha256": "6448cd3dab2d061cdd52ee1f9c26c41376b05ec7daf9339a686b6dca2344e60d",
-  "status": "DRAFT_FIXES_UNDER_CONFIRMATION_REVIEW",
+  "status": "FROZEN_FOR_BOUNDED_SOURCE_TRIAL_NOT_DEPLOYED",
   "target_runtime": "User-proposed sol6.1/xhigh is not selectable from Claude Code; every run records the actual model, effort and tools.",
   "files": [
     {
@@ -54,7 +54,7 @@
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
       "bytes": 15868,
-      "sha256": "f4c75a96de8c66afaea702f78f315c4cc65c295b44d1a1ad2d47c9cda43f09f8"
+      "sha256": "5b4aa5a171365984593dbbadc0521b3ee1d08aa4f6ba6f9e5b51c8e7671752b0"
     },
     {
       "path": "resources/SOURCE_INVENTORY.schema.json",
@@ -68,8 +68,8 @@
     },
     {
       "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 14503,
-      "sha256": "8b7c1c963dd1be5c70c1e9a86cefc93d5891ce4b1f80dd5a35cfb4de33dc8c9a"
+      "bytes": 14883,
+      "sha256": "b5b4f6cf27d38a30ac60c95f8148cf0f6ca154ea6a2d81eed9b662c7a5f03824"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
@@ -78,11 +78,11 @@
     },
     {
       "path": "tools/cps046b_route.py",
-      "bytes": 59644,
-      "sha256": "2945e7264d88d525723f5cb7242253a220708239073b7194171a33fc6d781484"
+      "bytes": 59920,
+      "sha256": "926a9255a8c199634cc99fd600f1c2490b5c3fe6e2a55ddc71a695247883b9bb"
     }
   ],
-  "utf8_bytes": 234702,
+  "utf8_bytes": 235358,
   "manifest_self_excluded": true,
   "deployment_approved": false
 }

@@ -45,7 +45,7 @@ response = obj({'schema': {'const': 'cps.semantic-source-refs.v2'}, 'case_id': I
                 'inventory_sha256': {'type': 'string', 'pattern': '^[0-9a-f]{64}$'},
                 'status': {'enum': ['research_draft', 'partial', 'held']},
                 'groups': {'type': 'array', 'items': {'$ref': '#/$defs/group'}},
-                'items': {'type': 'array', 'items': {'$ref': '#/$defs/item'}, 'minItems': 1, 'maxItems': 2000},
+                'items': {'type': 'array', 'items': {'$ref': '#/$defs/item'}, 'minItems': 1, 'maxItems': 4000},
                 'component_links': {'type': 'array', 'items': {'$ref': '#/$defs/component_link'}},
                 'source_roles': {'type': 'array', 'items': {'$ref': '#/$defs/source_role'}},
                 'limitations': {'type': 'array', 'items': TXT, 'maxItems': 400}})
