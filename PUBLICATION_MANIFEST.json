@@ -1046,6 +1046,11 @@
       "path": "docs/handoff/RESULTS_046C_BATCH1.md",
       "bytes": 5340,
       "sha256": "d3839cf531d8085cdc612b2499843f17010e0870a2a499bf7f4af2cfe68cc7a5"
+    },
+    {
+      "path": "research/guideline046_004/LARGE_WORKBOOK_DESIGN.md",
+      "bytes": 5380,
+      "sha256": "71659bd5b32a9ed38885bb62acc8914028bc7248732d2b73de82dcd1b904cb0b"
     }
   ]
 }
