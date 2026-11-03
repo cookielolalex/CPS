@@ -996,6 +996,46 @@
       "path": "research/guideline046_004/route_tests/test_compare_source047.py",
       "bytes": 5702,
       "sha256": "0cebb9e61fcc49108fcf7b4bd80699fd74b2517e4cd4ea786e43c3f569961a15"
+    },
+    {
+      "path": "research/guideline046_004/harness/EVALUATOR_BRIEF_TEMPLATE.md",
+      "bytes": 3750,
+      "sha256": "b05bab333e372ad8303c0708165124046dc24844c981f225e5914acb266c9461"
+    },
+    {
+      "path": "research/guideline046_004/harness/GENERATOR_PROMPT_TEMPLATE.md",
+      "bytes": 1933,
+      "sha256": "1dc75fb6dc37224bfd6621afc4483bf911c7f1446e13bb7412143120758c3683"
+    },
+    {
+      "path": "research/guideline046_004/harness/audit_transcript.py",
+      "bytes": 4039,
+      "sha256": "4fe2eee2ff078b4092c71fa7a0eda436f2d33b2fa2fda47b0529584ee137dde9"
+    },
+    {
+      "path": "research/guideline046_004/harness/freeze_admission.py",
+      "bytes": 1451,
+      "sha256": "89c29f78df38e6344cc66b888b740577234bc7e6ec67f83f96b041736ef4817b"
+    },
+    {
+      "path": "research/guideline046_004/harness/freeze_outputs.py",
+      "bytes": 1928,
+      "sha256": "0f1f85ca8400219a60f7c1e71fe6c645bdc784ab67f146e356173d35da691c7b"
+    },
+    {
+      "path": "research/guideline046_004/harness/fullpath_check.py",
+      "bytes": 1209,
+      "sha256": "6e2ff9236a88b17aa41d593145fa85250f6c67fcc19b22d352fb6b66a86fc2b2"
+    },
+    {
+      "path": "research/guideline046_004/harness/make_release.py",
+      "bytes": 2173,
+      "sha256": "4143196e0c911f9de5d342ddc1dabc463868a5f74195c8ff21a3cf31d778be85"
+    },
+    {
+      "path": "research/guideline046_004/harness/prepare_run.py",
+      "bytes": 2095,
+      "sha256": "2f0382525377d3ef66ec102460f78c4dd38b75086e3bd95bb8b0cadbc8a289cd"
     }
   ]
 }
