@@ -2,27 +2,22 @@
  "schema": "cps.allocation-examples.draft.v1",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "candidate": "046c",
- "case_count": 20,
+ "case_count": 32,
  "all_examples_invented": true,
  "private_project_inputs": false,
  "cases": [
   {
    "id": "A01",
-   "rule": "R1/R1b/R8",
+   "rule": "R1/R1b",
    "input": {
     "description": "發電機（租用）100KW"
    },
    "proposed_expected": {
-    "C_contains": [
-     "發電機"
-    ],
-    "D_contains": [
-     "100KW"
-    ],
-    "supply_basis_qualifier": "租用",
-    "placement": "undecided: exactly one of C or D; class named in proof"
+    "C": "發電機",
+    "D": "租用；100KW",
+    "proof_D_mentions": "supply-basis qualifier"
    },
-   "reason": "Hired-instead-of-bought is a supply-basis qualifier, not a financial annotation."
+   "reason": "Hired-instead-of-bought is a supply-basis qualifier; owner decision 2026-11-03 moves it to D as a separate span (wrapping brackets removed) joined with U+FF1B."
   },
   {
    "id": "A02",
@@ -74,7 +69,7 @@
     "C": "按鈕開關三只組合盒",
     "quantity_unchanged": true
    },
-   "reason": "Composition count stays attached to the sub-object noun in C."
+   "reason": "Composition count that is part of the name stays in C."
   },
   {
    "id": "A06",
@@ -83,13 +78,17 @@
     "description": "電錶箱安裝（新設1只）"
    },
    "proposed_expected": {
-    "C_contains": [
-     "電錶箱安裝"
-    ],
-    "scope_count": "新設1只",
-    "placement": "undecided: exactly one of C or D; class named in proof"
+    "placement_C": {
+     "C": "電錶箱安裝（新設1只）",
+     "D": null
+    },
+    "placement_D": {
+     "C": "電錶箱安裝",
+     "D": "新設1只"
+    },
+    "proof_names_class": "scope count; placement undecided"
    },
-   "reason": "A count limiting service scope is a scope count; placement undecided."
+   "reason": "A count limiting service scope is a scope count; both complete placements are acceptable."
   },
   {
    "id": "A07",
@@ -178,7 +177,7 @@
     "C": "可程式控制器",
     "D": "PLC，16點輸入"
    },
-   "reason": "Acronym in a delimited attribute list stays in D; the full name is C."
+   "reason": "Acronym inside a delimited attribute list stays in that contiguous D span."
   },
   {
    "id": "A14",
@@ -198,11 +197,15 @@
     "description": "RS-485轉換器"
    },
    "proposed_expected": {
-    "C_contains": [
-     "轉換器"
-    ],
-    "protocol_token": "RS-485",
-    "placement": "undecided: exactly one of C or D; proof names 'protocol/interface designation; placement undecided'"
+    "placement_C": {
+     "C": "RS-485轉換器",
+     "D": null
+    },
+    "placement_D": {
+     "C": "轉換器",
+     "D": "RS-485"
+    },
+    "proof_names_class": "protocol/interface designation; placement undecided"
    },
    "reason": "Protocol class; both placements acceptable; class must be recorded."
   },
@@ -213,13 +216,17 @@
     "description": "光纖收發器"
    },
    "proposed_expected": {
-    "C_contains": [
-     "收發器"
-    ],
-    "medium_token": "光纖",
-    "placement": "undecided; class recorded"
+    "placement_C": {
+     "C": "光纖收發器",
+     "D": null
+    },
+    "placement_D": {
+     "C": "收發器",
+     "D": "光纖"
+    },
+    "proof_names_class": "protocol/interface designation; placement undecided"
    },
-   "reason": "A transmission-medium word fused to a device noun is in the protocol/interface class."
+   "reason": "A medium word qualifying a signal device is in the protocol/interface class."
   },
   {
    "id": "A17",
@@ -228,10 +235,11 @@
     "description": "電磁接觸器 AC220V"
    },
    "proposed_expected": {
-    "if_D_null": "invalid; D has a rating",
-    "if_rating_kept_in_C": "D null reason must say the rating was kept in C and why"
+    "C": "電磁接觸器",
+    "D": "AC220V",
+    "if_D_null": "invalid: the item has a rating, which belongs in D"
    },
-   "reason": "Null reasons must be true of the whole source."
+   "reason": "Ratings go to D; a null D would need a reason that is false."
   },
   {
    "id": "A18",
@@ -262,13 +270,164 @@
    "id": "A20",
    "rule": "R12",
    "input": {
-    "description": "token matched by two rules sending it to different fields"
+    "description": "光纖收發器"
    },
    "proposed_expected": {
-    "apply": "more specific rule; cite both",
-    "if_equal": "treat as undecided class and record in limitations"
+    "governing_rule": "R8 (precedes R2 in the R12 order)",
+    "proof_cites": [
+     "R8",
+     "R2"
+    ]
    },
-   "reason": "Explicit precedence."
+   "reason": "Deterministic precedence: R8 before R2."
+  },
+  {
+   "id": "A21",
+   "rule": "R2/R8",
+   "input": {
+    "description": "光纖電纜 12芯"
+   },
+   "proposed_expected": {
+    "C": "光纖電纜",
+    "D": "12芯"
+   },
+   "reason": "The medium word names the cable kind supplied, so R2 governs and it stays in C."
+  },
+  {
+   "id": "A22",
+   "rule": "R3",
+   "input": {
+    "description": "控制箱，含2只底座"
+   },
+   "proposed_expected": {
+    "C": "控制箱",
+    "D": "含2只底座"
+   },
+   "reason": "An included accessory introduced by 含 after a delimiter is a D attribute with its count."
+  },
+  {
+   "id": "A23",
+   "rule": "R4",
+   "input": {
+    "description": "電纜托架，45度彎頭，W250"
+   },
+   "proposed_expected": {
+    "C": "電纜托架，彎頭",
+    "D": "45度；W250"
+   },
+   "reason": "C keeps the delimiter between two retained spans; D spans are non-contiguous and join with U+FF1B."
+  },
+  {
+   "id": "A24",
+   "rule": "R6",
+   "input": {
+    "label": "供應商：示例電機行",
+    "description": "控制盤"
+   },
+   "proposed_expected": {
+    "K": null,
+    "null_reason_mentions": "supplier label is not an ordering-supplier role"
+   },
+   "reason": "Supplier or quote-sender labels do not establish K."
+  },
+  {
+   "id": "A25",
+   "rule": "R14",
+   "input": {
+    "description": "電磁接觸器 AC220V (防塵型)"
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "AC220V (防塵型)"
+   },
+   "reason": "Parentheses inside one contiguous moved span stay verbatim."
+  },
+  {
+   "id": "A26",
+   "rule": "R15",
+   "input": {
+    "description": "電纜（耐燃）接續盒"
+   },
+   "proposed_expected": {
+    "C": "電纜接續盒",
+    "D": "耐燃"
+   },
+   "reason": "A bracket pair whose whole content moves to D is removed; retained spans join with nothing."
+  },
+  {
+   "id": "A27",
+   "rule": "R16",
+   "input": {
+    "description": "AB-12端子台"
+   },
+   "proposed_expected": {
+    "C": "端子台",
+    "D": null,
+    "unresolved_token": "AB-12",
+    "review_reason_mentions": "AB-12 role unresolved"
+   },
+   "reason": "Unlabelled code token with digits is kept in raw and review only."
+  },
+  {
+   "id": "A28",
+   "rule": "R17",
+   "input": {
+    "description": "90度彎頭"
+   },
+   "proposed_expected": {
+    "C": "彎頭",
+    "D": "90度"
+   },
+   "reason": "A fused measurable value moves to D."
+  },
+  {
+   "id": "A29",
+   "rule": "R18",
+   "input": {
+    "description": "廢料清運"
+   },
+   "proposed_expected": {
+    "C": "廢料清運"
+   },
+   "reason": "The condition word names the material handled; it stays in C."
+  },
+  {
+   "id": "A30",
+   "rule": "R19",
+   "input": {
+    "description": "盤體安裝 依監造指示"
+   },
+   "proposed_expected": {
+    "C": "盤體安裝",
+    "D": null,
+    "review_reason_mentions": "procedural clause"
+   },
+   "reason": "Procedural clauses never enter C or D."
+  },
+  {
+   "id": "A31",
+   "rule": "R22",
+   "input": {
+    "rows": "item row with amount text '另計' and a continuation row with a cached amount"
+   },
+   "proposed_expected": {
+    "raw_amount": "anchor-row amount cell",
+    "continuation_amount_role": "financial_summary (census)"
+   },
+   "reason": "Single-cell raw roles come from the anchor row."
+  },
+  {
+   "id": "A32",
+   "rule": "R23",
+   "input": {
+    "description": "組立工資",
+    "code_cell": "M0101"
+   },
+   "proposed_expected": {
+    "C": "組立工資",
+    "D": null
+   },
+   "reason": "A cost-line code stays in raw text only."
   }
  ]
 }

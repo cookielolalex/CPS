@@ -14,3 +14,14 @@ All decisions are dated 2026-11-03 (Asia/Taipei) and were made before any 046b g
 | R2 | Workbook export, saved-cell QA and visual QA need `@oai/artifact-tool` and a Windows source-verification helper. Neither is available here, so these steps are recorded as unattempted. No substitute writer is admitted. | REVIEW_046a N4 | 046a review |
 
 The deployment bar, the reserved-project closure, the case and dimension-plus exclusions, the WT-A5 closure and the frozen 045 scores (A 155/176, B 147/176) are unchanged.
+
+## Owner decisions, 2026-11-03 (after audit 048), applied in candidate 046c
+
+| ID | Decision | Effect |
+|---|---|---|
+| O1 | **Supply-basis qualifiers go to D (規格).** | FIELD_ROLES R1b in 046c: remove the qualifier from C with its wrapping delimiters and place it as its own D clause (joined by R4). The qualifier is no longer an undecided class. |
+| O2 | **Inferring K/M/N from document furniture is a critical error.** | FIELD_ROLES R6 in 046c. Evaluators count each such filled field as a critical error that blocks the case. The 1140908 B result under the new rule: 47 critical positions. This is recorded alongside the frozen 046b scoring, not as a rescore. |
+| O3 | **CPS is qualified on `claude-opus-5-5`.** | Runs on this runtime are qualification evidence. sol6.1/xhigh is no longer the target runtime. |
+| O4 | **New evidence:** the owner added three Data Center year folders (113, 114 and 115年度工作) to the private Drive folder. | Bulk transfer through the Drive connector is not feasible (10 MB limit, and files pass through the model context). The owner is asked to attach ZIP archives. Reserved projects (38 IDs from the cohort registry) are quarantined unread, and excluded cases are dropped. |
+
+Package-author decision recorded for review: phase/wire systems (3φ4W, 單相三線) are measurable values (R2), and so go to D, like pole counts.

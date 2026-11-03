@@ -42,21 +42,23 @@ def main():
     # components
     crow = lambda eid, gid, cell, parent, bq, bu: {'id': eid, 'category': 'component', 'sheet': '單價分析', 'anchor_cell': cell,
         'expected_values': byid[gid]['values'], 'raw': byid[gid]['raw'], 'supported_columns': ['C'], 'core_columns': ['C'],
-        'link': {'parent_expected_id': parent, 'basis_quantity': bq, 'basis_unit': bu, 'basis_raw': str(bq), 'basis_sheet': '單價分析', 'basis_cells': [cell.replace('A', 'C'), cell.replace('A', 'B')]}}
+        'link': {'parent_expected_id': parent, 'basis_quantity': bq, 'basis_unit': bu, 'basis_raw': str(bq), 'basis_sheet': '單價分析',
+                 'basis_cells_admissible': [cell.replace('A', 'C'), cell.replace('A', 'B'), cell.replace('A', 'D')],
+                 'basis_cells_required': [cell.replace('A', 'C'), cell.replace('A', 'B')]}}
     rows2 = [dict(r) for r in rows]
     rows2[1] = dict(rows2[1], expected_values=byid['R002']['values'])
     rows2 += [crow('EC1', 'C001', 'A3', 'ER003', 2, '工'), crow('EC2', 'C002', 'A4', 'ER003', 1, '式')]
     exp2 = dict(exp, rows=rows2, denominators={'component_rows': 2})
     r = c047.evaluate(exp2, carrier)
     results.append(('components_pair_by_anchor_cell', not r['correspondence_incidents'] and r['metrics']['component']['corresponded'] == 2))
-    results.append(('component_links_all_pass', r['component_links'] == {'matches': 2, 'denominator': 2, 'records': r['component_links']['records']} and r['component_links']['matches'] == 2))
+    results.append(('component_links_all_pass', r['component_links']['matches'] == 2 and r['component_links']['denominator'] == 2 and not r['component_links']['extra_generated_components']))
     results.append(('gates_pass_with_components', r['numeric_99_percent_gates']['canonical'] is True))
     bad = copy.deepcopy(carrier); next(x for x in bad['components'] if x['id'] == 'C001')['composition']['parent_id'] = 'R002'
     rb = c047.evaluate(exp2, bad)
     results.append(('wrong_parent_fails_link_and_gate', rb['component_links']['matches'] == 1 and rb['numeric_99_percent_gates']['canonical'] is False))
     bad2 = copy.deepcopy(carrier); next(x for x in bad2['components'] if x['id'] == 'C002')['composition']['basis_unit'] = '組'
     results.append(('wrong_basis_unit_fails_link', c047.evaluate(exp2, bad2)['component_links']['matches'] == 1))
-    bad3 = copy.deepcopy(carrier); next(x for x in bad3['components'] if x['id'] == 'C001')['composition']['basis_location']['cells'] = ['D3']
+    bad3 = copy.deepcopy(carrier); next(x for x in bad3['components'] if x['id'] == 'C001')['composition']['basis_location']['cells'] = ['C3', 'B3', 'C4']
     results.append(('wrong_basis_location_fails_link', c047.evaluate(exp2, bad3)['component_links']['matches'] == 1))
     bad4 = copy.deepcopy(carrier); next(x for x in bad4['components'] if x['id'] == 'C001')['composition']['basis_raw'] = '2.0'
     results.append(('wrong_basis_raw_fails_link', c047.evaluate(exp2, bad4)['component_links']['matches'] == 1))
@@ -67,6 +69,23 @@ def main():
         c047.evaluate(dict(exp2, denominators={'component_rows': 0}), carrier); results.append(('denominator_mismatch_raises', False))
     except ValueError:
         results.append(('denominator_mismatch_raises', True))
+    held = copy.deepcopy(carrier); next(x for x in held['components'] if x['id'] == 'C001').update(status='held', review_reasons=['held'])
+    results.append(('held_component_link_fails', c047.evaluate(exp2, held)['component_links']['matches'] == 1))
+    extra = copy.deepcopy(carrier); ex = copy.deepcopy(extra['components'][0]); ex['id'] = 'C999'; ex['location'] = dict(ex['location'], cells=['A1']); extra['components'].append(ex)
+    re_ = c047.evaluate(exp2, extra)
+    results.append(('extra_component_fails_links_and_gate', re_['case_gate']['all_parent_links'] is False and re_['numeric_99_percent_gates']['canonical'] is False))
+    rd = c047.evaluate(exp, carrier)
+    results.append(('detail_only_expectations_with_components_fail_gate', rd['numeric_99_percent_gates']['canonical'] is False))
+    for name, mut in (('empty_rows_raise', lambda e: e.update(rows=[])), ('category_typo_raises', lambda e: e['rows'][0].update(category='Detail')),
+                      ('duplicate_ids_raise', lambda e: e['rows'][1].update(id=e['rows'][0]['id'])),
+                      ('link_missing_required_cells_raises', lambda e: e['rows'][-1]['link'].pop('basis_cells_required'))):
+        ee = copy.deepcopy(exp2); mut(ee)
+        try:
+            c047.evaluate(ee, carrier); results.append((name, False))
+        except ValueError:
+            results.append((name, True))
+    pv = copy.deepcopy(no_comp); pv['items'][0]['evidence']['C']['location']['sheet'] = '他表'
+    results.append(('provenance_requires_expected_sheet', c047.evaluate(exp, pv)['supported_provenance_locators']['present'] == c043.evaluate(exp, pv)['supported_provenance_locators']['present']))
     try:
         c043.evaluate(exp2, carrier); results.append(('frozen_043_refuses_components', False))
     except ValueError:

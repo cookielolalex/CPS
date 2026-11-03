@@ -58,7 +58,7 @@ Proof rules:
 
 **Raw references.** `raw_refs` has the six raw fields `description, unit, quantity, unit_price, amount, remarks`. Each is `{"refs":[...], "reason_if_empty": string|null}`. A non-empty list requires `reason_if_empty:null`, and an empty list requires a specific reason.
 
-- `unit`, `quantity`, `unit_price` and `amount` hold at most one cell each: the item's own cell in that role.
+- `unit`, `quantity`, `unit_price` and `amount` hold at most one cell each: the item's own cell in that role on its anchor row (FIELD_ROLES R22).
 - `description` lists the logical item's descriptive text cells in row-major order (top to bottom, then left to right). These are its name/description column and any separate specification or description column, including proven continuation rows. Exclude the item-number cell and the unit, quantity, price, amount and remarks cells. The checker enforces row-major order and these exclusions.
 - `remarks` lists the item's remarks-column cells in row-major order.
 - Every listed cell must have non-null `canonical_raw`; empty cells are never listed. The copied raw text is the canonical texts joined with U+000A.
@@ -84,7 +84,7 @@ Proof rules:
 
 **Component links.** Every `analysis_component` item has exactly one link, and a demand item has none. A link is `{component_id, parent_id, status, basis_quantity, basis_raw_ref, basis_unit_ref, refs, reason}`.
 
-- `supported`: the parent is a demand item other than itself, `basis_quantity` is greater than 0, `basis_raw_ref` is one cell whose canonical text parses to `basis_quantity`, and `basis_unit_ref` is one nonblank, non-formula-like cell of saved type `text`. All basis cells are on one sheet. Never multiply by the parent quantity.
+- `supported` (basis cells per FIELD_ROLES R21: the component row's own quantity and unit cells): the parent is a demand item other than itself, `basis_quantity` is greater than 0, `basis_raw_ref` is one cell whose canonical text parses to `basis_quantity`, and `basis_unit_ref` is one nonblank, non-formula-like cell of saved type `text`. All basis cells are on one sheet. Never multiply by the parent quantity.
 - `held`: the admitted writer cannot carry a held or unlinked component, so the **whole export is held**. The response and census are still retained. Never delete a component or invent a link to avoid this.
 
 **Source roles.** Each source role is `{role, refs, reason}`, with role one of `demand_content, analysis_content, item_identifier, header, section, financial_summary, commercial_note, document_reference, footer, unresolved`.
