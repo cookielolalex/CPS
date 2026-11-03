@@ -16,7 +16,7 @@ Use actual evidence for each entry. Record pass, fail, unresolved or not applica
 7. All demands, continuations, services, analysis components, commercial notes and nonitems accounted for; no favorable excerpt or silently lost row.
 8. Names checked after codes/ratings and across columns; specific/compound nouns, accessory identity, service suffixes and composition-count referents preserved.
 9. No automatic translation, spelling normalization, unsupported alias, model selection or manufacturer inference. Every I/J value has a supported role.
-10. Source-supported C/D allocation, meaningful punctuation/internal characters, boundary representation and unavailable-reference treatment follow the declared policy, including FIELD_ROLES R1–R12; every undecided-class token names its class in the proof (R8); null reasons are true of the whole source (R9).
+10. Source-supported C/D allocation, meaningful punctuation/internal characters, boundary representation and unavailable-reference treatment follow the declared policy, including FIELD_ROLES R1–R38 and P1/P2; every undecided-class token names its class in the proof (R8); null reasons are true of the whole source (R9).
 11. Panel relationship and physical ownership distinguished; quantities/bases/rates preserved without unsupported multiplication, role substitution or scope expansion.
 12. Stage blanks and unresolved roles truthful; G/H blank, P not copied from F, Q held unless its accepted rate role is proven. Missing price alone does not determine responsibility.
 

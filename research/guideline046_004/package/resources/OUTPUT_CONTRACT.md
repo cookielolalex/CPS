@@ -22,7 +22,7 @@ Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semanti
    - An item cell that no raw field can carry (for example extra text in its quantity column) takes its own role, such as `commercial_note`.
    - Mark anything you cannot resolve as `unresolved` and explain why.
    - A single role entry can list many refs that share one reason.
-7. Apply FIELD_ROLES R1–R12. For every token of an undecided class (R8), name the class in the proof of the field that holds it and mention it in the other field's proof or null reason. Make every null reason true of the whole source (R9). Record total/subtotal discrepancies in `limitations` without repairing them (R10).
+7. Apply FIELD_ROLES R1–R38 and P1/P2. For every token of an undecided class (R8), name the class in the proof of the field that holds it and mention it in the other field's proof or null reason. Make every null reason true of the whole source (R9). Record total/subtotal discrepancies in `limitations` without repairing them (R10).
 8. Set item `status` to `research_draft` or `held`; `held` needs review reasons. Set the top-level `status` to `research_draft`, `partial` (some scope is unresolved or held) or `held`. Record every unresolved obligation in `limitations` or review reasons.
 
 ## Self-check before returning

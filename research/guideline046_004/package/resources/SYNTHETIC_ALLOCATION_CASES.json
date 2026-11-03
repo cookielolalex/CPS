@@ -2,7 +2,7 @@
  "schema": "cps.allocation-examples.draft.v1",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "candidate": "046d",
- "case_count": 48,
+ "case_count": 49,
  "all_examples_invented": true,
  "private_project_inputs": false,
  "cases": [
@@ -283,7 +283,7 @@
   },
   {
    "id": "A21",
-   "rule": "R2/R8",
+   "rule": "R2/R8/R34",
    "input": {
     "description": "光纖電纜 12芯"
    },
@@ -291,7 +291,7 @@
     "C": "光纖電纜",
     "D": "12芯"
    },
-   "reason": "The medium word names the cable kind supplied, so R2 governs and it stays in C."
+   "reason": "The medium word names the cable kind supplied, so R2 keeps it in C; the core count is a measurable value (R34)."
   },
   {
    "id": "A22",
@@ -407,16 +407,16 @@
   },
   {
    "id": "A31",
-   "rule": "R22",
+   "rule": "R22/R29",
    "input": {
     "rows": "item row with amount text '另計' and a continuation row with a cached amount"
    },
    "proposed_expected": {
     "raw_amount": "anchor-row amount cell (另計)",
-    "continuation_amount_role": "demand_content: a formula cache in the item's own amount column on its continuation row belongs to the item (R29); it is not the raw amount cell",
+    "continuation_amount_role": "unresolved, reason \"formula cache on a continuation row; the anchor-row cell is the item's raw amount (R22)\" — the anchor-row amount cell (另計) is not empty (R29)",
     "review_reason_mentions": "另計 financial annotation (R1)"
    },
-   "reason": "Single-cell raw roles come from the anchor row; the continuation-row cache stays with the item (R22, R29)."
+   "reason": "Single-cell raw roles come from the anchor row; a continuation-row cache that R22 does not select is unresolved with the fixed R29 reason."
   },
   {
    "id": "A32",
@@ -452,10 +452,10 @@
    "id": "A34",
    "rule": "R26",
    "input": {
-    "description": "產品甲，100V，附件乙"
+    "description": "產品甲，100V，端子台"
    },
    "proposed_expected": {
-    "C": "產品甲，附件乙",
+    "C": "產品甲，端子台",
     "D": "100V"
    },
    "reason": "One separator remains after a middle removal."
@@ -487,6 +487,18 @@
    "reason": "An allocation or percentage line is financial_summary."
   },
   {
+   "id": "A36b",
+   "rule": "R27",
+   "input": {
+    "row": "管理費 | 式 | 1 | 30000 (no item number)"
+   },
+   "proposed_expected": {
+    "role": "financial_summary",
+    "demand_item": false
+   },
+   "reason": "A line naming only overhead is financial_summary even with 式 | 1."
+  },
+  {
    "id": "A37",
    "rule": "R28",
    "input": {
@@ -496,7 +508,8 @@
    "proposed_expected": {
     "C": "沉水泵浦",
     "D": null,
-    "remarks_kept_in": "raw text only"
+    "remarks_kept_in": "raw text only",
+    "D_null_reason_mentions": "供加藥機使用 (purpose phrase kept in raw text, R28/R9)"
    },
    "reason": "Purpose phrases are not technical attributes."
   },
@@ -533,7 +546,8 @@
    "proposed_expected": {
     "C": "流量計",
     "D": null,
-    "review_reason_mentions": "unidentified code token FM100 (R16)"
+    "review_reason_mentions": "unidentified code token FM100 (R16)",
+    "I_and_D_null_reasons_mention": "FM100"
    },
    "reason": "A bracketed token with digits that is not a value or size is a code token."
   },
@@ -566,7 +580,9 @@
    },
    "proposed_expected": {
     "group": "控制盤",
-    "A": "控制盤 on both items"
+    "group_name_rule": "noun phrase after the section number 三、 (R33)",
+    "A": "控制盤 on both items",
+    "scope": "from the heading to the next same-level heading, subtotal or total row, or table end"
    },
    "reason": "A heading naming one panel whose contents follow establishes a group."
   },
@@ -634,21 +650,22 @@
    },
    "proposed_expected": {
     "C": "電磁接觸器",
-    "D": "附端子 蓋"
+    "D": "附端子蓋"
    },
-   "reason": "A continuation boundary is always one U+0020."
+   "reason": "A continuation boundary between two CJK characters becomes nothing; otherwise one U+0020 (R37)."
   },
   {
    "id": "A48",
    "rule": "R38",
    "input": {
     "description": "端子台 ",
-    "note": "stored trailing space; no rule moves any text"
+    "note": "stored trailing space"
    },
    "proposed_expected": {
-    "C": "端子台 "
+    "C": "端子台",
+    "transformation_mentions": "trailing whitespace removed at the C edge (R38)"
    },
-   "reason": "Unmoved text is copied verbatim, including a trailing space."
+   "reason": "Edge whitespace is trimmed at C/D/J edges; other characters are copied exactly."
   }
  ]
 }

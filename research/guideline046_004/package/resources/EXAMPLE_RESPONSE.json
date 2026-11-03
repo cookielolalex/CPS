@@ -56,7 +56,7 @@
             "cell:S1!B3"
           ],
           "transformation": "copied group heading",
-          "role_basis": "contractual panel group heading owns items 1-3"
+          "role_basis": "contractual panel group heading (壹 示例控制盤) owns items 1–4; scope closed by the subtotal row (R33)"
         },
         "B": {
           "refs": [
@@ -512,16 +512,18 @@
       "anchor_refs": [
         "cell:S1!A7"
       ],
-      "review_reasons": []
+      "review_reasons": [
+        "Remark 001.00 is an unlabelled bare number with no established role; kept in raw remarks (R16, R34)."
+      ]
     },
     {
       "id": "R004",
       "role": "demand",
-      "group_id": null,
+      "group_id": "G1",
       "status": "research_draft",
       "values": [
-        null,
-        null,
+        "示例控制盤",
+        "W600×H800×D300",
         "備用接點",
         null,
         "只",
@@ -540,10 +542,18 @@
       ],
       "proofs": {
         "A": {
-          "reason": "Item is not inside an explicitly identified panel group."
+          "refs": [
+            "cell:S1!B3"
+          ],
+          "transformation": "copied group heading",
+          "role_basis": "group heading"
         },
         "B": {
-          "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
+          "refs": [
+            "cell:S1!C3"
+          ],
+          "transformation": "copied group specification",
+          "role_basis": "group heading dimension"
         },
         "C": {
           "refs": [
@@ -1154,10 +1164,10 @@
       ],
       "proofs": {
         "A": {
-          "reason": "Item is not inside an explicitly identified panel group."
+          "reason": "analysis component; parent R003 carries the group (R25)"
         },
         "B": {
-          "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
+          "reason": "analysis component; parent R003 carries the group specification (R25)"
         },
         "C": {
           "refs": [
@@ -1167,7 +1177,7 @@
           "role_basis": "analysis component name"
         },
         "D": {
-          "reason": "No separable technical specification text in this item."
+          "reason": "The only remark, 每式, states the per-unit analysis basis cited in the component link; no technical attribute (R9, R25)."
         },
         "E": {
           "refs": [
@@ -1302,10 +1312,10 @@
       ],
       "proofs": {
         "A": {
-          "reason": "Item is not inside an explicitly identified panel group."
+          "reason": "analysis component; parent R003 carries the group (R25)"
         },
         "B": {
-          "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
+          "reason": "analysis component; parent R003 carries the group specification (R25)"
         },
         "C": {
           "refs": [
@@ -1315,7 +1325,7 @@
           "role_basis": "analysis component name"
         },
         "D": {
-          "reason": "No separable technical specification text in this item."
+          "reason": "The only remark, 每式, states the per-unit analysis basis cited in the component link; no technical attribute (R9, R25)."
         },
         "E": {
           "refs": [
