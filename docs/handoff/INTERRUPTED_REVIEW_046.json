@@ -1,0 +1,38 @@
+{
+  "schema": "cps.interrupted-review-notes.v1",
+  "date": "2026-11-03",
+  "timezone": "Asia/Taipei",
+  "status": "PRELIMINARY_FINDINGS_FROM_REVIEWER_MESSAGES_FINAL_REVIEW_NOT_SAVED",
+  "provenance": "Messages from the independent reviewer in the interrupted chat; reconstructed handoff notes, not a signed final reviewer report.",
+  "findings": [
+    {
+      "id": "IR-01",
+      "severity": "mandatory",
+      "finding": "Closed inventory schema lacks structured sheet/range/view/merge/hidden/external-link/native-number metadata or a pinned complete sidecar, despite required complete provenance and existing writer locators."
+    },
+    {
+      "id": "IR-02",
+      "severity": "mandatory",
+      "finding": "Response schema permits generic scalar values in all17 positions; existing writer requires F/P/Q numeric-or-null, G/H null, all other populated fields strings. Row status/group relationships and nonnull-C/held rules also need explicit compatibility."
+    },
+    {
+      "id": "IR-03",
+      "severity": "mandatory",
+      "finding": "Supported component transport lacks complete basis_unit/basis_location/basis_raw required by the existing carrier; no silent component deletion or value repair is permitted."
+    },
+    {
+      "id": "IR-04",
+      "severity": "mandatory",
+      "finding": "Existing nonitems.text is a string; typed original census values need an explicit lossless wrapper and pinned typed ledger."
+    },
+    {
+      "id": "IR-05",
+      "severity": "review prerequisite",
+      "finding": "Single-source cached_xls research restriction may be acceptable if unsupported cross-source/proof/group/component cases are explicitly held with complete source census and original model values retained. It gives no component or broad deployment credit."
+    }
+  ],
+  "implementation_fixes_completed": false,
+  "new_original_model_calls": 0,
+  "final_review_approval": false,
+  "source_preparer_exposure_incident": "The1141208 preparer opened1140908 SOURCE_AUDIT_POLICY.md while inspecting the comparator contract. No historical targets or model outputs were reported read. Its role is exposed to1140908 audit prose and must not serve as a pristine1140908 evaluator.1141208 facts were to come from its own original source; fresh generation contexts remain separate."
+}

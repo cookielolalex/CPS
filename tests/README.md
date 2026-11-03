@@ -1,3 +1,5 @@
+> Historical045 snapshot retained. For the later agent-run Markdown candidate and interrupted046review, start with [current status](../docs/handoff/CURRENT_STATUS.md).
+
 # Retained tests and verification limits
 
 No CPS tests were executed during this documentation/export task. Development remains paused.

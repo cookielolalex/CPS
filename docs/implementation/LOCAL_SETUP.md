@@ -1,3 +1,5 @@
+> Historical045 snapshot retained. For the later agent-run Markdown candidate and interrupted046review, start with [current status](../handoff/CURRENT_STATUS.md) and [046next steps](../handoff/RESUME_046.md).
+
 # Local continuation prerequisites
 
 Development is paused. Reading this handoff and validating its packaging are allowed by the upload task; running CPS, changing its implementation, conducting source investigations, or starting scheduled refinement requires the user's explicit resume instruction. The public repository contains historical source and documentation, not ready-to-run deployment configuration.

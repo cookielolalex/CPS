@@ -1,3 +1,5 @@
+> Historical045 snapshot retained. For the later agent-run Markdown candidate and interrupted046review, start with [current status](CURRENT_STATUS.md) and [046next steps](RESUME_046.md).
+
 # Resume plan after checkpoint 045
 
 **Status: paused.** This document records the adopted direction for a future resume. It is not an instruction to execute now. Only an explicit user request to resume can lift the pause. Documentation publication does not do so.

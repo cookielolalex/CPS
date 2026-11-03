@@ -1,0 +1,272 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "enum": [
+        "cps.source-inventory.cells.draft.v1"
+      ]
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "representation_profile": {
+      "enum": [
+        "cached-cell-raw-scalar-text.draft.v1"
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "minItems": 1
+    },
+    "cells": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cell"
+      },
+      "minItems": 1
+    },
+    "context_facts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/context"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "case_id",
+    "representation_profile",
+    "sources",
+    "cells",
+    "context_facts",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cps:source-inventory:cells:draft:v1",
+  "$defs": {
+    "source": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "format": {
+          "enum": [
+            "xlsx",
+            "cached_xls",
+            "ods"
+          ]
+        },
+        "adoption_status": {
+          "enum": [
+            "verified",
+            "partial",
+            "unverified"
+          ]
+        },
+        "adoption_basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "source_id",
+        "path",
+        "sha256",
+        "format",
+        "adoption_status",
+        "adoption_basis",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "cell": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^cell:[^\\s]+$"
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^[A-Z]+[1-9][0-9]*$"
+        },
+        "state": {
+          "enum": [
+            "literal",
+            "cached_formula",
+            "true_blank",
+            "explicit_empty",
+            "covered",
+            "error",
+            "missing_cache",
+            "unresolved"
+          ]
+        },
+        "saved_value": {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "saved_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache": {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "merge_anchor_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "canonical_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usable_for_raw": {
+          "type": "boolean"
+        },
+        "raw_limit_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ref",
+        "source_id",
+        "sheet",
+        "address",
+        "state",
+        "saved_value",
+        "saved_type",
+        "formula",
+        "cache",
+        "merge_anchor_ref",
+        "conflicts",
+        "canonical_raw",
+        "usable_for_raw",
+        "raw_limit_reason"
+      ],
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^context:[^\\s]+$"
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authority_pins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "ref",
+        "namespace",
+        "value",
+        "basis",
+        "authority_pins"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "description": "DRAFT structural contract only. Unique and cross-reference identity, source bytes, semantic roles, representation and adapter correctness require separate reviewed guards."
+}

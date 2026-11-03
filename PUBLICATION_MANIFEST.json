@@ -1,10 +1,10 @@
 {
-  "schema": "cps.publication.v1",
-  "snapshot_date": "2026-11-02",
+  "schema": "cps.publication.v2",
+  "snapshot_date": "2026-11-03",
   "timezone": "Asia/Taipei",
   "repository": "cookielolalex/CPS",
-  "status": "PAUSED_BY_USER_NOT_DEPLOYED",
-  "scope": "Public technical handoff; not a byte-complete private experiment archive",
+  "status": "IDLE_HANDOFF_REQUESTED_REVIEW_INCOMPLETE",
+  "scope": "Code/generic docs public; actual project evidence only in private ZIP",
   "manifest_self_excluded": true,
   "files": [
     {
@@ -14,13 +14,13 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 5151,
-      "sha256": "24168c2fb813dce79020ceace93c5c7a0448ea1c6b6265982e3e441938597f8f"
+      "bytes": 5590,
+      "sha256": "9ba3931098470e6481174253dec60ee698606949fa333453106543a79c466f9e"
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 2833,
-      "sha256": "b9a163da173da29703c834f3472b55aba45a9fe19e62ea4769831317909d8b1d"
+      "bytes": 3614,
+      "sha256": "d9fbed28752cba30db952bfd16f1b10cfd3f9898b3c094dcbec92125f2259277"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/handoff/CURRENT_STATUS.md",
-      "bytes": 7100,
-      "sha256": "11b51865be9803bd994dd9adeedd4f22a5a338bf81ebacad342c3d88b0a04ecd"
+      "bytes": 2490,
+      "sha256": "9ff8ee21c3facd6e0ed1f65b473fd9e483a8ee37c87ed4c4125730d785e3ca23"
     },
     {
       "path": "docs/handoff/DECISIONS.md",
@@ -58,19 +58,44 @@
       "sha256": "12daa452d7073731f08b5c1e35fb222bb733cb21b7e30b12fb47ba51303db1d2"
     },
     {
+      "path": "docs/handoff/HANDOFF_PROMPT.md",
+      "bytes": 2705,
+      "sha256": "5ac92e77d450003ad7962d977632c2cc4eb7f53f4c1e1229872d7351aa45fa52"
+    },
+    {
+      "path": "docs/handoff/INTERRUPTED_REVIEW_046.json",
+      "bytes": 2330,
+      "sha256": "50a34096ca9604fe1180623bbd439092e8069a776971c8388c88b913347ea51a"
+    },
+    {
+      "path": "docs/handoff/NAMING_STUDY.md",
+      "bytes": 2186,
+      "sha256": "4c640cb8e26bfbb77b3dab090e7d712a76edaacf07214a13a1ee0512030b6994"
+    },
+    {
+      "path": "docs/handoff/RESOURCE_BUNDLE.md",
+      "bytes": 3025,
+      "sha256": "c332a34faeeb78079c5b5e271f8549ca3599bc62332777931e76115e92657223"
+    },
+    {
+      "path": "docs/handoff/RESUME_046.md",
+      "bytes": 2949,
+      "sha256": "234cc4b757817805e8ab0be2d626bfff1c2cd466887c16bf777b7f261d84a4ea"
+    },
+    {
       "path": "docs/handoff/RESUME_PLAN.md",
-      "bytes": 9322,
-      "sha256": "4e371b31dd3998412c6bd5ed80b9f416f8a828aef5743f602ef3a1fac7dfde2e"
+      "bytes": 9576,
+      "sha256": "883b155b201b9654131c76cc7a80dc51804dd36ee958795c3b4112888f8d28da"
     },
     {
       "path": "docs/implementation/ARCHITECTURE.md",
-      "bytes": 9151,
-      "sha256": "104f4af2edec324eaa3f061429d712cdf3f0d1830e427eea00ff4c14c2dc822e"
+      "bytes": 9431,
+      "sha256": "3a4d4ed3dba780fca57ac2a1f258c4038088565b43db42e5c34ac03fef4f3676"
     },
     {
       "path": "docs/implementation/LOCAL_SETUP.md",
-      "bytes": 5895,
-      "sha256": "455af90c69f58ca25d63947f487edacc41f82ce4c9430426315a5fcb1576d993"
+      "bytes": 6151,
+      "sha256": "3a04650dfcd82e24ab236ba6a712b885f3d91302ffed95d84796d24342b06484"
     },
     {
       "path": "docs/implementation/SOURCE_EXPORT_MANIFEST.json",
@@ -99,13 +124,13 @@
     },
     {
       "path": "PUBLICATION_SCOPE.md",
-      "bytes": 3854,
-      "sha256": "65c3b14d19715d937c818457f50bd86c8d8940a6824a90259801394088fc4127"
+      "bytes": 1689,
+      "sha256": "5483d581db34e5c4fb09217e67db5867601e0cf7b5550643a85546d020fd6cdf"
     },
     {
       "path": "README.md",
-      "bytes": 4010,
-      "sha256": "8dfbefe26c4c219d86c93d66543fe1beccf79bd5da96d46f8a89e12f9beefdb6"
+      "bytes": 3068,
+      "sha256": "8bfd49ced4c2702c133ffccc7e98967a0e1adc0b37122dec42364916b3193a13"
     },
     {
       "path": "research/checkpoint045/check_proposed_admission.ps1.txt",
@@ -233,9 +258,129 @@
       "sha256": "1ececf30b034495bff049a629a15ccfa430f76a769d8f651d122be00aa069cb1"
     },
     {
+      "path": "research/guideline046_001/build_schema_drafts.py",
+      "bytes": 5282,
+      "sha256": "f1fb113a712e71bd8b8e90325945516ccc9e044f0341e0f299561961228055a2"
+    },
+    {
+      "path": "research/guideline046_001/package/CPS_GUIDELINE.md",
+      "bytes": 7814,
+      "sha256": "78040350af221fc8804f717a0d4294acf88ce1ee20a3f7a18867dbe159114702"
+    },
+    {
+      "path": "research/guideline046_001/package/PACKAGE_MANIFEST.json",
+      "bytes": 2434,
+      "sha256": "6448cd3dab2d061cdd52ee1f9c26c41376b05ec7daf9339a686b6dca2344e60d"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/COLUMNS.json",
+      "bytes": 1497,
+      "sha256": "550fd6c36d710e79d5a4877c4019643d658f1657808c569a6e8c478df597142e"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/FIELD_ROLES.md",
+      "bytes": 5095,
+      "sha256": "fb8d8e1695a742890d9d0b3af5ec083d166f0bedf313d5f7007de04a4a65f925"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/NAME_POLICY.json",
+      "bytes": 1186,
+      "sha256": "dc9605cc473100e9c358a8c3668d998db961d0914e7a08a22c198a33748dfd8b"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/NAMING_RULES.md",
+      "bytes": 7055,
+      "sha256": "d3c84312371a25f387fbb114a7e63af8005676566bc3e9472ee70866a30b1fc2"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/OUTPUT_CONTRACT.md",
+      "bytes": 3110,
+      "sha256": "ca9f926db6cfbd2dcd71a0b1e23282d137feb6d92fb677b237732907aae4aef3"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/REVIEW_CHECKLIST.md",
+      "bytes": 2991,
+      "sha256": "e881275c8ac917682d658d97fe8cf0c777317e7c7170e09977afcf6c34f1ed96"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/SEMANTIC_RESPONSE.schema.json",
+      "bytes": 11840,
+      "sha256": "b56cc336505825450afaf2af20daf39a7b2e73520b1988cf8c5dfa10abfb1987"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/SOURCE_INVENTORY.schema.json",
+      "bytes": 5965,
+      "sha256": "261e5bc1dcf07507299e9168f782326cd14ceafdc6a0194e90208e5e5717c3e7"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/SOURCE_READING.md",
+      "bytes": 4400,
+      "sha256": "9fa2f868d79d28d6dc09c9bb7c729a4d0dcf53c8fae4a491c9c80b84a819c09e"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/SOURCE_REFERENCE_CONTRACT.md",
+      "bytes": 8219,
+      "sha256": "f983bce55bab4e2c22ac7a4107b2c93877fe7e11e3617867d65eb7da78c450ed"
+    },
+    {
+      "path": "research/guideline046_001/package/resources/SYNTHETIC_NAMING_CASES.json",
+      "bytes": 11385,
+      "sha256": "08a5bf123e40b8b4efb420eb7da673091df5f393853544c51fe2f9ac8df0efa9"
+    },
+    {
+      "path": "research/naming_study/discover_source_patterns.py",
+      "bytes": 3131,
+      "sha256": "aa953509684e12510926b6ae5c89d2fd6d7c85921cada60d68f4cdb4f964c262"
+    },
+    {
+      "path": "research/naming_study/README.md",
+      "bytes": 442,
+      "sha256": "197d47226a618bf45a1ab4b6be38c484c1e4c0271f7ae17f156de87d186607b8"
+    },
+    {
+      "path": "research/naming_study/study_saved_names.py",
+      "bytes": 4356,
+      "sha256": "184ac4845d767c7f56b31784920d8aad26faad403421eabce610133e2d94851a"
+    },
+    {
       "path": "research/README.md",
       "bytes": 942,
       "sha256": "df9a322174209b2823f004551f3eead9abbe5071a54ec06a2987d9c42b9e74d4"
+    },
+    {
+      "path": "research/source_reader003/cps.py",
+      "bytes": 35831,
+      "sha256": "30fe59eb90c1dc40b5c7d1a77aee52584aa03d0ae3f7a4b62eb2742f0b4df8f4"
+    },
+    {
+      "path": "research/source_reader003/README.md",
+      "bytes": 305,
+      "sha256": "3a4b06afa33c58e02bf87e733e324740b670dc43fdb8a62b53b8abb73c791708"
+    },
+    {
+      "path": "research/source_reader003/source_formats.py",
+      "bytes": 41386,
+      "sha256": "ef681a3e688eb2805fa049331542635d1d2a0e1f10222ef3c605f995c9e097b6"
+    },
+    {
+      "path": "research/source_reader003/test_biff_compatibility.py",
+      "bytes": 7856,
+      "sha256": "6820bd2afe13d666fc17b99918977badb7546bcb01f4fa0b3766dcdee9c9bddd"
+    },
+    {
+      "path": "research/source_reader003/test_container_limits.py",
+      "bytes": 9070,
+      "sha256": "4ad6bb4925ae9c91005a4adfcdaa0f596c9521d0ec3da324f8d31dfa33ebc716"
+    },
+    {
+      "path": "research/source_reader003/test_cps.py",
+      "bytes": 16320,
+      "sha256": "82658fc890b2fe0884628c068850f66960ce4f283c5485c640b4eeb12b03f6c4"
+    },
+    {
+      "path": "research/source_reader003/test_source_formats.py",
+      "bytes": 20049,
+      "sha256": "5e52714b21f85fa01002c7a8f571c37f07ab325bb1b7d18c69555345fc26bb1a"
     },
     {
       "path": "src/installed_baseline/cps.ps1.txt",
@@ -284,13 +429,13 @@
     },
     {
       "path": "tests/README.md",
-      "bytes": 1556,
-      "sha256": "f4f164c076e40690b6e6dd4bf84be936daa05bbb5b5f37a1094636915e91be07"
+      "bytes": 1739,
+      "sha256": "1076d1be8957c2e447d5f3cdadf59774e1fdec1a495262bc8d9f1c670f0b4b12"
     },
     {
       "path": "tools/verify_handoff.py",
-      "bytes": 2314,
-      "sha256": "b7d4509808d69b674f1ce22d2df6c0b61e8d9c22b37ccfa7ef139590ee769d74"
+      "bytes": 2409,
+      "sha256": "11636b8996d6075f8867716fcb0bf2e502f7115d52ace7d6e4a7633e477b8d10"
     }
   ]
 }

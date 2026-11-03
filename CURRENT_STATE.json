@@ -1,8 +1,8 @@
 {
   "project": "CPS - Contract Parsing System",
-  "snapshot_date": "2026-11-02",
+  "snapshot_date": "2026-11-03",
   "timezone": "Asia/Taipei",
-  "status": "PAUSED_BY_USER",
+  "status": "IDLE_HANDOFF_REQUESTED_REVIEW_INCOMPLETE",
   "deployment_status": "NOT_READY_FOR_UNATTENDED_DEPLOYMENT",
   "completed_checkpoint": "045",
   "plan_version": 71,
@@ -83,14 +83,30 @@
     ]
   },
   "next_after_explicit_resume": {
-    "checkpoint": "046",
-    "method": "Narrow source-reference/coverage transport and generic field-role clarification; preserve immutable source and current gold",
+    "step": "Finish independent046review, fix exact interface findings in a new candidate, implement/review narrow adapter, meaningful actual-route fixtures, freeze then test",
     "exposed_regression_case": "1140908",
     "maximum_new_regression_pairs": 1,
     "next_real_source_case": "1141208",
-    "deferred_complete_structure_case": "1140608",
     "next_regular_full_audit": "048"
   },
   "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
-  "read_first": "AGENTS.md"
+  "read_first": "AGENTS.md",
+  "latest_candidate": "046a",
+  "deployment_artifact": "Markdown guideline and supplementary resources used by an AI agent",
+  "proposed_model": "sol6.1/xhigh; actual model/effort and tool route must be recorded in future tests",
+  "latest_preparation": {
+    "package_files": 12,
+    "authoring_checks_passed": 33,
+    "independent_review": "PRELIMINARY_FINDINGS_ONLY",
+    "fixes_completed": false,
+    "adapter_implemented": false,
+    "new1140908_model_calls": 0,
+    "new1141208_model_calls": 0,
+    "source1141208_preparation": "PARTIAL_UNFROZEN_NO_FINAL_EXPECTATIONS"
+  },
+  "publication": {
+    "public": "Code, generic guideline, aggregate status and handoff docs",
+    "private": "Selected project evidence only in downloadable ZIP",
+    "secrets_included": false
+  }
 }

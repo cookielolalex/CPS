@@ -1,0 +1,506 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "enum": [
+        "cps.semantic-source-refs.draft.v1"
+      ]
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inventory_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "research_draft",
+        "partial",
+        "held"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    },
+    "component_links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/component_link"
+      }
+    },
+    "source_roles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_role"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "case_id",
+    "inventory_sha256",
+    "status",
+    "items",
+    "component_links",
+    "source_roles",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cps:semantic-source-refs:draft:v1",
+  "$defs": {
+    "nonnull_proof": {
+      "type": "object",
+      "properties": {
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(cell|context):[^\\s]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "transformation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role_basis": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "refs",
+        "transformation",
+        "role_basis"
+      ],
+      "additionalProperties": false
+    },
+    "null_proof": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "raw_selection": {
+      "type": "object",
+      "properties": {
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^cell:[^\\s]+$"
+          },
+          "uniqueItems": true
+        },
+        "reason_if_empty": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "refs",
+        "reason_if_empty"
+      ],
+      "additionalProperties": false
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "enum": [
+            "demand",
+            "analysis_component"
+          ]
+        },
+        "status": {
+          "enum": [
+            "research_draft",
+            "partial",
+            "held"
+          ]
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number",
+              "null"
+            ]
+          },
+          "minItems": 17,
+          "maxItems": 17
+        },
+        "proofs": {
+          "type": "object",
+          "properties": {
+            "A": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "B": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "C": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "D": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "E": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "F": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "G": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "H": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "I": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "J": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "K": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "L": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "M": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "N": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "O": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "P": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            },
+            "Q": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nonnull_proof"
+                },
+                {
+                  "$ref": "#/$defs/null_proof"
+                }
+              ]
+            }
+          },
+          "required": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q"
+          ],
+          "additionalProperties": false
+        },
+        "raw_refs": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "$ref": "#/$defs/raw_selection"
+            },
+            "unit": {
+              "$ref": "#/$defs/raw_selection"
+            },
+            "quantity": {
+              "$ref": "#/$defs/raw_selection"
+            },
+            "unit_price": {
+              "$ref": "#/$defs/raw_selection"
+            },
+            "amount": {
+              "$ref": "#/$defs/raw_selection"
+            },
+            "remarks": {
+              "$ref": "#/$defs/raw_selection"
+            }
+          },
+          "required": [
+            "description",
+            "unit",
+            "quantity",
+            "unit_price",
+            "amount",
+            "remarks"
+          ],
+          "additionalProperties": false
+        },
+        "anchor_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^cell:[^\\s]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "review_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "status",
+        "values",
+        "proofs",
+        "raw_refs",
+        "anchor_refs",
+        "review_reasons"
+      ],
+      "additionalProperties": false
+    },
+    "component_link": {
+      "type": "object",
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "held"
+          ]
+        },
+        "basis": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^cell:[^\\s]+$"
+          },
+          "uniqueItems": true
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "component_id",
+        "parent_id",
+        "status",
+        "basis",
+        "refs",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "source_role": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "enum": [
+            "demand_content",
+            "analysis_content",
+            "item_identifier",
+            "header",
+            "section",
+            "financial_summary",
+            "commercial_note",
+            "document_reference",
+            "footer",
+            "unresolved"
+          ]
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^cell:[^\\s]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "role",
+        "refs",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "description": "DRAFT structural contract. Array positions map A-Q. Null/value-proof consistency, unique/cross-role references, type/precision, stage blanks, coverage and semantic support require reviewed guards; schema conformance alone is not acceptance."
+}

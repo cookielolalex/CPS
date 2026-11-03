@@ -36,8 +36,8 @@ def verify(root):
                 if not local.is_relative_to(root) or not local.exists():
                     failures.append(f"Unresolved local link in {item['path']}: {target}")
     state = json.loads((root / "CURRENT_STATE.json").read_text(encoding="utf-8"))
-    if state["status"] != "PAUSED_BY_USER" or state["development_allowed"]:
-        failures.append("This snapshot must preserve the recorded pause")
+    if state["status"] != "IDLE_HANDOFF_REQUESTED_REVIEW_INCOMPLETE" or state["development_allowed"]:
+        failures.append("This snapshot must preserve the handoff-only execution boundary")
     if state["reserved_answers_opened"]:
         failures.append("This snapshot must preserve reserved-answer closure")
     if failures:

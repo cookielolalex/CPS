@@ -1,0 +1,72 @@
+{
+  "schema": "cps.guideline-package.draft-manifest.v1",
+  "candidate": "046a",
+  "status": "FROZEN_FOR_INDEPENDENT_REVIEW_NOT_DEPLOYED",
+  "target_runtime": "User proposed sol6.1/xhigh; actual future runtime must be recorded; no trial yet.",
+  "files": [
+    {
+      "path": "CPS_GUIDELINE.md",
+      "bytes": 7814,
+      "sha256": "78040350af221fc8804f717a0d4294acf88ce1ee20a3f7a18867dbe159114702"
+    },
+    {
+      "path": "resources/COLUMNS.json",
+      "bytes": 1497,
+      "sha256": "550fd6c36d710e79d5a4877c4019643d658f1657808c569a6e8c478df597142e"
+    },
+    {
+      "path": "resources/FIELD_ROLES.md",
+      "bytes": 5095,
+      "sha256": "fb8d8e1695a742890d9d0b3af5ec083d166f0bedf313d5f7007de04a4a65f925"
+    },
+    {
+      "path": "resources/NAME_POLICY.json",
+      "bytes": 1186,
+      "sha256": "dc9605cc473100e9c358a8c3668d998db961d0914e7a08a22c198a33748dfd8b"
+    },
+    {
+      "path": "resources/NAMING_RULES.md",
+      "bytes": 7055,
+      "sha256": "d3c84312371a25f387fbb114a7e63af8005676566bc3e9472ee70866a30b1fc2"
+    },
+    {
+      "path": "resources/OUTPUT_CONTRACT.md",
+      "bytes": 3110,
+      "sha256": "ca9f926db6cfbd2dcd71a0b1e23282d137feb6d92fb677b237732907aae4aef3"
+    },
+    {
+      "path": "resources/REVIEW_CHECKLIST.md",
+      "bytes": 2991,
+      "sha256": "e881275c8ac917682d658d97fe8cf0c777317e7c7170e09977afcf6c34f1ed96"
+    },
+    {
+      "path": "resources/SEMANTIC_RESPONSE.schema.json",
+      "bytes": 11840,
+      "sha256": "b56cc336505825450afaf2af20daf39a7b2e73520b1988cf8c5dfa10abfb1987"
+    },
+    {
+      "path": "resources/SOURCE_INVENTORY.schema.json",
+      "bytes": 5965,
+      "sha256": "261e5bc1dcf07507299e9168f782326cd14ceafdc6a0194e90208e5e5717c3e7"
+    },
+    {
+      "path": "resources/SOURCE_READING.md",
+      "bytes": 4400,
+      "sha256": "9fa2f868d79d28d6dc09c9bb7c729a4d0dcf53c8fae4a491c9c80b84a819c09e"
+    },
+    {
+      "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
+      "bytes": 8219,
+      "sha256": "f983bce55bab4e2c22ac7a4107b2c93877fe7e11e3617867d65eb7da78c450ed"
+    },
+    {
+      "path": "resources/SYNTHETIC_NAMING_CASES.json",
+      "bytes": 11385,
+      "sha256": "08a5bf123e40b8b4efb420eb7da673091df5f393853544c51fe2f9ac8df0efa9"
+    }
+  ],
+  "utf8_bytes": 70557,
+  "unicode_characters": 63363,
+  "context_or_time_fit_established": false,
+  "manifest_self_excluded": true
+}

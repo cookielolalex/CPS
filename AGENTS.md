@@ -4,7 +4,9 @@
 
 Read `CURRENT_STATE.json`, `README.md`, `docs/handoff/CURRENT_STATUS.md`, `docs/handoff/RESUME_PLAN.md`, and the policy documents linked there. Local evidence locations use placeholders explained in `PUBLICATION_SCOPE.md` and the handoff docs.
 
-**Development is PAUSED by the owner after checkpoint 045.** Publishing or reading this handoff is not a resume instruction. Do not run models, evaluations, source investigations, new refinement cycles, or reactivate the hourly automation without an explicit later user request to resume. Documentation maintenance and repository administration specifically requested by the owner are separate from development. No active development worker remained at the pause.
+**Latest snapshot:2026-11-03, handoff requested after interruption.** The owner resumed local development, then requested independent review/fixes and tests on1140908/1141208. That work stopped during preliminary review/source preparation. No new model test or accepted fix followed. Read `docs/handoff/RESUME_046.md` and `INTERRUPTED_REVIEW_046.json` before acting. A pasted handoff prompt explicitly requesting continuation is resume authority; this publication alone is not. Keep the hourly automation paused unless the user separately resumes it. No active worker remained at packaging.
+
+The semantic product is the Markdown guideline plus its resources. The deterministic installed parser is a baseline. Read the separate private bundle only in the appropriate source or evaluation role; never pass private study/targets/gold into a fresh generator context.
 
 ## Scope and authority
 

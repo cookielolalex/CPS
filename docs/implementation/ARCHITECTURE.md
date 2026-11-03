@@ -1,3 +1,5 @@
+> Historical045 snapshot retained. For the later agent-run Markdown candidate and interrupted046review, start with [current status](../handoff/CURRENT_STATUS.md) and [046next steps](../handoff/RESUME_046.md).
+
 # CPS implementation map
 
 This is a source-code handoff, not an installed or qualified release. Development was explicitly paused after checkpoint 045. Packaging these files does not resume development or admit a new model run. See [current status](../handoff/CURRENT_STATUS.md) and [resume plan](../handoff/RESUME_PLAN.md) first.
