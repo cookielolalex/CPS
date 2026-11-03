@@ -14,3 +14,12 @@ None of these decisions changes the 046c generator package. Each one narrows wha
 Manual obligations that asked more than the generator-facing text supports were softened or removed under the R13 gate. One example is requiring cost-line codes to be named in D null reasons. Each change is logged in the private expectation notes.
 
 These decisions make the batch-1 numeric gates more lenient only where the policy itself is undecided. They do not change the deployment bar, and no batch-1 case earns eligibility credit.
+
+## Cohort correction before generation (B1-C1)
+
+1150107 belongs to the **rolling_validation** split in the cohort registry. The other three batch cases (1130803, 1141002, 1140506) are tuning. Batch-1 results are meant to feed candidate 046d, and running 1150107 there would turn one of the few remaining rolling-validation cases in the available year folders into tuning material.
+
+- 1150107 is therefore **removed from the batch-1 generator runs** before any generation.
+- Its source-only expectations stay frozen and private. They were authored and reviewed from the contract only, with no historical target. They are kept for possible later use as a validation case, after an R13 re-check against whichever candidate is then run.
+- Disclosure: the generic panel-group question (backlog Q8) was raised while those expectations were being authored. It is the only way 1150107 has informed tuning so far, so any later result on 1150107 must report this exposure.
+- Batch-1 generation runs on the three tuning cases only.
