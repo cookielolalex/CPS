@@ -15,3 +15,13 @@ Owner decisions applied (2026-11-03): supply-basis qualifiers go to D; K/M/N inf
 Route and interface: unchanged from 046b (`cps046b-route.v2`, reviewed). The 046c route tests pass 114/114 with corrected invented fixtures.
 
 Disclosure, in line with audit finding P-3: R14–R24 answer generic questions raised by the independent 1141210 source-expectation author under the R13 consistency gate. They were declared before any 046c generation, and the package author did not see 1141210 content.
+
+## Evaluator compare_source047 (component-capable)
+
+An independent code reviewer (a fresh context, observed model `claude-opus-5-5`) reviewed it in three rounds:
+
+1. APPROVE_AFTER_LISTED_FIXES. Two blocking items: the basis-location direction and lax link defaults, and gate loopholes.
+2. Confirmation: APPROVE_AFTER_LISTED_FIXES. Four small fixes: parent-ID typing, duplicate columns, D4 tests, and recording the limitations.
+3. **APPROVE_FOR_FREEZE** at sha256 `d0959cb22fc67ca75798645127c070346a3ee148c183d03c3a0844ce03889dad`.
+
+The evaluator tests pass 29/29. Detail-only results equal the frozen 043 comparator, and the 043 pin is unchanged. The recorded limitations L1–L4 are in the module docstring.
