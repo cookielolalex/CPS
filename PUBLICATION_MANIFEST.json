@@ -861,6 +861,11 @@
       "path": "research/guideline046_003/source_prep/screenshot_views.cjs",
       "bytes": 723,
       "sha256": "8107dab2386e9ae9c3b57979d24d8c6424eafe5f8c633a26e90610cc3725b892"
+    },
+    {
+      "path": "research/guideline046_003/DECISIONS_BATCH1.md",
+      "bytes": 2804,
+      "sha256": "a4107b5a5073baa7a539ed713ece91d90efef35a851a417800e42e5187429c37"
     }
   ]
 }
