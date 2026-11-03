@@ -919,8 +919,8 @@
     },
     {
       "path": "research/guideline046_004/package/resources/FIELD_ROLES.md",
-      "bytes": 31015,
-      "sha256": "d93c39552d957090ce18a83e8bb45d6c548e6f6fed8e5e39727943f5725b83c9"
+      "bytes": 32154,
+      "sha256": "29039cb7716884b29009fd568289ef8d6703d37e27b25eac0d512a4c2a603eab"
     },
     {
       "path": "research/guideline046_004/package/resources/NAME_POLICY.json",
@@ -964,8 +964,8 @@
     },
     {
       "path": "research/guideline046_004/package/resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 18908,
-      "sha256": "7a055a6e2f868c22dbf7081e8b70ca9551c9a50782817de613d431b5aca859da"
+      "bytes": 19877,
+      "sha256": "ce52017e8a546e63f109072857404706a0dd07a945ab6862e6676b6d14c4d07c"
     },
     {
       "path": "research/guideline046_004/package/resources/SYNTHETIC_NAMING_CASES.json",
