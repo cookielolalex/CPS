@@ -21,10 +21,18 @@ Deviations from 043 (all deliberate, listed here and tested in test_compare_sour
     expectations fails the gates.
  D4 unsupported_populated_columns and provenance requirements honour a matched declared complete
     alternative (043 computed both against canonical values only).
- D5 Expectation and link schemas are validated strictly; violations raise before scoring.
+ D5 Expectation and link schemas are validated strictly; violations raise before scoring
+    (unique ids and columns, core_columns ⊆ supported_columns, A1 anchor cells, link fields).
+ D6 Generated location `cells` must be a list (a string is never substring-matched).
+Recorded limitations (not gates): (L1) when a matched alternative fills a C/D column that the
+canonical row leaves unsupported, no provenance locator is demanded for it (writer004 already
+requires evidence for every filled value); (L2) the carrier is not re-validated against the
+writer004 schema here (the CPS route validates every carrier with writer004 before release);
+(L3) the raw representation profile is not re-derived here (expectations bind the inventory and
+profile); (L4) distinctness of census cells and component cells is not enforced.
 The CLI enforces the same release/freeze bindings as compare_source046 with explicit raises.
 """
-import argparse, datetime, hashlib, importlib.util, json, sys
+import argparse, datetime, hashlib, importlib.util, json, re, sys
 from pathlib import Path
 
 FROZEN = Path(__file__).with_name('compare_source043.py')
@@ -66,12 +74,15 @@ def validate_expectations(expected):
         need(e.get('category') in ('detail', 'component'), 'EXPECTED_CATEGORY')
         need(isinstance(e.get('sheet'), str) and e['sheet'], 'EXPECTED_SHEET')
         ac = e.get('anchor_cell')
-        need(ac is None or (isinstance(ac, str) and ac.isalnum() and ac == ac.upper()), 'EXPECTED_ANCHOR_CELL')
+        need(ac is None or (isinstance(ac, str) and re.fullmatch(r'[A-Z]{1,3}[1-9][0-9]*', ac) is not None), 'EXPECTED_ANCHOR_CELL')
         need(ac is not None or isinstance(e.get('anchor_row'), int), 'EXPECTED_ANCHOR')
         need(isinstance(e.get('expected_values'), list) and len(e['expected_values']) == 17, 'EXPECTED_VALUES_17')
         need(isinstance(e.get('raw'), dict) and set(e['raw']) == set(RAW), 'EXPECTED_RAW_KEYS')
-        need(isinstance(e.get('core_columns'), list) and e['core_columns'] and set(e['core_columns']) <= set(COLS), 'EXPECTED_CORE_COLUMNS')
-        need(isinstance(e.get('supported_columns'), list) and set(e['supported_columns']) <= set(COLS), 'EXPECTED_SUPPORTED_COLUMNS')
+        need(isinstance(e.get('core_columns'), list) and e['core_columns'] and set(e['core_columns']) <= set(COLS)
+             and len(set(e['core_columns'])) == len(e['core_columns']), 'EXPECTED_CORE_COLUMNS')
+        need(isinstance(e.get('supported_columns'), list) and set(e['supported_columns']) <= set(COLS)
+             and len(set(e['supported_columns'])) == len(e['supported_columns']), 'EXPECTED_SUPPORTED_COLUMNS')
+        need(set(e['core_columns']) <= set(e['supported_columns']), 'CORE_NOT_SUBSET_OF_SUPPORTED')
         if e['category'] == 'component':
             lk = e.get('link')
             need(isinstance(lk, dict), 'EXPECTED_LINK')
@@ -160,8 +171,9 @@ def evaluate(expected, carrier):
         a = paired.get(e['id'])
         comp = a.get('composition') if a else None
         parent_expected = paired.get(lk['parent_expected_id'])
-        cands = [x for x in details if isinstance(comp, dict) and x.get('id') == comp.get('parent_id')]
-        ok_parent = isinstance(comp, dict) and len(cands) == 1 and parent_expected is not None and cands[0] is parent_expected
+        pid = comp.get('parent_id') if isinstance(comp, dict) else None
+        cands = [x for x in details if isinstance(pid, str) and pid and isinstance(x.get('id'), str) and x.get('id') == pid]
+        ok_parent = len(cands) == 1 and parent_expected is not None and cands[0] is parent_expected
         ok_basis = isinstance(comp, dict) and 'basis_quantity' in comp and same(comp.get('basis_quantity'), lk['basis_quantity'])
         ok_unit = isinstance(comp, dict) and 'basis_unit' in comp and same(comp.get('basis_unit'), lk['basis_unit'])
         ok_raw = isinstance(comp, dict) and 'basis_raw' in comp and same(comp.get('basis_raw'), lk['basis_raw'])
@@ -169,7 +181,7 @@ def evaluate(expected, carrier):
         cells = loc.get('cells') if isinstance(loc, dict) else None
         ok_loc = (isinstance(cells, list) and bool(cells) and loc.get('sheet') == lk['basis_sheet']
                   and set(cells) <= set(lk['basis_cells_admissible']) and set(lk['basis_cells_required']) <= set(cells))
-        ok_status = a is not None and a.get('status') != 'held'
+        ok_status = a is not None and a.get('status') == 'research_draft'
         link_results.append({'id': e['id'], 'parent_pass': ok_parent, 'basis_quantity_pass': ok_basis, 'basis_unit_pass': ok_unit,
                              'basis_raw_pass': ok_raw, 'basis_location_pass': ok_loc, 'not_held': ok_status,
                              'pass': ok_parent and ok_basis and ok_unit and ok_raw and ok_loc and ok_status})

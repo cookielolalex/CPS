@@ -84,6 +84,30 @@ def main():
             c047.evaluate(ee, carrier); results.append((name, False))
         except ValueError:
             results.append((name, True))
+    noid = copy.deepcopy(carrier); next(x for x in noid['items'] if x['id'] == 'R003')['id'] = None
+    for x in noid['components']:
+        x['composition']['parent_id'] = None
+    results.append(('missing_parent_ids_fail_links', c047.evaluate(exp2, noid)['component_links']['matches'] == 0))
+    dup = copy.deepcopy(exp); dup['rows'][0]['core_columns'] = ['C', 'C', 'E', 'F']
+    try:
+        c047.evaluate(dup, no_comp); results.append(('duplicate_core_columns_raise', False))
+    except ValueError:
+        results.append(('duplicate_core_columns_raise', True))
+    # D4: a matched complete alternative suppresses the C/D unsupported flag and the null-column locator requirement
+    alt = copy.deepcopy(exp); r0 = byid['R001']
+    canon = list(r0['values']); canon[2] = r0['values'][2] + r0['values'][3]; canon[3] = None
+    alt['rows'][0] = dict(alt['rows'][0], expected_values=canon, supported_columns=['C', 'D', 'E', 'F', 'L'], core_columns=['C', 'E', 'F'],
+                          C_D_alternatives=[{'C': r0['values'][2], 'D': r0['values'][3]}])
+    ra = c047.evaluate(alt, no_comp)
+    rr0 = ra['row_results'][0]
+    results.append(('alternative_suppresses_unsupported_flag', rr0['unsupported_populated_columns'] == [] and rr0['declared_alternatives']['D'] is True))
+    alt2 = copy.deepcopy(exp); canon2 = list(r0['values'])
+    alt2['rows'][0] = dict(alt2['rows'][0], expected_values=canon2, supported_columns=['C', 'D', 'E', 'F', 'L'], core_columns=['C', 'E', 'F'],
+                           C_D_alternatives=[{'C': r0['values'][2] + r0['values'][3], 'D': None}])
+    m2 = copy.deepcopy(no_comp); g = m2['items'][0]; g['values'][2] = r0['values'][2] + r0['values'][3]; g['values'][3] = None
+    g['evidence'].pop('D'); g['null_reasons']['D'] = 'kept in C'
+    rp = c047.evaluate(alt2, m2)
+    results.append(('alternative_with_null_D_needs_no_D_locator', not any(x['id'] == 'ER001' and x['column'] == 'D' for x in rp['supported_provenance_locators']['records'])))
     pv = copy.deepcopy(no_comp); pv['items'][0]['evidence']['C']['location']['sheet'] = '他表'
     results.append(('provenance_requires_expected_sheet', c047.evaluate(exp, pv)['supported_provenance_locators']['present'] == c043.evaluate(exp, pv)['supported_provenance_locators']['present']))
     try:

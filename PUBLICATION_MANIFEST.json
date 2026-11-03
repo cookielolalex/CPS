@@ -644,8 +644,8 @@
     },
     {
       "path": "research/guideline046_003/package/PACKAGE_MANIFEST.json",
-      "bytes": 3148,
-      "sha256": "69313ea0450ad1418ed82cca569f60ba7c8c4ca23d1306d5191ebce26a155353"
+      "bytes": 3150,
+      "sha256": "4d8602db470169cdd31647ef2d2dfce3b732643d350d3b15f03fd5fcbf00961e"
     },
     {
       "path": "research/guideline046_003/package/resources/COLUMNS.json",
@@ -724,8 +724,8 @@
     },
     {
       "path": "research/guideline046_002/route_tests/test_compare_source047.py",
-      "bytes": 7520,
-      "sha256": "13809163e665cb59c51ab7e2adb4ec71b48b9eddc84644af9702784bcbe11540"
+      "bytes": 9499,
+      "sha256": "1488846de1eda7db9c00a5002db8154456f394f2cfcad5e98a0305e410ed364e"
     },
     {
       "path": "research/guideline046_002/source_prep/build_inventory_xlsx_v2.py",
@@ -749,8 +749,8 @@
     },
     {
       "path": "research/evaluation/compare_source047.py",
-      "bytes": 18717,
-      "sha256": "4d4fb2cdfc5fe166ad3b7fbd7055827181b693f0c6e42f453d71e61817e571f3"
+      "bytes": 19800,
+      "sha256": "d0959cb22fc67ca75798645127c070346a3ee148c183d03c3a0844ce03889dad"
     },
     {
       "path": "research/guideline046_003/route_tests/make_fixtures.py",
@@ -771,6 +771,11 @@
       "path": "research/guideline046_003/route_tests/test_compare_source047.py",
       "bytes": 5702,
       "sha256": "0cebb9e61fcc49108fcf7b4bd80699fd74b2517e4cd4ea786e43c3f569961a15"
+    },
+    {
+      "path": "research/guideline046_003/REVIEW_046c.md",
+      "bytes": 2043,
+      "sha256": "d9913481265d34bb1f874c2a19d6801f8a26eb375b40771eeffa1bc787b06729"
     }
   ]
 }
