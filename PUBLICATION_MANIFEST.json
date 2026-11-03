@@ -14,13 +14,13 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 6006,
-      "sha256": "66d4e86665f0c9f0e38d6772810c1c0a011ebb3392c4e93a33dc130df4adca22"
+      "bytes": 6040,
+      "sha256": "ae0adb016f42baec639907fc8bd8451a90c39f37043b7cb2a11495652f06a389"
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 5912,
-      "sha256": "4a4904aa6bc2cd0db7f36738e5fe41c76a111f59e8fc46256d5391e8c8d702bc"
+      "bytes": 6854,
+      "sha256": "85139fa828f0c0e8d94d5944c51fbd7cdbf16a216f058f8dcda7c8520d587baf"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/handoff/CURRENT_STATUS.md",
-      "bytes": 4101,
-      "sha256": "7203e06d9ee536b01378ecadbf8eb04ed1a23337a187d162ab1682fc221b256f"
+      "bytes": 6138,
+      "sha256": "20fc256814d816a8f7eb223b58f854025458cdc41cae90702a6179ce8e049506"
     },
     {
       "path": "docs/handoff/DECISIONS.md",

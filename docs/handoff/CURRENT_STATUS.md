@@ -1,4 +1,23 @@
-# Current status — 2026-11-03 (after the 046b trials)
+# Current status — 2026-11-03 (after 046c development batch 1; 046d frozen)
+
+- **Candidate 046c, development batch 1 (three tuning cases; rolling-validation case 1150107 held out before generation).** On 1141002, 1130803 and 1140506, both readers cleared the governing numeric gate in declared-alternatives mode: 550/550 for both readers; 239/239 for both readers; 353/354 and 354/354. Every manual obligation was met and there were 0 critical errors. Canonical core falls below 99% on two cases, entirely because of placements 046c leaves undecided. No case counts as passed: export, saved 17-column QA and visual QA were not attempted, and tuning cases earn no eligibility credit. Details: [RESULTS_046C_BATCH1.md](RESULTS_046C_BATCH1.md).
+- **Candidate 046d** (`research/guideline046_004/`), frozen with manifest `b2c5177a…` and not admitted. It adds:
+  - R25 for analysis-component rows, fixing the example defect that failed 1141210 reader A ([RESULTS_046C_1141210.md](RESULTS_046C_1141210.md));
+  - R26–R38, deciding backlog Q1–Q13;
+  - R39–R44, from the batch-1 error classes.
+  
+  An independent semantic review, including a delta round, approved it ([REVIEW_046d.md](../../research/guideline046_004/REVIEW_046d.md)). The harness audit tool now extracts paths from full commands.
+- **Batch 2 under 046d:** three tuning cases (1130204, 1131202, 1140507), with packets built from Drive originals verified against the registry hashes. Independent expectations are being authored. Six large workbooks (1131112, 1140607, 1140304, 1131207, 1140808, 1140608) need a chunked reading method first.
+- **Unchanged blockers:**
+  - No admitted export runtime exists, so saved-workbook and visual QA cannot run.
+  - No eligibility evidence exists for the 30-pair bar.
+  - All 38 reserved answers stay closed.
+  - The four R8 undecided classes still need owner decisions before canonical scoring can govern.
+- **Pair counts:** 1 eligible development pair, 0 eligible reserved pairs, 0 performance-passed historical pairs.
+
+---
+
+## Status after the 046b trials (2026-11-03, kept as history)
 
 The resumed session finished the interrupted review and built candidate 046b, with the source-reference adapter (route v2), a writer-port parity check and invented-fixture route tests (113/113). An independent reviewer approved 046b for bounded source trials after two rounds. Independent 1141208 source expectations were authored, reviewed and frozen. One exposed 1140908 A/B pair and one 1141208 A/B pair then ran in fresh contexts. All outcomes were frozen before evaluation, and evaluation ran in separate contexts.
 

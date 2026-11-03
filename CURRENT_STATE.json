@@ -1,202 +1,277 @@
 {
-  "project": "CPS - Contract Parsing System",
-  "snapshot_date": "2026-11-03",
-  "timezone": "Asia/Taipei",
-  "status": "IDLE_HANDOFF_AFTER_046B_SOURCE_TRIALS",
-  "deployment_status": "NOT_READY_FOR_UNATTENDED_DEPLOYMENT",
-  "completed_checkpoint": "046b",
-  "plan_version": 71,
-  "automation": {
-    "id": "cps-refinement-cycles",
-    "status": "PAUSED"
+ "project": "CPS - Contract Parsing System",
+ "snapshot_date": "2026-11-03",
+ "timezone": "Asia/Taipei",
+ "status": "IDLE_HANDOFF_AFTER_046B_SOURCE_TRIALS",
+ "deployment_status": "NOT_READY_FOR_UNATTENDED_DEPLOYMENT",
+ "completed_checkpoint": "046b",
+ "plan_version": 71,
+ "automation": {
+  "id": "cps-refinement-cycles",
+  "status": "PAUSED"
+ },
+ "development_allowed": false,
+ "resume_requires_explicit_user_request": true,
+ "upload_is_not_resume_authorization": true,
+ "source_only_case": {
+  "case_id": "1140908",
+  "A": {
+   "matches": 155,
+   "denominator": 176,
+   "percent": 88.06818181818181
   },
-  "development_allowed": false,
-  "resume_requires_explicit_user_request": true,
-  "upload_is_not_resume_authorization": true,
-  "source_only_case": {
-    "case_id": "1140908",
-    "A": {
-      "matches": 155,
-      "denominator": 176,
-      "percent": 88.06818181818181
-    },
-    "B": {
-      "matches": 147,
-      "denominator": 176,
-      "percent": 83.52272727272727
-    },
-    "passed": false
+  "B": {
+   "matches": 147,
+   "denominator": 176,
+   "percent": 83.52272727272727
   },
-  "eligible_development_pairs": 1,
-  "eligible_reserved_pairs": 0,
-  "performance_passed_historical_pairs": 0,
-  "inventory": {
-    "development_candidates": 153,
-    "assigned_development_families": 139,
-    "tuning": 118,
-    "rolling": 35,
-    "reserved_cases": 38,
-    "assigned_reserved_families": 35
-  },
-  "reserved_answers_opened": false,
-  "reserved_release_requires": [
-    "frozen final candidate",
-    "frozen evaluator",
-    "frozen complete source expectations and input manifests",
-    "all 38 generated outputs frozen"
+  "passed": false
+ },
+ "eligible_development_pairs": 1,
+ "eligible_reserved_pairs": 0,
+ "performance_passed_historical_pairs": 0,
+ "inventory": {
+  "development_candidates": 153,
+  "assigned_development_families": 139,
+  "tuning": 118,
+  "rolling": 35,
+  "reserved_cases": 38,
+  "assigned_reserved_families": 35
+ },
+ "reserved_answers_opened": false,
+ "reserved_release_requires": [
+  "frozen final candidate",
+  "frozen evaluator",
+  "frozen complete source expectations and input manifests",
+  "all 38 generated outputs frozen"
+ ],
+ "historical_pool": {
+  "current_candidates": 23,
+  "candidate_count_is_not_eligibility": true,
+  "original_holdouts_are_exposed": true
+ },
+ "excluded_cases": [
+  "1110106",
+  "1110201",
+  "1110909",
+  "1111101",
+  "1121102",
+  "1130309",
+  "1130906"
+ ],
+ "fixed_deployment_bar": {
+  "independently_eligible_revision_compatible_pairs": 30,
+  "reserved_pairs_minimum": 10,
+  "source_core_percent_minimum": 99,
+  "applies_per": [
+   "case",
+   "applicable detail stratum",
+   "applicable component stratum",
+   "claimed layout",
+   "overall"
   ],
-  "historical_pool": {
-    "current_candidates": 23,
-    "candidate_count_is_not_eligibility": true,
-    "original_holdouts_are_exposed": true
-  },
-  "excluded_cases": [
-    "1110106",
-    "1110201",
-    "1110909",
-    "1111101",
-    "1121102",
-    "1130309",
-    "1130906"
+  "required": [
+   "complete raw records",
+   "complete semantic provenance",
+   "complete required nonitem census",
+   "all mandatory manual obligations",
+   "zero unresolved critical errors",
+   "two original readers passing correctness",
+   "assembly repeatability",
+   "saved 17-column workbook QA",
+   "visual QA"
+  ]
+ },
+ "next_after_explicit_resume": {
+  "step": "Batch 2 under frozen 046d (expectations, review, freeze, admission, A then B, separate evaluation); large-workbook method design; owner decisions on export runtime and the four R8 undecided classes",
+  "exposed_regression_case": "1140908 (pair used; do not repeat)",
+  "next_regular_full_audit": "049 after batch 2 or earlier on a critical finding or regression",
+  "resume_doc": "docs/handoff/RESUME_047.md"
+ },
+ "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
+ "read_first": "AGENTS.md",
+ "latest_candidate": "046d",
+ "deployment_artifact": "Markdown guideline and supplementary resources used by an AI agent",
+ "proposed_model": "sol6.1/xhigh; actual model/effort and tool route must be recorded in future tests",
+ "latest_preparation": {
+  "package_files": 15,
+  "route_tests_passed": 113,
+  "independent_review": "APPROVE_FOR_BOUNDED_SOURCE_TRIAL (two rounds)",
+  "fixes_completed": true,
+  "adapter_implemented": true,
+  "new1140908_model_calls": 2,
+  "new1141208_model_calls": 2,
+  "source1141208_preparation": "INDEPENDENT_EXPECTATIONS_FROZEN_0b974752"
+ },
+ "publication": {
+  "public": "Code, generic guideline, aggregate status and handoff docs",
+  "private": "Selected project evidence only in downloadable ZIP",
+  "secrets_included": false
+ },
+ "portability": {
+  "zip": "CPS_handoff_20261103_portable.zip",
+  "verified_source_cases": [
+   "1140908",
+   "1141208"
   ],
-  "fixed_deployment_bar": {
-    "independently_eligible_revision_compatible_pairs": 30,
-    "reserved_pairs_minimum": 10,
-    "source_core_percent_minimum": 99,
-    "applies_per": [
-      "case",
-      "applicable detail stratum",
-      "applicable component stratum",
-      "claimed layout",
-      "overall"
-    ],
-    "required": [
-      "complete raw records",
-      "complete semantic provenance",
-      "complete required nonitem census",
-      "all mandatory manual obligations",
-      "zero unresolved critical errors",
-      "two original readers passing correctness",
-      "assembly repeatability",
-      "saved 17-column workbook QA",
-      "visual QA"
-    ]
+  "replayed_saved_evaluation": "045 A/B",
+  "external_project_reads": 0,
+  "new_model_tests": 4,
+  "private_results_zip": "CPS_046b_results_20261103_PRIVATE.zip (sha256 d6dad4f7af7ef694e47b80284ddb4d459cfdf7b74624a9d78c74eb3166d8df74)"
+ },
+ "latest_trials_046b": {
+  "evidence": "docs/evidence/METRICS_046B.json",
+  "results": "docs/handoff/RESULTS_046B.md",
+  "observed_model": "claude-opus-5-5",
+  "1140908": {
+   "A": {
+    "matches": 141,
+    "denominator": 176
+   },
+   "B": {
+    "matches": 140,
+    "denominator": 176
+   },
+   "passed": false,
+   "regression_vs_045": true
   },
-  "next_after_explicit_resume": {
-    "step": "Audit 048 brought forward after the 1140908 regression; fix generic gaps only in a new candidate (046c) with independent review; export/visual QA on frozen carriers in an admitted export runtime",
-    "exposed_regression_case": "1140908 (pair used; do not repeat)",
-    "next_real_source_case": "choose under plan and eligibility rules",
-    "next_regular_full_audit": "048 (brought forward)",
-    "resume_doc": "docs/handoff/RESUME_047.md"
-  },
-  "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
-  "read_first": "AGENTS.md",
-  "latest_candidate": "046c",
-  "deployment_artifact": "Markdown guideline and supplementary resources used by an AI agent",
-  "proposed_model": "sol6.1/xhigh; actual model/effort and tool route must be recorded in future tests",
-  "latest_preparation": {
-    "package_files": 15,
-    "route_tests_passed": 113,
-    "independent_review": "APPROVE_FOR_BOUNDED_SOURCE_TRIAL (two rounds)",
-    "fixes_completed": true,
-    "adapter_implemented": true,
-    "new1140908_model_calls": 2,
-    "new1141208_model_calls": 2,
-    "source1141208_preparation": "INDEPENDENT_EXPECTATIONS_FROZEN_0b974752"
-  },
-  "publication": {
-    "public": "Code, generic guideline, aggregate status and handoff docs",
-    "private": "Selected project evidence only in downloadable ZIP",
-    "secrets_included": false
-  },
-  "portability": {
-    "zip": "CPS_handoff_20261103_portable.zip",
-    "verified_source_cases": [
-      "1140908",
-      "1141208"
-    ],
-    "replayed_saved_evaluation": "045 A/B",
-    "external_project_reads": 0,
-    "new_model_tests": 4,
-    "private_results_zip": "CPS_046b_results_20261103_PRIVATE.zip (sha256 d6dad4f7af7ef694e47b80284ddb4d459cfdf7b74624a9d78c74eb3166d8df74)"
-  },
-  "latest_trials_046b": {
-    "evidence": "docs/evidence/METRICS_046B.json",
-    "results": "docs/handoff/RESULTS_046B.md",
-    "observed_model": "claude-opus-5-5",
-    "1140908": {
-      "A": {
-        "matches": 141,
-        "denominator": 176
-      },
-      "B": {
-        "matches": 140,
-        "denominator": 176
-      },
-      "passed": false,
-      "regression_vs_045": true
-    },
-    "1141208": {
-      "A": {
-        "governing_matches": 107,
-        "denominator": 107,
-        "canonical_matches": 107
-      },
-      "B": {
-        "governing_matches": 107,
-        "denominator": 107,
-        "canonical_matches": 105
-      },
-      "numeric_gate_passed": true,
-      "source_case_passed": false
-    }
-  },
-  "latest_trials_046c": {
-    "results": "docs/handoff/RESULTS_046C_1141210.md",
-    "case": "1141210 (exposed at 041)",
-    "observed_model": "claude-opus-5-5",
-    "A": {
-      "governing_core": [
-        93,
-        121
-      ],
-      "component_core": [
-        26,
-        54
-      ],
-      "gate": false
-    },
-    "B": {
-      "governing_core": [
-        121,
-        121
-      ],
-      "component_core": [
-        54,
-        54
-      ],
-      "links": [
-        14,
-        14
-      ],
-      "gate": true
-    },
-    "case_passed": false,
-    "reason": "two-reader correctness fails (A: package example taught empty component unit/quantity/identity); export/visual QA unattempted; exposed case"
-  },
-  "owner_decisions_2026_11_03": {
-    "supply_basis_qualifiers": "D",
-    "party_role_inference_from_document_furniture": "critical error",
-    "runtime": "claude-opus-5-5"
-  },
-  "development_batch_1": {
-    "cases": [
-      "1130803",
-      "1150107",
-      "1141002",
-      "1140506"
-    ],
-    "status": "expectations authored; independent reviews in progress",
-    "source": "contracts fetched from Drive and verified against cohort registry SHA-256"
+  "1141208": {
+   "A": {
+    "governing_matches": 107,
+    "denominator": 107,
+    "canonical_matches": 107
+   },
+   "B": {
+    "governing_matches": 107,
+    "denominator": 107,
+    "canonical_matches": 105
+   },
+   "numeric_gate_passed": true,
+   "source_case_passed": false
   }
+ },
+ "latest_trials_046c": {
+  "results": "docs/handoff/RESULTS_046C_1141210.md",
+  "case": "1141210 (exposed at 041)",
+  "observed_model": "claude-opus-5-5",
+  "A": {
+   "governing_core": [
+    93,
+    121
+   ],
+   "component_core": [
+    26,
+    54
+   ],
+   "gate": false
+  },
+  "B": {
+   "governing_core": [
+    121,
+    121
+   ],
+   "component_core": [
+    54,
+    54
+   ],
+   "links": [
+    14,
+    14
+   ],
+   "gate": true
+  },
+  "case_passed": false,
+  "reason": "two-reader correctness fails (A: package example taught empty component unit/quantity/identity); export/visual QA unattempted; exposed case"
+ },
+ "owner_decisions_2026_11_03": {
+  "supply_basis_qualifiers": "D",
+  "party_role_inference_from_document_furniture": "critical error",
+  "runtime": "claude-opus-5-5"
+ },
+ "development_batch_1": {
+  "candidate": "046c",
+  "cases_run": [
+   "1141002",
+   "1130803",
+   "1140506"
+  ],
+  "held_out": {
+   "1150107": "rolling_validation cohort; removed from tuning generation before any run; source-only expectations frozen and kept"
+  },
+  "results": "docs/handoff/RESULTS_046C_BATCH1.md",
+  "governing_core": {
+   "1141002": {
+    "A": [
+     550,
+     550
+    ],
+    "B": [
+     550,
+     550
+    ]
+   },
+   "1130803": {
+    "A": [
+     239,
+     239
+    ],
+    "B": [
+     239,
+     239
+    ]
+   },
+   "1140506": {
+    "A": [
+     353,
+     354
+    ],
+    "B": [
+     354,
+     354
+    ]
+   }
+  },
+  "canonical_core": {
+   "1141002": {
+    "A": 548,
+    "B": 548
+   },
+   "1130803": {
+    "A": 236,
+    "B": 235
+   },
+   "1140506": {
+    "A": 339,
+    "B": 338
+   }
+  },
+  "obligations_all_met": true,
+  "critical_errors": 0,
+  "case_passed": false,
+  "reason": "export, saved 17-column and visual QA unattempted; tuning cases earn no eligibility credit"
+ },
+ "candidate_046d": {
+  "path": "research/guideline046_004/package",
+  "manifest_sha256": "b2c5177a480803d2b3c31240286b6494c3e0a6fbf0d65c4dcd5f2cf411aa4ab5",
+  "status": "FROZEN_NOT_ADMITTED",
+  "review": "research/guideline046_004/REVIEW_046d.md",
+  "adds": "R25 component rows; R26-R38 decisions on backlog Q1-Q13; R39-R44 from batch-1 classes; corrected examples; harness audit fix"
+ },
+ "development_batch_2": {
+  "candidate": "046d",
+  "cases": [
+   "1130204",
+   "1131202",
+   "1140507"
+  ],
+  "status": "independent source expectations being authored",
+  "large_workbook_backlog": [
+   "1131112",
+   "1140607",
+   "1140304",
+   "1131207",
+   "1140808",
+   "1140608"
+  ]
+ }
 }
