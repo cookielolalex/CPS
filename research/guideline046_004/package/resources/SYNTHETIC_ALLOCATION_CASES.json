@@ -771,7 +771,7 @@
    "id": "A56",
    "rule": "R40",
    "input": {
-    "description": "電纜管 鍍鋅",
+    "description": "電纜管，鍍鋅",
     "remarks": "改用不鏽鋼"
    },
    "proposed_expected": {

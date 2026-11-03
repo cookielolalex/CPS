@@ -1,15 +1,19 @@
 {
   "schema": "cps.guideline-package.manifest.v2",
-  "candidate": "046c",
-  "parent_candidate": "046b",
-  "parent_manifest_sha256": "7748be1de62683f57a57398ba6a89dd6cd50c4b925471291f3839a2ab4e559f4",
+  "candidate": "046d",
+  "parent_candidate": "046c",
+  "parent_manifest_sha256": "4d8602db470169cdd31647ef2d2dfce3b732643d350d3b15f03fd5fcbf00961e",
   "status": "FROZEN_FOR_BOUNDED_SOURCE_TRIAL_NOT_DEPLOYED",
-  "target_runtime": "User-proposed sol6.1/xhigh is not selectable from Claude Code; every run records the actual model, effort and tools.",
+  "target_runtime": "Owner-adopted qualification runtime claude-opus-5-5 (decision 2026-11-03); every run records the actual model, effort and tools.",
+  "semantic_review": "research/guideline046_004/REVIEW_046d.md",
+  "utf8_bytes": 289420,
+  "manifest_self_excluded": true,
+  "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 8811,
-      "sha256": "1b566aadc3913a2a869541ab92865d5b81032787e13ee3a468cd0e2d8f76d98c"
+      "bytes": 9051,
+      "sha256": "1c64b43f112b22cb24b2ddeadb818af24505983210f57f0d64f0a9f54d0e2fe5"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -23,13 +27,13 @@
     },
     {
       "path": "resources/EXAMPLE_RESPONSE.json",
-      "bytes": 33341,
-      "sha256": "277f990478ff2abc2cf0155458fa3c0b8fac0438e57999728ac108a75bc03032"
+      "bytes": 41944,
+      "sha256": "e3bf4ac02b3e05e70d14b18d3c2039d547b266b0de76ceb0345f482fd99e7dba"
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 19303,
-      "sha256": "079fbcf22e4a452306090ac00585c0b8e926b6f5a176ed4fd772cb2043963c34"
+      "bytes": 32156,
+      "sha256": "e723ed14250c7ac0a626eb977e5a012db91989c3c4b04b5be8570115fb75aee3"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -43,13 +47,13 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 5514,
-      "sha256": "43414571cc315559d6c64d0d3eceb82a776a1a9cb354bd2af311f851debbacee"
+      "bytes": 5524,
+      "sha256": "63ddeb030ad3e841f0aaff224f4f6bdf9394c6c73a7cd5f65645e13541de5b8f"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
-      "bytes": 3290,
-      "sha256": "3d3b847726c0317cc11e32d587ceb3f971c53d913832f2a88b3418ecf1181fd0"
+      "bytes": 3300,
+      "sha256": "d3871f6b9e3c5e30424f0c7d3d18bb4f9dda820b721618d35672f054aec7b4d3"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
@@ -73,8 +77,8 @@
     },
     {
       "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 10494,
-      "sha256": "07e13a751e320f98f3a44163d61f6404390f395a8cadce1e5c0a929cd3600d0f"
+      "bytes": 19879,
+      "sha256": "66b1a568029547863ac296cba911a9e3c9c2dac57187a8b8093789e19565a688"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
@@ -86,8 +90,5 @@
       "bytes": 59920,
       "sha256": "926a9255a8c199634cc99fd600f1c2490b5c3fe6e2a55ddc71a695247883b9bb"
     }
-  ],
-  "utf8_bytes": 258319,
-  "manifest_self_excluded": true,
-  "deployment_approved": false
+  ]
 }

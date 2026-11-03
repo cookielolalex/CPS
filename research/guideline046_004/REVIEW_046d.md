@@ -1,6 +1,6 @@
 # Independent semantic review of candidate 046d (2026-11-03)
 
-**Status: semantically approved; not frozen and not admitted.** Freezing waits for the generic error classes from 046c development batch 1. Any rule added from those classes needs a delta review before the freeze.
+**Status: semantically approved and frozen on 2026-11-03. The manifest is `research/guideline046_004/package/PACKAGE_MANIFEST.json`, sha256 `b2c5177a480803d2b3c31240286b6494c3e0a6fbf0d65c4dcd5f2cf411aa4ab5`, covering 16 files. Not admitted: each trial needs its own frozen admission.** The R39–R44 delta was reviewed after the batch-1 evaluations.
 
 ## Reviewer and scope
 
@@ -58,3 +58,15 @@ Four optional wording notes were applied after approval. They change wording onl
 ## Residual risk recorded by the reviewer
 
 R33 decides the core A/B fields and rests mainly on one development case. The frozen comparator has no A/B alternatives. Any evaluator convention on panel groups therefore has to follow R33's wording exactly. A heading R33 does not settle remains an R24 doubt, to be declared or excluded before generation.
+
+## Delta round (after 046c development batch 1)
+
+R39–R44 were added for the generic classes in [RESULTS_046C_BATCH1.md](../../docs/handoff/RESULTS_046C_BATCH1.md), with examples A49–A54. The same independent reviewer checked them.
+
+- **Delta 1: SEMANTIC_APPROVE_AFTER_LISTED_FIXES.**
+  - Blocking: R43 overrode R1b and broke A01. R42 left the batch-1 disagreement case open, and its relation to R5's detail-schedule sentence was unclear.
+  - Should-fix: R41's precedence position; two gaps in R40 (a superseded attribute, a replaced object); two gaps in R39 (item status, generic verbs).
+  - All were applied with the reviewer's wording in commit e3b850e, plus R44's header-text wording, R41 recorded as a class-membership rule, and examples A55–A56.
+- **Delta 2: SEMANTIC_APPROVE**, conditional on one string. The example inside R40 and A56 separated a finish word from its noun by whitespace only, which R2 keeps in C. Both now use a full-width comma. The reviewer said no further review was needed once that change was made.
+
+Final checks before freezing: the example passes route `check`, and the author's route-test run passed 114/114.

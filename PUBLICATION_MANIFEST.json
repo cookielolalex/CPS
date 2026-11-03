@@ -889,8 +889,8 @@
     },
     {
       "path": "research/guideline046_004/PLAN_046d.md",
-      "bytes": 2024,
-      "sha256": "95337a8ad5c3c3cc0efef86a12f59ef511c26a40c0dca20fe9b4422aca17261c"
+      "bytes": 2050,
+      "sha256": "acbc6a06c21a2fabd317efd0196826acdf08469fdc1e2165b09872b2b35fa7ee"
     },
     {
       "path": "research/guideline046_004/package/CPS_GUIDELINE.md",
@@ -899,8 +899,8 @@
     },
     {
       "path": "research/guideline046_004/package/PACKAGE_MANIFEST.json",
-      "bytes": 3150,
-      "sha256": "4d8602db470169cdd31647ef2d2dfce3b732643d350d3b15f03fd5fcbf00961e"
+      "bytes": 3227,
+      "sha256": "b2c5177a480803d2b3c31240286b6494c3e0a6fbf0d65c4dcd5f2cf411aa4ab5"
     },
     {
       "path": "research/guideline046_004/package/resources/COLUMNS.json",
@@ -919,8 +919,8 @@
     },
     {
       "path": "research/guideline046_004/package/resources/FIELD_ROLES.md",
-      "bytes": 32154,
-      "sha256": "29039cb7716884b29009fd568289ef8d6703d37e27b25eac0d512a4c2a603eab"
+      "bytes": 32156,
+      "sha256": "e723ed14250c7ac0a626eb977e5a012db91989c3c4b04b5be8570115fb75aee3"
     },
     {
       "path": "research/guideline046_004/package/resources/NAME_POLICY.json",
@@ -964,8 +964,8 @@
     },
     {
       "path": "research/guideline046_004/package/resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 19877,
-      "sha256": "ce52017e8a546e63f109072857404706a0dd07a945ab6862e6676b6d14c4d07c"
+      "bytes": 19879,
+      "sha256": "66b1a568029547863ac296cba911a9e3c9c2dac57187a8b8093789e19565a688"
     },
     {
       "path": "research/guideline046_004/package/resources/SYNTHETIC_NAMING_CASES.json",
@@ -1039,8 +1039,8 @@
     },
     {
       "path": "research/guideline046_004/REVIEW_046d.md",
-      "bytes": 3605,
-      "sha256": "50cf70e5f33628dd0bd3d46d2f583b2a546fc0707e72b7145950cc7cdf90efb9"
+      "bytes": 4889,
+      "sha256": "ad81dea2ac7448bf9ae3ea2d8f71f30d11b3983eafd8827e42b26bca5121b663"
     },
     {
       "path": "docs/handoff/RESULTS_046C_BATCH1.md",

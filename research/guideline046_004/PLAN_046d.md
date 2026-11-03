@@ -1,4 +1,4 @@
-# Candidate 046d — working plan (not frozen, not admitted)
+# Candidate 046d: plan (frozen 2026-11-03, manifest `b2c5177a…`; see REVIEW_046d.md)
 
 `package/` starts as an exact copy of frozen 046c (`research/guideline046_003/package/`, manifest `4d8602db…`). 046c stays untouched. Every change below must be generic, use invented examples only, and pass an independent semantic review plus the route tests before any admission. The changes come from three places:
 
