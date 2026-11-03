@@ -99,9 +99,9 @@ These answer generic questions raised during independent source-expectation auth
 **R24 Remaining doubt.** Any C/D question these rules still leave open is recorded in limitations with the cells involved (R12). Evaluators exclude it from C/D correctness obligations unless complete alternatives were declared before generation; the next policy version decides it.
 
 
-## Decisions R25–R38 (046d, declared before any 046d generation)
+## Decisions R25–R44 (046d, declared before any 046d generation)
 
-R25 corrects the analysis-component example found misleading in a 046c trial. R26–R38 decide the questions that independent source-expectation authors raised under 046c (policy backlog Q1–Q13). They are generic and cite no contract; the examples are invented. They were revised after the independent semantic review of 046d. The undecided classes of R8 are unchanged. **Precedence:** R25–R38 govern R1–R24 and the older sentences above where they disagree. In the R12 order, R27 and R29 rank with R11; R35 with R5; R28 and R36 with R1 (financial annotation); R32 with R8; R31 with R7; R30 and R34 with R2. R25, R26, R33, R37 and R38 are outside the order: they say how to compose or scope a result, not where a token goes.
+R25 corrects the analysis-component example found misleading in a 046c trial. R26–R38 decide the questions that independent source-expectation authors raised under 046c (policy backlog Q1–Q13); R39–R44 address generic error classes and disagreements observed in 046c development batch 1. They are generic and cite no contract; the examples are invented. They were revised after the independent semantic review of 046d. The undecided classes of R8 are unchanged. **Precedence:** R25–R44 govern R1–R24 and the older sentences above where they disagree. In the R12 order, R27 and R29 rank with R11; R35 with R5; R28 and R36 with R1 (financial annotation); R32 with R8; R31 with R7; R30 and R34 with R2; R39 and R40 with R1 (financial annotation); R41 with R1 (inclusion); R42 with R5. R25, R26, R33, R37, R38, R43 and R44 are outside the order: they say how to compose or scope a result, not where a token goes.
 
 **R25 Analysis component rows.** An `analysis_component` item carries its own row's literal unit in E and its own literal per-unit quantity in F: the same cells as its link's `basis_unit_ref` and `basis_raw_ref` (R21). F is the literal cell value even when the block's base exceeds one unit (每100M); never multiply or divide it, and never copy the parent's unit or quantity. Project-level values that apply to every item of the order (K, L, M, N, O, each only with the support the field table and R6 require) apply to component rows exactly as to demand rows. P stays null unless the component row itself states a required quantity; G and H stay null; Q stays null, because an analysis price is not an accepted contract rate. A component takes no group from its parent: A and B stay null with the reason "analysis component; parent <id> carries the group" unless its own block qualifies under R33. Example: a 單價分析 row 組立工資 | 工 | 2 under a heading that links it to a 式 item gives C 組立工資, E 工, F 2, and the same L as the demand rows.
 
@@ -130,6 +130,18 @@ R25 corrects the analysis-component example found misleading in a 046c trial. R2
 **R37 Continuation boundaries.** A newline or continuation boundary inside a span, together with any whitespace beside it, becomes one U+0020, or nothing when both neighbouring characters are CJK ideographs or full-width punctuation (附端子⏎蓋 → 附端子蓋; AC110V⏎附端子蓋 → AC110V 附端子蓋, where ⏎ marks the boundary). Do not judge word breaks otherwise.
 
 **R38 Edges and verbatim copying.** Remove leading and trailing whitespace (U+0020, U+3000, TAB) at every C, D and J edge and record it in the transformation. Copy every other character that no rule moves, removes or replaces exactly, including internal spaces and an unpaired bracket at an edge.
+
+**R39 Remarks about the item itself.** A remark that only excludes, cancels, suspends or marks the item as unused without naming an object or work (不含, 不使用, 免, 取消, 暫停) is not a technical attribute: keep it in raw text with a review reason. It never deletes the row, never changes F and never enters D. A remark that excludes a named object or work (不含底座, 不含安裝) follows R1 and R36.
+
+**R40 Change remarks.** A remark that changes the item's method, material or type (改用不鏽鋼, 改為埋設) states a technical attribute: the change phrase as written goes to D. A justification or condition in the same remark (因現場…, 配合…, 依…) stays in raw text with a review reason (R19).
+
+**R41 Words inside inclusion clauses.** A status or count word inside an inclusion or exclusion clause (含新設線路2處) belongs to that clause. The clause as a whole follows R1 and R36; the word is not a separate R3 scope-count token, and R8 class naming does not apply. The proof cites R1 and names the word.
+
+**R42 Holding for unavailable documents.** Hold an item (status `held`, values kept, the hold explained) when a document that is not in the packet is the only definition of what the item supplies or covers: its description is only a pointer, or its lump-sum scope (式) is defined only by the missing document (詳設計圖 | 式 | 1; 依規範施作 | 式 | 1). Do not hold an item whose own text names the object or work when the pointer only adds detail (電纜 3.5mm² 依圖施作): record the pointer under R5.
+
+**R43 Brackets at the start or middle of a moved run.** R4 removes wrapping delimiters only when they enclose a whole moved span. A bracket pair at the start or in the middle of a longer contiguous moved run is inside it and stays verbatim (R14): 電磁接觸器 (防塵型) AC220V → D (防塵型) AC220V. The only exception is R32: brackets that enclose exactly an undecided-class token.
+
+**R44 Naming source columns in reasons.** Proofs and null reasons name a source column by its header text or address, never by a document role the source does not state (R9).
 
 ## Commercial and quantity distinctions
 

@@ -2,7 +2,7 @@
  "schema": "cps.allocation-examples.draft.v1",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "candidate": "046d",
- "case_count": 49,
+ "case_count": 55,
  "all_examples_invented": true,
  "private_project_inputs": false,
  "cases": [
@@ -666,6 +666,86 @@
     "transformation_mentions": "trailing whitespace removed at the C edge (R38)"
    },
    "reason": "Edge whitespace is trimmed at C/D/J edges; other characters are copied exactly."
+  },
+  {
+   "id": "A49",
+   "rule": "R39",
+   "input": {
+    "description": "溫度計",
+    "remarks": "不使用"
+   },
+   "proposed_expected": {
+    "C": "溫度計",
+    "D": null,
+    "review_reason_mentions": "remark 不使用 about the item itself (R39); row kept, F unchanged"
+   },
+   "reason": "A bare item-status remark is raw text, never D, and never deletes the row."
+  },
+  {
+   "id": "A50",
+   "rule": "R40",
+   "input": {
+    "description": "電纜管",
+    "remarks": "改用不鏽鋼 因現場潮濕"
+   },
+   "proposed_expected": {
+    "C": "電纜管",
+    "D": "改用不鏽鋼",
+    "review_reason_mentions": "justification 因現場潮濕 (R40/R19)"
+   },
+   "reason": "The change phrase is a D attribute; its justification stays in raw text."
+  },
+  {
+   "id": "A51",
+   "rule": "R41",
+   "input": {
+    "description": "配線工程(含新設線路2處)"
+   },
+   "proposed_expected": {
+    "C": "配線工程",
+    "D": "含新設線路2處",
+    "proof_mentions": "R1 inclusion clause; status/count word belongs to the clause (R41)"
+   },
+   "reason": "Words inside an inclusion clause go with the clause."
+  },
+  {
+   "id": "A52",
+   "rule": "R42",
+   "input": {
+    "row": "詳設計圖 | 式 | 1"
+   },
+   "proposed_expected": {
+    "status": "held",
+    "values_kept": true,
+    "limitation_mentions": "defining document not in the packet"
+   },
+   "reason": "An item defined only by a missing document is held."
+  },
+  {
+   "id": "A53",
+   "rule": "R42",
+   "input": {
+    "row": "電纜 3.5mm² 依圖施作 | M | 100"
+   },
+   "proposed_expected": {
+    "status": "research_draft",
+    "C": "電纜",
+    "D": "3.5mm²",
+    "review_reason_mentions": "document reference 依圖施作 (R5)"
+   },
+   "reason": "A pointer that only adds detail does not hold an item whose own text names the object."
+  },
+  {
+   "id": "A54",
+   "rule": "R43",
+   "input": {
+    "description": "電磁接觸器 (防塵型) AC220V"
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "(防塵型) AC220V"
+   },
+   "reason": "A bracket at the start of a longer moved run stays verbatim."
   }
  ]
 }
