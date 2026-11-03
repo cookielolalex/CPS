@@ -61,3 +61,7 @@ Not started:
 - the per-unit check mode in the route (the current checker requires every content cell to be used, so it can validate only the merged response);
 - merge tests with invented fixtures;
 - an independent review.
+
+## Addendum after the owner decision (O6, census only) and the 046e review
+
+R46 moves the cells of no-parent analysis blocks into the census. The admitted writer caps `nonitems` at 5,000 entries. A workbook with more census cells than that is still rejected by the writer (`NONITEMS_REQUIRED`), and its export stays held. 1131112 has about 7,596 content cells and no linkable blocks, so it will very likely exceed the cap. R46 does not make it exportable. A larger census needs a writer change (the portable writer, O5) and its own review. That cap applies to the archived writer004 validation.

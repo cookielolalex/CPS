@@ -30,6 +30,6 @@ Search for the supplied object in every supported field. A blank description wit
 
 Distinguish locations, quotation sections, contractual panel groups and physical enclosure ownership. Preserve complete panel labels and position suffixes. A shared enclosure does not prove one enclosure per child. Quantity allocation is a separate fact.
 
-Separate project demands from per-unit composition and financial summaries. Link analysis only with proven parent identity, unit and positive literal basis; retain conflicting/ambiguous links as held. Do not silently omit analysis components, multiply them into purchases or use resource summaries to invent absent demand rows.
+Separate project demands from per-unit composition and financial summaries. Link analysis only with proven parent identity, unit and positive literal basis; retain conflicting/ambiguous links as held. Do not silently omit analysis components (a block with no parent demand item follows FIELD_ROLES R46), multiply them into purchases or use resource summaries to invent absent demand rows.
 
 Do not discover additional sources during a generator run. Missing material triggers an explicit limitation and separate database investigation under the governing task, not an opportunistic file search from a target-exposed context.

@@ -2,7 +2,7 @@
  "schema": "cps.allocation-examples.draft.v1",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "candidate": "046e",
- "case_count": 63,
+ "case_count": 67,
  "all_examples_invented": true,
  "private_project_inputs": false,
  "cases": [
@@ -784,13 +784,13 @@
    "id": "A57",
    "rule": "R45",
    "input": {
-    "row": "電力監視器 RS485 | 台 | 1 | (empty price cells)",
+    "row": "電力監視器 RS485 | 台 | 1; price cells empty",
     "context": "outside any panel"
    },
    "proposed_expected": {
     "demand_item": false,
     "census_role": "excluded_supply",
-    "reason": "no enclosure and no estimate: not in the quoted supply (R45)"
+    "reason": "begins \"no enclosure and no estimate: not in the quoted supply (R45)\" and names the empty price cells"
    },
    "reason": "An unpriced line outside any panel is not a 未填 row."
   },
@@ -818,7 +818,8 @@
    },
    "proposed_expected": {
     "demand_item": false,
-    "census_role": "excluded_supply"
+    "census_role": "excluded_supply",
+    "reason": "begins \"no enclosure and no estimate: not in the quoted supply (R45)\" and names 業主供料"
    },
    "reason": "Text stating no price counts as no quoted price."
   },
@@ -862,7 +863,64 @@
     "D": null
    },
    "reason": "A bracketed acronym after the full name stays in C with its brackets."
+  },
+  {
+   "id": "A63",
+   "rule": "R45",
+   "input": {
+    "contract": "one lump-sum total only; no line has its own price",
+    "row": "電纜 3.5mm² | M | 100, outside any panel"
+   },
+   "proposed_expected": {
+    "demand_item": true,
+    "review_reason_mentions": "contract without line prices (R45 doubt)",
+    "limitation": "contract has no line prices"
+   },
+   "reason": "Lump-sum contracts keep every line as a doubt; nothing is excluded."
+  },
+  {
+   "id": "A64",
+   "rule": "R45/R42",
+   "input": {
+    "row": "詳附表 | 式 | 1; price cells empty",
+    "context": "outside any panel"
+   },
+   "proposed_expected": {
+    "demand_item": true,
+    "status": "held",
+    "review_reason_mentions": "missing detail schedule (R42); no enclosure not established (R45)"
+   },
+   "reason": "A held line is kept, never excluded."
+  },
+  {
+   "id": "A65",
+   "rule": "R45",
+   "input": {
+    "rows": [
+     "1 儀表設備 | 式 | 1 | 300000",
+     "1.1 流量計 | 台 | 2 (price cells empty)"
+    ]
+   },
+   "proposed_expected": {
+    "1.1": {
+     "demand_item": true,
+     "review_reason_mentions": "price may be carried by priced parent line 1 (R45 doubt)"
+    }
+   },
+   "reason": "An unpriced breakdown under a priced parent is a doubt, kept."
+  },
+  {
+   "id": "A66",
+   "rule": "R47/R31",
+   "input": {
+    "description": "電纜(PVC)"
+   },
+   "proposed_expected": {
+    "C": "電纜",
+    "D": "PVC"
+   },
+   "reason": "A letter-only bracketed material token is an R31 attribute designation, not an acronym gloss; its wrapping brackets enclose the whole moved span and are removed (R4)."
   }
  ],
- "assumption": "Unless an example states otherwise, its line has a quoted price or lies inside a panel, so it is a 未填 row under R45."
+ "assumption": "Unless an example states otherwise, a line that the other rules make a demand item has a quoted price or lies inside a panel."
 }

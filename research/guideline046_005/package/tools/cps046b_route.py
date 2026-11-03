@@ -1,4 +1,6 @@
-"""CPS candidate 046b source-reference checker and carrier adapter (stdlib only).
+"""CPS source-reference checker and carrier adapter, route v3 for candidate 046e (stdlib only).
+v3 adds the census roles excluded_supply and analysis_unlinked (FIELD_ROLES R45/R46) and the
+checks CENSUS_ONLY_CELL_USED_BY_ITEM and COMPONENT_GROUP_FORBIDDEN (R25); otherwise unchanged from v2.
 
 check-inventory : validate a source inventory before generation (writer source rules,
                   completeness, canonical text, unavoidable holds).
@@ -794,6 +796,9 @@ def _check(inv, resp_raw, rep):
             component_ids.add(iid)
         else:
             rep.bad('ITEM_ROLE', w + '.role')
+        if it['role'] == 'analysis_component' and (it['group_id'] is not None or (isinstance(it.get('values'), list)
+                                                   and len(it['values']) == 17 and (it['values'][0] is not None or it['values'][1] is not None))):
+            rep.bad('COMPONENT_GROUP_FORBIDDEN', w, 'analysis components never carry A, B or a group (FIELD_ROLES R25)')
         if it['group_id'] is not None and (not isinstance(it['group_id'], str) or it['group_id'] not in groups):
             rep.bad('UNKNOWN_GROUP_ID', w + '.group_id')
         if it['status'] not in ('research_draft', 'held'):
@@ -1032,6 +1037,10 @@ def _check(inv, resp_raw, rep):
         elif role in CONTENT_ROLES and rf not in used:
             rep.bad('CONTENT_CELL_NOT_USED_BY_ANY_ITEM', 'source_roles', {'ref': rf, 'role': role,
                     'action': 'cite it in the owning item (raw or proof) or classify it by its own nonitem role'})
+    for rf in sorted(used):
+        if assigned.get(rf, (None,))[0] in ('excluded_supply', 'analysis_unlinked'):
+            rep.bad('CENSUS_ONLY_CELL_USED_BY_ITEM', 'source_roles', {'ref': rf, 'role': assigned[rf][0], 'uses': used[rf][:5],
+                    'action': 'a line excluded under R45 or a block unlinked under R46 yields no item evidence; reclassify the cell or drop the citation'})
     for w, x in desc_anchor:
         if assigned.get(x, (None,))[0] == 'item_identifier':
             rep.bad('DESCRIPTION_INCLUDES_EXCLUDED_CELL', w + '.raw_refs.description', [x])

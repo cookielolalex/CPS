@@ -11,3 +11,9 @@ The owner answered these through the session's question tool. Answers are quoted
 | O9 | Protocol/interface token placement for included items | Not answered as a placement: the owner answered with the item-scope rule above (O7). | The protocol/interface class stays undecided. Evaluators keep declaring both placements. |
 
 The deployment bar, reserved closure, exclusions and WT-A5 closure are unchanged. O7 applies the recorded CRQA-11 rule ("no enclosure and no estimate"), now confirmed by the owner as the test for 未填 rows. Missing price alone still never deletes a line inside a panel.
+
+## Package-author decisions in 046e (not owner decisions; independently reviewed)
+
+- **R25 amendment** (components never carry A/B). The basis is the generic open question raised by two independent 046d expectation authors: does an analysis-block heading that names a panel create an R33 group for its components? Components are written only to the writer's composition-reference sheet, never to the 17-column 未填 sheet, so A/B have no 未填 meaning for them. The route enforces this with `COMPONENT_GROUP_FORBIDDEN`.
+- **R45 boundary.** A line is excluded only where "no enclosure and no estimate" is actually established (CRQA-11). Lines held under R42, lines inside a panel, and R45 doubts are kept as demand items with a review reason. The doubts are other price content, a price possibly carried by a parent or analysis block, a heading that names a panel but forms no group, owner-supplied or 另案 panel lines, and contracts without line prices.
+- **Open question for the owner.** O7 says "items when panels are quoted". A panel line whose own price text says 業主供料 or 另案 (owner-supplied or a separate contract) is kept as an R45 doubt for now, together with its contents, until the owner rules. Enclosure-like objects (接線盒, 拉線箱) and existing panels (既設盤) are evaluator-declared doubts.

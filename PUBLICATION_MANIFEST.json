@@ -1049,23 +1049,23 @@
     },
     {
       "path": "research/guideline046_004/LARGE_WORKBOOK_DESIGN.md",
-      "bytes": 5380,
-      "sha256": "71659bd5b32a9ed38885bb62acc8914028bc7248732d2b73de82dcd1b904cb0b"
+      "bytes": 5976,
+      "sha256": "ed22aad34bb7926636eecbbd478b44501fa1726c604afc2a657bd268a26d2c5a"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O5_O9.md",
-      "bytes": 2439,
-      "sha256": "4b4374edbf9fc3b84c144af459656479e57258380474c70467cba9a5c36c5777"
+      "bytes": 3768,
+      "sha256": "22e7c6bdb75618b451b9e1964c0d0a16ee51b0f57dd34ceb7c47545aab96561b"
     },
     {
       "path": "research/guideline046_005/harness/EVALUATOR_BRIEF_TEMPLATE.md",
-      "bytes": 3750,
-      "sha256": "b05bab333e372ad8303c0708165124046dc24844c981f225e5914acb266c9461"
+      "bytes": 3912,
+      "sha256": "23b35a5ae80019b6a7b95996960cc372bc962d13a69685cd4358ab0e5f691d11"
     },
     {
       "path": "research/guideline046_005/harness/GENERATOR_PROMPT_TEMPLATE.md",
       "bytes": 1933,
-      "sha256": "1dc75fb6dc37224bfd6621afc4483bf911c7f1446e13bb7412143120758c3683"
+      "sha256": "5ecb1081ad6739c048a5d0adc30966727198f2a6ea27eec066ae4e0a44a370ca"
     },
     {
       "path": "research/guideline046_005/harness/audit_transcript.py",
@@ -1099,8 +1099,8 @@
     },
     {
       "path": "research/guideline046_005/package/CPS_GUIDELINE.md",
-      "bytes": 9467,
-      "sha256": "df3246b4783ff9162249f40648fe48647748c5d80f6c7b79c8e9fafffbdcecf2"
+      "bytes": 9680,
+      "sha256": "2d5054cd05c430a7b6dda3629237f4a748d326b1ac9a601b15edab60a6f27542"
     },
     {
       "path": "research/guideline046_005/package/PACKAGE_MANIFEST.json",
@@ -1119,13 +1119,13 @@
     },
     {
       "path": "research/guideline046_005/package/resources/EXAMPLE_RESPONSE.json",
-      "bytes": 38251,
-      "sha256": "fa3400d4360404bcd4ada0a49febc6f667f85b298e688ae86d72157d8a415567"
+      "bytes": 42031,
+      "sha256": "437023124f97d5bea7e9109bb363f33623528c15862150233f79ed3354ab2a9c"
     },
     {
       "path": "research/guideline046_005/package/resources/FIELD_ROLES.md",
-      "bytes": 35029,
-      "sha256": "44c993dd1f0ac84a675267ffc51167cb3d2884cc7276af78c682472ae3bb4bed"
+      "bytes": 36427,
+      "sha256": "21c02316a2e45df9207e276f2fb29182f194c85f3f385a38eba0f50b5d83895d"
     },
     {
       "path": "research/guideline046_005/package/resources/NAME_POLICY.json",
@@ -1159,28 +1159,28 @@
     },
     {
       "path": "research/guideline046_005/package/resources/SOURCE_READING.md",
-      "bytes": 4685,
-      "sha256": "11baafe0652775097bb239a628848986000ca68eb916fc68d988ac4383ec1456"
+      "bytes": 4746,
+      "sha256": "49a1cc7086f62454cbf7255093b0cec20ce43dc0d295d2bdbb2843021bf19ba4"
     },
     {
       "path": "research/guideline046_005/package/resources/SOURCE_REFERENCE_CONTRACT.md",
       "bytes": 15420,
-      "sha256": "8b6563bc3082dd41712e5b84eb62aba7038d825043a3bea84a2aba52b29f76ce"
+      "sha256": "696ad227022728b399bcf3df2f39116e8227d720b93a6148469ce9665be8a8f8"
     },
     {
       "path": "research/guideline046_005/package/resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 22294,
-      "sha256": "02a308ad944340dd7759f105a38584c52d012d794a064c60e3c278804640ab34"
+      "bytes": 24055,
+      "sha256": "0b89f6c5fae484a934e148001ac34d061ebbc2cbfa350acc9d4204a126912aa0"
     },
     {
       "path": "research/guideline046_005/package/resources/SYNTHETIC_NAMING_CASES.json",
-      "bytes": 9630,
-      "sha256": "54b50b9fc2d1faf188dd703532d7b1594923b0757df3a55f577a4a2148c6bebf"
+      "bytes": 9586,
+      "sha256": "2e9bbc9f22bb3d8948b4387e78f76c32f0fe9f8315b9d08b50ac35f0723c866f"
     },
     {
       "path": "research/guideline046_005/package/tools/cps046b_route.py",
-      "bytes": 60009,
-      "sha256": "2fe20e8faa01d1ec1b769c6f2f9e998d388522139c3304aa241a4af064b4f7dd"
+      "bytes": 61001,
+      "sha256": "db43d38fc2b0a353918c5d2801eb78cb83cabb74b6d02de13cf5ff92f1bd5b91"
     },
     {
       "path": "research/guideline046_005/route_tests/make_fixtures.py",
@@ -1194,8 +1194,8 @@
     },
     {
       "path": "research/guideline046_005/route_tests/run_route_tests.py",
-      "bytes": 21493,
-      "sha256": "3981850e06c924af3a2a31e8a2510990083d6194841c5b0b33c5c111f65452d6"
+      "bytes": 23403,
+      "sha256": "d473551f0606f429c4c77a50ca4f4ef6847f83cbd76aaded7fe78b68988b4660"
     },
     {
       "path": "research/guideline046_005/route_tests/test_compare_source047.py",

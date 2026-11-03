@@ -1,6 +1,6 @@
 # Source-reference and coverage contract v2 (candidate 046b)
 
-Status: candidate interface for independent review and bounded source-only trials. It is not deployment approval. `tools/cps046b_route.py` (route v2) mechanically enforces every rule below that can be checked from references alone. Semantic choices, such as which cells are descriptive or which role a cell has, stay with the AI and an independent semantic review. Where this text and the tool disagree, the response is held and the disagreement is a defect to report. Do not adapt the response to whichever one is more lenient.
+Status: candidate interface for independent review and bounded source-only trials. It is not deployment approval. `tools/cps046b_route.py` (route v3) mechanically enforces every rule below that can be checked from references alone. Semantic choices, such as which cells are descriptive or which role a cell has, stay with the AI and an independent semantic review. Where this text and the tool disagree, the response is held and the disagreement is a defect to report. Do not adapt the response to whichever one is more lenient.
 
 The AI decides item identity, field roles, values and references. The route only validates and copies. It never selects a reference, edits a value, shortens a name, infers a brand, repairs a response or reads evaluator material.
 

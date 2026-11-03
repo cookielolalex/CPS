@@ -218,17 +218,13 @@
     "description": "自動切換開關(ATS) 3P160A"
    },
    "proposed_expected": {
-    "C_contains": [
-     "自動切換開關(ATS)"
-    ],
-    "D_contains": [
-     "3P160A"
-    ],
     "retain_acronym": "ATS",
     "I": null,
     "no_alias_replacement": true,
     "acronym_gloss": "ATS",
-    "placement": "decided (R47, owner decision O8): C 自動切換開關(ATS), D 3P160A"
+    "placement": "decided (R47, owner decision O8): C 自動切換開關(ATS), D 3P160A",
+    "C": "自動切換開關(ATS)",
+    "D": "3P160A"
    }
   },
   {

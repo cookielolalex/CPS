@@ -278,6 +278,32 @@ def main():
     code, out, _ = route('check', '--inventory', str(inv), '--response', str(v2))
     rep = json.loads(out)
     record('e_analysis_unlinked_check_pass', code == 0 and rep['status'] == 'PASS', rep['violations'][:5])
+    code, out, _ = route('convert', '--inventory', str(inv), '--response', str(v2), '--out-dir', str(work / 'variant_analysis_unlinked_out'))
+    ok = code == 0
+    if ok:
+        cv = json.loads((work / 'variant_analysis_unlinked_out' / 'carrier.json').read_text(encoding='utf-8'))
+        wc, _ = node_validate(wd, work / 'variant_analysis_unlinked_out' / 'carrier.json')
+        lg = json.loads((work / 'variant_analysis_unlinked_out' / 'CENSUS_LEDGER.json').read_text(encoding='utf-8'))
+        entries = lg['entries'] if isinstance(lg, dict) and 'entries' in lg else lg
+        s2 = [e for e in entries if isinstance(e, dict) and str(e.get('ref', '')).startswith('cell:S2!') and e.get('primary_role') == 'analysis_unlinked']
+        ok = (wc == 0 and cv['components'] == [] and any(n['kind'] == 'analysis_unlinked' for n in cv['nonitems'])
+              and s2 and all(e.get('census') is True for e in s2))
+    record('e_analysis_unlinked_convert_writer_and_ledger_census', bool(ok))
+    def cite_excluded(r):
+        exclude_item(r)
+        excl = r['source_roles'][-1]['refs']
+        r1 = next(x for x in r['items'] if x['id'] == 'R001')
+        r1['proofs']['C']['refs'] = r1['proofs']['C']['refs'] + [excl[0]]
+    v5 = roles_variant('variant_cite_excluded', cite_excluded)
+    code, out, _ = route('check', '--inventory', str(inv), '--response', str(v5))
+    record('e_census_only_cell_cited_by_item_rejected', code != 0 and 'CENSUS_ONLY_CELL_USED_BY_ITEM' in out)
+    def component_group(r):
+        c1 = next(x for x in r['items'] if x['role'] == 'analysis_component')
+        g = r['groups'][0]
+        c1['group_id'] = g['id']; c1['values'][0] = g['name']
+    v6 = roles_variant('variant_component_group', component_group)
+    code, out, _ = route('check', '--inventory', str(inv), '--response', str(v6))
+    record('e_component_group_rejected', code != 0 and 'COMPONENT_GROUP_FORBIDDEN' in out)
     def bad_role(r):
         r['source_roles'][0]['role'] = 'excluded'
     v3 = roles_variant('variant_unknown_role', bad_role)

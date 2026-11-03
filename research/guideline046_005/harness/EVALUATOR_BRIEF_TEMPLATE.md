@@ -4,7 +4,7 @@ Inputs (verify every hash before use):
 - Release: `{RELEASE}` (sha256 `{RELEASE_SHA}`). It names the frozen carrier pins and any not-carried outcomes.
 - Expectations: `{EXPECTATIONS}` (sha256 `{EXPECTATIONS_SHA}`, status `FROZEN_BEFORE_MODEL_INVOCATION`).
 - Evaluator: `/home/user/CPS/research/evaluation/compare_source047.py` (frozen, sha256 `d0959cb22fc67ca75798645127c070346a3ee148c183d03c3a0844ce03889dad`). It builds on the hash-pinned frozen `compare_source043.py` and scores component rows and links. Run it with `python3 -I -B`, once per carried run: `--expectations … --expectations-sha … --carrier … --carrier-sha … --release … --release-sha … --run {A|B} --output {EVAL}/COMPARISON_{RUN}.json`.
-- For the manual review only: the frozen responses, the adapter carriers, the census ledgers, the case source inventory `{INVENTORY}`, the frozen policy in `/home/user/CPS/research/guideline046_004/package/` (resources/FIELD_ROLES.md R1–R38, NAMING_RULES.md, SOURCE_REFERENCE_CONTRACT.md) and `/home/user/CPS/docs/handoff/EVALUATION.md`, plus the expectation notes `{NOTES}`.
+- For the manual review only: the frozen responses, the adapter carriers, the census ledgers, the case source inventory `{INVENTORY}`, the frozen policy in `/home/user/CPS/research/guideline046_005/package/` (resources/FIELD_ROLES.md R1–R47, NAMING_RULES.md, SOURCE_REFERENCE_CONTRACT.md) and `/home/user/CPS/docs/handoff/EVALUATION.md`, plus the expectation notes `{NOTES}`.
 - Write only under `{EVAL}`.
 - Forbidden: historical worksheets (any `evaluation_only/` path), the naming study, reserved projects and the web.
 
@@ -20,7 +20,7 @@ Tasks:
    - correspondence incidents (missing and ambiguous counts), extra generated IDs and role defects;
    - the numeric 99% gates per mode;
    - the governing gate per the expectations' `gate_reading`. 1140908 has no gate_reading; there, canonical core is the 045-comparable figure.
-3. Manual semantic review (private): for each run, check every mandatory semantic obligation recorded in the expectations, and every critical-error class: invented value, wrong item boundary or merged items, dropped demand, service turned into a material, wrong panel relation, quantity or rate role substitution, translation or alias, a model or brand without role evidence, and a party role (K/M/N) inferred from document furniture, which the owner decided on 2026-11-03 is a critical error. Count unresolved critical errors. Check that raw/provenance mechanics, the census and the null reasons are truthful. Write `{EVAL}/MANUAL_REVIEW.md` with the detail.
+3. Manual semantic review (private): for each run, check every mandatory semantic obligation recorded in the expectations, and every critical-error class: invented value, wrong item boundary or merged items, dropped demand, service turned into a material, wrong panel relation, quantity or rate role substitution, translation or alias, a model or brand without role evidence, and a party role (K/M/N) inferred from document furniture, which the owner decided on 2026-11-03 is a critical error. A line wrongly excluded under R45 (it has a quoted price, lies inside a panel, or is a kept R45 doubt or R42 hold) counts as a dropped demand, which is critical. Count unresolved critical errors. Check that raw/provenance mechanics, the census and the null reasons are truthful. Write `{EVAL}/MANUAL_REVIEW.md` with the detail.
 4. Write `{EVAL}/EVALUATION_SUMMARY.json` with all the numbers above.
 
 Final report (aggregates only):

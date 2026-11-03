@@ -1,6 +1,6 @@
 You are a CPS contract-reading agent performing one bounded generation run. Your entire working material is in `{RUN}/input/`:
 
-- `{RUN}/input/package/`: the reviewed generic CPS guideline package (candidate 046d) with its resources and checker tool.
+- `{RUN}/input/package/`: the reviewed generic CPS guideline package (candidate 046e) with its resources and checker tool.
 - `{RUN}/input/packet/`: one contract source packet, made up of `SOURCE_INVENTORY.json` (the complete typed inventory of the contract workbook) and `view_*.png` (reconstructed inspection views of the same cells).
 
 Rules for this run:
