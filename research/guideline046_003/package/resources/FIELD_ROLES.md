@@ -36,7 +36,7 @@ Explicit name/spec columns are strong structural evidence, not a prohibition aga
 
 Apply the full naming policy and source-language default. Preserve generic source prefixes under this candidate's explicit policy. Preserve both general and specific product nouns unless a separately versioned policy relocates the general category into ancillary context without losing the specific name. No automatic historical-name aliases are approved.
 
-For this cell-based candidate, raw multi-cell descriptions/remarks join proven continuation cells with literal newlines. Derived C/D/J replace actual newlines/continuation boundaries with one U+0020; retain meaningful internal spaces and stored Unicode spelling. When D is assembled from source spans that are not contiguous in the source, join them in source order with U+FF1B only (rule R4 below). Trim only whitespace created at a new C/D allocation edge. Do not apply that rule to an unsplit original field or J. A separable boundary delimiter left at a new C/D edge is dropped (R4), and the transformation says so; meaningful signs, ranges and identifier characters remain. Separable wrapping parentheses around a moved technical/scope qualifier stay in raw evidence, while the underlying qualifier remains in D. Parentheses integral to the technical expression are retained. The 046c allocation rules below require independent semantic review before original-source trials.
+For this cell-based candidate, raw multi-cell descriptions/remarks join proven continuation cells with literal newlines. Derived C/D/J replace actual newlines/continuation boundaries with one U+0020; retain meaningful internal spaces and stored Unicode spelling. When D is assembled from source spans that are not contiguous in the source, join them in source order with U+FF1B only (rule R4 below). Trim only whitespace created at a new C/D allocation edge. Do not apply that rule to an unsplit original field or J. A separable boundary delimiter left at a new C/D edge is dropped (R4), and the transformation says so; meaningful signs, ranges and identifier characters remain. Separable wrapping parentheses that enclose a whole moved span (R14) stay in raw evidence, while the underlying qualifier remains in D. Parentheses integral to the technical expression are retained. The 046c allocation rules below require independent semantic review before original-source trials.
 
 Do not remove a leading sign to satisfy a workbook writer. If a meaningful value cannot be represented safely by the admitted writer, hold the output and retain its exact value; do not silently omit or escape it into a different value.
 
@@ -72,29 +72,29 @@ These rules are generic and cite no contract. When a rule and an older sentence 
 
 ## Clarifications R14–R24 (046c, declared 2026-11-03 before any 046c generation)
 
-These answer generic questions raised during independent source-expectation authoring under the R13 consistency gate. They cite no contract and follow from R1–R12 and the published examples (N03, N08, N20, A13, A23).
+These answer generic questions raised during independent source-expectation authoring under the R13 consistency gate. They cite no contract and follow from R1–R12 and the published examples (N03, N08, N20, A13, A23). Where a clarification and R1–R12 disagree, R1–R12 govern. In the R12 order, R19, R20 and R23 rank with R5, and R16 ranks after R2.
 
-**R14 Delimiters inside a moved span.** R4 removes wrapping delimiters only when they enclose the whole moved span. Delimiters, parentheses and brackets inside one contiguous moved span are kept verbatim (A13: D PLC，16點輸入).
+**R14 Delimiters inside a moved span.** A moved span is the maximal run of consecutive characters in one stream that all go to D. R4 removes wrapping delimiters only when they enclose that whole run; delimiters inside it stay verbatim (A13, A25). R1b qualifiers are always separate spans.
 
-**R15 Composing C.** Within C a bracket pair is kept or removed as a whole: kept when its content stays in C, removed when its whole content moves to D. Two retained name spans keep the source delimiter between them; if none remains, they are joined with nothing (電纜｛45度｝彎頭 → C 電纜彎頭, D 45度).
+**R15 Composing C.** Within C a bracket pair is kept or removed as a whole: removed when none of its content stays in C; kept otherwise. Two retained name spans keep the source delimiter between them; if none remains, they are joined with nothing (電纜｛45度｝彎頭 → C 電纜彎頭, D 45度).
 
-**R16 Code tokens.** An alphanumeric code token without a measurable unit (letters with digits, e.g. QX-620) written before or after a clear noun with no source label is not part of C and not part of D. Keep it in raw text and a review reason with its role unresolved (N03, N08, N20). A labelled code follows its label (型號 → I). A lexical name or acronym without digits (PLC-CPU模組, NFB) is a name, not a code token.
+**R16 Unidentified code tokens.** An unlabelled token of letters with digits that no other rule classifies — not a measurable value or grade code (R2), size or dimension designation (W100, DN250), attribute designation (IP65), protocol/interface designation (R8) or document number (R5) — is not part of C or D (e.g. QX-620 before a clear noun). Keep it in raw text and a review reason with its role unresolved (N03, N08, N20). A labelled code follows its label (型號 → I). A lexical name or acronym without digits (PLC-CPU模組, NFB) is a name, not a code token.
 
 **R17 Fused measurable values.** A measurable value (R2) fused to a noun moves to D even without a delimiter (45度彎頭 → C 彎頭, D 45度; 100KW發電機 → C 發電機, D 100KW).
 
-**R18 Condition words that name the object.** A condition word that says what the object is (廢料, 廢水, 污泥, 舊品 when it names the material handled by a service) is part of the object noun in C. R3 status words are limited to new/existing/reused/temporary words that limit scope.
+**R18 Condition words that name the object.** A condition word that says what the object is (廢料, 廢水, 污泥, 舊品 when it names the material handled by a service) is part of the object noun in C. R3 status words are new/existing/reused words saying which objects the work covers (新設, 既設, 利用舊品). A word naming the kind of work or the material handled (臨時用電, 廢料清運) is part of C.
 
 **R19 Procedural clauses.** An instruction, coordination or approval clause (依監造指示, 配合現場, 經核可後) is treated like a document reference (R5): raw text and a review reason only; never C or D.
 
-**R20 Conformity verbs.** 符合…, 合於…, conforming to … are document-reference verbs under R5.
+**R20 Conformity verbs.** 符合…, 合於…, conforming to … are document-reference verbs under R5. If the object of the verb is an attribute designation (符合IP65), place only that value in D (R5).
 
 **R21 Analysis basis cells.** For a supported component link, `basis_raw_ref` is the component row's own quantity cell and `basis_unit_ref` is the component row's own unit cell. A block-header unit label is context for the link proof, not the basis unit.
 
-**R22 Single-cell raw roles on multi-row items.** The unit, quantity, unit-price and amount raw cells are the item's cells in those columns on its anchor row. Cells in those columns on continuation rows are classified by their own role (financial_summary, commercial_note, …) and stay in the census; they are not concatenated into the item's raw fields.
+**R22 Single-cell raw roles on multi-row items.** The unit, quantity, unit-price and amount raw cells are the item's single cells in those columns: the anchor-row cell. If that cell is empty, use the one continuation-row cell of the same item that has content there. When both rows have content in a column, the anchor-row cell is raw; the other is classified by its own role, or as unresolved naming the possible roles, and stays in the census.
 
 **R23 Cost-line codes.** A pricing, resource or work-item code (工料編碼, 資源代碼, 工項編號) identifies a cost line, not a technical attribute: keep it in raw text; never C or D.
 
-**R24 Remaining doubt.** Any C/D question these rules still leave open is recorded in limitations with the cells involved (R12); evaluators declare complete alternatives for it, and the next policy version decides it.
+**R24 Remaining doubt.** Any C/D question these rules still leave open is recorded in limitations with the cells involved (R12). Evaluators exclude it from C/D correctness obligations unless complete alternatives were declared before generation; the next policy version decides it.
 
 ## Commercial and quantity distinctions
 

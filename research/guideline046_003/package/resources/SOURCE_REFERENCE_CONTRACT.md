@@ -58,7 +58,7 @@ Proof rules:
 
 **Raw references.** `raw_refs` has the six raw fields `description, unit, quantity, unit_price, amount, remarks`. Each is `{"refs":[...], "reason_if_empty": string|null}`. A non-empty list requires `reason_if_empty:null`, and an empty list requires a specific reason.
 
-- `unit`, `quantity`, `unit_price` and `amount` hold at most one cell each: the item's own cell in that role on its anchor row (FIELD_ROLES R22).
+- `unit`, `quantity`, `unit_price` and `amount` hold at most one cell each: the item's own cell in that role (FIELD_ROLES R22).
 - `description` lists the logical item's descriptive text cells in row-major order (top to bottom, then left to right). These are its name/description column and any separate specification or description column, including proven continuation rows. Exclude the item-number cell and the unit, quantity, price, amount and remarks cells. The checker enforces row-major order and these exclusions.
 - `remarks` lists the item's remarks-column cells in row-major order.
 - Every listed cell must have non-null `canonical_raw`; empty cells are never listed. The copied raw text is the canonical texts joined with U+000A.

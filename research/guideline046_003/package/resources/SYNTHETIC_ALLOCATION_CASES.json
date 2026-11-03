@@ -364,7 +364,8 @@
     "C": "端子台",
     "D": null,
     "unresolved_token": "AB-12",
-    "review_reason_mentions": "AB-12 role unresolved"
+    "review_reason_mentions": "AB-12 role unresolved",
+    "null_reasons_D_and_I_mention": "AB-12 (R9)"
    },
    "reason": "Unlabelled code token with digits is kept in raw and review only."
   },
@@ -411,8 +412,9 @@
     "rows": "item row with amount text '另計' and a continuation row with a cached amount"
    },
    "proposed_expected": {
-    "raw_amount": "anchor-row amount cell",
-    "continuation_amount_role": "financial_summary (census)"
+    "raw_amount": "anchor-row amount cell (另計)",
+    "continuation_amount_role": "its own role (financial_summary only if it is a subtotal or total) or unresolved naming the possible roles (R11)",
+    "review_reason_mentions": "另計 financial annotation (R1)"
    },
    "reason": "Single-cell raw roles come from the anchor row."
   },

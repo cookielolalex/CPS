@@ -644,8 +644,8 @@
     },
     {
       "path": "research/guideline046_003/package/PACKAGE_MANIFEST.json",
-      "bytes": 3147,
-      "sha256": "ed8435317a33377a921abad876923fdce079b6087c1c031303bbf86bc7ee1e4a"
+      "bytes": 3148,
+      "sha256": "69313ea0450ad1418ed82cca569f60ba7c8c4ca23d1306d5191ebce26a155353"
     },
     {
       "path": "research/guideline046_003/package/resources/COLUMNS.json",
@@ -664,8 +664,8 @@
     },
     {
       "path": "research/guideline046_003/package/resources/FIELD_ROLES.md",
-      "bytes": 18600,
-      "sha256": "1eb3f66d90a930e596413bb08af80ac89f94b760e6c87ea4557bd4280ffa91b5"
+      "bytes": 19303,
+      "sha256": "079fbcf22e4a452306090ac00585c0b8e926b6f5a176ed4fd772cb2043963c34"
     },
     {
       "path": "research/guideline046_003/package/resources/NAME_POLICY.json",
@@ -704,13 +704,13 @@
     },
     {
       "path": "research/guideline046_003/package/resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 15002,
-      "sha256": "a2ca6b7651858e7fef0a8a95b51ae270337c128dab70848c007114d2dbb110dc"
+      "bytes": 14984,
+      "sha256": "20d378c537483d7e4e24bae648781136faa2ed6a56fadc5d939ca5534870773c"
     },
     {
       "path": "research/guideline046_003/package/resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 10283,
-      "sha256": "ac8f53c11193593da40bae195e5c5ee274819c56f684c718a012b83763dcc211"
+      "bytes": 10494,
+      "sha256": "07e13a751e320f98f3a44163d61f6404390f395a8cadce1e5c0a929cd3600d0f"
     },
     {
       "path": "research/guideline046_003/package/resources/SYNTHETIC_NAMING_CASES.json",
