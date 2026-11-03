@@ -157,7 +157,7 @@ These apply owner decisions O6–O8 of 2026-11-03 (`research/guideline046_005/DE
   - an R45 doubt: other price content (另計, 詳單價分析, 免費, a lone dash, a negative number, an error or a missing cache); a line whose price may be carried by a priced parent line or by an analysis block of this source; a line under a heading that names a panel but forms no R33 group; a panel line whose own price text says 業主供料 or 另案, and the lines inside it; or every line of a contract that has no line prices.
 
   An R45 doubt is not an R24 C/D doubt; evaluators declare before generation whether it counts (R13).
-- **Excluded.** Any other line with no quoted price that is not inside a panel (no enclosure and no estimate, CRQA-11) is not a 未填 row. Classify every one of its cells, including its item number and continuation rows, as `excluded_supply`. The reason begins "no enclosure and no estimate: not in the quoted supply (R45)" and names the condition: price cells empty, zero, or the quoted text. Write no item for it, and cite none of its cells in any item.
+- **Excluded.** Any other line with no quoted price that is not inside a panel (no enclosure and no estimate, CRQA-11) is not a 未填 row. Classify every one of its cells, including its item number and continuation rows, as `excluded_supply`; this overrides R29 for formula caches on those rows. The reason begins "no enclosure and no estimate: not in the quoted supply (R45)" and names the condition: price cells empty, zero, or the quoted text. Write no item for it, and cite none of its cells in any item.
 
 Examples:
 - 電力監視器 RS485 | 台 | 1, price cells empty, outside any panel → `excluded_supply`.

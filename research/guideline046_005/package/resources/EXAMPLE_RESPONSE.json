@@ -1606,6 +1606,7 @@
     }
   ],
   "limitations": [
-    "Invented fixture response."
+    "Invented fixture response.",
+    "R007 kept and held: no price, but no enclosure is not established because the object is defined only by the missing 配電盤規範 (R42, R45)."
   ]
 }

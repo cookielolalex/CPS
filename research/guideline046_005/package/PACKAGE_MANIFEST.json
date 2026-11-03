@@ -1,19 +1,19 @@
 {
   "schema": "cps.guideline-package.manifest.v2",
-  "candidate": "046d",
-  "parent_candidate": "046c",
-  "parent_manifest_sha256": "4d8602db470169cdd31647ef2d2dfce3b732643d350d3b15f03fd5fcbf00961e",
+  "candidate": "046e",
+  "parent_candidate": "046d",
+  "parent_manifest_sha256": "b2c5177a480803d2b3c31240286b6494c3e0a6fbf0d65c4dcd5f2cf411aa4ab5",
   "status": "FROZEN_FOR_BOUNDED_SOURCE_TRIAL_NOT_DEPLOYED",
   "target_runtime": "Owner-adopted qualification runtime claude-opus-5-5 (decision 2026-11-03); every run records the actual model, effort and tools.",
-  "semantic_review": "research/guideline046_004/REVIEW_046d.md",
-  "utf8_bytes": 289420,
+  "semantic_review": "research/guideline046_005/REVIEW_046e.md",
+  "utf8_bytes": 301070,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 9051,
-      "sha256": "1c64b43f112b22cb24b2ddeadb818af24505983210f57f0d64f0a9f54d0e2fe5"
+      "bytes": 9680,
+      "sha256": "2d5054cd05c430a7b6dda3629237f4a748d326b1ac9a601b15edab60a6f27542"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -27,13 +27,13 @@
     },
     {
       "path": "resources/EXAMPLE_RESPONSE.json",
-      "bytes": 41944,
-      "sha256": "e3bf4ac02b3e05e70d14b18d3c2039d547b266b0de76ceb0345f482fd99e7dba"
+      "bytes": 42182,
+      "sha256": "de21332ea7b8833a9b8fcfa33c304f4c7d3f8bdec29c5dd89104ba192764edb8"
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 32156,
-      "sha256": "e723ed14250c7ac0a626eb977e5a012db91989c3c4b04b5be8570115fb75aee3"
+      "bytes": 36480,
+      "sha256": "da9c3d5c8e1894897c7dee52ec5edfcecfc86ffd5e78731a9e052fea12b24677"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -47,18 +47,18 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 5524,
-      "sha256": "63ddeb030ad3e841f0aaff224f4f6bdf9394c6c73a7cd5f65645e13541de5b8f"
+      "bytes": 5825,
+      "sha256": "ac1188b53d2f512e94a243d16fdc52d899c87c95343468e269e83545d35f435d"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
       "bytes": 3300,
-      "sha256": "d3871f6b9e3c5e30424f0c7d3d18bb4f9dda820b721618d35672f054aec7b4d3"
+      "sha256": "c3872bf6eef23f6306fb71695d7760d5435bb1d572972fc63135f923a2e3bf63"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
-      "bytes": 15868,
-      "sha256": "5b4aa5a171365984593dbbadc0521b3ee1d08aa4f6ba6f9e5b51c8e7671752b0"
+      "bytes": 15920,
+      "sha256": "81f9a20fabcdb5532c20ef79c515085350dde4000883c5d6f8e79c44dd28262e"
     },
     {
       "path": "resources/SOURCE_INVENTORY.schema.json",
@@ -67,28 +67,28 @@
     },
     {
       "path": "resources/SOURCE_READING.md",
-      "bytes": 4685,
-      "sha256": "11baafe0652775097bb239a628848986000ca68eb916fc68d988ac4383ec1456"
+      "bytes": 4746,
+      "sha256": "49a1cc7086f62454cbf7255093b0cec20ce43dc0d295d2bdbb2843021bf19ba4"
     },
     {
       "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 14984,
-      "sha256": "20d378c537483d7e4e24bae648781136faa2ed6a56fadc5d939ca5534870773c"
+      "bytes": 15683,
+      "sha256": "923523fee3d4403a50908d01aa16abc2497d6a351f64ecf6c5fa1006ccba82cf"
     },
     {
       "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 19879,
-      "sha256": "66b1a568029547863ac296cba911a9e3c9c2dac57187a8b8093789e19565a688"
+      "bytes": 24213,
+      "sha256": "7835192b74f11e10780d409f0e6cfd5127e179c87cb2a0fa701867dbd164381d"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
-      "bytes": 9655,
-      "sha256": "0d86d5b90f0cfca4869618b846a24d6ecde298cd6931c10066689a7b9003a77f"
+      "bytes": 9586,
+      "sha256": "2e9bbc9f22bb3d8948b4387e78f76c32f0fe9f8315b9d08b50ac35f0723c866f"
     },
     {
       "path": "tools/cps046b_route.py",
-      "bytes": 59920,
-      "sha256": "926a9255a8c199634cc99fd600f1c2490b5c3fe6e2a55ddc71a695247883b9bb"
+      "bytes": 61001,
+      "sha256": "db43d38fc2b0a353918c5d2801eb78cb83cabb74b6d02de13cf5ff92f1bd5b91"
     }
   ]
 }

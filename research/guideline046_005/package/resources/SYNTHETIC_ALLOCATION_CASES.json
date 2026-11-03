@@ -888,7 +888,8 @@
    "proposed_expected": {
     "demand_item": true,
     "status": "held",
-    "review_reason_mentions": "missing detail schedule (R42); no enclosure not established (R45)"
+    "review_reason_mentions": "missing detail schedule (R42); no enclosure not established (R45)",
+    "limitation_mentions": "line kept and held; no enclosure not established (R42, R45)"
    },
    "reason": "A held line is kept, never excluded."
   },
@@ -904,7 +905,8 @@
    "proposed_expected": {
     "1.1": {
      "demand_item": true,
-     "review_reason_mentions": "price may be carried by priced parent line 1 (R45 doubt)"
+     "review_reason_mentions": "price may be carried by priced parent line 1 (R45 doubt)",
+     "limitation_mentions": "unpriced breakdown kept as R45 doubt"
     }
    },
    "reason": "An unpriced breakdown under a priced parent is a doubt, kept."
