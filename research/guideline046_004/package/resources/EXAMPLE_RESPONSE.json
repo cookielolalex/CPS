@@ -700,10 +700,10 @@
       ],
       "proofs": {
         "A": {
-          "reason": "Item is not inside an explicitly identified panel group."
+          "reason": "Item is after the subtotal row that closes the scope of heading 壹 示例控制盤 (R33); no other panel group is identified."
         },
         "B": {
-          "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
+          "reason": "Item is outside any panel group (R33), so no group specification applies."
         },
         "C": {
           "refs": [
@@ -856,10 +856,10 @@
       ],
       "proofs": {
         "A": {
-          "reason": "Item is not inside an explicitly identified panel group."
+          "reason": "Item is after the subtotal row that closes the scope of heading 壹 示例控制盤 (R33); no other panel group is identified."
         },
         "B": {
-          "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
+          "reason": "Item is outside any panel group (R33), so no group specification applies."
         },
         "C": {
           "refs": [
@@ -1020,10 +1020,10 @@
       ],
       "proofs": {
         "A": {
-          "reason": "Item is not inside an explicitly identified panel group."
+          "reason": "Item is after the subtotal row that closes the scope of heading 壹 示例控制盤 (R33); no other panel group is identified."
         },
         "B": {
-          "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
+          "reason": "Item is outside any panel group (R33), so no group specification applies."
         },
         "C": {
           "reason": "Only a document pointer; no supplied object is identified."

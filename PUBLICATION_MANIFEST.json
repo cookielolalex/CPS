@@ -914,13 +914,13 @@
     },
     {
       "path": "research/guideline046_004/package/resources/EXAMPLE_RESPONSE.json",
-      "bytes": 41788,
-      "sha256": "c08b6d2078c1e22fa30d81521cfaf07603a0d407a3f5f45cea83f665c28301bd"
+      "bytes": 41944,
+      "sha256": "e3bf4ac02b3e05e70d14b18d3c2039d547b266b0de76ceb0345f482fd99e7dba"
     },
     {
       "path": "research/guideline046_004/package/resources/FIELD_ROLES.md",
-      "bytes": 28627,
-      "sha256": "031173a4057d626606c8dd8a37671ddef43d174e5f95383e6b16126c2eff0327"
+      "bytes": 28694,
+      "sha256": "401c59363b14b5f6be732e692ec4aeab7ac1015cf0efd1ceddb6f8168ff97500"
     },
     {
       "path": "research/guideline046_004/package/resources/NAME_POLICY.json",
@@ -1036,6 +1036,11 @@
       "path": "research/guideline046_004/harness/prepare_run.py",
       "bytes": 2095,
       "sha256": "2f0382525377d3ef66ec102460f78c4dd38b75086e3bd95bb8b0cadbc8a289cd"
+    },
+    {
+      "path": "research/guideline046_004/REVIEW_046d.md",
+      "bytes": 3605,
+      "sha256": "50cf70e5f33628dd0bd3d46d2f583b2a546fc0707e72b7145950cc7cdf90efb9"
     }
   ]
 }
