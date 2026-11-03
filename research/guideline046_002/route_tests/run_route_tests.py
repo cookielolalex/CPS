@@ -89,9 +89,10 @@ def main():
     r1 = byid['R001']
     record('anchor_plus_census', 'cell:S1!A4' in census and 'A4' in r1['location']['cells'] and census['cell:S1!A4']['kind'] == 'item_identifier')
     t0, n0 = json.loads(census['cell:S1!C17']['text']), json.loads(census['cell:S1!D17']['text'])
-    record('typed_census_distinguishes_text_zero_and_number_zero', t0 == {'saved_type': 'text', 'state': 'literal', 'value': '0'}
-           and n0 == {'saved_type': 'number', 'state': 'literal', 'value': 0.0})
-    record('census_excludes_demand_content_and_empty', 'cell:S1!B4' not in census and 'cell:S1!G4' not in census and 'cell:S1!G6' in census)
+    record('typed_census_distinguishes_text_zero_and_number_zero', t0 == {'saved_type': 'text', 'state': 'literal', 'value': '0', 'formula_record_present': False, 'conflicts': []}
+           and n0 == {'saved_type': 'number', 'state': 'literal', 'value': 0.0, 'formula_record_present': False, 'conflicts': []})
+    record('census_excludes_demand_content_and_empty', 'cell:S1!B4' not in census and 'cell:S1!G4' not in census and 'cell:S1!G6' not in census and 'cell:S1!B10' in census)
+    record('census_keeps_formula_flag', json.loads(census['cell:S1!E16']['text'])['formula_record_present'] is True and json.loads(census['cell:S1!F9']['text'])['formula_record_present'] is True)
     record('typed_census_unusable_states_kept', json.loads(census['cell:S1!E16']['text'])['state'] == 'error'
            and json.loads(census['cell:S1!D16']['text'])['value'] is True)
     ev = r1['evidence']
@@ -143,12 +144,19 @@ def main():
     # mutations
     idx = json.loads((fx / 'MUTATIONS.json').read_text(encoding='utf-8'))['mutations']
     for mu in idx:
-        code, out, _ = route('check', '--inventory', str(inv), '--response', str(fx / mu['file']))
+        minv = fx / mu.get('inventory', 'fixture_inventory.json')
+        code, out, _ = route('check', '--inventory', str(minv), '--response', str(fx / mu['file']))
         rep = json.loads(out)
         codes = sorted({v['code'].split(':')[0] for v in rep['violations']})
-        ok = code == 1 and mu['expected_code'] in codes
-        c2, out2, _ = route('convert', '--inventory', str(inv), '--response', str(fx / mu['file']), '--out-dir', str(work / ('mut_' + mu['name'])))
-        refused = c2 == 1 and not (work / ('mut_' + mu['name']) / 'carrier.json').exists()
+        cats = {v['code'].split(':')[0]: v['category'] for v in rep['violations']}
+        want_cat = {'raw_date_cell': 'field_must_be_null', 'F_proof_text_cell': 'field_must_be_null', 'date_cell_proof_O': 'field_must_be_null',
+                    'unicode_digit_quantity': 'field_must_be_null', 'context_only_C': 'field_must_be_null',
+                    'formula_like_D': 'unrepresentable_hold', 'component_link_held': 'unrepresentable_hold',
+                    'long_packed_transformation': 'unrepresentable_hold', 'too_many_nonitems': 'unrepresentable_hold',
+                    'unknown_ref': 'invalid', 'dropped_item': 'invalid'}.get(mu['name'])
+        ok = code == 1 and mu['expected_code'] in codes and (want_cat is None or cats.get(mu['expected_code']) == want_cat)
+        c2, out2, _ = route('convert', '--inventory', str(minv), '--response', str(fx / mu['file']), '--out-dir', str(work / ('mut_' + mu['name'])))
+        refused = c2 == 1 and not (work / ('mut_' + mu['name']) / 'carrier.json').exists() and (work / ('mut_' + mu['name']) / 'CENSUS_LEDGER.json').exists()
         record('mutation_' + mu['name'], ok and refused, None if ok and refused else {'expected': mu['expected_code'], 'got': codes})
 
     # writer parity: the same defects injected directly into a carrier are rejected by writer004 itself
@@ -172,7 +180,54 @@ def main():
     inject('view_unaccounted', lambda c: (c['components'].clear(), c.update(nonitems=[n for n in c['nonitems'] if n['location']['sheet'] != '單價分析'])), 'VIEW_SCOPE_UNACCOUNTED')
     inject('pathlike_selection', lambda c: it(c, 'R001')['evidence']['L'].update(selection_evidence='C:\\x'), 'EXTRA_SOURCE_REFERENCE')
 
-    summary = {'route': 'cps046b-route.v1', 'tests': len(results), 'passed': sum(r['pass'] for r in results),
+    # writer parity fuzz: Python port vs the real writer004 prepareMatrices on the same carriers
+    route_mod = load_module(ROUTE, 'cps046b_route_under_test')
+    fuzz = []
+    def variant(label, f):
+        c = copy.deepcopy(carrier)
+        f(c)
+        fuzz.append((label, c))
+    nums = ['3', '3.0', '+3', '03', '3,000', '1,00', '３', '٣', ' 3 ', '\u30003', '\u00a03', '3\u2028', '\ufeff3', '3.', '.3',
+            '3e0', '0x3', '\u22123', '-3', '', '\t3\n', '3\x0b', '0003.000', '2.9999999999999999', '9007199254740993']
+    for s_ in nums:
+        variant('qty:' + repr(s_), lambda c, s_=s_: (it(c, 'R002')['raw'].update(quantity=s_), it(c, 'R002')['evidence']['F'].update(raw_text=s_)))
+    texts = ['a' * 30000, 'a' * 30001, '\U00020000' * 15000, '\U00020000' * 15001, ' ', '\u3000', '\ufeff', '\u200b', '\x0b', '\x7f', '\u0085',
+             '=a', '\u3000=a', '\ufeff+a', '\u00a0@a', '\u2028-a', '\u200b-a', '\u0085-a', 'a\u2029b']
+    for s_ in texts:
+        variant('C:' + repr(s_[:12]) + f'/{len(s_)}', lambda c, s_=s_: it(c, 'R002')['values'].__setitem__(2, s_))
+        variant('nonitem_text:' + repr(s_[:12]) + f'/{len(s_)}', lambda c, s_=s_: c['nonitems'][0].update(text=s_))
+        variant('transformation:' + repr(s_[:12]) + f'/{len(s_)}', lambda c, s_=s_: it(c, 'R002')['evidence']['C'].update(transformation=s_))
+    for s_ in ['C:\\x', 'c:/x', '\\\\srv\\x', 'file://x', 'HTTP://x', 'x:y', 'cell:S1!A1']:
+        variant('meta:' + repr(s_), lambda c, s_=s_: c['metadata'].update(note=s_))
+    variant('meta_key_sources', lambda c: c['metadata'].update(sources='x'))
+    variant('nonitems_5001', lambda c: c.update(nonitems=[c['nonitems'][0]] * 5001))
+    variant('review_cell_long', lambda c: it(c, 'R002').update(review_reasons=['r' * 30000, 'r' * 3000]))
+    variant('values_review_cell_long', lambda c: (it(c, 'R002')['values'].__setitem__(3, 'd' * 20000), it(c, 'R002')['null_reasons'].pop('D'),
+                                                 it(c, 'R002')['evidence'].update(D=dict(it(c, 'R002')['evidence']['C'])), it(c, 'R002')['values'].__setitem__(8, 'i' * 20000),
+                                                 it(c, 'R002')['null_reasons'].pop('I'), it(c, 'R002')['evidence'].update(I=dict(it(c, 'R002')['evidence']['C']))))
+    variant('group_limitations_501', lambda c: c['groups'][0].update(limitations=['x'] * 501))
+    variant('duplicate_location_cell', lambda c: it(c, 'R002')['location']['cells'].append(it(c, 'R002')['location']['cells'][0]))
+    variant('view_zero', lambda c: it(c, 'R002')['location'].update(views=[0]))
+    variant('basis_unit_formula', lambda c: it(c, 'C001')['composition'].update(basis_unit='-x'))
+    variant('basis_raw_unicode', lambda c: it(c, 'C001')['composition'].update(basis_raw='２'))
+    fp = work / 'parity_carriers.json'
+    fp.write_text(json.dumps([c for _, c in fuzz], ensure_ascii=False), encoding='utf-8')
+    pcode, pout, perr = run(['node', str(HERE / 'parity_batch.mjs'), str((wd / 'writer004.mjs').resolve()), str(fp.resolve())])
+    node_codes = json.loads(pout) if pcode == 0 else []
+    mism = []
+    for (label, c), nc in zip(fuzz, node_codes):
+        try:
+            route_mod.validate_carrier_port(c)
+            pc = 'PASS'
+        except route_mod.WriterReject as e:
+            pc = e.code
+        if pc != nc:
+            mism.append({'case': label, 'python': pc, 'node': nc})
+    record('writer_port_parity_fuzz', pcode == 0 and len(node_codes) == len(fuzz) and not mism,
+           {'cases': len(fuzz), 'node_pass': sum(x == 'PASS' for x in node_codes), 'mismatches': mism[:10], 'stderr': perr[-300:]})
+    record('valid_carrier_port_pass', route_mod.validate_carrier_port(carrier) is True)
+
+    summary = {'route': 'cps046b-route.v2', 'tests': len(results), 'passed': sum(r['pass'] for r in results),
                'failed': [r for r in results if not r['pass']], 'fixtures_invented': True,
                'route_sha256': sha(ROUTE.read_bytes()), 'comparer_sha256': sha(COMPARER.read_bytes()),
                'writer_files': WRITER_SHA, 'export_attempted': False}

@@ -70,10 +70,31 @@ def canon(v):
     return '0' if s in ('-0', '') else s
 
 
-def build_inventory(adoption):
+def serialize(inv):
+    def dump(x):
+        return json.dumps(x, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    parts = []
+    for k, v in inv.items():
+        if k in ('cells', 'sheets', 'views', 'context_facts', 'limitations') and isinstance(v, list):
+            body = ',\n'.join('  ' + dump(x) for x in v)
+            parts.append(f' {dump(k)}:[\n{body}\n ]' if v else f' {dump(k)}:[]')
+        else:
+            parts.append(f' {dump(k)}:{dump(v)}')
+    return '{\n' + ',\n'.join(parts) + '\n}\n'
+
+
+def build_inventory(adoption, overrides=None, extra_sheet=False):
     cells = []
     sheets = []
-    for si, (name, data, rows, cols) in enumerate([(S1, sheet1, 18, 7), (S2, sheet2, 4, 4)], start=1):
+    s1 = dict(sheet1)
+    s1.update(overrides or {})
+    specs = [(S1, s1, 18, 7), (S2, sheet2, 4, 4)]
+    vws = list(views)
+    if extra_sheet:
+        specs.append(('資源統計', {(r, letters(c)): (T, f'統計{r}-{c}', False) for r in range(1, 52) for c in range(1, 101)}, 51, 100))
+        merges[3] = []
+        vws.append({'id': 4, 'sheet': '資源統計', 'range': 'A1:CV51'})
+    for si, (name, data, rows, cols) in enumerate(specs, start=1):
         cov = {}
         for m in merges[si]:
             a, b = m.split(':')
@@ -109,7 +130,7 @@ def build_inventory(adoption):
                         reason = 'date-typed serial; display format is not reproduced by this profile'
                     elif typ == 'boolean':
                         reason = 'boolean saved value is not material raw text in this profile'
-                vv = [v['id'] for v in views if v['sheet'] == name and r >= int(v['range'].split(':')[0][1:]) and r <= int(v['range'].split(':')[1][1:])]
+                vv = [v['id'] for v in vws if v['sheet'] == name and r >= int(''.join(ch for ch in v['range'].split(':')[0] if ch.isdigit())) and r <= int(''.join(ch for ch in v['range'].split(':')[1] if ch.isdigit()))]
                 cells.append({'ref': ref, 'sheet_index': si, 'sheet': name, 'address': f'{L}{r}', 'row': r, 'col': c,
                               'saved_type': typ if typ != 'blank' else 'blank', 'state': state, 'saved_value': val,
                               'native_literal': None, 'formula_record_present': frm, 'formula': None,
@@ -122,15 +143,15 @@ def build_inventory(adoption):
                       'adoption_status': adoption, 'adoption_basis': 'Invented fixture; no real contract.',
                       'reader': {'name': 'invented', 'version': '0', 'biff_format': None, 'formula_expressions_available': False},
                       'carrier_source': {'kind': 'cached_xls', 'path': 'X:\\Fixtures\\invented\\fixture-contract.xls',
-                                         'sha256': fake_sha, 'views': views}},
+                                         'sha256': fake_sha, 'views': vws}},
            'sheets': sheets,
-           'views': [dict(v, image={'file': f"view_{v['id']:02d}.png", 'bytes': 1, 'sha256': fake_sha}) for v in views],
+           'views': [dict(v, image={'file': f"view_{v['id']:02d}.png", 'bytes': 1, 'sha256': fake_sha}) for v in vws],
            'external_links': [], 'cells': cells,
            'context_facts': [{'ref': 'context:case_identity', 'namespace': 'cps.internal_case_id', 'value': 'FIXTURE01',
                               'basis': 'Invented selected case identity for route testing.',
                               'authority_pins': [{'label': 'invented', 'sha256': fake_sha}]}],
            'limitations': ['Invented fixture inventory for adapter route tests only.']}
-    raw = (json.dumps(inv, ensure_ascii=False, indent=1) + '\n').encode('utf-8')
+    raw = serialize(inv).encode('utf-8')
     return inv, raw
 
 
@@ -155,8 +176,26 @@ def item(iid, role, group, status, values, proofs, rawrefs, anchors, reasons=())
             'proofs': {c: proofs[c] for c in COLS}, 'raw_refs': rawrefs, 'anchor_refs': anchors, 'review_reasons': list(reasons)}
 
 
+NULL_REASONS = {
+    'A': 'Item is not inside an explicitly identified panel group.',
+    'B': 'Item is not inside an explicitly identified panel group, so no group specification applies.',
+    'C': 'No supplied object is identified.',
+    'D': 'No separable technical specification text in this item.',
+    'E': 'No unit cell for this row.',
+    'F': 'No quantity cell for this row.',
+    'I': 'No source-supported model role in this item.',
+    'J': 'No source-supported brand role in this item.',
+    'K': 'Supplier role is project-level and not asserted on analysis composition rows.',
+    'L': 'Engineering identity is not asserted on analysis composition rows.',
+    'M': 'Ordering-customer role is project-level and not asserted on analysis composition rows.',
+    'N': 'Using-customer role is project-level and not asserted on analysis composition rows.',
+    'O': 'Required date is project-level and not asserted on analysis composition rows.',
+    'P': 'No explicit required/ordering quantity is stated for this item; F is not copied.',
+}
+
+
 def base_proofs(**over):
-    p = {c: nul(f'Column {c}: no source-supported value for this item at this stage.') for c in COLS}
+    p = {c: nul(NULL_REASONS.get(c, 'n/a')) for c in COLS}
     p['G'] = nul('Procurement unit price is blank at the 未填 stage.')
     p['H'] = nul('Procurement extended price is blank at the 未填 stage.')
     p['Q'] = nul('Source adoption is unverified, so no accepted contract rate can be asserted.')
@@ -165,9 +204,22 @@ def base_proofs(**over):
     return p
 
 
+PROJECT = dict(K='示例電機行', M='示例自來水處', N='示例淨水場', O='2026-12-01')
+
+
+def project_proofs():
+    S = 'cell:S1!'
+    return dict(K=nn([S + 'A15'], 'text after label', 'explicit project-level supplier label'),
+                M=nn([S + 'A13'], 'text after label', 'explicit project-level ordering-customer label'),
+                N=nn([S + 'A14'], 'text after label', 'explicit project-level using-unit label'),
+                O=nn([S + 'A16'], 'text after label', 'explicit project-level required-date label'))
+
+
 def vals(**kw):
     v = [None] * 17
     v[11] = 'FIXTURE01'
+    for k, x in PROJECT.items():
+        v[COLS.index(k)] = x
     for k, x in kw.items():
         v[COLS.index(k)] = x
     return v
@@ -178,37 +230,35 @@ def valid_response(inv_sha):
     T2 = 'cell:S2!'
     items = [
         item('R001', 'demand', 'G1', 'research_draft',
-             vals(A='示例控制盤', B='W600×H800×D300', C='電磁接觸器', D='AC110V 附端子蓋', E='只', F=2, K='示例電機行', M='示例自來水處', N='示例淨水場', O='2026-12-01'),
+             vals(A='示例控制盤', B='W600×H800×D300', C='電磁接觸器', D='AC110V 附端子蓋', E='只', F=2),
              base_proofs(A=nn([S + 'B3'], 'copied group heading', 'contractual panel group heading owns items 1-3'),
                          B=nn([S + 'C3'], 'copied group specification', 'dimension printed on the group heading row'),
                          C=nn([S + 'B4'], 'span after leading code', 'identifying product noun'),
                          D=nn([S + 'B4', S + 'B5'], 'rating span plus continuation; newline to U+0020', 'rating and included accessory'),
-                         E=nn([S + 'C4'], 'copied', 'unit column'), F=nn([S + 'D4'], 'copied', 'quantity column'),
-                         K=nn([S + 'A15'], 'text after label', 'explicit supplier label'),
-                         M=nn([S + 'A13'], 'text after label', 'explicit ordering-customer label'),
-                         N=nn([S + 'A14'], 'text after label', 'explicit using-unit label'),
-                         O=nn([S + 'A16'], 'text after label', 'explicit required-date label')),
+                         E=nn([S + 'C4'], 'copied', 'unit column'), F=nn([S + 'D4'], 'copied', 'quantity column'), **project_proofs()),
              raw(desc=[S + 'B4', S + 'B5'], unit=[S + 'C4'], qty=[S + 'D4'], price=[S + 'E4'], amount=[S + 'F4'],
                  reasons={'remarks': 'remarks cell is an explicit empty string'}),
              [S + 'A4'], ['Leading token QX-620 has no proven model role.']),
-        item('R002', 'demand', 'G1', 'research_draft', vals(A='示例控制盤', C='三段式選擇開關', E='個', F=3),
-             base_proofs(A=nn([S + 'B3'], 'copied group heading', 'group heading'), C=nn([S + 'B6'], 'copied', 'functional switch name'),
-                         E=nn([S + 'C6'], 'copied', 'unit column'), F=nn([S + 'D6'], 'copied', 'quantity column')),
+        item('R002', 'demand', 'G1', 'research_draft', vals(A='示例控制盤', B='W600×H800×D300', C='三段式選擇開關', E='個', F=3),
+             base_proofs(A=nn([S + 'B3'], 'copied group heading', 'group heading'), B=nn([S + 'C3'], 'copied group specification', 'group heading dimension'),
+                         C=nn([S + 'B6'], 'copied', 'functional switch name'),
+                         E=nn([S + 'C6'], 'copied', 'unit column'), F=nn([S + 'D6'], 'copied', 'quantity column'), **project_proofs()),
              raw(desc=[S + 'B6'], unit=[S + 'C6'], qty=[S + 'D6'], price=[S + 'E6'], amount=[S + 'F6'], remarks=[S + 'G6']),
              [S + 'A6']),
-        item('R003', 'demand', 'G1', 'research_draft', vals(A='示例控制盤', C='盤體組立費', E='式', F=1),
-             base_proofs(A=nn([S + 'B3'], 'copied group heading', 'group heading'), C=nn([S + 'B7'], 'copied', 'service line'),
-                         E=nn([S + 'C7'], 'copied', 'unit column'), F=nn([S + 'D7'], 'copied', 'quantity column')),
+        item('R003', 'demand', 'G1', 'research_draft', vals(A='示例控制盤', B='W600×H800×D300', C='盤體組立費', E='式', F=1),
+             base_proofs(A=nn([S + 'B3'], 'copied group heading', 'group heading'), B=nn([S + 'C3'], 'copied group specification', 'group heading dimension'),
+                         C=nn([S + 'B7'], 'copied', 'service line'),
+                         E=nn([S + 'C7'], 'copied', 'unit column'), F=nn([S + 'D7'], 'copied', 'quantity column'), **project_proofs()),
              raw(desc=[S + 'B7'], unit=[S + 'C7'], qty=[S + 'D7'], price=[S + 'E7'], amount=[S + 'F7'], remarks=[S + 'G7']),
              [S + 'A7']),
         item('R004', 'demand', None, 'research_draft', vals(C='備用接點', E='只', F=0),
              base_proofs(C=nn([S + 'B8'], 'copied', 'product noun'), E=nn([S + 'C8'], 'copied', 'unit column'),
-                         F=nn([S + 'D8'], 'copied numeric zero', 'quantity column; real zero')),
+                         F=nn([S + 'D8'], 'copied numeric zero', 'quantity column; real zero'), **project_proofs()),
              raw(desc=[S + 'B8'], unit=[S + 'C8'], qty=[S + 'D8'], price=[S + 'E8'], amount=[S + 'F8']),
              [S + 'A8']),
         item('R005', 'demand', None, 'research_draft', vals(C='溫度計', E='支', F=1),
              base_proofs(C=nn([S + 'B11'], 'copied', 'product noun'), E=nn([S + 'C11'], 'copied', 'unit column'),
-                         F=nn([S + 'D11'], 'copied', 'quantity column')),
+                         F=nn([S + 'D11'], 'copied', 'quantity column'), **project_proofs()),
              raw(desc=[S + 'B11'], unit=[S + 'C11'], qty=[S + 'D11'], price=[S + 'E11'], amount=[S + 'F11'], remarks=[S + 'G11']),
              [S + 'A11']),
         item('R006', 'demand', None, 'research_draft', vals(C='流量計', E='台', F=1, I='FM-100', J='示例儀器', P=2),
@@ -216,23 +266,23 @@ def valid_response(inv_sha):
                          F=nn([S + 'D12'], 'copied', 'quantity column'),
                          I=nn([S + 'G12'], 'text after 型號 label', 'explicit model label'),
                          J=nn([S + 'G12'], 'text after 廠牌 label', 'explicit brand label'),
-                         P=nn([S + 'B17'], 'copied', 'explicit required-quantity label in A17')),
+                         P=nn([S + 'B17'], 'copied', 'explicit required-quantity label in A17'), **project_proofs()),
              raw(desc=[S + 'B12'], unit=[S + 'C12'], qty=[S + 'D12'], price=[S + 'E12'], amount=[S + 'F12'], remarks=[S + 'G12']),
              [S + 'A12']),
         item('R007', 'demand', None, 'held', vals(E='式', F=1),
              base_proofs(C=nul('Only a document pointer; no supplied object is identified.'),
-                         E=nn([S + 'C18'], 'copied', 'unit column'), F=nn([S + 'D18'], 'copied', 'quantity column')),
+                         E=nn([S + 'C18'], 'copied', 'unit column'), F=nn([S + 'D18'], 'copied', 'quantity column'), **project_proofs()),
              raw(desc=[S + 'B18'], unit=[S + 'C18'], qty=[S + 'D18']), [S + 'A18'],
              ['Candidate row names only a specification document; supplied object unresolved.']),
-        item('C001', 'analysis_component', None, 'research_draft', vals(C='組立工資', E='工', F=2),
+        item('C001', 'analysis_component', None, 'research_draft', [None, None, '組立工資', None, '工', 2] + [None] * 11,
              base_proofs(C=nn([T2 + 'A3'], 'copied', 'analysis component name'), E=nn([T2 + 'B3'], 'copied', 'unit'),
-                         F=nn([T2 + 'C3'], 'copied', 'per-unit quantity')),
+                         F=nn([T2 + 'C3'], 'copied', 'per-unit quantity'), L=nul(NULL_REASONS['L'])),
              raw(desc=[T2 + 'A3'], unit=[T2 + 'B3'], qty=[T2 + 'C3'], remarks=[T2 + 'D3']), [T2 + 'A3']),
         item('C002', 'analysis_component', None, 'research_draft', [None, None, '配線材料'] + [None] * 14,
              base_proofs(C=nn([T2 + 'A4'], 'copied', 'analysis component name'),
                          E=nul('Per-unit basis unit is carried by the component link, not as a demand unit.'),
                          F=nul('Per-unit basis quantity is carried by the component link; no purchase quantity.'),
-                         L=nul('Engineering identity is not asserted on analysis-only composition rows.')),
+                         L=nul(NULL_REASONS['L'])),
              raw(desc=[T2 + 'A4'], unit=[T2 + 'B4'], qty=[T2 + 'C4'], remarks=[T2 + 'D4']), [T2 + 'A4']),
     ]
     # Ensure every column except G/H/Q has a nonnull somewhere and every column has a null somewhere.
@@ -248,10 +298,10 @@ def valid_response(inv_sha):
         {'role': 'section', 'refs': [S + 'A3', S + 'B3', S + 'C3'], 'reason': 'section number, contractual group heading and its dimension'},
         {'role': 'item_identifier', 'refs': [S + 'A4', S + 'A6', S + 'A7', S + 'A8', S + 'A11', S + 'A12', S + 'A18'], 'reason': 'item numbers'},
         {'role': 'demand_content', 'refs': [S + x for x in ['B4', 'C4', 'D4', 'E4', 'F4', 'B5', 'B6', 'C6', 'D6', 'E6', 'F6',
-                                                          'B7', 'C7', 'D7', 'E7', 'F7', 'G7', 'B8', 'C8', 'D8', 'E8', 'F8',
+                                                          'G6', 'B7', 'C7', 'D7', 'E7', 'F7', 'G7', 'B8', 'C8', 'D8', 'E8', 'F8',
                                                           'B11', 'C11', 'D11', 'E11', 'F11', 'G11', 'B12', 'C12', 'D12', 'E12', 'F12', 'G12',
                                                           'B18', 'C18', 'D18']], 'reason': 'item description, unit, quantity, price, amount and remarks cells'},
-        {'role': 'commercial_note', 'refs': [S + 'G6', S + 'B10'], 'reason': 'no-estimate remark and freight note'},
+        {'role': 'commercial_note', 'refs': [S + 'B10'], 'reason': 'standalone freight note outside any item'},
         {'role': 'financial_summary', 'refs': [S + 'B9', S + 'F9'], 'reason': 'subtotal'},
         {'role': 'header', 'refs': [S + 'A13', S + 'A14', S + 'A15', S + 'A16', S + 'A17', S + 'B17', S + 'C17', S + 'D17'], 'reason': 'project information block'},
         {'role': 'unresolved', 'refs': [S + 'C16', S + 'D16', S + 'E16'], 'reason': 'date serial, boolean and error states without a supported role'},
@@ -295,12 +345,12 @@ def mutations(base):
         ('E_not_raw_unit', 'SOURCE_UNIT_MISMATCH', m(lambda r: item(r, 'R002')['values'].__setitem__(4, '只'))),
         ('F_not_raw_quantity', 'SOURCE_QUANTITY_MISMATCH', m(lambda r: item(r, 'R002')['values'].__setitem__(5, 4))),
         ('F_proof_other_cell', 'F_PROOF_MUST_BE_RAW_QUANTITY_CELL', m(lambda r: item(r, 'R003')['proofs']['F'].update(refs=[S + 'D12']))),
-        ('F_proof_text_cell', 'NUMERIC_EVIDENCE_MISMATCH', m(lambda r: item(r, 'R002')['proofs']['F'].update(refs=[S + 'B6']))),
+        ('F_proof_text_cell', 'NONNUMERIC_SOURCE_TEXT_FIELD_MUST_BE_NULL', m(lambda r: item(r, 'R002')['proofs']['F'].update(refs=[S + 'B6']))),
         ('Q_unverified', 'Q_REQUIRES_VERIFIED_ADOPTION', m(lambda r: (item(r, 'R006')['values'].__setitem__(16, 50000), item(r, 'R006')['proofs'].update(Q={'refs': [S + 'E12'], 'transformation': 'copied', 'role_basis': 'unit price column'})))),
         ('formula_like_D', 'FORMULA_LIKE_STRING_WHOLE_OUTPUT_HELD', m(lambda r: (item(r, 'R005')['values'].__setitem__(3, '-20~60℃'), item(r, 'R005')['proofs'].update(D={'refs': [S + 'G11'], 'transformation': 'copied remark', 'role_basis': 'temperature range'})))),
-        ('raw_blank_cell', 'REF_NOT_USABLE_FOR_RAW', m(lambda r: item(r, 'R001')['raw_refs'].update(remarks={'refs': [S + 'G4'], 'reason_if_empty': None}))),
-        ('raw_covered_cell', 'REF_NOT_USABLE_FOR_RAW', m(lambda r: item(r, 'R005')['raw_refs'].update(remarks={'refs': [S + 'G11', S + 'B13'], 'reason_if_empty': None}))),
-        ('raw_date_cell', 'REF_NOT_USABLE_FOR_RAW', m(lambda r: item(r, 'R005')['raw_refs'].update(remarks={'refs': [S + 'C16'], 'reason_if_empty': None}))),
+        ('raw_blank_cell', 'EMPTY_CELL_CITED_IN_RAW', m(lambda r: item(r, 'R001')['raw_refs'].update(remarks={'refs': [S + 'G4'], 'reason_if_empty': None}))),
+        ('raw_covered_cell', 'EMPTY_CELL_CITED_IN_RAW', m(lambda r: item(r, 'R005')['raw_refs'].update(remarks={'refs': [S + 'G11', S + 'B13'], 'reason_if_empty': None}))),
+        ('raw_date_cell', 'SOURCE_CELL_NOT_CARRIABLE_IN_RAW', m(lambda r: item(r, 'R005')['raw_refs'].update(remarks={'refs': [S + 'C16'], 'reason_if_empty': None}))),
         ('raw_unit_two_cells', 'SINGLE_CELL_RAW_FIELD', m(lambda r: item(r, 'R002')['raw_refs'].update(unit={'refs': [S + 'C6', S + 'C7'], 'reason_if_empty': None}))),
         ('empty_raw_without_reason', 'EMPTY_SELECTION_REASON_REQUIRED', m(lambda r: item(r, 'R004')['raw_refs'].update(remarks={'refs': [], 'reason_if_empty': None}))),
         ('reason_with_refs', 'REASON_ONLY_FOR_EMPTY_SELECTION', m(lambda r: item(r, 'R002')['raw_refs'].update(remarks={'refs': [S + 'G6'], 'reason_if_empty': 'x'}))),
@@ -310,7 +360,7 @@ def mutations(base):
         ('context_only_C', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', m(lambda r: item(r, 'R002')['proofs'].update(C={'refs': ['context:case_identity'], 'transformation': 't', 'role_basis': 'b'}))),
         ('unknown_context', 'UNKNOWN_CONTEXT_REF', m(lambda r: item(r, 'R002')['proofs'].update(L={'refs': ['context:other'], 'transformation': 't', 'role_basis': 'b'}))),
         ('proof_spans_sheets', 'LOCATION_SPANS_SHEETS', m(lambda r: item(r, 'R003')['proofs']['C'].update(refs=[S + 'B7', 'cell:S2!A1']))),
-        ('proof_blank_cell', 'REF_NOT_USABLE_FOR_PROOF', m(lambda r: item(r, 'R002')['proofs']['C'].update(refs=[S + 'B6', S + 'G8']))),
+        ('proof_blank_cell', 'EMPTY_CELL_CITED_IN_PROOF', m(lambda r: item(r, 'R002')['proofs']['C'].update(refs=[S + 'B6', S + 'G8']))),
         ('anchor_other_sheet', 'LOCATION_SPANS_SHEETS', m(lambda r: item(r, 'R002').update(anchor_refs=['cell:S2!A1']))),
         ('component_link_held', 'COMPONENT_LINK_HELD_WHOLE_EXPORT_HELD', m(lambda r: r['component_links'][1].update(status='held', parent_id=None, basis_quantity=None, basis_raw_ref=None, basis_unit_ref=None))),
         ('component_basis_mismatch', 'BASIS_LITERAL_MISMATCH', m(lambda r: r['component_links'][0].update(basis_quantity=3))),
@@ -330,6 +380,21 @@ def mutations(base):
         ('view_unaccounted', 'VIEW_SCOPE_UNACCOUNTED', m(lambda r: (r['items'].__delitem__(slice(7, 9)), r['component_links'].clear(),
                                                                     [x.update(role='demand_content') for x in r['source_roles'] if x['role'] == 'analysis_content'],
                                                                     [x.update(role='demand_content') for x in r['source_roles'] if x['refs'][0] == 'cell:S2!A1']))),
+    ]
+    cases += [
+        ('dropped_item', 'CONTENT_CELL_NOT_USED_BY_ANY_ITEM', m(lambda r: r['items'].pop(1))),
+        ('desc_not_row_major', 'RAW_STREAM_NOT_ROW_MAJOR', m(lambda r: item(r, 'R001')['raw_refs'].update(description={'refs': [S + 'B5', S + 'B4'], 'reason_if_empty': None}))),
+        ('desc_includes_unit', 'DESCRIPTION_INCLUDES_EXCLUDED_CELL', m(lambda r: item(r, 'R002')['raw_refs'].update(description={'refs': [S + 'B6', S + 'C6'], 'reason_if_empty': None}))),
+        ('anchor_not_first_row', 'ANCHOR_NOT_ON_FIRST_ROW', m(lambda r: item(r, 'R001').update(anchor_refs=[S + 'G5']))),
+        ('anchor_shared', 'ANCHOR_SHARED_ACROSS_ITEMS', m(lambda r: item(r, 'R002').update(anchor_refs=[S + 'A4']))),
+        ('basis_unit_number_cell', 'BASIS_UNIT_MUST_BE_TEXT_CELL', m(lambda r: r['component_links'][0].update(basis_unit_ref='cell:S2!C3'))),
+        ('desc_shared', 'DESCRIPTION_CELL_SHARED_ACROSS_ITEMS', m(lambda r: item(r, 'R002')['raw_refs'].update(description={'refs': [S + 'B4', S + 'B6'], 'reason_if_empty': None}))),
+        ('group_id_list', 'UNKNOWN_GROUP_ID', m(lambda r: item(r, 'R002').update(group_id=[]))),
+        ('huge_int_F', 'UNSAFE_INTEGER', m(lambda r: item(r, 'R002')['values'].__setitem__(5, 10 ** 400))),
+        ('date_cell_proof_O', 'SOURCE_CELL_NOT_CARRIABLE_IN_PROOF', m(lambda r: item(r, 'R005')['proofs']['O'].update(refs=[S + 'C16']))),
+        ('long_packed_transformation', 'WRITER_WOULD_REJECT_STRING_REQUIRED', m(lambda r: item(r, 'R002')['proofs']['C'].update(transformation='x' * 16000, role_basis='y' * 16000))),
+        ('escaped_expansion_transformation', 'WRITER_WOULD_REJECT_STRING_REQUIRED', m(lambda r: item(r, 'R002')['proofs']['C'].update(transformation='"\n' * 9000))),
+        ('group_limitations_501', 'TOO_MANY_GROUP_LIMITATIONS_FOR_WRITER', m(lambda r: r['groups'][0].update(limitations=['limit'] * 501))),
     ]
     raws = [('duplicate_json_key', 'DUPLICATE_JSON_KEY', lambda b: b.replace(b'"status": "partial"', b'"status": "partial", "status": "partial"', 1)),
             ('nonfinite_number', 'NONFINITE_NUMBER', lambda b: b.replace(b'"basis_quantity": 2', b'"basis_quantity": NaN', 1))]
@@ -362,6 +427,21 @@ def main():
         assert b != enc(base), name
         (OUT / f'mut_{name}.json').write_bytes(b)
         index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code})
+    def var(name, code, inv_kw, mutate):
+        _, vraw = build_inventory('unverified', **inv_kw)
+        (OUT / f'inv_{name}.json').write_bytes(vraw)
+        rr = copy.deepcopy(base)
+        rr['inventory_sha256'] = hashlib.sha256(vraw).hexdigest()
+        mutate(rr)
+        (OUT / f'mut_{name}.json').write_bytes(enc(rr))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'inventory': f'inv_{name}.json', 'expected_code': code})
+
+    def big_roles(r):
+        r['source_roles'].append({'role': 'unresolved', 'refs': [f'cell:S3!{letters(c)}{rr}' for rr in range(1, 52) for c in range(1, 101)],
+                                  'reason': 'resource statistics sheet not used for demands'})
+    var('unicode_digit_quantity', 'NONNUMERIC_RAW_QUANTITY_FIELD_MUST_BE_NULL', {'overrides': {(6, 'D'): (T, '３', False)}}, lambda r: None)
+    var('too_many_nonitems', 'WRITER_WOULD_REJECT_NONITEMS_REQUIRED', {'extra_sheet': True}, big_roles)
+    var('long_header_census', 'WRITER_WOULD_REJECT_STRING_REQUIRED', {'overrides': {(1, 'A'): (T, '題' * 29990, False)}}, lambda r: None)
     (OUT / 'MUTATIONS.json').write_text(json.dumps({'expected_canonical': EXPECT_CANON, 'mutations': index}, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps({'mutations': len(index)}))
 

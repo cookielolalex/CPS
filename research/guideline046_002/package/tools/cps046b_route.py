@@ -1,19 +1,26 @@
 """CPS candidate 046b source-reference checker and carrier adapter (stdlib only).
 
-check   : validate a semantic response against its pinned source inventory and the
-          existing writer004 carrier rules; print every violation. No output files.
-convert : run the same checks, then copy referenced source values into a
-          cps.cached-xls(x)-research-carrier.v1 object for writer004.validateCarrier,
-          plus a complete positional census ledger. Refuses on any violation.
+check-inventory : validate a source inventory before generation (writer source rules,
+                  completeness, canonical text, unavoidable holds).
+check           : validate a semantic response against its pinned inventory, then build the
+                  carrier exactly as convert would and run a Python port of writer004
+                  validateCarrier/prepareMatrices on it. Prints every violation.
+convert         : same checks; if clean, write carrier.json for writer004 plus a complete
+                  positional CENSUS_LEDGER.json. If not clean, still write the ledger and a
+                  rejection receipt (the response and census are retained).
 
 The adapter only validates and copies. It never selects references, edits a value,
-shortens a name, repairs a response or reads anything except the two given files.
+shortens a name, repairs a response or reads anything except the files it is given.
+Violation categories: invalid (correct the response from the source), field_must_be_null
+(the cited source cannot be carried for this field: leave the field/raw selection empty
+with a specific reason; never alter the source meaning), unrepresentable_hold (a true
+answer cannot be carried by the admitted writer: keep it; the export is held).
 """
 import argparse, copy, hashlib, json, math, re, sys
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = 'cps046b-route.v1'
+VERSION = 'cps046b-route.v2'
 RESPONSE_SCHEMA = 'cps.semantic-source-refs.v2'
 INVENTORY_SCHEMA = 'cps.source-inventory.cells.v2'
 PROFILE = 'cached-cell-raw-scalar-text.v2'
@@ -28,19 +35,24 @@ ROLES = ('demand_content', 'analysis_content', 'item_identifier', 'header', 'sec
          'financial_summary', 'commercial_note', 'document_reference', 'footer', 'unresolved')
 CENSUS_ROLES = ('item_identifier', 'header', 'section', 'financial_summary', 'commercial_note',
                 'document_reference', 'footer', 'unresolved')
+CONTENT_ROLES = ('demand_content', 'analysis_content')
 GROUP_RELATIONS = ('contractual_group', 'physical_enclosure', 'contractual_and_physical', 'unresolved')
 LIMIT = 20 * 1024 * 1024
 MAX_SAFE = 9007199254740991
-ID_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}')
-CELL_REF_RE = re.compile(r'cell:S([1-9][0-9]{0,3})!([A-Z]{1,3})([1-9][0-9]{0,6})')
-CONTEXT_REF_RE = re.compile(r'context:[a-z0-9_]{1,64}')
-ADDR_RE = re.compile(r'([A-Z]{1,3})([1-9][0-9]{0,6})')
-# JavaScript String.prototype.trim / \s whitespace set (writer004 runs in Node).
+ID_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', re.ASCII)
+CELL_REF_RE = re.compile(r'cell:S([1-9][0-9]{0,3})!([A-Z]{1,3})([1-9][0-9]{0,6})', re.ASCII)
+CONTEXT_REF_RE = re.compile(r'context:[a-z0-9_]{1,64}', re.ASCII)
+ADDR_RE = re.compile(r'([A-Z]{1,3})([1-9][0-9]{0,6})', re.ASCII)
+# JavaScript String.prototype.trim / \s whitespace (writer004 runs in Node).
 JS_WS = '\t\n\x0b\x0c\r                  　﻿'
 CTRL_RE = re.compile('[\u0000-\u0008\u000b\u000c\u000e-\u001f]')
 FORMULA_RE = re.compile('^[' + re.escape(JS_WS) + ']*[=+@-]')
-NUMERIC_TEXT_RE = re.compile(r'[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?')
+# JS \d is ASCII-only: Unicode digits must not pass (re.ASCII).
+NUMERIC_TEXT_RE = re.compile(r'[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?', re.ASCII)
 PATHLIKE_RE = re.compile(r'(?:[A-Za-z]:[\\/]|\\\\|file://|https?://)', re.I)
+META_KEY_RE = re.compile(r'^(?:paths?|files?|uris?|urls?|callbacks?|scripts?|formulas?|sources?|source_path|source_file|source_url|source_uri|annex|annexes|attachments?)$', re.I)
+FORBIDDEN_PATH_RE = re.compile(r'(?:未填|已填|電機圖|板金|鈑金|歷史|(?:^|[\\/_. -])(?:ok|targets?|reserved|drawings?|histor(?:y|ical|ies))(?=[\\/_. -]|$))', re.I)
+DEVICE_RE = re.compile(r'^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)', re.I)
 
 
 class Rejected(ValueError):
@@ -65,11 +77,26 @@ def strict_load(raw):
 
     def bad_constant(_):
         raise Rejected('NONFINITE_NUMBER')
+
+    def parse_float(t):
+        f = float(t)
+        if not math.isfinite(f):
+            raise Rejected('NONFINITE_NUMBER')
+        return f
+
+    def parse_int(t):
+        n = int(t)
+        if abs(n) > MAX_SAFE:
+            raise Rejected('UNSAFE_INTEGER')
+        return n
     try:
-        return json.loads(raw.decode('utf-8'), object_pairs_hook=pairs, parse_constant=bad_constant)
+        return json.loads(raw.decode('utf-8'), object_pairs_hook=pairs, parse_constant=bad_constant,
+                          parse_float=parse_float, parse_int=parse_int)
     except UnicodeDecodeError:
         raise Rejected('UTF8_REQUIRED')
-    except (json.JSONDecodeError, RecursionError) as e:
+    except (json.JSONDecodeError, RecursionError, ValueError) as e:
+        if isinstance(e, Rejected):
+            raise
         raise Rejected('INVALID_JSON:' + str(e)[:120])
 
 
@@ -81,28 +108,24 @@ def js_blank(s):
     return s.strip(JS_WS) == ''
 
 
-def lone_surrogate(s):
-    return any(0xD800 <= ord(ch) <= 0xDFFF for ch in s)
+def is_num(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(float(x)) and abs(x) <= MAX_SAFE
 
 
 def canonical_number(v):
     """R2: plain base-10 text of a finite binary64 value; no exponent/grouping."""
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        raise Rejected('NUMBER_REQUIRED')
     f = float(v)
     if not math.isfinite(f):
-        raise Rejected('NONFINITE_NUMBER')
+        return None
     s = format(Decimal(repr(f)), 'f')
     if '.' in s:
         s = s.rstrip('0').rstrip('.')
-    if s in ('-0', ''):
-        s = '0'
-    return s
+    return '0' if s in ('-0', '') else s
 
 
 def writer_numeric_raw(text):
-    """Port of writer004 numericRaw: returns float or None if writer would reject."""
-    if not isinstance(text, str):
+    """Port of writer004 numericRaw: float, or None where the writer rejects."""
+    if not isinstance(text, str) or js_len(text) > 30000 or CTRL_RE.search(text) or js_blank(text):
         return None
     t = text.strip(JS_WS)
     if not NUMERIC_TEXT_RE.fullmatch(t):
@@ -120,17 +143,25 @@ def col_number(letters):
     return n
 
 
+def parse_addr(a):
+    m = ADDR_RE.fullmatch(a) if isinstance(a, str) else None
+    if not m:
+        return None
+    c, r = col_number(m[1]), int(m[2])
+    if c > 16384 or r > 1048576:
+        return None
+    return c, r
+
+
 def parse_range(r):
+    if not isinstance(r, str):
+        return None
     a = r.split(':')
     if len(a) not in (1, 2):
-        raise Rejected('RANGE_REQUIRED')
-    lo, hi = ADDR_RE.fullmatch(a[0]), ADDR_RE.fullmatch(a[-1])
-    if not lo or not hi:
-        raise Rejected('RANGE_REQUIRED')
-    lo = (col_number(lo[1]), int(lo[2]))
-    hi = (col_number(hi[1]), int(hi[2]))
-    if lo[0] > hi[0] or lo[1] > hi[1]:
-        raise Rejected('RANGE_ORDER')
+        return None
+    lo, hi = parse_addr(a[0]), parse_addr(a[-1])
+    if not lo or not hi or lo[0] > hi[0] or lo[1] > hi[1]:
+        return None
     return lo, hi
 
 
@@ -139,14 +170,20 @@ class Report:
         self.violations = []
         self.warnings = []
 
-    def bad(self, code, where, detail=None, category='invalid'):
+    def add(self, code, where, detail, category):
         v = {'code': code, 'where': where, 'category': category}
         if detail is not None:
             v['detail'] = detail
         self.violations.append(v)
 
+    def bad(self, code, where, detail=None):
+        self.add(code, where, detail, 'invalid')
+
+    def null(self, code, where, detail=None):
+        self.add(code, where, detail, 'field_must_be_null')
+
     def hold(self, code, where, detail=None):
-        self.bad(code, where, detail, 'unrepresentable_hold')
+        self.add(code, where, detail, 'unrepresentable_hold')
 
     def warn(self, code, where, detail=None):
         w = {'code': code, 'where': where}
@@ -167,29 +204,25 @@ def exact_keys(obj, keys, where, rep):
     return True
 
 
-def writer_text(v, where, rep, allow_blank=False, check_formula=True, hold_formula=True):
-    """Apply writer004 string rules; returns True if acceptable."""
+def writer_text(v, where, rep, allow_blank=False, check_formula=True):
     if not isinstance(v, str):
         rep.bad('STRING_REQUIRED', where)
         return False
     ok = True
-    if lone_surrogate(v):
+    if any(0xD800 <= ord(ch) <= 0xDFFF for ch in v):
         rep.bad('LONE_SURROGATE', where)
         ok = False
     if not allow_blank and js_blank(v):
         rep.bad('NONBLANK_STRING_REQUIRED', where)
         ok = False
     if js_len(v) > 30000:
-        rep.bad('STRING_TOO_LONG', where)
+        rep.hold('STRING_TOO_LONG_FOR_WRITER', where)
         ok = False
     if CTRL_RE.search(v):
         rep.hold('CONTROL_CHARACTER_UNREPRESENTABLE', where)
         ok = False
     if check_formula and FORMULA_RE.match(v):
-        if hold_formula:
-            rep.hold('FORMULA_LIKE_STRING_WHOLE_OUTPUT_HELD', where, {'retained_value': v})
-        else:
-            rep.bad('FORMULA_LIKE_STRING', where)
+        rep.hold('FORMULA_LIKE_STRING_WHOLE_OUTPUT_HELD', where, {'retained_value': v})
         ok = False
     return ok
 
@@ -198,6 +231,295 @@ def ident(v, where, rep):
     if not isinstance(v, str) or not ID_RE.fullmatch(v):
         rep.bad('ID_REQUIRED', where, {'pattern': ID_RE.pattern})
         return False
+    return True
+
+
+# ---------------------------------------------------------------- writer004 port
+class WriterReject(Exception):
+    def __init__(self, code, where):
+        super().__init__(f'{code}: {where}')
+        self.code, self.where = code, where
+
+
+def _fail(code, where):
+    raise WriterReject(code, where)
+
+
+def _obj(v, p):
+    if not isinstance(v, dict):
+        _fail('OBJECT_REQUIRED', p)
+
+
+def _keys(v, ks, p):
+    _obj(v, p)
+    if sorted(v) != sorted(ks):
+        _fail('EXACT_KEYS_REQUIRED', p)
+
+
+def _str(v, p, empty=False):
+    if not isinstance(v, str) or (not empty and js_blank(v)) or js_len(v) > 30000 or CTRL_RE.search(v):
+        _fail('STRING_REQUIRED', p)
+
+
+def _maybe(v, p):
+    if v is not None:
+        _str(v, p, True)
+
+
+def _strings(v, p):
+    if not isinstance(v, list) or len(v) > 500:
+        _fail('STRING_ARRAY_REQUIRED', p)
+    for i, s in enumerate(v):
+        _str(s, f'{p}[{i}]')
+
+
+def _id(v, p):
+    _str(v, p)
+    if not ID_RE.fullmatch(v):
+        _fail('ID_REQUIRED', p)
+
+
+def _numeric(v, p):
+    if not is_num(v):
+        _fail('FINITE_SAFE_NUMBER_REQUIRED', p)
+
+
+def _numeric_raw(v, p):
+    _str(v, p)
+    t = v.strip(JS_WS)
+    if not NUMERIC_TEXT_RE.fullmatch(t):
+        _fail('UNSUPPORTED_NUMERIC_TEXT', p)
+    n = float(t.replace(',', ''))
+    _numeric(n, p)
+    return n
+
+
+def _locator(v, source, p):
+    _keys(v, ['sheet', 'cells', 'views'], p)
+    _str(v['sheet'], p)
+    cells, views = v['cells'], v['views']
+    if (not isinstance(cells, list) or not cells or len(cells) > 1000 or not isinstance(views, list) or not views
+            or len(views) > 1000 or len(set(map(str, cells))) != len(cells) or len(set(map(str, views))) != len(views)):
+        _fail('LOCATION_SHAPE', p)
+    bb = []
+    for n in views:
+        if not isinstance(n, int) or isinstance(n, bool) or n < 1 or n > len(source['views']):
+            _fail('VIEW_BOUNDS', p)
+        view = source['views'][n - 1]
+        if view['sheet'] != v['sheet']:
+            _fail('SHEET_VIEW_MISMATCH', p)
+        bb.append(parse_range(view['range']))
+    cc = []
+    for a in cells:
+        x = parse_addr(a)
+        if x is None:
+            _fail('CELL_ADDRESS', 'location')
+        cc.append(x)
+    for c, r in cc:
+        if not any(lo[0] <= c <= hi[0] and lo[1] <= r <= hi[1] for lo, hi in bb):
+            _fail('CELL_OUTSIDE_VIEWS', p)
+    for lo, hi in bb:
+        if not any(lo[0] <= c <= hi[0] and lo[1] <= r <= hi[1] for c, r in cc):
+            _fail('UNRELATED_VIEW', p)
+
+
+def _source_shape(s, p):
+    _keys(s, ['kind', 'path', 'sha256', 'views'], p)
+    if s['kind'] not in ('cached_xlsx', 'cached_xls'):
+        _fail('SOURCE_KIND', p)
+    _str(s['path'], p + '.path')
+    path = s['path']
+    import unicodedata
+    if len(path) > 2048 or unicodedata.normalize('NFC', path) != path:
+        _fail('NONCANONICAL_UNICODE_PATH', p)
+    if not re.match(r'^[A-Z]:\\', path) or '/' in path:
+        _fail('CANONICAL_LOCAL_ABSOLUTE_PATH_REQUIRED', p)
+    parts = path[3:].split('\\')
+    if not parts or any(not x or x in ('.', '..') or x[-1] in ' .' or re.search(r'[<>:"|?*\x00-\x1f]', x) or DEVICE_RE.match(x) for x in parts):
+        _fail('NONCANONICAL_PATH_COMPONENT', p)
+    import ntpath
+    if ntpath.normpath(path) != path or ntpath.splitext(path)[1].lower() != ('.xls' if s['kind'] == 'cached_xls' else '.xlsx'):
+        _fail('SOURCE_KIND_EXTENSION_MISMATCH', p)
+    if FORBIDDEN_PATH_RE.search(path):
+        _fail('FORBIDDEN_SOURCE_PATH', p)
+    if not isinstance(s['sha256'], str) or not re.fullmatch('[a-f0-9]{64}', s['sha256']):
+        _fail('SHA256_REQUIRED', p)
+    if not isinstance(s['views'], list) or not 1 <= len(s['views']) <= 1000:
+        _fail('VIEWS_REQUIRED', p)
+    for i, v in enumerate(s['views']):
+        _keys(v, ['id', 'sheet', 'range'], p)
+        if v['id'] != i + 1:
+            _fail('VIEW_ID', p)
+        _str(v['sheet'], p)
+        if parse_range(v['range']) is None:
+            _fail('RANGE_REQUIRED', 'source')
+
+
+def _metadata(v, p='metadata', depth=0):
+    if depth > 12:
+        _fail('METADATA_TOO_DEEP', p)
+    if v is None or isinstance(v, bool):
+        return
+    if isinstance(v, (int, float)):
+        _numeric(v, p)
+        return
+    if isinstance(v, str):
+        _str(v, p, True)
+        if PATHLIKE_RE.search(v):
+            _fail('EXTRA_SOURCE_REFERENCE', p)
+        return
+    if isinstance(v, list):
+        if len(v) > 1000:
+            _fail('METADATA_TOO_LARGE', p)
+        for i, x in enumerate(v):
+            _metadata(x, f'{p}[{i}]', depth + 1)
+        return
+    _obj(v, p)
+    for k, x in v.items():
+        if META_KEY_RE.match(k):
+            _fail('EXTRA_SOURCE_REFERENCE', f'{p}.{k}')
+        _metadata(x, f'{p}.{k}', depth + 1)
+
+
+def _js(v):
+    return json.dumps(v, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+
+
+def validate_carrier_port(c):
+    """Python port of writer004 validateCarrier + prepareMatrices review-cell checks."""
+    _keys(c, ['schema', 'headers', 'case_id', 'family_id', 'source', 'metadata', 'groups', 'items', 'components', 'nonitems', 'limitations'], 'carrier')
+    kind = c['source'].get('kind') if isinstance(c['source'], dict) else None
+    if c['schema'] != ('cps.cached-xls-research-carrier.v1' if kind == 'cached_xls' else 'cps.cached-xlsx-research-carrier.v1'):
+        _fail('SCHEMA_MISMATCH', 'schema')
+    if c['headers'] != HEADERS:
+        _fail('EXACT_HEADERS_REQUIRED', 'headers')
+    _id(c['case_id'], 'case_id'); _id(c['family_id'], 'family_id'); _source_shape(c['source'], 'source')
+    _obj(c['metadata'], 'metadata'); _metadata(c['metadata']); _strings(c['limitations'], 'limitations')
+    if not isinstance(c['groups'], list) or len(c['groups']) > 2000:
+        _fail('GROUPS_REQUIRED', 'groups')
+    if not isinstance(c['items'], list) or not 1 <= len(c['items']) <= 2000:
+        _fail('ITEMS_REQUIRED', 'items')
+    if not isinstance(c['nonitems'], list) or len(c['nonitems']) > 5000:
+        _fail('NONITEMS_REQUIRED', 'nonitems')
+    if not isinstance(c['components'], list) or len(c['components']) > 2000:
+        _fail('COMPONENTS_REQUIRED', 'components')
+    src = c['source']
+    groups, seen, covered = {}, set(), set()
+    for i, g in enumerate(c['groups']):
+        p = f'groups[{i}]'
+        _keys(g, ['id', 'name', 'specification', 'location', 'anchor', 'quantity_basis', 'limitations'], p); _id(g['id'], p + '.id')
+        if g['id'] in groups:
+            _fail('DUPLICATE_GROUP_ID', g['id'])
+        _maybe(g['name'], p + '.name'); _maybe(g['specification'], p + '.specification'); _locator(g['location'], src, p)
+        covered.update(g['location']['views'])
+        _str(g['anchor'], p + '.anchor'); _str(g['quantity_basis'], p + '.quantity_basis'); _strings(g['limitations'], p + '.limitations')
+        if g['name'] is None and not g['limitations']:
+            _fail('UNRESOLVED_GROUP_REASON_REQUIRED', p)
+        groups[g['id']] = g
+    alls = c['items'] + c['components']
+    for i, r in enumerate(alls):
+        p = f'items[{i}]'
+        ks = ['id', 'group_id', 'location', 'anchor', 'raw', 'values', 'evidence', 'null_reasons', 'status', 'review_reasons'] + (['composition'] if i >= len(c['items']) else [])
+        _keys(r, ks, p); _id(r['id'], p + '.id')
+        if r['id'] in seen:
+            _fail('DUPLICATE_ITEM_ID', r['id'])
+        seen.add(r['id'])
+        if r['group_id'] is not None and r['group_id'] not in groups:
+            _fail('UNKNOWN_GROUP_ID', p)
+        _locator(r['location'], src, p); covered.update(r['location']['views']); _str(r['anchor'], p + '.anchor')
+        _keys(r['raw'], list(RAW), p + '.raw')
+        for k, v in r['raw'].items():
+            _maybe(v, f'{p}.raw.{k}')
+        if not isinstance(r['values'], list) or len(r['values']) != 17:
+            _fail('SEVENTEEN_VALUES_REQUIRED', p)
+        if r['status'] not in ('research_draft', 'held'):
+            _fail('REVIEW_STATUS_REQUIRED', p)
+        _strings(r['review_reasons'], p + '.review_reasons')
+        if r['status'] == 'held' and not r['review_reasons']:
+            _fail('HELD_REASON_REQUIRED', p)
+        if r['values'][2] is None and r['status'] != 'held':
+            _fail('UNRESOLVED_ITEM_MUST_BE_HELD', p)
+        _obj(r['evidence'], p + '.evidence'); _obj(r['null_reasons'], p + '.null_reasons')
+        req_ev, req_null = [], []
+        for j, v in enumerate(r['values']):
+            col, vp = COLS[j], f'{p}.values.{COLS[j]}'
+            if v is None:
+                req_null.append(col)
+                _str(r['null_reasons'].get(col), f'{p}.null_reasons.{col}')
+                continue
+            if j in BLANK_COLS:
+                _fail('PURCHASE_PRICE_MUST_BE_BLANK', vp)
+            if j in NUMERIC_COLS:
+                _numeric(v, vp)
+            else:
+                _str(v, vp)
+            if isinstance(v, str) and FORMULA_RE.match(v):
+                _fail('FORMULA_STRING_FORBIDDEN', vp)
+            req_ev.append(col)
+            e = r['evidence'].get(col)
+            _obj(e, f'{p}.evidence.{col}')
+            if 'selection_evidence' in e:
+                if col != 'L':
+                    _fail('SELECTION_ONLY_ENGINEERING_ID', vp)
+                _keys(e, ['selection_evidence', 'transformation'], f'{p}.evidence.{col}')
+                _str(e['selection_evidence'], vp + '.selection_evidence'); _str(e['transformation'], vp + '.transformation')
+                if PATHLIKE_RE.search(e['selection_evidence']):
+                    _fail('EXTRA_SOURCE_REFERENCE', vp)
+            else:
+                _keys(e, ['location', 'anchor', 'raw_text', 'transformation'], f'{p}.evidence.{col}')
+                _locator(e['location'], src, vp); _str(e['anchor'], vp + '.anchor'); _str(e['raw_text'], vp + '.raw_text'); _str(e['transformation'], vp + '.transformation')
+                if j in NUMERIC_COLS and _numeric_raw(e['raw_text'], vp) != float(v):
+                    _fail('NUMERIC_EVIDENCE_MISMATCH', vp)
+        _keys(r['evidence'], req_ev, p + '.evidence'); _keys(r['null_reasons'], req_null, p + '.null_reasons')
+        if r['group_id'] is None and (r['values'][0] is not None or r['values'][1] is not None):
+            _fail('UNGROUPED_AB_MUST_BE_BLANK', p)
+        if r['values'][5] is not None and _numeric_raw(r['raw']['quantity'], p + '.raw.quantity') != float(r['values'][5]):
+            _fail('SOURCE_QUANTITY_MISMATCH', p)
+        if r['values'][16] is not None and _numeric_raw(r['raw']['unit_price'], p + '.raw.unit_price') != float(r['values'][16]):
+            _fail('SOURCE_UNIT_PRICE_MISMATCH', p)
+        if r['values'][4] is not None and r['values'][4] != r['raw']['unit']:
+            _fail('SOURCE_UNIT_MISMATCH', p)
+    details = {r['id'] for r in c['items']}
+    for r in c['components']:
+        x = r['composition']
+        _keys(x, ['parent_id', 'basis_quantity', 'basis_unit', 'basis_location', 'basis_raw'], 'composition'); _id(x['parent_id'], 'composition')
+        if x['parent_id'] not in details or x['parent_id'] == r['id']:
+            _fail('COMPONENT_PARENT_MUST_BE_DETAIL', r['id'])
+        _numeric(x['basis_quantity'], r['id'])
+        if x['basis_quantity'] <= 0 or _numeric_raw(x['basis_raw'], r['id']) != float(x['basis_quantity']):
+            _fail('POSITIVE_LITERAL_BASIS_REQUIRED', r['id'])
+        _str(x['basis_unit'], r['id'])
+        if FORMULA_RE.match(x['basis_unit']):
+            _fail('FORMULA_STRING_FORBIDDEN', r['id'])
+        _locator(x['basis_location'], src, r['id'])
+    for i, n in enumerate(c['nonitems']):
+        p = f'nonitems[{i}]'
+        _keys(n, ['location', 'kind', 'anchor', 'text', 'reason'], p); _locator(n['location'], src, p); covered.update(n['location']['views'])
+        for k in ('kind', 'anchor', 'reason'):
+            _str(n[k], f'{p}.{k}')
+        _str(n['text'], p + '.text', True)
+    for v in range(1, len(src['views']) + 1):
+        if v not in covered:
+            _fail('VIEW_SCOPE_UNACCOUNTED', str(v))
+    # prepareMatrices review-sheet cells: <=32767 UTF-16 units and not formula-like
+    cells = [_js(src)] + [x for k, v in c['metadata'].items() for x in (_js(k), _js(v))] + [_js(v) for v in c['limitations']]
+    for g in c['groups']:
+        cells += [g['id'], _js(g['location']), _js(g['anchor']), _js(g)]
+    for i, r in enumerate(alls):
+        loc, anc = _js(r['location']), _js(r['anchor'])
+        comp = r.get('composition')
+        rows = i + 2 if i < len(c['items']) else i - len(c['items']) + 2
+        cells += [r['id'], loc, anc, _js({'group_id': r['group_id'], 'sheet': '未填研究草稿' if i < len(c['items']) else '組成參考',
+                                          'saved_row': rows, 'composition': comp, 'values': r['values']}), _js(r['review_reasons'])]
+        cells += [_js(v) for v in r['raw'].values()]
+        for v in r['evidence'].values():
+            cells += [_js(v.get('location')) if v.get('location') else '', _js(v.get('anchor', '已核對工程選取')), _js(v), _js(v['transformation'])]
+        cells += [_js(v) for v in r['null_reasons'].values()] + [_js(v) for v in r['review_reasons']]
+    for n in c['nonitems']:
+        cells += [_js(n['location']), _js(n['anchor']), _js(n['text']), _js(n['reason'])]
+    for k, v in enumerate(cells):
+        if isinstance(v, str) and (js_len(v) > 32767 or FORMULA_RE.match(v)):
+            _fail('REVIEW_CELL_UNSAFE_OR_TOO_LONG', str(k))
     return True
 
 
@@ -225,11 +547,11 @@ class Inventory:
         self.family_id = d['family_id']
         self.views = {}
         for i, v in enumerate(cs['views']):
-            if v['id'] != i + 1:
-                raise Rejected('INVENTORY_VIEW_ID')
-            self.views[v['id']] = (v['sheet'], parse_range(v['range']))
-        inv_views = [{k: v[k] for k in ('id', 'sheet', 'range')} for v in d['views']]
-        if inv_views != cs['views']:
+            rng = parse_range(v['range'])
+            if v['id'] != i + 1 or rng is None:
+                raise Rejected('INVENTORY_VIEW')
+            self.views[v['id']] = (v['sheet'], rng)
+        if [{k: v[k] for k in ('id', 'sheet', 'range')} for v in d['views']] != cs['views']:
             raise Rejected('INVENTORY_VIEWS_JOIN')
         self.sheets = {s['index']: s for s in d['sheets']}
         self.cells = {}
@@ -242,8 +564,7 @@ class Inventory:
             if self.sheets[c['sheet_index']]['name'] != c['sheet']:
                 raise Rejected('INVENTORY_SHEET_JOIN')
             self.cells[c['ref']] = c
-        expected = sum(s['rows'] * s['columns'] for s in d['sheets'] if s['in_scope'])
-        if expected != len(self.cells):
+        if sum(s['rows'] * s['columns'] for s in d['sheets'] if s['in_scope']) != len(self.cells):
             raise Rejected('INVENTORY_INCOMPLETE_CENSUS')
         self.context = {}
         for x in d['context_facts']:
@@ -252,10 +573,13 @@ class Inventory:
             self.context[x['ref']] = x
 
     def cell_views(self, sheet, addr):
-        m = ADDR_RE.fullmatch(addr)
-        c, r = col_number(m[1]), int(m[2])
+        c, r = parse_addr(addr)
         return [vid for vid, (s, (lo, hi)) in self.views.items()
                 if s == sheet and lo[0] <= c <= hi[0] and lo[1] <= r <= hi[1]]
+
+    def rc(self, ref):
+        c = self.cells[ref]
+        return c['row'], c['col']
 
     @staticmethod
     def has_content(c):
@@ -269,13 +593,78 @@ class Inventory:
         return False
 
 
+def check_inventory(inv):
+    rep = Report()
+    ident(inv.case_id, 'case_id', rep)
+    ident(inv.family_id, 'family_id', rep)
+    try:
+        _source_shape(inv.carrier_source, 'carrier_source')
+    except WriterReject as e:
+        rep.bad('WRITER_SOURCE_' + e.code, e.where)
+    for ref, c in inv.cells.items():
+        if c['saved_type'] == 'number' and c['state'] in ('literal', 'cached_formula'):
+            if c['canonical_raw'] != canonical_number(c['saved_value']):
+                rep.bad('CANONICAL_NUMBER_MISMATCH', ref)
+        elif c['saved_type'] == 'text' and c['state'] in ('literal', 'cached_formula') and c['usable_for_raw']:
+            if c['canonical_raw'] != c['saved_value']:
+                rep.bad('CANONICAL_TEXT_MISMATCH', ref)
+        if c['canonical_raw'] is not None and not c['usable_for_raw']:
+            rep.bad('CANONICAL_ON_UNUSABLE_CELL', ref)
+        if Inventory.has_content(c) and not inv.cell_views(c['sheet'], c['address']):
+            rep.hold('CONTENT_CELL_OUTSIDE_VIEWS', ref)
+    for vid, (sheet, (lo, hi)) in inv.views.items():
+        if not any(Inventory.has_content(c) and c['sheet'] == sheet and lo[0] <= c['col'] <= hi[0] and lo[1] <= c['row'] <= hi[1] for c in inv.cells.values()):
+            rep.hold('VIEW_WITHOUT_CONTENT', str(vid))
+    formula_like = [ref for ref, c in inv.cells.items() if isinstance(c['canonical_raw'], str) and FORMULA_RE.match(c['canonical_raw'])]
+    if formula_like:
+        rep.warn('FORMULA_LIKE_SOURCE_TEXT', 'cells', {'count': len(formula_like),
+                 'note': 'A value copied verbatim from these cells would hold the whole export.'})
+    return rep
+
+
+# ---------------------------------------------------------------- checks
+def ref_list(v, where, rep, inv, allow_context=False, min_items=0):
+    if not isinstance(v, list):
+        rep.bad('ARRAY_REQUIRED', where)
+        return []
+    if len(v) < min_items:
+        rep.bad('REFS_REQUIRED', where)
+    strs = [x for x in v if isinstance(x, str)]
+    if len(set(strs)) != len(v):
+        rep.bad('DUPLICATE_OR_NONSTRING_REF', where)
+    good = []
+    for i, r in enumerate(strs):
+        w = f'{where}[{i}]'
+        if r.startswith('context:') and allow_context:
+            if r not in inv.context:
+                rep.bad('UNKNOWN_CONTEXT_REF', w, r)
+                continue
+        elif r not in inv.cells:
+            rep.bad('UNKNOWN_CELL_REF', w, r)
+            continue
+        if r not in good:
+            good.append(r)
+    return good
+
+
+def copy_text(inv, ref, where, rep, purpose):
+    c = inv.cells[ref]
+    if c['canonical_raw'] is None and not Inventory.has_content(c):
+        rep.bad('EMPTY_CELL_CITED_IN_' + purpose, where, {'ref': ref, 'state': c['state']})
+        return None
+    if not c['usable_for_raw'] or c['canonical_raw'] is None:
+        rep.null('SOURCE_CELL_NOT_CARRIABLE_IN_' + purpose, where,
+                 {'ref': ref, 'state': c['state'], 'saved_type': c['saved_type'], 'reason': c['raw_limit_reason'],
+                  'action': 'leave this field or raw selection empty with a specific reason; the cell stays in the census'})
+        return None
+    return c['canonical_raw']
+
+
 def locator(inv, refs, where, rep):
-    """Build a writer locator from cell refs (single sheet, all inside views)."""
     cells = [inv.cells[r] for r in refs if r in inv.cells]
     if len(cells) != len(refs) or not cells:
         return None
-    sheets = {c['sheet'] for c in cells}
-    if len(sheets) != 1:
+    if len({c['sheet'] for c in cells}) != 1:
         rep.bad('LOCATION_SPANS_SHEETS', where)
         return None
     sheet = cells[0]['sheet']
@@ -290,46 +679,21 @@ def locator(inv, refs, where, rep):
         addrs.append(c['address'])
         views.update(vv)
     if len(addrs) > 1000:
-        rep.bad('LOCATION_TOO_LARGE', where)
+        rep.hold('LOCATION_TOO_LARGE_FOR_WRITER', where)
         return None
     return {'sheet': sheet, 'cells': addrs, 'views': sorted(views)}
 
 
-# ---------------------------------------------------------------- checks
-def ref_list(v, where, rep, inv, allow_context=False, min_items=0):
-    if not isinstance(v, list):
-        rep.bad('ARRAY_REQUIRED', where)
-        return []
-    if len(v) < min_items:
-        rep.bad('REFS_REQUIRED', where)
-    if len(set(x for x in v if isinstance(x, str))) != len(v):
-        rep.bad('DUPLICATE_OR_NONSTRING_REF', where)
-    good = []
-    for i, r in enumerate(v):
-        w = f'{where}[{i}]'
-        if not isinstance(r, str):
-            continue
-        if r.startswith('context:') and allow_context:
-            if r not in inv.context:
-                rep.bad('UNKNOWN_CONTEXT_REF', w, r)
-                continue
-        elif r not in inv.cells:
-            rep.bad('UNKNOWN_CELL_REF', w, r)
-            continue
-        good.append(r)
-    return good
-
-
-def cell_text_for_copy(inv, ref, where, rep, purpose):
-    c = inv.cells[ref]
-    if not c['usable_for_raw'] or c['canonical_raw'] is None:
-        rep.bad('REF_NOT_USABLE_FOR_' + purpose, where, {'ref': ref, 'state': c['state'], 'reason': c['raw_limit_reason']})
-        return None
-    return c['canonical_raw']
-
-
 def check(inv, resp_raw):
     rep = Report()
+    try:
+        return _check(inv, resp_raw, rep)
+    except Exception as e:      # never crash: report the failure as a violation
+        rep.bad('CHECKER_COULD_NOT_EVALUATE', 'response', f'{type(e).__name__}: {str(e)[:200]}')
+        return rep, None
+
+
+def _check(inv, resp_raw, rep):
     try:
         r = strict_load(resp_raw)
     except Rejected as e:
@@ -354,18 +718,19 @@ def check(inv, resp_raw):
             rep.bad('ARRAY_REQUIRED', k)
             return rep, None
     if len(r['limitations']) > 400:
-        rep.bad('TOO_MANY_LIMITATIONS', 'limitations')
+        rep.hold('TOO_MANY_LIMITATIONS_FOR_WRITER', 'limitations')
     for i, s in enumerate(r['limitations']):
         writer_text(s, f'limitations[{i}]', rep, check_formula=False)
     if not r['items']:
         rep.bad('ITEMS_REQUIRED', 'items')
-    ids = set()
-
-    covered = set()
+    ids, covered, used = set(), set(), {}
 
     def cover(loc):
         if loc:
             covered.update(loc['views'])
+
+    def use(ref, what):
+        used.setdefault(ref, []).append(what)
 
     # groups
     groups = {}
@@ -387,60 +752,56 @@ def check(inv, resp_raw):
         anchors = ref_list(g['anchor_refs'], w + '.anchor_refs', rep, inv, min_items=1)
         names = ref_list(g['name_refs'], w + '.name_refs', rep, inv)
         specs = ref_list(g['specification_refs'], w + '.specification_refs', rep, inv)
-        if g['name'] is not None and not names:
-            rep.bad('GROUP_NAME_PROOF_REQUIRED', w)
-        if g['name'] is None and names:
-            rep.bad('GROUP_NAME_REFS_WITHOUT_NAME', w)
-        if g['specification'] is not None and not specs:
-            rep.bad('GROUP_SPEC_PROOF_REQUIRED', w)
-        if g['specification'] is None and specs:
-            rep.bad('GROUP_SPEC_REFS_WITHOUT_SPEC', w)
+        if (g['name'] is not None) != bool(names):
+            rep.bad('GROUP_NAME_PROOF_MISMATCH', w, 'name and name_refs must be both present or both absent')
+        if (g['specification'] is not None) != bool(specs):
+            rep.bad('GROUP_SPEC_PROOF_MISMATCH', w, 'specification and specification_refs must be both present or both absent')
         for rr in names + specs:
-            if inv.cells[rr]['canonical_raw'] is None:
-                rep.bad('GROUP_PROOF_CELL_EMPTY', w, rr)
+            copy_text(inv, rr, w, rep, 'GROUP_PROOF')
         writer_text(g['quantity_basis'], w + '.quantity_basis', rep, check_formula=False)
         if not isinstance(g['limitations'], list):
             rep.bad('ARRAY_REQUIRED', w + '.limitations')
         else:
+            if len(g['limitations']) > 500:
+                rep.hold('TOO_MANY_GROUP_LIMITATIONS_FOR_WRITER', w)
             for j, s in enumerate(g['limitations']):
                 writer_text(s, f'{w}.limitations[{j}]', rep, check_formula=False)
             if g['name'] is None and not g['limitations']:
                 rep.bad('UNRESOLVED_GROUP_REASON_REQUIRED', w)
+        for x in anchors + names + specs:
+            use(x, 'group:' + str(g['id']))
         if anchors:
-            cover(locator(inv, anchors + names + specs, w + '.location', rep))
+            cover(locator(inv, anchors + [x for x in names + specs if x not in anchors], w + '.location', rep))
 
     # items
-    items = {}
-    demand_ids, component_ids = set(), set()
-    n_items = n_comp = 0
+    items, demand_ids, component_ids = {}, set(), set()
+    desc_owner, anchor_owner, raw_owner, desc_anchor = {}, {}, {}, []
     for i, it in enumerate(r['items']):
         w = f'items[{i}]'
         if not exact_keys(it, ('id', 'role', 'group_id', 'status', 'values', 'proofs', 'raw_refs',
                                'anchor_refs', 'review_reasons'), w, rep):
             continue
-        if ident(it['id'], w + '.id', rep):
-            if it['id'] in ids:
-                rep.bad('DUPLICATE_ID', w + '.id', it['id'])
-            ids.add(it['id'])
-            items[it['id']] = it
+        iid = it['id']
+        if ident(iid, w + '.id', rep):
+            if iid in ids:
+                rep.bad('DUPLICATE_ID', w + '.id', iid)
+            ids.add(iid)
+            items[iid] = it
         if it['role'] == 'demand':
-            demand_ids.add(it['id'])
-            n_items += 1
+            demand_ids.add(iid)
         elif it['role'] == 'analysis_component':
-            component_ids.add(it['id'])
-            n_comp += 1
+            component_ids.add(iid)
         else:
             rep.bad('ITEM_ROLE', w + '.role')
-        if it['group_id'] is not None and it['group_id'] not in groups:
+        if it['group_id'] is not None and (not isinstance(it['group_id'], str) or it['group_id'] not in groups):
             rep.bad('UNKNOWN_GROUP_ID', w + '.group_id')
         if it['status'] not in ('research_draft', 'held'):
             rep.bad('ITEM_STATUS', w + '.status', ['research_draft', 'held'])
-        rr_ok = isinstance(it['review_reasons'], list)
-        if not rr_ok:
+        if not isinstance(it['review_reasons'], list):
             rep.bad('ARRAY_REQUIRED', w + '.review_reasons')
         else:
             if len(it['review_reasons']) > 500:
-                rep.bad('TOO_MANY_REVIEW_REASONS', w)
+                rep.hold('TOO_MANY_REVIEW_REASONS_FOR_WRITER', w)
             for j, s in enumerate(it['review_reasons']):
                 writer_text(s, f'{w}.review_reasons[{j}]', rep, check_formula=False)
             if it['status'] == 'held' and not it['review_reasons']:
@@ -451,10 +812,15 @@ def check(inv, resp_raw):
             continue
         if vals[2] is None and it['status'] != 'held':
             rep.bad('NULL_C_REQUIRES_HELD', w)
-        # anchors and raw selections (item location: one sheet)
         anchors = ref_list(it['anchor_refs'], w + '.anchor_refs', rep, inv, min_items=1)
-        raw_vals = {}
-        loc_refs = list(anchors)
+        for x in anchors:
+            use(x, f'{iid}.anchor')
+            if x in anchor_owner and anchor_owner[x] != iid:
+                rep.bad('ANCHOR_SHARED_ACROSS_ITEMS', w, x)
+            anchor_owner[x] = iid
+        if anchors and len({inv.rc(x)[0] for x in anchors}) != 1:
+            rep.bad('ANCHORS_NOT_ON_ONE_ROW', w)
+        raw_vals, loc_refs, raw_cells = {}, list(anchors), {}
         rawsel = it['raw_refs']
         if exact_keys(rawsel, RAW, w + '.raw_refs', rep):
             for k in RAW:
@@ -463,62 +829,77 @@ def check(inv, resp_raw):
                 if not exact_keys(sel, ('refs', 'reason_if_empty'), sw, rep):
                     continue
                 refs = ref_list(sel['refs'], sw + '.refs', rep, inv)
+                raw_cells[k] = refs
                 if k in SINGLE_RAW and len(sel['refs']) > 1:
                     rep.bad('SINGLE_CELL_RAW_FIELD', sw)
-                if sel['refs']:
-                    if sel['reason_if_empty'] is not None:
-                        rep.bad('REASON_ONLY_FOR_EMPTY_SELECTION', sw)
-                else:
-                    if not isinstance(sel['reason_if_empty'], str) or js_blank(sel['reason_if_empty']):
-                        rep.bad('EMPTY_SELECTION_REASON_REQUIRED', sw)
-                parts = []
-                for rf in refs:
-                    t = cell_text_for_copy(inv, rf, sw, rep, 'RAW')
-                    if t is not None:
-                        parts.append(t)
-                if refs and len(parts) == len(refs):
+                if sel['refs'] and sel['reason_if_empty'] is not None:
+                    rep.bad('REASON_ONLY_FOR_EMPTY_SELECTION', sw)
+                if not sel['refs'] and (not isinstance(sel['reason_if_empty'], str) or js_blank(sel['reason_if_empty'])):
+                    rep.bad('EMPTY_SELECTION_REASON_REQUIRED', sw)
+                if k in ('description', 'remarks') and refs != sorted(refs, key=inv.rc):
+                    rep.bad('RAW_STREAM_NOT_ROW_MAJOR', sw)
+                parts = [copy_text(inv, x, sw, rep, 'RAW') for x in refs]
+                if refs and all(t is not None for t in parts):
                     raw_vals[k] = '\n'.join(parts)
                     writer_text(raw_vals[k], sw + ':copied', rep, allow_blank=True, check_formula=False)
                 elif not sel['refs']:
                     raw_vals[k] = None
-                loc_refs += [x for x in refs if x not in loc_refs]
+                for x in refs:
+                    use(x, f'{iid}.raw.{k}')
+                    if x not in loc_refs:
+                        loc_refs.append(x)
+                    if k == 'description':
+                        if x in desc_owner and desc_owner[x] != iid:
+                            rep.bad('DESCRIPTION_CELL_SHARED_ACROSS_ITEMS', sw, x)
+                        desc_owner[x] = iid
+                    elif x in raw_owner and raw_owner[x] != iid:
+                        rep.warn('RAW_CELL_SHARED_ACROSS_ITEMS', sw, x)
+                    raw_owner.setdefault(x, iid)
+            others = {x for k in RAW if k != 'description' for x in raw_cells.get(k, [])}
+            overlap = [x for x in raw_cells.get('description', []) if x in others]
+            if overlap:
+                rep.bad('DESCRIPTION_INCLUDES_EXCLUDED_CELL', w + '.raw_refs.description', overlap)
+            # an anchor may be the first description cell only when it is not an item-number cell
+            desc_anchor += [(w, x) for x in raw_cells.get('description', []) if x in anchors]
+            item_rows = [inv.rc(x)[0] for x in loc_refs]
+            if anchors and item_rows and inv.rc(anchors[0])[0] != min(item_rows):
+                rep.bad('ANCHOR_NOT_ON_FIRST_ROW', w)
         if anchors:
             cover(locator(inv, loc_refs, w + '.location', rep))
-        # values and proofs
         proofs = it['proofs']
         if not exact_keys(proofs, tuple(COLS), w + '.proofs', rep):
             continue
         for j, col in enumerate(COLS):
-            v, p, vw = vals[j], proofs[col], f'{w}.values.{col}'
+            v, p, vw, pw = vals[j], proofs[col], f'{w}.values.{col}', f'{w}.proofs.{col}'
             if v is None:
                 if not (isinstance(p, dict) and set(p) == {'reason'}):
-                    rep.bad('NULL_PROOF_REQUIRED', f'{w}.proofs.{col}')
+                    rep.bad('NULL_PROOF_REQUIRED', pw)
                 else:
-                    writer_text(p['reason'], f'{w}.proofs.{col}.reason', rep, check_formula=False)
+                    writer_text(p['reason'], pw + '.reason', rep, check_formula=False)
                 continue
             if j in BLANK_COLS:
                 rep.bad('PURCHASE_PRICE_MUST_BE_BLANK', vw)
                 continue
             if j in NUMERIC_COLS:
-                if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or abs(v) > MAX_SAFE:
+                if not is_num(v):
                     rep.bad('FINITE_SAFE_NUMBER_REQUIRED', vw)
                     continue
             else:
-                if not writer_text(v, vw, rep):
-                    pass
+                writer_text(v, vw, rep)
             if not (isinstance(p, dict) and set(p) == {'refs', 'transformation', 'role_basis'}):
-                rep.bad('NONNULL_PROOF_REQUIRED', f'{w}.proofs.{col}', 'keys refs, transformation, role_basis')
+                rep.bad('NONNULL_PROOF_REQUIRED', pw, 'keys refs, transformation, role_basis')
                 continue
-            pw = f'{w}.proofs.{col}'
             writer_text(p['transformation'], pw + '.transformation', rep, check_formula=False)
             writer_text(p['role_basis'], pw + '.role_basis', rep, check_formula=False)
             prefs = ref_list(p['refs'], pw + '.refs', rep, inv, allow_context=True, min_items=1)
             cells = [x for x in prefs if x.startswith('cell:')]
             ctx = [x for x in prefs if x.startswith('context:')]
+            for x in cells:
+                use(x, f'{iid}.proof.{col}')
             if not cells and ctx and col != 'L':
-                rep.hold('CONTEXT_ONLY_PROOF_UNREPRESENTABLE', pw, 'Only L can be proven by context alone; hold this field.')
+                rep.null('CONTEXT_ONLY_PROOF_UNREPRESENTABLE', pw, 'Only L can be proven by context alone; leave this field null with a reason.')
             if cells:
-                texts = [cell_text_for_copy(inv, x, pw, rep, 'PROOF') for x in cells]
+                texts = [copy_text(inv, x, pw, rep, 'PROOF') for x in cells]
                 if all(t is not None for t in texts):
                     joined = '\n'.join(texts)
                     if js_blank(joined):
@@ -530,43 +911,40 @@ def check(inv, resp_raw):
                         rep.bad('NUMERIC_PROOF_SINGLE_CELL', pw)
                     elif texts[0] is not None:
                         n = writer_numeric_raw(texts[0])
-                        if n is None or n != float(v):
+                        if n is None:
+                            rep.null('NONNUMERIC_SOURCE_TEXT_FIELD_MUST_BE_NULL', pw,
+                                     'The cited cell is not a plain ASCII numeric literal the writer accepts; leave the field null with a specific reason and keep the raw text.')
+                        elif n != float(v):
                             rep.bad('NUMERIC_EVIDENCE_MISMATCH', pw, {'value': v})
-            if col == 'L' and ctx and not cells:
-                sel = selection_evidence(inv, ctx, p)
-                if PATHLIKE_RE.search(sel):
-                    rep.bad('SELECTION_EVIDENCE_PATHLIKE', pw)
-        # writer cross-field rules
         if it['group_id'] is None and (vals[0] is not None or vals[1] is not None):
             rep.bad('UNGROUPED_AB_MUST_BE_BLANK', w)
-        g = groups.get(it['group_id'])
+        g = groups.get(it['group_id']) if isinstance(it['group_id'], str) else None
         if g is not None:
             if vals[0] is not None and vals[0] != g['name']:
                 rep.bad('A_MUST_EQUAL_GROUP_NAME', w)
             if vals[1] is not None and vals[1] != g['specification']:
                 rep.bad('B_MUST_EQUAL_GROUP_SPECIFICATION', w)
-        def is_num(x):
-            return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(float(x))
-        if vals[5] is not None:
-            qsel = rawsel.get('quantity') if isinstance(rawsel, dict) else None
-            qref = qsel.get('refs') if isinstance(qsel, dict) else None
-            n = writer_numeric_raw(raw_vals.get('quantity'))
-            if n is None or not is_num(vals[5]) or n != float(vals[5]):
-                rep.bad('SOURCE_QUANTITY_MISMATCH', w)
-            elif isinstance(proofs.get('F'), dict) and proofs['F'].get('refs') != qref:
+        for j, key, code in ((5, 'quantity', 'SOURCE_QUANTITY_MISMATCH'), (16, 'unit_price', 'SOURCE_UNIT_PRICE_MISMATCH')):
+            if vals[j] is None or not is_num(vals[j]):
+                continue
+            rawtext = raw_vals.get(key)
+            n = writer_numeric_raw(rawtext)
+            if rawtext is not None and n is None:
+                rep.null('NONNUMERIC_RAW_' + key.upper() + '_FIELD_MUST_BE_NULL', w,
+                         f'Raw {key} text is not a plain ASCII numeric literal; column {COLS[j]} must be null with a specific reason.')
+            elif n is None or n != float(vals[j]):
+                rep.bad(code, w)
+        if vals[5] is not None and isinstance(proofs.get('F'), dict) and 'refs' in proofs['F']:
+            if proofs['F'].get('refs') != raw_cells.get('quantity'):
                 rep.bad('F_PROOF_MUST_BE_RAW_QUANTITY_CELL', w)
-        if vals[16] is not None:
-            if inv.adoption != 'verified':
-                rep.bad('Q_REQUIRES_VERIFIED_ADOPTION', w)
-            n = writer_numeric_raw(raw_vals.get('unit_price'))
-            if n is None or not is_num(vals[16]) or n != float(vals[16]):
-                rep.bad('SOURCE_UNIT_PRICE_MISMATCH', w)
+        if vals[16] is not None and inv.adoption != 'verified':
+            rep.bad('Q_REQUIRES_VERIFIED_ADOPTION', w)
         if vals[4] is not None and vals[4] != raw_vals.get('unit'):
             rep.bad('SOURCE_UNIT_MISMATCH', w)
-    if n_items < 1:
+    if not demand_ids:
         rep.bad('DEMAND_ITEM_REQUIRED', 'items')
-    if n_items > 2000 or n_comp > 2000 or n_items + n_comp > 2000:
-        rep.bad('ITEM_LIMIT', 'items')
+    if len(demand_ids) > 2000 or len(component_ids) > 2000:
+        rep.hold('ITEM_LIMIT_FOR_WRITER', 'items')
 
     # component links
     linked = {}
@@ -576,7 +954,7 @@ def check(inv, resp_raw):
                                'basis_unit_ref', 'refs', 'reason'), w, rep):
             continue
         cid = lk['component_id']
-        if cid not in component_ids:
+        if not isinstance(cid, str) or cid not in component_ids:
             rep.bad('LINK_COMPONENT_UNKNOWN', w)
             continue
         if cid in linked:
@@ -590,10 +968,10 @@ def check(inv, resp_raw):
         if lk['status'] != 'supported':
             rep.bad('LINK_STATUS', w)
             continue
-        if lk['parent_id'] not in demand_ids or lk['parent_id'] == cid:
+        if not isinstance(lk['parent_id'], str) or lk['parent_id'] not in demand_ids or lk['parent_id'] == cid:
             rep.bad('COMPONENT_PARENT_MUST_BE_DEMAND', w)
         bq = lk['basis_quantity']
-        if isinstance(bq, bool) or not isinstance(bq, (int, float)) or not math.isfinite(float(bq)) or bq <= 0 or abs(bq) > MAX_SAFE:
+        if not is_num(bq) or bq <= 0:
             rep.bad('POSITIVE_BASIS_REQUIRED', w)
             bq = None
         refs = []
@@ -603,17 +981,24 @@ def check(inv, resp_raw):
                 rep.bad('BASIS_CELL_REF_REQUIRED', f'{w}.{k}')
             else:
                 refs.append(x)
+                use(x, f'{cid}.basis')
+        for x in extra:
+            use(x, f'{cid}.basis')
         if len(refs) == 2:
-            t = cell_text_for_copy(inv, refs[0], w + '.basis_raw_ref', rep, 'BASIS')
-            u = cell_text_for_copy(inv, refs[1], w + '.basis_unit_ref', rep, 'BASIS')
+            t = copy_text(inv, refs[0], w + '.basis_raw_ref', rep, 'BASIS')
+            u = copy_text(inv, refs[1], w + '.basis_unit_ref', rep, 'BASIS')
             if t is not None and bq is not None:
                 n = writer_numeric_raw(t)
-                if n is None or n != float(bq):
+                if n is None:
+                    rep.hold('NONNUMERIC_BASIS_TEXT_UNREPRESENTABLE', w)
+                elif n != float(bq):
                     rep.bad('BASIS_LITERAL_MISMATCH', w)
-            if u is not None:
-                writer_text(u, w + '.basis_unit_ref:copied', rep, hold_formula=True)
+            if inv.cells[refs[1]]['saved_type'] != 'text':
+                rep.bad('BASIS_UNIT_MUST_BE_TEXT_CELL', w + '.basis_unit_ref')
+            elif u is not None:
+                writer_text(u, w + '.basis_unit_ref:copied', rep)
             locator(inv, refs + [x for x in extra if x not in refs], w + '.basis_location', rep)
-    for cid in component_ids - set(linked):
+    for cid in sorted(component_ids - set(linked)):
         rep.bad('COMPONENT_LINK_REQUIRED', cid)
 
     # source roles
@@ -640,13 +1025,28 @@ def check(inv, resp_raw):
             if not vv:
                 rep.hold('CENSUS_CELL_OUTSIDE_VIEWS', 'source_roles', rf)
             covered.update(vv)
+        elif role in CONTENT_ROLES and rf not in used:
+            rep.bad('CONTENT_CELL_NOT_USED_BY_ANY_ITEM', 'source_roles', {'ref': rf, 'role': role,
+                    'action': 'cite it in the owning item (raw or proof) or classify it by its own nonitem role'})
+    for w, x in desc_anchor:
+        if assigned.get(x, (None,))[0] == 'item_identifier':
+            rep.bad('DESCRIPTION_INCLUDES_EXCLUDED_CELL', w + '.raw_refs.description', [x])
     for vid in inv.views:
         if vid not in covered:
             rep.hold('VIEW_SCOPE_UNACCOUNTED', 'views', vid)
     missing = [ref for ref, c in inv.cells.items() if Inventory.has_content(c) and ref not in assigned]
     if missing:
         rep.bad('UNCLASSIFIED_CONTENT_CELLS', 'source_roles', missing[:200] + (['...'] if len(missing) > 200 else []))
-    return rep, {'response': r, 'assigned': assigned}
+    ctx = {'response': r, 'assigned': assigned, 'used': used}
+    if not rep.violations:          # build exactly what convert writes and run the writer port on it
+        carrier, _ = build_carrier(inv, resp_raw, ctx)
+        try:
+            validate_carrier_port(carrier)
+        except WriterReject as e:
+            rep.hold('WRITER_WOULD_REJECT_' + e.code, e.where)
+        except Exception as e:
+            rep.bad('CHECKER_COULD_NOT_EVALUATE', 'writer_port', f'{type(e).__name__}: {str(e)[:200]}')
+    return rep, ctx
 
 
 def selection_evidence(inv, ctx, proof):
@@ -661,49 +1061,59 @@ def pack_transformation(proof, ctx):
 
 
 def census_text(c):
-    return json.dumps({'saved_type': c['saved_type'], 'state': c['state'], 'value': c['saved_value']},
+    return json.dumps({'saved_type': c['saved_type'], 'state': c['state'], 'value': c['saved_value'],
+                       'formula_record_present': c['formula_record_present'], 'conflicts': c['conflicts']},
                       ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-# ---------------------------------------------------------------- convert
-def convert(inv, resp_raw):
-    rep, ctx = check(inv, resp_raw)
-    if rep.violations:
-        return rep, None, None
-    r = ctx['response']
-    assigned = ctx['assigned']
-    ledger = {ref: {'ref': ref, 'sheet': c['sheet'], 'address': c['address'], 'state': c['state'],
-                    'saved_type': c['saved_type'], 'saved_value': c['saved_value'],
-                    'primary_role': assigned.get(ref, (None,))[0], 'raw_uses': [], 'proof_uses': [],
-                    'anchor_uses': [], 'group_uses': [], 'component_basis_uses': [], 'census': False,
-                    'disposition': ('classified' if ref in assigned else
-                                    ('empty_or_covered' if not Inventory.has_content(c) else 'unclassified'))}
-              for ref, c in inv.cells.items()}
+def build_ledger(inv, resp_raw, ctx):
+    assigned = ctx['assigned'] if ctx else {}
+    used = ctx['used'] if ctx else {}
+    entries = []
+    for ref, c in inv.cells.items():
+        role = assigned.get(ref, (None,))[0]
+        entries.append({'ref': ref, 'sheet': c['sheet'], 'address': c['address'], 'state': c['state'],
+                        'saved_type': c['saved_type'], 'saved_value': c['saved_value'],
+                        'formula_record_present': c['formula_record_present'], 'conflicts': c['conflicts'],
+                        'primary_role': role, 'uses': used.get(ref, []), 'census': role in CENSUS_ROLES,
+                        'disposition': ('classified' if role else ('empty_or_covered' if not Inventory.has_content(c) else 'unclassified'))})
+    ann = []
+    if ctx:
+        for it in ctx['response'].get('items', []):
+            if isinstance(it, dict) and isinstance(it.get('raw_refs'), dict):
+                for k, sel in it['raw_refs'].items():
+                    if isinstance(sel, dict) and sel.get('reason_if_empty'):
+                        ann.append({'item': it.get('id'), 'raw_field': k, 'reason_if_empty': sel['reason_if_empty']})
+        for lk in ctx['response'].get('component_links', []):
+            if isinstance(lk, dict):
+                ann.append({'component': lk.get('component_id'), 'link_status': lk.get('status'), 'link_reason': lk.get('reason')})
+    obj = {'schema': 'cps.census-ledger.v2', 'case_id': inv.case_id, 'inventory_sha256': inv.sha256,
+           'response_sha256': sha256(resp_raw), 'positions': len(entries), 'entries': entries, 'response_annotations': ann}
+    return (json.dumps(obj, ensure_ascii=False, indent=1, allow_nan=False) + '\n').encode('utf-8')
+
+
+def build_carrier(inv, resp_raw, ctx):
+    r, assigned = ctx['response'], ctx['assigned']
+    ledger_bytes = build_ledger(inv, resp_raw, ctx)
+    quiet = Report()
     groups = []
     for g in r['groups']:
         refs = g['anchor_refs'] + [x for x in g['name_refs'] + g['specification_refs'] if x not in g['anchor_refs']]
-        for x in refs:
-            ledger[x]['group_uses'].append(g['id'])
         anchor = json.dumps({'anchor_refs': g['anchor_refs'], 'name_refs': g['name_refs'],
                              'specification_refs': g['specification_refs'], 'relationship': g['relationship']},
                             ensure_ascii=False, sort_keys=True)
         groups.append({'id': g['id'], 'name': g['name'], 'specification': g['specification'],
-                       'location': locator(inv, refs, 'group', Report()), 'anchor': anchor,
+                       'location': locator(inv, refs, 'group', quiet), 'anchor': anchor,
                        'quantity_basis': g['quantity_basis'], 'limitations': list(g['limitations'])})
     links = {lk['component_id']: lk for lk in r['component_links']}
     out_items, out_components = [], []
     for it in r['items']:
         anchor = json.dumps({'anchor_refs': it['anchor_refs']}, ensure_ascii=False)
-        for x in it['anchor_refs']:
-            ledger[x]['anchor_uses'].append(it['id'])
         raw, loc_refs = {}, list(it['anchor_refs'])
         for k in RAW:
             refs = it['raw_refs'][k]['refs']
             raw[k] = '\n'.join(inv.cells[x]['canonical_raw'] for x in refs) if refs else None
-            for x in refs:
-                ledger[x]['raw_uses'].append(f"{it['id']}.{k}")
-                if x not in loc_refs:
-                    loc_refs.append(x)
+            loc_refs += [x for x in refs if x not in loc_refs]
         evidence, nulls = {}, {}
         for j, col in enumerate(COLS):
             v, p = it['values'][j], it['proofs'][col]
@@ -712,53 +1122,41 @@ def convert(inv, resp_raw):
                 continue
             cells = [x for x in p['refs'] if x.startswith('cell:')]
             cx = [x for x in p['refs'] if x.startswith('context:')]
-            for x in cells:
-                ledger[x]['proof_uses'].append(f"{it['id']}.{col}")
-            if not cells:      # L by selection evidence only (checked)
-                evidence[col] = {'selection_evidence': selection_evidence(inv, cx, p),
-                                 'transformation': p['transformation']}
+            if not cells:
+                evidence[col] = {'selection_evidence': selection_evidence(inv, cx, p), 'transformation': p['transformation']}
             else:
-                evidence[col] = {'location': locator(inv, cells, 'proof', Report()), 'anchor': anchor,
+                evidence[col] = {'location': locator(inv, cells, 'proof', quiet), 'anchor': anchor,
                                  'raw_text': '\n'.join(inv.cells[x]['canonical_raw'] for x in cells),
                                  'transformation': pack_transformation(p, cx)}
-        row = {'id': it['id'], 'group_id': it['group_id'], 'location': locator(inv, loc_refs, 'item', Report()),
+        row = {'id': it['id'], 'group_id': it['group_id'], 'location': locator(inv, loc_refs, 'item', quiet),
                'anchor': anchor, 'raw': raw, 'values': copy.deepcopy(it['values']), 'evidence': evidence,
                'null_reasons': nulls, 'status': it['status'], 'review_reasons': list(it['review_reasons'])}
         if it['role'] == 'analysis_component':
             lk = links[it['id']]
             brefs = [lk['basis_raw_ref'], lk['basis_unit_ref']] + [x for x in lk['refs'] if x not in (lk['basis_raw_ref'], lk['basis_unit_ref'])]
-            for x in brefs:
-                ledger[x]['component_basis_uses'].append(it['id'])
             row['composition'] = {'parent_id': lk['parent_id'], 'basis_quantity': lk['basis_quantity'],
                                   'basis_unit': inv.cells[lk['basis_unit_ref']]['canonical_raw'],
-                                  'basis_location': locator(inv, brefs, 'basis', Report()),
+                                  'basis_location': locator(inv, brefs, 'basis', quiet),
                                   'basis_raw': inv.cells[lk['basis_raw_ref']]['canonical_raw']}
             out_components.append(row)
         else:
             out_items.append(row)
     nonitems = []
-    for ref, c in inv.cells.items():       # inventory order
+    for ref, c in inv.cells.items():
         if ref in assigned and assigned[ref][0] in CENSUS_ROLES:
             role, reason = assigned[ref]
-            nonitems.append({'location': locator(inv, [ref], 'census', Report()), 'kind': role, 'anchor': ref,
+            nonitems.append({'location': locator(inv, [ref], 'census', quiet), 'kind': role, 'anchor': ref,
                              'text': census_text(c), 'reason': reason})
-            ledger[ref]['census'] = True
-    # values unchanged guard (type-exact)
-    src_rows = [x for x in r['items'] if x['role'] == 'demand'] + [x for x in r['items'] if x['role'] == 'analysis_component']
-    for src, dst in zip(src_rows, out_items + out_components):
-        if src['id'] != dst['id'] or json.dumps(src['values'], ensure_ascii=False) != json.dumps(dst['values'], ensure_ascii=False) \
-                or [type(x) for x in src['values']] != [type(x) for x in dst['values']]:
+    # values-unchanged guard against an independent re-parse of the frozen response bytes
+    fresh = strict_load(resp_raw)['items']
+    order = [x for x in fresh if x['role'] == 'demand'] + [x for x in fresh if x['role'] == 'analysis_component']
+    for src, dst in zip(order, out_items + out_components):
+        if src['id'] != dst['id'] or _js(src['values']) != _js(dst['values']) or [type(x) for x in src['values']] != [type(x) for x in dst['values']]:
             raise Rejected('VALUE_CHANGED_DURING_COPY')
-    ledger_obj = {'schema': 'cps.census-ledger.v1', 'case_id': inv.case_id, 'inventory_sha256': inv.sha256,
-                  'response_sha256': sha256(resp_raw), 'positions': len(ledger), 'entries': list(ledger.values())}
-    ledger_bytes = (json.dumps(ledger_obj, ensure_ascii=False, indent=1, allow_nan=False) + '\n').encode('utf-8')
-    limitations = [s for s in r['limitations']]
-    limitations += [s for s in inv.d['limitations']]
+    limitations = list(r['limitations']) + list(inv.d['limitations'])
     limitations.append('Carrier produced by the 046b source-reference adapter: values copied from the frozen response; '
-                       'raw/proof text copied from the pinned inventory; nonitem text is a typed JSON wrapper '
-                       '{saved_type,state,value}; proof role_basis is packed in transformation JSON.')
-    if len(limitations) > 500:
-        raise Rejected('CARRIER_LIMITATION_COUNT')
+                       'raw/proof text copied from the pinned inventory; nonitem text is a typed JSON wrapper; '
+                       'proof role_basis is packed in transformation JSON; empty-selection and link reasons are in the census ledger.')
     carrier = {
         'schema': 'cps.cached-xls-research-carrier.v1' if inv.kind == 'cached_xls' else 'cps.cached-xlsx-research-carrier.v1',
         'headers': list(HEADERS), 'case_id': inv.case_id, 'family_id': inv.family_id,
@@ -769,12 +1167,24 @@ def convert(inv, resp_raw):
                      'representation_profile': PROFILE, 'source_adoption': inv.adoption},
         'groups': groups, 'items': out_items, 'components': out_components, 'nonitems': nonitems,
         'limitations': limitations}
-    return rep, carrier, ledger_bytes
+    return carrier, ledger_bytes
+
+
+def convert(inv, resp_raw):
+    rep, ctx = check(inv, resp_raw)
+    if rep.violations:
+        ledger = build_ledger(inv, resp_raw, ctx) if ctx else build_ledger(inv, resp_raw, None)
+        return rep, None, ledger
+    carrier, ledger = build_carrier(inv, resp_raw, ctx)
+    validate_carrier_port(carrier)
+    return rep, carrier, ledger
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest='cmd', required=True)
+    pi = sub.add_parser('check-inventory')
+    pi.add_argument('--inventory', required=True)
     for name in ('check', 'convert'):
         p = sub.add_parser(name)
         p.add_argument('--inventory', required=True)
@@ -783,12 +1193,18 @@ def main(argv=None):
             p.add_argument('--out-dir', required=True)
     a = ap.parse_args(argv)
     inv_raw = Path(a.inventory).read_bytes()
-    resp_raw = Path(a.response).read_bytes()
     try:
         inv = Inventory(inv_raw)
-    except (Rejected, KeyError, TypeError) as e:
+    except (Rejected, KeyError, TypeError, ValueError) as e:
         print(json.dumps({'status': 'INVENTORY_REJECTED', 'error': repr(e)}, ensure_ascii=False))
         return 2
+    if a.cmd == 'check-inventory':
+        rep = check_inventory(inv)
+        print(json.dumps({'status': 'PASS' if not rep.violations else 'REJECTED', 'route': VERSION,
+                          'inventory_sha256': inv.sha256, 'violations': rep.violations, 'warnings': rep.warnings},
+                         ensure_ascii=False, indent=1))
+        return 0 if not rep.violations else 1
+    resp_raw = Path(a.response).read_bytes()
     if a.cmd == 'check':
         rep, _ = check(inv, resp_raw)
         status = 'PASS' if not rep.violations else 'REJECTED'
@@ -798,19 +1214,25 @@ def main(argv=None):
         return 0 if status == 'PASS' else 1
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=False)
-    rep, carrier, ledger = convert(inv, resp_raw)
+    try:
+        rep, carrier, ledger = convert(inv, resp_raw)
+    except (WriterReject, Rejected) as e:
+        (out / 'ADAPTER_FAILURE.json').write_text(json.dumps({'status': 'ADAPTER_INTERNAL_REJECTION', 'error': str(e)}) + '\n', encoding='utf-8')
+        print(json.dumps({'status': 'ADAPTER_INTERNAL_REJECTION', 'error': str(e)}))
+        return 3
+    (out / 'CENSUS_LEDGER.json').write_bytes(ledger)
     receipt = {'route': VERSION, 'inventory_sha256': inv.sha256, 'response_sha256': sha256(resp_raw),
-               'violations': rep.violations, 'warnings': rep.warnings}
+               'census_ledger_sha256': sha256(ledger), 'violations': rep.violations, 'warnings': rep.warnings}
     if carrier is None:
         receipt['status'] = 'NOT_CARRIED'
+        receipt['categories'] = sorted({v['category'] for v in rep.violations})
         (out / 'ADAPTER_REJECTION.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
-        print(json.dumps({'status': 'NOT_CARRIED', 'violations': len(rep.violations)}))
+        print(json.dumps({'status': 'NOT_CARRIED', 'violations': len(rep.violations), 'categories': receipt['categories']}))
         return 1
     cb = (json.dumps(carrier, ensure_ascii=False, indent=1, allow_nan=False) + '\n').encode('utf-8')
     (out / 'carrier.json').write_bytes(cb)
-    (out / 'CENSUS_LEDGER.json').write_bytes(ledger)
-    receipt.update(status='CARRIED_STRUCTURE_ONLY', carrier_sha256=sha256(cb), census_ledger_sha256=sha256(ledger),
-                   items=len(carrier['items']), components=len(carrier['components']), groups=len(carrier['groups']),
+    receipt.update(status='CARRIED_STRUCTURE_ONLY', carrier_sha256=sha256(cb), items=len(carrier['items']),
+                   components=len(carrier['components']), groups=len(carrier['groups']),
                    nonitems=len(carrier['nonitems']), semantic_approval=False)
     (out / 'ADAPTER_RECEIPT.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps({k: receipt[k] for k in ('status', 'carrier_sha256', 'items', 'components', 'nonitems')}))

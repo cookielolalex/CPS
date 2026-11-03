@@ -15,7 +15,13 @@ Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semanti
 3. Fill all 17 values, then give each column either a non-null proof (`refs`, `transformation`, `role_basis`) or a specific null `reason`. The transformation says how the value was obtained from the cited text, for example "copied", "text after label 型號", or "rating span moved to D; newline → U+0020". The role basis says why that text has this field role. Keep values exactly as the policy and source support them; never adjust a value to pass a check.
 4. Fill `raw_refs` per `SOURCE_REFERENCE_CONTRACT.md` §3: description and remarks streams in row-major order, and at most one cell each for unit, quantity, unit price and amount. Never list an empty cell, and give a specific reason for every empty selection.
 5. Set `anchor_refs` to the item's identity cell(s) on its first row, normally the item number. If an item has no item-number cell, use the first cell of its description.
-6. Assign exactly one primary `source_roles` entry to every content cell in the inventory, and none to empty cells. Classify an item's own description, unit, quantity, price, amount and remark cells as `demand_content` (or `analysis_content`). Classify item numbers as `item_identifier`. Mark anything you cannot resolve as `unresolved` and explain why. A single role entry can list many refs that share one reason.
+6. Assign exactly one primary `source_roles` entry to every content cell in the inventory, and none to empty cells.
+   - Classify an item's own description, unit, quantity, price, amount and remark cells as `demand_content` (or `analysis_content`), even when a remark is commercial in tone.
+   - Every such cell must be cited by its item.
+   - Classify item numbers as `item_identifier`.
+   - An item cell that no raw field can carry (for example extra text in its quantity column) takes its own role, such as `commercial_note`.
+   - Mark anything you cannot resolve as `unresolved` and explain why.
+   - A single role entry can list many refs that share one reason.
 7. Set item `status` to `research_draft` or `held`; `held` needs review reasons. Set the top-level `status` to `research_draft`, `partial` (some scope is unresolved or held) or `held`. Record every unresolved obligation in `limitations` or review reasons.
 
 ## Self-check before returning
@@ -26,7 +32,8 @@ Run the package checker on your file. It reads only the two files you name:
 python3 -I tools/cps046b_route.py check --inventory SOURCE_INVENTORY.json --response response.json
 ```
 
-- `invalid` violations are structural defects, such as an unknown or wrong-case reference, a missing proof, a wrong type, a mismatched unit or quantity, a missing role, or a duplicate role. Correct the response from the source, not by deleting meaning.
+- `invalid` violations are structural defects, such as an unknown or wrong-case reference, a missing proof, a wrong type, a mismatched unit or quantity, a missing role, a duplicate role, or a content cell that no item uses. Correct the response from the source, not by deleting meaning.
+- `field_must_be_null` violations mean the cited source cannot be carried for that field. Examples: a quantity written as text with a unit or with full-width digits, a date-typed or error cell, or a non-L field proven only by context. Set that field null, or that raw selection empty, with a specific reason. The source cell stays in the census.
 - `unrepresentable_hold` violations mean a true answer cannot be carried by the admitted writer. Examples: a value that begins with `-`, `=`, `+` or `@`; a held component link; a non-L field proven only by context. Do not change a true value to make one disappear. Keep it, explain it in `limitations`, and return the response. The export is then held, and that outcome is recorded honestly.
 - A passing check proves structure only. It is not semantic approval.
 

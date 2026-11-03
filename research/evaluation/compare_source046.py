@@ -37,6 +37,7 @@ def main():
     assert sha(a.expectations) == a.expectations_sha and sha(a.release) == a.release_sha
     expected = m.load(a.expectations)
     assert expected['status'] == 'FROZEN_BEFORE_MODEL_INVOCATION'
+    assert expected['case_id'] == expected['carrier_contract']['case_id']
     release = m.load(a.release)
     assert release['both_outcomes_frozen'] is True and expected['case_id'] in release['case_ids'] and a.run in release['allowed_runs']
     assert release['reserved_answers_opened'] is False

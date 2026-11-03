@@ -3,7 +3,7 @@
   "candidate": "046b",
   "parent_candidate": "046a",
   "parent_manifest_sha256": "6448cd3dab2d061cdd52ee1f9c26c41376b05ec7daf9339a686b6dca2344e60d",
-  "status": "DRAFT_UNDER_INDEPENDENT_REVIEW",
+  "status": "DRAFT_FIXES_UNDER_CONFIRMATION_REVIEW",
   "target_runtime": "User-proposed sol6.1/xhigh is not selectable from Claude Code; every run records the actual model, effort and tools.",
   "files": [
     {
@@ -18,13 +18,13 @@
     },
     {
       "path": "resources/EXAMPLE_INVENTORY.json",
-      "bytes": 68419,
-      "sha256": "cf58da2430d4801cfece00dde9c859d502cbe16c17f82e4e5ff7ea70ddaa420d"
+      "bytes": 53447,
+      "sha256": "ba31092c745e9b3f12fe7ead7c889758b348c3c3e26f1f2d8b0fc254f4f68d09"
     },
     {
       "path": "resources/EXAMPLE_RESPONSE.json",
-      "bytes": 30762,
-      "sha256": "9df6301ace00e1cb0c51ac95e9848bfbf2a5e6a4c407ae12e567233ca14a62d8"
+      "bytes": 32740,
+      "sha256": "ea4d7bad31dba1c2dd51e6ee5a698e9dadfc5746ea8d09c0265c501b4318325f"
     },
     {
       "path": "resources/FIELD_ROLES.md",
@@ -43,8 +43,8 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 4558,
-      "sha256": "f9b6c79f405dca0d03298da80a6487148245de608e50462e14d1926b9e9188e3"
+      "bytes": 5189,
+      "sha256": "98310e04e46db2ba9d913e9c41302f2bd552d174f795b5a8d9467d6d84a1e409"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
@@ -68,8 +68,8 @@
     },
     {
       "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 11849,
-      "sha256": "ef56550012687f479ded5b204377ec7dcec5f5067cc8b69c1e4e88a1fee75695"
+      "bytes": 14503,
+      "sha256": "8b7c1c963dd1be5c70c1e9a86cefc93d5891ce4b1f80dd5a35cfb4de33dc8c9a"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
@@ -78,11 +78,11 @@
     },
     {
       "path": "tools/cps046b_route.py",
-      "bytes": 38086,
-      "sha256": "e0261b969036c9301a50b6a3166f8cc728fea52ccd739aaf420385e147afa786"
+      "bytes": 59644,
+      "sha256": "2945e7264d88d525723f5cb7242253a220708239073b7194171a33fc6d781484"
     }
   ],
-  "utf8_bytes": 222853,
+  "utf8_bytes": 234702,
   "manifest_self_excluded": true,
   "deployment_approved": false
 }

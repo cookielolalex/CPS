@@ -2,7 +2,7 @@
  "schema": "cps.semantic-source-refs.v2",
  "case_id": "FIXTURE01",
  "family_id": "FIXTURE01",
- "inventory_sha256": "cf58da2430d4801cfece00dde9c859d502cbe16c17f82e4e5ff7ea70ddaa420d",
+ "inventory_sha256": "ba31092c745e9b3f12fe7ead7c889758b348c3c3e26f1f2d8b0fc254f4f68d09",
  "status": "partial",
  "groups": [
   {
@@ -101,17 +101,17 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
      "refs": [
       "cell:S1!A15"
      ],
      "transformation": "text after label",
-     "role_basis": "explicit supplier label"
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -125,24 +125,24 @@
       "cell:S1!A13"
      ],
      "transformation": "text after label",
-     "role_basis": "explicit ordering-customer label"
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
      "refs": [
       "cell:S1!A14"
      ],
      "transformation": "text after label",
-     "role_basis": "explicit using-unit label"
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
      "refs": [
       "cell:S1!A16"
      ],
      "transformation": "text after label",
-     "role_basis": "explicit required-date label"
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -199,7 +199,7 @@
    "status": "research_draft",
    "values": [
     "示例控制盤",
-    null,
+    "W600×H800×D300",
     "三段式選擇開關",
     null,
     "個",
@@ -208,11 +208,11 @@
     null,
     null,
     null,
-    null,
+    "示例電機行",
     "FIXTURE01",
-    null,
-    null,
-    null,
+    "示例自來水處",
+    "示例淨水場",
+    "2026-12-01",
     null,
     null
    ],
@@ -225,7 +225,11 @@
      "role_basis": "group heading"
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!C3"
+     ],
+     "transformation": "copied group specification",
+     "role_basis": "group heading dimension"
     },
     "C": {
      "refs": [
@@ -235,7 +239,7 @@
      "role_basis": "functional switch name"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -258,13 +262,17 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A15"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -274,16 +282,28 @@
      "role_basis": "selected internal case identity, not a printed code"
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A13"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A14"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A16"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -339,7 +359,7 @@
    "status": "research_draft",
    "values": [
     "示例控制盤",
-    null,
+    "W600×H800×D300",
     "盤體組立費",
     null,
     "式",
@@ -348,11 +368,11 @@
     null,
     null,
     null,
-    null,
+    "示例電機行",
     "FIXTURE01",
-    null,
-    null,
-    null,
+    "示例自來水處",
+    "示例淨水場",
+    "2026-12-01",
     null,
     null
    ],
@@ -365,7 +385,11 @@
      "role_basis": "group heading"
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!C3"
+     ],
+     "transformation": "copied group specification",
+     "role_basis": "group heading dimension"
     },
     "C": {
      "refs": [
@@ -375,7 +399,7 @@
      "role_basis": "service line"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -398,13 +422,17 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A15"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -414,16 +442,28 @@
      "role_basis": "selected internal case identity, not a printed code"
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A13"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A14"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A16"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -488,20 +528,20 @@
     null,
     null,
     null,
-    null,
+    "示例電機行",
     "FIXTURE01",
-    null,
-    null,
-    null,
+    "示例自來水處",
+    "示例淨水場",
+    "2026-12-01",
     null,
     null
    ],
    "proofs": {
     "A": {
-     "reason": "Column A: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group."
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
     },
     "C": {
      "refs": [
@@ -511,7 +551,7 @@
      "role_basis": "product noun"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -534,13 +574,17 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A15"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -550,16 +594,28 @@
      "role_basis": "selected internal case identity, not a printed code"
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A13"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A14"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A16"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -622,20 +678,20 @@
     null,
     null,
     null,
-    null,
+    "示例電機行",
     "FIXTURE01",
-    null,
-    null,
-    null,
+    "示例自來水處",
+    "示例淨水場",
+    "2026-12-01",
     null,
     null
    ],
    "proofs": {
     "A": {
-     "reason": "Column A: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group."
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
     },
     "C": {
      "refs": [
@@ -645,7 +701,7 @@
      "role_basis": "product noun"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -668,13 +724,17 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A15"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -684,16 +744,28 @@
      "role_basis": "selected internal case identity, not a printed code"
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A13"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A14"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A16"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -758,20 +830,20 @@
     null,
     "FM-100",
     "示例儀器",
-    null,
+    "示例電機行",
     "FIXTURE01",
-    null,
-    null,
-    null,
+    "示例自來水處",
+    "示例淨水場",
+    "2026-12-01",
     2,
     null
    ],
    "proofs": {
     "A": {
-     "reason": "Column A: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group."
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
     },
     "C": {
      "refs": [
@@ -781,7 +853,7 @@
      "role_basis": "product noun"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -818,7 +890,11 @@
      "role_basis": "explicit brand label"
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A15"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -828,13 +904,25 @@
      "role_basis": "selected internal case identity, not a printed code"
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A13"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A14"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A16"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
      "refs": [
@@ -906,26 +994,26 @@
     null,
     null,
     null,
-    null,
+    "示例電機行",
     "FIXTURE01",
-    null,
-    null,
-    null,
+    "示例自來水處",
+    "示例淨水場",
+    "2026-12-01",
     null,
     null
    ],
    "proofs": {
     "A": {
-     "reason": "Column A: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group."
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
     },
     "C": {
      "reason": "Only a document pointer; no supplied object is identified."
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -948,13 +1036,17 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A15"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level supplier label"
     },
     "L": {
      "refs": [
@@ -964,16 +1056,28 @@
      "role_basis": "selected internal case identity, not a printed code"
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A13"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level ordering-customer label"
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A14"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level using-unit label"
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "refs": [
+      "cell:S1!A16"
+     ],
+     "transformation": "text after label",
+     "role_basis": "explicit project-level required-date label"
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -1035,7 +1139,7 @@
     null,
     null,
     null,
-    "FIXTURE01",
+    null,
     null,
     null,
     null,
@@ -1044,10 +1148,10 @@
    ],
    "proofs": {
     "A": {
-     "reason": "Column A: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group."
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
     },
     "C": {
      "refs": [
@@ -1057,7 +1161,7 @@
      "role_basis": "analysis component name"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "refs": [
@@ -1080,32 +1184,28 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "reason": "Supplier role is project-level and not asserted on analysis composition rows."
     },
     "L": {
-     "refs": [
-      "context:case_identity"
-     ],
-     "transformation": "copied selected internal case identity",
-     "role_basis": "selected internal case identity, not a printed code"
+     "reason": "Engineering identity is not asserted on analysis composition rows."
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "reason": "Ordering-customer role is project-level and not asserted on analysis composition rows."
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "reason": "Using-customer role is project-level and not asserted on analysis composition rows."
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "reason": "Required date is project-level and not asserted on analysis composition rows."
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -1176,10 +1276,10 @@
    ],
    "proofs": {
     "A": {
-     "reason": "Column A: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group."
     },
     "B": {
-     "reason": "Column B: no source-supported value for this item at this stage."
+     "reason": "Item is not inside an explicitly identified panel group, so no group specification applies."
     },
     "C": {
      "refs": [
@@ -1189,7 +1289,7 @@
      "role_basis": "analysis component name"
     },
     "D": {
-     "reason": "Column D: no source-supported value for this item at this stage."
+     "reason": "No separable technical specification text in this item."
     },
     "E": {
      "reason": "Per-unit basis unit is carried by the component link, not as a demand unit."
@@ -1204,28 +1304,28 @@
      "reason": "Procurement extended price is blank at the 未填 stage."
     },
     "I": {
-     "reason": "Column I: no source-supported value for this item at this stage."
+     "reason": "No source-supported model role in this item."
     },
     "J": {
-     "reason": "Column J: no source-supported value for this item at this stage."
+     "reason": "No source-supported brand role in this item."
     },
     "K": {
-     "reason": "Column K: no source-supported value for this item at this stage."
+     "reason": "Supplier role is project-level and not asserted on analysis composition rows."
     },
     "L": {
-     "reason": "Engineering identity is not asserted on analysis-only composition rows."
+     "reason": "Engineering identity is not asserted on analysis composition rows."
     },
     "M": {
-     "reason": "Column M: no source-supported value for this item at this stage."
+     "reason": "Ordering-customer role is project-level and not asserted on analysis composition rows."
     },
     "N": {
-     "reason": "Column N: no source-supported value for this item at this stage."
+     "reason": "Using-customer role is project-level and not asserted on analysis composition rows."
     },
     "O": {
-     "reason": "Column O: no source-supported value for this item at this stage."
+     "reason": "Required date is project-level and not asserted on analysis composition rows."
     },
     "P": {
-     "reason": "Column P: no source-supported value for this item at this stage."
+     "reason": "No explicit required/ordering quantity is stated for this item; F is not copied."
     },
     "Q": {
      "reason": "Source adoption is unverified, so no accepted contract rate can be asserted."
@@ -1346,6 +1446,7 @@
     "cell:S1!D6",
     "cell:S1!E6",
     "cell:S1!F6",
+    "cell:S1!G6",
     "cell:S1!B7",
     "cell:S1!C7",
     "cell:S1!D7",
@@ -1378,10 +1479,9 @@
   {
    "role": "commercial_note",
    "refs": [
-    "cell:S1!G6",
     "cell:S1!B10"
    ],
-   "reason": "no-estimate remark and freight note"
+   "reason": "standalone freight note outside any item"
   },
   {
    "role": "financial_summary",
