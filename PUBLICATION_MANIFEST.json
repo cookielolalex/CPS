@@ -1051,6 +1051,156 @@
       "path": "research/guideline046_004/LARGE_WORKBOOK_DESIGN.md",
       "bytes": 5380,
       "sha256": "71659bd5b32a9ed38885bb62acc8914028bc7248732d2b73de82dcd1b904cb0b"
+    },
+    {
+      "path": "research/guideline046_005/DECISIONS_OWNER_O5_O9.md",
+      "bytes": 2439,
+      "sha256": "4b4374edbf9fc3b84c144af459656479e57258380474c70467cba9a5c36c5777"
+    },
+    {
+      "path": "research/guideline046_005/harness/EVALUATOR_BRIEF_TEMPLATE.md",
+      "bytes": 3750,
+      "sha256": "b05bab333e372ad8303c0708165124046dc24844c981f225e5914acb266c9461"
+    },
+    {
+      "path": "research/guideline046_005/harness/GENERATOR_PROMPT_TEMPLATE.md",
+      "bytes": 1933,
+      "sha256": "1dc75fb6dc37224bfd6621afc4483bf911c7f1446e13bb7412143120758c3683"
+    },
+    {
+      "path": "research/guideline046_005/harness/audit_transcript.py",
+      "bytes": 4039,
+      "sha256": "4fe2eee2ff078b4092c71fa7a0eda436f2d33b2fa2fda47b0529584ee137dde9"
+    },
+    {
+      "path": "research/guideline046_005/harness/freeze_admission.py",
+      "bytes": 1451,
+      "sha256": "89c29f78df38e6344cc66b888b740577234bc7e6ec67f83f96b041736ef4817b"
+    },
+    {
+      "path": "research/guideline046_005/harness/freeze_outputs.py",
+      "bytes": 1928,
+      "sha256": "0f1f85ca8400219a60f7c1e71fe6c645bdc784ab67f146e356173d35da691c7b"
+    },
+    {
+      "path": "research/guideline046_005/harness/fullpath_check.py",
+      "bytes": 1209,
+      "sha256": "6e2ff9236a88b17aa41d593145fa85250f6c67fcc19b22d352fb6b66a86fc2b2"
+    },
+    {
+      "path": "research/guideline046_005/harness/make_release.py",
+      "bytes": 2173,
+      "sha256": "4143196e0c911f9de5d342ddc1dabc463868a5f74195c8ff21a3cf31d778be85"
+    },
+    {
+      "path": "research/guideline046_005/harness/prepare_run.py",
+      "bytes": 2095,
+      "sha256": "2f0382525377d3ef66ec102460f78c4dd38b75086e3bd95bb8b0cadbc8a289cd"
+    },
+    {
+      "path": "research/guideline046_005/package/CPS_GUIDELINE.md",
+      "bytes": 9467,
+      "sha256": "df3246b4783ff9162249f40648fe48647748c5d80f6c7b79c8e9fafffbdcecf2"
+    },
+    {
+      "path": "research/guideline046_005/package/PACKAGE_MANIFEST.json",
+      "bytes": 3227,
+      "sha256": "b2c5177a480803d2b3c31240286b6494c3e0a6fbf0d65c4dcd5f2cf411aa4ab5"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/COLUMNS.json",
+      "bytes": 1497,
+      "sha256": "550fd6c36d710e79d5a4877c4019643d658f1657808c569a6e8c478df597142e"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/EXAMPLE_INVENTORY.json",
+      "bytes": 53469,
+      "sha256": "b72e8496de2d7df2a8db149c847198ed6ffa1843d27558e19a3b7dba96e0c8de"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/EXAMPLE_RESPONSE.json",
+      "bytes": 38251,
+      "sha256": "fa3400d4360404bcd4ada0a49febc6f667f85b298e688ae86d72157d8a415567"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/FIELD_ROLES.md",
+      "bytes": 35029,
+      "sha256": "44c993dd1f0ac84a675267ffc51167cb3d2884cc7276af78c682472ae3bb4bed"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/NAME_POLICY.json",
+      "bytes": 1186,
+      "sha256": "dc9605cc473100e9c358a8c3668d998db961d0914e7a08a22c198a33748dfd8b"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/NAMING_RULES.md",
+      "bytes": 7055,
+      "sha256": "d3c84312371a25f387fbb114a7e63af8005676566bc3e9472ee70866a30b1fc2"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/OUTPUT_CONTRACT.md",
+      "bytes": 5750,
+      "sha256": "134f4557b02e6583762e1ccb626d25a537fe0a97973d640691fa096f6fefce76"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/REVIEW_CHECKLIST.md",
+      "bytes": 3300,
+      "sha256": "c3872bf6eef23f6306fb71695d7760d5435bb1d572972fc63135f923a2e3bf63"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/SEMANTIC_RESPONSE.schema.json",
+      "bytes": 15920,
+      "sha256": "81f9a20fabcdb5532c20ef79c515085350dde4000883c5d6f8e79c44dd28262e"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/SOURCE_INVENTORY.schema.json",
+      "bytes": 9247,
+      "sha256": "9250f130e7c8bca66a755ca6ade1c02a3f028db204ad1729fca844f0fc785358"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/SOURCE_READING.md",
+      "bytes": 4685,
+      "sha256": "11baafe0652775097bb239a628848986000ca68eb916fc68d988ac4383ec1456"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/SOURCE_REFERENCE_CONTRACT.md",
+      "bytes": 15420,
+      "sha256": "8b6563bc3082dd41712e5b84eb62aba7038d825043a3bea84a2aba52b29f76ce"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/SYNTHETIC_ALLOCATION_CASES.json",
+      "bytes": 22294,
+      "sha256": "02a308ad944340dd7759f105a38584c52d012d794a064c60e3c278804640ab34"
+    },
+    {
+      "path": "research/guideline046_005/package/resources/SYNTHETIC_NAMING_CASES.json",
+      "bytes": 9630,
+      "sha256": "54b50b9fc2d1faf188dd703532d7b1594923b0757df3a55f577a4a2148c6bebf"
+    },
+    {
+      "path": "research/guideline046_005/package/tools/cps046b_route.py",
+      "bytes": 60009,
+      "sha256": "2fe20e8faa01d1ec1b769c6f2f9e998d388522139c3304aa241a4af064b4f7dd"
+    },
+    {
+      "path": "research/guideline046_005/route_tests/make_fixtures.py",
+      "bytes": 35244,
+      "sha256": "508960ebe5e36d823c6de1eb42d0dbe34e0132006d0c9a39e10b4722b9b5783e"
+    },
+    {
+      "path": "research/guideline046_005/route_tests/parity_batch.mjs",
+      "bytes": 622,
+      "sha256": "26c8aafb8ca43c7ca1d110421b3d862c555d606038972708b788231a014675f4"
+    },
+    {
+      "path": "research/guideline046_005/route_tests/run_route_tests.py",
+      "bytes": 21493,
+      "sha256": "3981850e06c924af3a2a31e8a2510990083d6194841c5b0b33c5c111f65452d6"
+    },
+    {
+      "path": "research/guideline046_005/route_tests/test_compare_source047.py",
+      "bytes": 5702,
+      "sha256": "0cebb9e61fcc49108fcf7b4bd80699fd74b2517e4cd4ea786e43c3f569961a15"
     }
   ]
 }
