@@ -20,7 +20,12 @@ Metric (declared before any qualification run; changes need a new version and re
   normalized: strings NFKC-folded, internal whitespace runs collapsed to one space, outer whitespace
   trimmed; numbers and numeric text compared as decimals; dates as ISO yyyy-mm-dd; empty -> null.
   strict: strings trimmed only; numbers compared as decimals; text never equals a number.
-  Deployment reading (O12): a case "matches" at score >= 0.95 in the governing mode. Row recall,
+  v2 (owner decision O19): C and D are excluded from the governing score. They are scored separately
+  as ONE description position per row: C+D joined, NFKC, all whitespace and the punctuation
+  ，,、;；:：()（）[]【】/ removed, a leading 產品 dropped; equal strings match. A target row with no
+  partner, or a CPS row with no partner, counts as a description miss when non-empty. The
+  description rate is reported with the secondary target 0.75.
+  Deployment reading (O12, O19): a case "matches" at score >= 0.95 in the governing mode. Row recall,
   row precision and per-field rates are diagnostics.
 Usage: python3 -I -B compare_target048.py --target T.xlsx --target-sha HEX --carrier C.json
        --carrier-sha HEX --out OUT.json
@@ -33,8 +38,9 @@ LABELS = ['盤體名稱', '盤體規格', '材料名稱', '規格', '單位', '�
           '工程編號', '訂購客戶', '使用客戶', '需要日期', '需要數量', '合約價']
 COLS = 'ABCDEFGHIJKLMNOPQ'
 JOB_LEVEL = [i for i, c in enumerate(COLS) if c in 'KLMNO']
-SCORED = [i for i, c in enumerate(COLS) if c not in 'GHKLMNO']
-VERSION = 'cps.target-comparison048.v1.2'
+SCORED = [i for i, c in enumerate(COLS) if c not in 'GHKLMNOCD']
+DESC = (2, 3)
+VERSION = 'cps.target-comparison048.v2'
 
 
 def sha(p):
@@ -145,6 +151,27 @@ def align(T, C):
     return pairs
 
 
+DESC_PUNCT = re.compile(r'[\s，,、;；:：()（）\[\]【】/]')
+
+
+def desc_key(row):
+    t = (text_of(norm(row[2], 'normalized')) + text_of(norm(row[3], 'normalized')))
+    t = DESC_PUNCT.sub('', unicodedata.normalize('NFKC', t))
+    return t[2:] if t.startswith('產品') else t
+
+
+def desc_score(T, C, pairs):
+    pt = {i for i, _, _ in pairs}; pc = {j for _, j, _ in pairs}
+    matched = counted = 0
+    for i, j, _ in pairs:
+        a, b = desc_key(T[i]), desc_key(C[j])
+        if a or b:
+            counted += 1; matched += int(a == b)
+    counted += sum(1 for i in range(len(T)) if i not in pt and desc_key(T[i]))
+    counted += sum(1 for j in range(len(C)) if j not in pc and desc_key(C[j]))
+    return {'matched': matched, 'counted': counted, 'rate': (matched / counted) if counted else None, 'target': 0.75}
+
+
 def score(T, C, pairs, mode):
     pt = {i for i, _, _ in pairs}
     pc = {j for _, j, _ in pairs}
@@ -196,9 +223,11 @@ def evaluate(target_path, carrier):
            'unpaired_target_rows': [tg['rows'][i]['row'] for i in range(len(T)) if i not in {p[0] for p in pairs}],
            'unpaired_cps_ids': [carrier['items'][j]['id'] for j in range(len(C)) if j not in {p[1] for p in pairs}],
            'pairs': [{'target_row': tg['rows'][i]['row'], 'cps_id': carrier['items'][j]['id'], 'similarity': round(s, 4)} for i, j, s in pairs],
-           'modes': {m: score(T, C, pairs, m) for m in ('normalized', 'strict')}}
+           'modes': {m: score(T, C, pairs, m) for m in ('normalized', 'strict')},
+           'description_cd': desc_score(T, C, pairs)}
     g = out['modes']['normalized']['score']
-    out['governing'] = {'mode': 'normalized', 'score': g, 'threshold': 0.95, 'case_matches_at_95': (g is not None and g >= 0.95)}
+    out['governing'] = {'mode': 'normalized', 'score': g, 'threshold': 0.95, 'case_matches_at_95': (g is not None and g >= 0.95),
+                        'description_cd_rate': out['description_cd']['rate'], 'description_target_0_75_met': (out['description_cd']['rate'] or 0) >= 0.75}
     return out
 
 

@@ -1259,8 +1259,8 @@
     },
     {
       "path": "research/evaluation/compare_target048.py",
-      "bytes": 10933,
-      "sha256": "b6a525beea30fbd00473981f13b72870f9e334abb120d5c529a3a4bc273c0261"
+      "bytes": 12442,
+      "sha256": "98a30acfaf6b10ede3e81a55a721741f2c7ac701925ce052bfc4ced1f7af73d6"
     },
     {
       "path": "docs/handoff/DIAGNOSTIC_HISTORICAL_MATCH.md",
@@ -1451,6 +1451,11 @@
       "path": "research/guideline046_005/STUDY_PHRASEBOOK_20261104.md",
       "bytes": 2085,
       "sha256": "d5454c18ec2886794fb8ff55897c69e935c1155e0f8c1537581b409a4c5d5cea"
+    },
+    {
+      "path": "research/guideline046_005/DECISIONS_OWNER_O19_O20.md",
+      "bytes": 1246,
+      "sha256": "70188c1cee6ba778a29c8e6ba5e316df5c12cc2a5460cd7748ea3b5e1cb10d39"
     }
   ]
 }

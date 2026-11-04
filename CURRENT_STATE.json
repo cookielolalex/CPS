@@ -289,7 +289,11 @@
   "O13": "M/N/L from per-job inputs",
   "O14": "company brand/model table resource (owner-reviewed, from non-reserved 未填)",
   "O15": "abbreviation glossary resource for C (owner-reviewed)",
-  "O16": "Q = quoted unit price; I=J=不含估價 on not-estimated lines; enclosure row A/B/J per creator"
+  "O16": "Q = quoted unit price; I=J=不含估價 on not-estimated lines; enclosure row A/B/J per creator",
+  "O17": "company 材料清單 is a job input (brand table is fallback)",
+  "O18": "breaker brand fallback = most common",
+  "O19": "95% excludes C/D wording; C/D scored as one description with target 0.75",
+  "O20": "acronym alone in C (reverses O8)"
  },
  "portable_writer": {
   "path": "research/export",
