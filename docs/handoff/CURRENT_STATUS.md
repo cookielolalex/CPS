@@ -1,3 +1,27 @@
+# Current status — 2026-11-04, later (046f trial done; qualification screen done)
+
+**Not deployment-ready.** The gate is 95% match with the creator's historical 未填 (O12, O19), on 30 independently eligible pairs including 10 reserved, drawn from 113–115 current-template targets only (O21, O22).
+
+- **Candidate 046f** (`research/guideline046_006/`) is frozen (manifest `5f5502a7…`), reviewed and approved after two rounds. Route v4.2 passes 221/221.
+- **046f development trial** on five exposed tuning cases ([RESULTS_046F_DEV.md](RESULTS_046F_DEV.md)):
+  - Governing scores were 0.985, 0.962, 0.942, 0.928, and 0.585. The last case is an old-template target, now excluded under O21.
+  - Readers A and B produced identical results, with 0 critical errors.
+  - The trial earns no eligibility credit.
+- **Portable writer** (`research/export/`) has a review verdict of ADMIT_AFTER_LISTED_FIXES. The S1–S4 hardening is in progress. It is not admitted yet, so visual QA has not run.
+- **Qualification screen** ([QUALIFICATION_SCREEN_20261104.md](QUALIFICATION_SCREEN_20261104.md)):
+  - Of 22 non-reserved candidates, 10 are eligible now, 10 are large workbooks that need a reviewed scope method, and 2 are old-template and ineligible.
+  - Reaching 20 non-reserved pairs needs all 20 current-template candidates, with no margin.
+  - Family independence has not been established; that review is running.
+  - 21 reserved cases are in scope, with templates checked only after all outputs are frozen.
+- **Next:**
+  1. Finish the writer hardening, then confirm and admit it.
+  2. Finish the family review.
+  3. Run a structure study of large 材料清單 files on exposed tuning cases.
+  4. Build candidate 046g: the scope stage for large workbooks, glossary category words, R52 matching after a qualifier, the equipment test, and enclosure A naming. Then review it and run a regression on the dev cases.
+  5. Run qualification. Reserved targets stay closed until all outputs are frozen.
+
+---
+
 # Current status — 2026-11-04 (calibrating CPS to the historical 未填 creator)
 
 **Not deployment-ready.** The owner reset the goal: CPS must match the creator's historical 未填 at 95% (owner decisions O10–O20 in `research/guideline046_005/DECISIONS_OWNER_*.md`). The studies behind this are in `research/guideline046_005/STUDY_*.md`.

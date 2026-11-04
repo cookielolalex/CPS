@@ -324,5 +324,18 @@
   "critical_errors": 0,
   "saved_qa": "10/10 pass (portable writer v2.2, not admitted)",
   "eligibility_credit": 0
+ },
+ "qualification_screen_2026_11_04": {
+  "record": "docs/handoff/QUALIFICATION_SCREEN_20261104.md",
+  "scope": "113-115 (O22), current template (O21), 材料清單 job input (O17)",
+  "non_reserved_candidates": 22,
+  "eligible_ordinary_size": 10,
+  "large_needs_scope_method": 10,
+  "ineligible_old_template": 2,
+  "family_independence": "not established; review running (10 flagged by project-series name overlap)",
+  "reserved_in_scope": 21,
+  "reserved_template_check": "closed until all outputs frozen",
+  "reachable_non_reserved": "20 only with the large-workbook scope method admitted and all 20 independent; 10 without it",
+  "eligibility_credit_so_far": 0
  }
 }
