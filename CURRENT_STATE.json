@@ -308,5 +308,19 @@
   "review": "research/guideline046_006/REVIEW_046f.md",
   "route": "cps046f-route.v4.2",
   "writer": "research/export writer_portable v2.2 (not admitted)"
+ },
+ "latest_trials_046f_dev": {
+  "results": "docs/handoff/RESULTS_046F_DEV.md",
+  "governing": {
+   "1130803": 0.985,
+   "1140506": 0.962,
+   "1131202": 0.942,
+   "1141002": 0.928,
+   "1130204": 0.585
+  },
+  "readers_identical": true,
+  "critical_errors": 0,
+  "saved_qa": "10/10 pass (portable writer v2.2, not admitted)",
+  "eligibility_credit": 0
  }
 }
