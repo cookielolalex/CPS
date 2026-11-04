@@ -10,8 +10,10 @@ Metric (declared before any qualification run; changes need a new version and re
   admitted only when its similarity is >= 0.5. Similarity = 0.7*sim(C+' '+D) + 0.15*eq(E) + 0.15*eq(F)
   on normalized values (C and D joined so the creator's C/D split does not block alignment), where sim
   is difflib's ratio and eq is 1/0.
-  Fields. The 15 positions A–F and I–Q are scored; G and H (stage blanks) are reported but not
-  scored. For an aligned pair, a position counts when either side is non-null; it matches when the
+  Fields. The 10 item positions A–F, I, J, P and Q are scored per row; G and H (stage blanks) are
+  reported but not scored. K, L, M, N and O are job-level identifiers (the creator writes them on
+  every row in later files and on the first row only in older files): each is scored once per case
+  as one position, the target's modal non-null value against the CPS modal non-null value (v1.2). For an aligned pair, a position counts when either side is non-null; it matches when the
   normalized values are equal. A target row with no partner contributes each non-null position as a
   miss; a CPS row with no partner contributes each non-null position as an error.
   Score = matched / counted (per case). The governing mode is `normalized`; `strict` is reported.
@@ -30,8 +32,9 @@ from pathlib import Path
 LABELS = ['盤體名稱', '盤體規格', '材料名稱', '規格', '單位', '數量', '單價', '複價', '型號', '廠牌', '訂購廠商',
           '工程編號', '訂購客戶', '使用客戶', '需要日期', '需要數量', '合約價']
 COLS = 'ABCDEFGHIJKLMNOPQ'
-SCORED = [i for i, c in enumerate(COLS) if c not in 'GH']
-VERSION = 'cps.target-comparison048.v1.1'
+JOB_LEVEL = [i for i, c in enumerate(COLS) if c in 'KLMNO']
+SCORED = [i for i, c in enumerate(COLS) if c not in 'GHKLMNO']
+VERSION = 'cps.target-comparison048.v1.2'
 
 
 def sha(p):
@@ -167,6 +170,15 @@ def score(T, C, pairs, mode):
             for k in SCORED:
                 if norm(C[j][k], mode) is not None:
                     counted += 1; per[COLS[k]][1] += 1
+    for k in JOB_LEVEL:
+        tv = [norm(r[k], mode) for r in T if norm(r[k], mode) is not None]
+        cv = [norm(r[k], mode) for r in C if norm(r[k], mode) is not None]
+        if not tv and not cv:
+            continue
+        tm = max(set(tv), key=tv.count) if tv else None
+        cm = max(set(cv), key=cv.count) if cv else None
+        counted += 1; per[COLS[k]] = [int(tm == cm), 1]
+        matched += int(tm == cm)
     return {'matched': matched, 'counted': counted, 'score': (matched / counted) if counted else None,
             'per_field': {k: {'matched': v[0], 'counted': v[1]} for k, v in per.items()},
             'cps_GH_nonnull_on_paired_rows': gh_nonnull}
