@@ -165,7 +165,7 @@ What the tests prove:
   - a carrier without O13/R57 (plain, and Q only) gives the same bytes in v1 and v2;
   - each invalid v2 variant is refused at the expected stage with the expected code, and a route tool with a different `VERSION` is refused.
 
-Latest run (2026-11-04, route v4.1 engineer's run, not a review): RESULTS_PLACEHOLDER
+Latest run (2026-11-04, route v4.1 engineer's run, not a review): 222 of 222 tests passed with visual tests, against the archived writer004 original, with 11 valid and 21 invalid v1 fixtures and 11 valid and 17 invalid v2 fixtures. The same suite without visual tests passed 211 of 211 against the public writer004 copy. Both runs used writer_portable.py `60783149…ac7f` (`cps-export-writer-portable.v2.1`), saved_qa.py `4db50b42…e89c`, visual_qa.py `ebfcb352…d59a`, writer004_matrices.mjs `028dbdae…b3f8` and route v4.1 `cps046b_route.py` `40639537…104e`.
 
 Earlier runs: 2026-11-04 before route v4.1, 169 of 169 with visual tests (writer v2.0, route v4 `b01f34f5…fdfd`); 2026-11-03, before mode v2, 118 of 118.
 
