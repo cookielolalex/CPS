@@ -1271,6 +1271,11 @@
       "path": "research/guideline046_005/STUDY_SUPPLY_MARKERS_20261104.md",
       "bytes": 2596,
       "sha256": "7cab11996c0a71ad05ddfe7e43a4e95dfe535f2e4179dbc15be3907f541e7a46"
+    },
+    {
+      "path": "research/guideline046_005/STUDY_CREATOR_PRACTICE_20261104.md",
+      "bytes": 4169,
+      "sha256": "8a572568b5b535438278db3fec92d5a928db1880cbfb4badd7428f9953aff951"
     }
   ]
 }
