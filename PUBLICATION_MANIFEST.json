@@ -1266,6 +1266,11 @@
       "path": "docs/handoff/DIAGNOSTIC_HISTORICAL_MATCH.md",
       "bytes": 2413,
       "sha256": "673bf09e3d800a73d3aaaa0dd5004e93881301e033c08c1e11b23505bad02503"
+    },
+    {
+      "path": "research/guideline046_005/STUDY_SUPPLY_MARKERS_20261104.md",
+      "bytes": 2596,
+      "sha256": "7cab11996c0a71ad05ddfe7e43a4e95dfe535f2e4179dbc15be3907f541e7a46"
     }
   ]
 }
