@@ -62,7 +62,7 @@
   "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
   "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2)."
  ],
- "case_count": 30,
+ "case_count": 33,
  "cases": [
   {
    "id": "N01",
@@ -699,6 +699,42 @@
     }
    },
    "reason": "A contract line that states only a model takes the brand from the table entry only when the entry's brand matches the model, that is when the entry lists that model. The 電磁接觸器 entry lists XM-10, so J = its brand."
+  },
+  {
+   "id": "N31",
+   "rule": "R52",
+   "input": {
+    "description": "產品，指示燈類，AC220V 指示燈"
+   },
+   "expected": {
+    "C": null,
+    "D": "AC220V 指示燈"
+   },
+   "reason": "After the prefix and the 類 chain one segment remains, so C null and D = the text (R52 rule 3); with more segments, a noun segment whose first token contains a digit is also C null (rule 4 note)."
+  },
+  {
+   "id": "N32",
+   "rule": "R52",
+   "input": {
+    "description": "產品，RS485電力監視器"
+   },
+   "expected": {
+    "C": null,
+    "D": "RS485電力監視器"
+   },
+   "reason": "A noun segment whose first token contains a digit gives C null and D the text (R52)."
+  },
+  {
+   "id": "N33",
+   "rule": "R52/O20",
+   "input": {
+    "description": "產品，自動切換開關(ATS) 3P160A"
+   },
+   "expected": {
+    "C": "ATS",
+    "D": "3P160A"
+   },
+   "reason": "Acronym alone in C; D keeps the rest after the noun and its acronym (R52 rule 2)."
   }
  ]
 }

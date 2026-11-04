@@ -50,3 +50,8 @@ Build one config per job, for its bound source (R47b): the 材料清單 when the
 - Route v4.2 warns, and does not reject, for the three documented relaxations: `O13_SELECTION_EVIDENCE_M_N` (M/N from job inputs), `R57_NULL_C_RESEARCH_DRAFT` (a null C on a `research_draft` row) and `O16_Q_UNVERIFIED_ADOPTION` (Q under unverified adoption). On a 046f job packet it rejects departures from R48 and the R56 group mechanism as `invalid` (`OUTPUT_CONTRACT.md`, interface point 4) and reports `policy_checks: applied`; a packet built by `make_job_config.py` is always a job packet.
 - The route's `convert` receipt reports each class (`o13_m_n_selection_evidence`, `r57_null_c_research_draft`, `o16_q_unverified_adoption`) and the overall `export_mode_required`; use the overall value. Carriers that need `v2` are exported with `research/export/writer_portable.py --mode v2`; the unchanged writer004 gate refuses them (`SELECTION_ONLY_ENGINEERING_ID`, `UNRESOLVED_ITEM_MUST_BE_HELD`). Mode v2 loads the route port only if its bytes match the sha256 pinned in the writer (`ROUTE_V4_SHA256`). The portable writer is not admitted yet.
 - `freeze_admission.py` still writes the 046b admission schema name; the plan fields in its config name the candidate.
+
+
+## Admission requirement (from the 046f review)
+
+Every 046f generation run must be admitted only for a packet whose `check-inventory` reports `policy_checks: applied` (job-input facts present). Record the value in the admission record. A packet without job-input facts is not a 046f job packet.
