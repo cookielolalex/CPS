@@ -16,8 +16,8 @@ try {
   const {prepareMatrices} = await import(pathToFileURL(args[1]).href);
   const raw = await fs.readFile(args[3]);
   if (raw.length > 20 * 1024 * 1024) throw Object.assign(new Error('INPUT_SIZE_LIMIT'), {code: 'INPUT_SIZE_LIMIT'});
-  // Same decoding as writer004 build(): raw.toString('utf8').replace(/^﻿/, '').
-  const c = JSON.parse(raw.toString('utf8').replace(/^﻿/, ''));
+  // Same decoding as writer004 build(): raw.toString('utf8').replace(/^\ufeff/, '').
+  const c = JSON.parse(raw.toString('utf8').replace(/^\ufeff/, ''));
   const {main, components, links, review} = prepareMatrices(c);
   // writer004: worksheets.add('未填研究草稿'), add('來源與審查'), add('組成參考'), add('組成連結');
   // EXPECTED_SAVED_VALUES order: ws, rs, cs, ls.

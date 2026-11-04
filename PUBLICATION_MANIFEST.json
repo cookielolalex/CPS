@@ -1206,6 +1206,51 @@
       "path": "research/guideline046_005/REVIEW_046e.md",
       "bytes": 3247,
       "sha256": "e8cdf34e573cb771f0f2343e306142595a831aec06696327c368e9e4f9bc836c"
+    },
+    {
+      "path": "research/export/README.md",
+      "bytes": 14524,
+      "sha256": "89df82a7d6e7c2850214341cf6b350c290ad385e6c212996d5ce26f10d916ca9"
+    },
+    {
+      "path": "research/export/saved_qa.py",
+      "bytes": 23367,
+      "sha256": "4db50b4244c38a2fc9b1dd2ad7772f8d5a9db86b03fcd7f76e008f228e1fe89c"
+    },
+    {
+      "path": "research/export/tests/make_export_fixtures.py",
+      "bytes": 10007,
+      "sha256": "716ee0a4472a2e66a3045e34c6d4a0d19a519688d9b092eeae84fea8d0638293"
+    },
+    {
+      "path": "research/export/tests/parity_matrices.mjs",
+      "bytes": 1181,
+      "sha256": "2185770124439cb33edc632058c0272fd2eacc49afa2e58f5184ffb2932320b9"
+    },
+    {
+      "path": "research/export/tests/run_export_tests.py",
+      "bytes": 20166,
+      "sha256": "2c0011e3443e1a976cc074f43bb1c1653d7405d49afbe1a72138b1b772e054d4"
+    },
+    {
+      "path": "research/export/tests/stringify_fuzz.mjs",
+      "bytes": 361,
+      "sha256": "3e8da2da3c4a72c6d8f984f08f401d42a43ede796e8c7eccde9594ef446dc575"
+    },
+    {
+      "path": "research/export/visual_qa.py",
+      "bytes": 16120,
+      "sha256": "ebfcb3527efa2146661bb1305d65c6f03d8d013a43aced3051ce30afa42bd59a"
+    },
+    {
+      "path": "research/export/writer004_matrices.mjs",
+      "bytes": 1984,
+      "sha256": "028dbdae55a9e42c686fbbaf371d956168bf4eeee9cfeea1642f6dda3713b3f8"
+    },
+    {
+      "path": "research/export/writer_portable.py",
+      "bytes": 29759,
+      "sha256": "a20050aed412e8d2b934219d9373e3f5fd7a780bd5a9f42324c689fbf0af4aa0"
     }
   ]
 }

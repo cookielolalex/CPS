@@ -59,11 +59,11 @@ COLOR_TEXT, COLOR_HEADER_FILL, COLOR_HEADER_TEXT, COLOR_PRICE_FILL = '172033', '
 FIXED_TIME = datetime.datetime(1980, 1, 1, 0, 0, 0)
 
 # JavaScript \s (and String.prototype.trim) whitespace: WhiteSpace + LineTerminator.
-JS_WS = '\t\n\x0b\x0c\r                  　﻿'
+JS_WS = '\t\n\x0b\x0c\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
 FORMULA_LIKE_RE = re.compile('^[' + re.escape(JS_WS) + ']*[=+@-]')       # writer004 formulaLike
 ARRAY_INDEX_RE = re.compile(r'(?:0|[1-9][0-9]*)', re.ASCII)
 OOXML_ESCAPE_RE = re.compile(r'_x[0-9A-Fa-f]{4}_')
-XML_ILLEGAL_RE = re.compile('[\u0000-\u0008\u000b\u000c\u000e-\u001f\ud800-\udfff￾￿]')
+XML_ILLEGAL_RE = re.compile('[\u0000-\u0008\u000b\u000c\u000e-\u001f\ud800-\udfff\ufffe\uffff]')
 
 LIMITATIONS = [
     'NOT ADMITTED: research export route; requires an independent review before CPS may use it.',
@@ -208,7 +208,7 @@ def js_parse(raw):
         text = raw.decode('utf-8')
     except UnicodeDecodeError:
         raise Refused('UTF8_REQUIRED', 'parse', 'node would replace invalid bytes with U+FFFD; the portable writer refuses')
-    if text.startswith('﻿'):
+    if text.startswith('\ufeff'):
         text = text[1:]
 
     def parse_int(t):
@@ -394,6 +394,7 @@ def build_workbook(m, n_items):
         for r in range(2, n_items + 2):
             ws.cell(row=r, column=j + 1).fill = price_fill
     wb.active = 0
+    wb.calculation.fullCalcOnLoad = False          # no formulas; do not ask the application to recalculate
     wb.properties.creator = 'CPS writer_portable (openpyxl)'
     wb.properties.created = FIXED_TIME
     wb.properties.modified = FIXED_TIME

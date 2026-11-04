@@ -84,7 +84,7 @@ write('v03_numeric_edges', variant(numeric_edges), note='17-digit doubles, 1e-7,
 
 
 def text_edges(c):
-    set_value(c, 'R002', 'D', 'a\rb\r\nc\td e\x85f﻿g  ')
+    set_value(c, 'R002', 'D', 'a\rb\r\nc\td\u2028e\x85f\ufeffg  ')
     set_value(c, 'R003', 'I', '#N/A')
     set_value(c, 'R003', 'J', '123')
     set_value(c, 'R004', 'I', '#REF!')
@@ -173,8 +173,8 @@ write('i01_minus_value', variant(lambda c: set_value(c, 'R005', 'D', '-20~60℃'
 write('i02_equals_value', variant(lambda c: set_value(c, 'R002', 'D', '=SUM(A1:A2)')), False, 'FORMULA_STRING_FORBIDDEN', G)
 write('i03_plus_value', variant(lambda c: set_value(c, 'R002', 'I', '+886-2-1234')), False, 'FORMULA_STRING_FORBIDDEN', G)
 write('i04_at_value', variant(lambda c: set_value(c, 'R002', 'J', '@vendor')), False, 'FORMULA_STRING_FORBIDDEN', G)
-write('i05_ideographic_space_equals', variant(lambda c: set_value(c, 'R002', 'D', '　=x')), False, 'FORMULA_STRING_FORBIDDEN', G)
-write('i06_bom_minus', variant(lambda c: set_value(c, 'R002', 'D', '﻿-5')), False, 'FORMULA_STRING_FORBIDDEN', G)
+write('i05_ideographic_space_equals', variant(lambda c: set_value(c, 'R002', 'D', '\u3000=x')), False, 'FORMULA_STRING_FORBIDDEN', G)
+write('i06_bom_minus', variant(lambda c: set_value(c, 'R002', 'D', '\ufeff-5')), False, 'FORMULA_STRING_FORBIDDEN', G)
 write('i07_basis_unit_minus', variant(lambda c: item(c, 'C001')['composition'].update(basis_unit='-工')), False, 'FORMULA_STRING_FORBIDDEN', G)
 write('i08_quantity_mismatch', variant(lambda c: item(c, 'R002')['raw'].update(quantity='+4')), False, 'SOURCE_QUANTITY_MISMATCH', G)
 write('i09_purchase_price', variant(lambda c: set_value(c, 'R002', 'G', 1, '1')), False, 'PURCHASE_PRICE_MUST_BE_BLANK', G)
@@ -187,7 +187,7 @@ write('i14_lone_surrogate_value', variant(lambda c: set_value(c, 'R002', 'D', 'a
       ascii_json=True, note='writer004 accepts; the portable writer refuses (not XML-representable in a cell)')
 write('i15_ooxml_escape_value', variant(lambda c: set_value(c, 'R002', 'D', 'AB_x0041_C')), False, 'PORTABLE_UNREPRESENTABLE', 'writability',
       note='writer004 accepts; spreadsheet applications would decode _x0041_ as A')
-write('i16_fffe_in_review', variant(lambda c: item(c, 'R002')['evidence']['C'].update(transformation='a￾b')), False,
+write('i16_fffe_in_review', variant(lambda c: item(c, 'R002')['evidence']['C'].update(transformation='a\ufffeb')), False,
       'PORTABLE_UNREPRESENTABLE', 'writability', note='U+FFFE survives JSON.stringify into a review cell; not an XML character')
 bad = BASE_BYTES.replace('Invented fixture response.'.encode(), b'Invented fixture \xff response.', 1)
 write('i17_invalid_utf8', raw=bad, valid=False, code='UTF8_REQUIRED', stage='parse', note='node decodes with U+FFFD and accepts; the portable writer refuses')

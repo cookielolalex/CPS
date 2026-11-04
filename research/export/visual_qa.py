@@ -15,6 +15,7 @@ Modes
 
 Usage
   python3 -I -B visual_qa.py --xlsx /abs/research-draft.xlsx --dest /abs/new-dir [--mode fit-width|exact] [--dpi 150]
+      [--sheets name1,name2]   (PNG only for those sheets; rendered.pdf keeps every page)
 """
 import argparse, datetime, hashlib, json, os, re, shutil, struct, subprocess, sys, tempfile, zipfile
 from pathlib import Path
@@ -143,7 +144,7 @@ def make_fit_width_copy(src, dst):
 
 
 # ------------------------------------------------------------------ rendering
-def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='pdftoppm', timeout=900, tmp_root=None):
+def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='pdftoppm', timeout=900, tmp_root=None, sheets=None):
     if not xlsx.is_file():
         raise RenderError('XLSX_MISSING')
     if dest.exists():
@@ -181,13 +182,38 @@ def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='p
             c2, info, _ = run(['pdfinfo', str(pdf)], 120)
             m = re.search(r'^Pages:\s+(\d+)', info, re.M)
             pages = int(m.group(1)) if m else None
+        page_sheets = {}
+        if have_pdftotext and names:
+            c4, text, _ = run(['pdftotext', '-layout', str(pdf), '-'], timeout)
+            chunks = text.split('\f')
+            for n, chunk in enumerate(chunks[:pages] if pages else chunks, start=1):
+                head = '\n'.join(chunk.strip('\n').splitlines()[:3])
+                hits = [x for x in names if x in head]
+                page_sheets[n] = max(hits, key=len) if hits else None
+        selected = None
+        if sheets:
+            if not page_sheets or not pages:
+                raise RenderError('SHEET_FILTER_NEEDS_FIT_WIDTH_MODE_PDFINFO_AND_PDFTOTEXT')
+            unknown = [x for x in sheets if x not in names]
+            if unknown:
+                raise RenderError('UNKNOWN_SHEET: ' + ', '.join(unknown))
+            # pages whose sheet could not be read from the page header are kept
+            selected = [n for n in range(1, pages + 1) if page_sheets.get(n) in sheets or page_sheets.get(n) is None]
         images = []
-        render_cmd = None
+        render_cmds = []
         if have_pdftoppm:
-            render_cmd = [pdftoppm, '-r', str(dpi), '-png', str(pdf), str(work / 'page')]
-            c3, o3, e3 = run(render_cmd, timeout, env)
-            if c3 != 0:
-                raise RenderError('PDFTOPPM_FAILED: ' + e3[-500:])
+            ranges = []
+            for n in (selected if selected is not None else []):
+                if ranges and ranges[-1][1] == n - 1:
+                    ranges[-1][1] = n
+                else:
+                    ranges.append([n, n])
+            for rng in (ranges if selected is not None else [None]):
+                rc = [pdftoppm, '-r', str(dpi)] + (['-f', str(rng[0]), '-l', str(rng[1])] if rng else []) + ['-png', str(pdf), str(work / 'page')]
+                render_cmds.append(rc)
+                c3, o3, e3 = run(rc, timeout, env)
+                if c3 != 0:
+                    raise RenderError('PDFTOPPM_FAILED: ' + e3[-500:])
             pngs = sorted(work.glob('page-*.png'), key=lambda p: int(p.stem.split('-')[-1]))
             for p in pngs:
                 n = int(p.stem.split('-')[-1])
@@ -204,13 +230,6 @@ def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='p
             shutil.copyfile(png, dest / 'page-0001.png')
             images.append((1, 'page-0001.png'))
             fallback = True
-        page_sheets = {}
-        if have_pdftotext and names and not fallback:
-            for n, _ in images:
-                c4, text, _ = run(['pdftotext', '-f', str(n), '-l', str(n), '-layout', str(pdf), '-'], 120)
-                head = '\n'.join(text.strip('\n\f').splitlines()[:3])
-                hits = [s for s in names if s in head]
-                page_sheets[n] = max(hits, key=len) if hits else None
     after = xlsx.read_bytes()
     if sha256(after) != sha256(before):
         raise RenderError('SAVED_WORKBOOK_CHANGED_DURING_RENDER')
@@ -231,17 +250,21 @@ def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='p
         'pdf': {'file': 'rendered.pdf', 'sha256': sha256(pdf_bytes), 'pages': pages,
                 'note': 'PDF bytes carry LibreOffice creation metadata and may differ between runs; PNG pixels are the reproducible artifact.'},
         'pages': len(entries), 'images': entries,
-        'page_sheet_mapping': 'from the rendered page header (fit-width mode only)' if page_sheets else None,
+        'sheet_filter': sheets or None,
+        'complete_render': selected is None and not fallback and (pages is None or len(entries) == pages),
+        'page_sheet_mapping': ({str(n): v for n, v in sorted(page_sheets.items())} if page_sheets else None),
+        'page_sheet_mapping_basis': 'sheet name read from the rendered page header (fit-width mode only)' if page_sheets else None,
         'render_tools': {'libreoffice': version([soffice, '--version']), 'pdftoppm': version([pdftoppm, '-v']) if have_pdftoppm else None,
                          'pdfinfo': version(['pdfinfo', '-v']) if have_pdfinfo else None,
                          'pdftotext': version(['pdftotext', '-v']) if have_pdftotext else None, 'fc-match': fonts,
                          'python': sys.version.split()[0]},
         'commands': {'convert': [x if not x.startswith('-env:') else '-env:UserInstallation=<fresh temp profile>' for x in cmd[:-3]] + ['--outdir', '<temp>', '<temp>/render-copy.xlsx'],
-                     'render': (['pdftoppm', '-r', str(dpi), '-png', '<temp>/render-copy.pdf', '<temp>/page'] if render_cmd else 'soffice --convert-to png (first page only)')},
+                     'render': ([[x if not x.startswith(str(tmp)) else '<temp>/' + Path(x).name for x in rc] for rc in render_cmds]
+                                if render_cmds else 'soffice --convert-to png (first page only)')},
         'limitations': (['pdftoppm unavailable: LibreOffice PNG export renders only the first page.'] if fallback else []) + [
             'LibreOffice rendering, not Excel; Arial is substituted by the font fc-match reports.',
             'Rows without explicit height are sized by LibreOffice at load (writer004 autofitRows is not reproduced).',
-        ] + (['fit-width mode: the rendered copy adds print settings that the saved workbook does not contain.'] if mode == 'fit-width' else []),
+        ] + (['--sheets filter: PNGs cover only the selected sheets; rendered.pdf keeps every page.'] if sheets else []) + (['fit-width mode: the rendered copy adds print settings that the saved workbook does not contain.'] if mode == 'fit-width' else []),
         'started': started, 'ended': datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     with open(dest / 'VISUAL_QA_MANIFEST.json', 'x', encoding='utf-8') as f:
@@ -259,13 +282,16 @@ def main(argv=None):
     ap.add_argument('--pdftoppm', default='pdftoppm')
     ap.add_argument('--timeout', type=int, default=900)
     ap.add_argument('--tmp-root')
+    ap.add_argument('--sheets', help='comma-separated sheet names to render as PNG (fit-width mode); default all')
     a = ap.parse_args(argv)
+    sheets = [x for x in a.sheets.split(',') if x] if a.sheets else None
     try:
-        m = render(Path(a.xlsx).resolve(strict=True), Path(a.dest).absolute(), a.mode, a.dpi, a.soffice, a.pdftoppm, a.timeout, a.tmp_root)
+        m = render(Path(a.xlsx).resolve(strict=True), Path(a.dest).absolute(), a.mode, a.dpi, a.soffice, a.pdftoppm, a.timeout, a.tmp_root, sheets)
     except (RenderError, subprocess.SubprocessError, OSError) as e:
         sys.stderr.write(json.dumps({'status': 'RENDER_FAILED', 'error': str(e)[:1000]}) + '\n')
         return 1
-    print(json.dumps({'status': m['status'], 'pages': m['pages'], 'mode': m['mode'], 'dest': a.dest}, ensure_ascii=False))
+    print(json.dumps({'status': m['status'], 'pages_rendered': m['pages'], 'pdf_pages': m['pdf']['pages'], 'complete_render': m['complete_render'],
+                      'mode': m['mode'], 'dest': a.dest}, ensure_ascii=False))
     return 0
 
 
