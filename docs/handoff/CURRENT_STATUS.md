@@ -1,3 +1,22 @@
+# Current status — 2026-11-04 (calibrating CPS to the historical 未填 creator)
+
+**Not deployment-ready.** The owner reset the goal: CPS must match the creator's historical 未填 at 95% (owner decisions O10–O20 in `research/guideline046_005/DECISIONS_OWNER_*.md`). The studies behind this are in `research/guideline046_005/STUDY_*.md`.
+
+- **The 95% bar (O19).** It counts rows and every non-description field. C/D wording is reported separately against a 0.75 target, because the creator's own C/D agrees with her earlier projects only 72–77% of the time.
+- **Inputs.**
+  - The contract, plus the company material list 材料清單 (O17). It carries brand/model on 99.9%/93.7% of her values.
+  - Job inputs for L/M/N (O13).
+  - Owner-reviewed private tables: an abbreviation glossary and a brand table (O14/O15/O18). The drafts were sent to the owner for review.
+- **Reachability.** The studies were simulations, not generated outputs. With the 材料清單, rules and no phrasebook, 14–23 of 39 tuning cases reach ≥0.95 under the O19 metric, and 29–33 reach ≥0.90.
+- **Candidate 046f** (`research/guideline046_006/`) is a draft with creator-practice rules R47b–R58. Two things are in progress: interface relaxations (C null, Q without verified adoption, and L/M/N job-input evidence in route v4 and portable writer v2), and updated examples.
+- **Next:**
+  1. An independent review of 046f.
+  2. A first 046f generation on tuning cases with their 材料清單, measured with `compare_target048.py` v2.
+  3. Then qualification on rolling-validation and reserved cases (30 pairs including 10 reserved), with saved and visual QA through the portable writer once it is reviewed.
+- **Earlier work.** Candidates 046a–046e and the source-only expectation track are kept as history. The batch-1 results are in `RESULTS_046C_BATCH1.md` and the diagnostic in `DIAGNOSTIC_HISTORICAL_MATCH.md`.
+
+---
+
 # Current status — 2026-11-03 (after 046c development batch 1; 046d frozen)
 
 - **Candidate 046c, development batch 1 (three tuning cases; rolling-validation case 1150107 held out before generation).** On 1141002, 1130803 and 1140506, both readers cleared the governing numeric gate in declared-alternatives mode: 550/550 for both readers; 239/239 for both readers; 353/354 and 354/354. Every manual obligation was met and there were 0 critical errors. Canonical core falls below 99% on two cases, entirely because of placements 046c leaves undecided. No case counts as passed: export, saved 17-column QA and visual QA were not attempted, and tuning cases earn no eligibility credit. Details: [RESULTS_046C_BATCH1.md](RESULTS_046C_BATCH1.md).
