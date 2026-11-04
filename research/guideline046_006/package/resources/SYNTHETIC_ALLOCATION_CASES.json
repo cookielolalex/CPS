@@ -1,0 +1,928 @@
+{
+ "schema": "cps.allocation-examples.draft.v1",
+ "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
+ "candidate": "046e",
+ "case_count": 67,
+ "all_examples_invented": true,
+ "private_project_inputs": false,
+ "cases": [
+  {
+   "id": "A01",
+   "rule": "R1/R1b",
+   "input": {
+    "description": "發電機（租用）100KW"
+   },
+   "proposed_expected": {
+    "C": "發電機",
+    "D": "租用；100KW",
+    "proof_D_mentions": "supply-basis qualifier"
+   },
+   "reason": "Hired-instead-of-bought is a supply-basis qualifier; owner decision 2026-11-03 moves it to D as a separate span (wrapping brackets removed) joined with U+FF1B."
+  },
+  {
+   "id": "A02",
+   "rule": "R1",
+   "input": {
+    "description": "抽水機",
+    "remarks": "不含估價"
+   },
+   "proposed_expected": {
+    "C": "抽水機",
+    "D_must_not_include": [
+     "不含估價"
+    ],
+    "review_reason_mentions": "estimate status"
+   },
+   "reason": "Estimate status is a financial annotation; never C or D."
+  },
+  {
+   "id": "A03",
+   "rule": "R2",
+   "input": {
+    "description": "鋁製線槽 W100"
+   },
+   "proposed_expected": {
+    "C": "鋁製線槽",
+    "D": "W100"
+   },
+   "reason": "Fused material word with no delimiter stays in C; the measurable width goes to D."
+  },
+  {
+   "id": "A04",
+   "rule": "R2",
+   "input": {
+    "description": "控制箱 SUS304 t=1.5mm"
+   },
+   "proposed_expected": {
+    "C": "控制箱",
+    "D": "SUS304 t=1.5mm"
+   },
+   "reason": "Grade code and thickness are separated and measurable: D."
+  },
+  {
+   "id": "A05",
+   "rule": "R3",
+   "input": {
+    "description": "按鈕開關三只組合盒"
+   },
+   "proposed_expected": {
+    "C": "按鈕開關三只組合盒",
+    "quantity_unchanged": true
+   },
+   "reason": "Composition count that is part of the name stays in C."
+  },
+  {
+   "id": "A06",
+   "rule": "R3/R8",
+   "input": {
+    "description": "電錶箱安裝（新設1只）"
+   },
+   "proposed_expected": {
+    "placement_C": {
+     "C": "電錶箱安裝（新設1只）",
+     "D": null
+    },
+    "placement_D": {
+     "C": "電錶箱安裝",
+     "D": "新設1只"
+    },
+    "proof_names_class": "scope count; placement undecided"
+   },
+   "reason": "A count limiting service scope is a scope count; both complete placements are acceptable."
+  },
+  {
+   "id": "A07",
+   "rule": "R4",
+   "input": {
+    "description": "（防水）電纜接頭 φ20"
+   },
+   "proposed_expected": {
+    "C": "電纜接頭",
+    "D": "防水；φ20"
+   },
+   "reason": "Non-contiguous spans join with U+FF1B; separable wrapping parentheses removed."
+  },
+  {
+   "id": "A08",
+   "rule": "R4",
+   "input": {
+    "description": "電纜 3.5mm² 600V",
+    "continuation": "PVC絕緣"
+   },
+   "proposed_expected": {
+    "C": "電纜",
+    "D": "3.5mm² 600V PVC絕緣"
+   },
+   "reason": "One continuous span across a continuation boundary uses U+0020, not U+FF1B."
+  },
+  {
+   "id": "A09",
+   "rule": "R5",
+   "input": {
+    "description": "沉水抽水機 詳規範"
+   },
+   "proposed_expected": {
+    "C": "沉水抽水機",
+    "D": null,
+    "review_reason_mentions": "document reference"
+   },
+   "reason": "A bare reference to an unavailable specification never enters C or D."
+  },
+  {
+   "id": "A10",
+   "rule": "R5",
+   "input": {
+    "description": "接地線 依示例標準 22mm²"
+   },
+   "proposed_expected": {
+    "C": "接地線",
+    "D": "22mm²"
+   },
+   "reason": "Only the explicit technical value enters D; the reference clause stays in raw/review."
+  },
+  {
+   "id": "A11",
+   "rule": "R6",
+   "input": {
+    "page_header": "示例工程有限公司 估價單",
+    "description": "控制盤"
+   },
+   "proposed_expected": {
+    "K": null,
+    "M": null,
+    "N": null,
+    "null_reason_mentions": "name appears only in the page header; no role stated"
+   },
+   "reason": "Letterhead names do not establish party roles."
+  },
+  {
+   "id": "A12",
+   "rule": "R6",
+   "input": {
+    "label": "訂購單位：示例自來水處",
+    "description": "控制盤"
+   },
+   "proposed_expected": {
+    "M": "示例自來水處"
+   },
+   "reason": "An explicitly labelled role may fill the field."
+  },
+  {
+   "id": "A13",
+   "rule": "R7",
+   "input": {
+    "description": "可程式控制器，PLC，16點輸入"
+   },
+   "proposed_expected": {
+    "C": "可程式控制器",
+    "D": "PLC，16點輸入"
+   },
+   "reason": "Acronym inside a delimited attribute list stays in that contiguous D span."
+  },
+  {
+   "id": "A14",
+   "rule": "R7",
+   "input": {
+    "description": "PLC"
+   },
+   "proposed_expected": {
+    "C": "PLC"
+   },
+   "reason": "An acronym that is the only name is C; never expanded."
+  },
+  {
+   "id": "A15",
+   "rule": "R8",
+   "input": {
+    "description": "RS-485轉換器"
+   },
+   "proposed_expected": {
+    "placement_C": {
+     "C": "RS-485轉換器",
+     "D": null
+    },
+    "placement_D": {
+     "C": "轉換器",
+     "D": "RS-485"
+    },
+    "proof_names_class": "protocol/interface designation; placement undecided"
+   },
+   "reason": "Protocol class; both placements acceptable; class must be recorded."
+  },
+  {
+   "id": "A16",
+   "rule": "R8",
+   "input": {
+    "description": "光纖收發器"
+   },
+   "proposed_expected": {
+    "placement_C": {
+     "C": "光纖收發器",
+     "D": null
+    },
+    "placement_D": {
+     "C": "收發器",
+     "D": "光纖"
+    },
+    "proof_names_class": "protocol/interface designation; placement undecided"
+   },
+   "reason": "A medium word qualifying a signal device is in the protocol/interface class."
+  },
+  {
+   "id": "A17",
+   "rule": "R9",
+   "input": {
+    "description": "電磁接觸器 AC220V"
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "AC220V",
+    "if_D_null": "invalid: the item has a rating, which belongs in D"
+   },
+   "reason": "Ratings go to D; a null D would need a reason that is false."
+  },
+  {
+   "id": "A18",
+   "rule": "R10",
+   "input": {
+    "rows": "three amounts 100, 200, 300 and a cached subtotal 500"
+   },
+   "proposed_expected": {
+    "limitations_mention": "subtotal 500 differs from the sum of the listed amounts",
+    "no_output_field_changed": true
+   },
+   "reason": "Discrepancies are recorded, never repaired."
+  },
+  {
+   "id": "A19",
+   "rule": "R11",
+   "input": {
+    "description": "營業稅 5%",
+    "amount": "cached figure"
+   },
+   "proposed_expected": {
+    "source_role": "financial_summary",
+    "demand_item": false
+   },
+   "reason": "Tax rows and their labels are financial summary cells."
+  },
+  {
+   "id": "A20",
+   "rule": "R12",
+   "input": {
+    "description": "光纖收發器"
+   },
+   "proposed_expected": {
+    "governing_rule": "R8 (precedes R2 in the R12 order)",
+    "proof_cites": [
+     "R8",
+     "R2"
+    ]
+   },
+   "reason": "Deterministic precedence: R8 before R2."
+  },
+  {
+   "id": "A21",
+   "rule": "R2/R8/R34",
+   "input": {
+    "description": "光纖電纜 12芯"
+   },
+   "proposed_expected": {
+    "C": "光纖電纜",
+    "D": "12芯"
+   },
+   "reason": "The medium word names the cable kind supplied, so R2 keeps it in C; the core count is a measurable value (R34)."
+  },
+  {
+   "id": "A22",
+   "rule": "R3",
+   "input": {
+    "description": "控制箱，含2只底座"
+   },
+   "proposed_expected": {
+    "C": "控制箱",
+    "D": "含2只底座"
+   },
+   "reason": "An included accessory introduced by 含 after a delimiter is a D attribute with its count."
+  },
+  {
+   "id": "A23",
+   "rule": "R4",
+   "input": {
+    "description": "電纜托架，45度彎頭，W250"
+   },
+   "proposed_expected": {
+    "C": "電纜托架，彎頭",
+    "D": "45度；W250"
+   },
+   "reason": "C keeps the delimiter between two retained spans; D spans are non-contiguous and join with U+FF1B."
+  },
+  {
+   "id": "A24",
+   "rule": "R6",
+   "input": {
+    "label": "供應商：示例電機行",
+    "description": "控制盤"
+   },
+   "proposed_expected": {
+    "K": null,
+    "null_reason_mentions": "supplier label is not an ordering-supplier role"
+   },
+   "reason": "Supplier or quote-sender labels do not establish K."
+  },
+  {
+   "id": "A25",
+   "rule": "R14",
+   "input": {
+    "description": "電磁接觸器 AC220V (防塵型)"
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "AC220V (防塵型)"
+   },
+   "reason": "Parentheses inside one contiguous moved span stay verbatim."
+  },
+  {
+   "id": "A26",
+   "rule": "R15",
+   "input": {
+    "description": "電纜（耐燃）接續盒"
+   },
+   "proposed_expected": {
+    "C": "電纜接續盒",
+    "D": "耐燃"
+   },
+   "reason": "A bracket pair whose whole content moves to D is removed; retained spans join with nothing."
+  },
+  {
+   "id": "A27",
+   "rule": "R16",
+   "input": {
+    "description": "AB-12端子台"
+   },
+   "proposed_expected": {
+    "C": "端子台",
+    "D": null,
+    "unresolved_token": "AB-12",
+    "review_reason_mentions": "AB-12 role unresolved",
+    "null_reasons_D_and_I_mention": "AB-12 (R9)"
+   },
+   "reason": "Unlabelled code token with digits is kept in raw and review only."
+  },
+  {
+   "id": "A28",
+   "rule": "R17",
+   "input": {
+    "description": "90度彎頭"
+   },
+   "proposed_expected": {
+    "C": "彎頭",
+    "D": "90度"
+   },
+   "reason": "A fused measurable value moves to D."
+  },
+  {
+   "id": "A29",
+   "rule": "R18",
+   "input": {
+    "description": "廢料清運"
+   },
+   "proposed_expected": {
+    "C": "廢料清運"
+   },
+   "reason": "The condition word names the material handled; it stays in C."
+  },
+  {
+   "id": "A30",
+   "rule": "R19",
+   "input": {
+    "description": "盤體安裝 依監造指示"
+   },
+   "proposed_expected": {
+    "C": "盤體安裝",
+    "D": null,
+    "review_reason_mentions": "procedural clause"
+   },
+   "reason": "Procedural clauses never enter C or D."
+  },
+  {
+   "id": "A31",
+   "rule": "R22/R29",
+   "input": {
+    "rows": "item row with amount text '另計' and a continuation row with a cached amount"
+   },
+   "proposed_expected": {
+    "raw_amount": "anchor-row amount cell (另計)",
+    "continuation_amount_role": "unresolved, reason \"formula cache on a continuation row; the anchor-row cell is the item's raw amount (R22)\" — the anchor-row amount cell (另計) is not empty (R29)",
+    "review_reason_mentions": "另計 financial annotation (R1)"
+   },
+   "reason": "Single-cell raw roles come from the anchor row; a continuation-row cache that R22 does not select is unresolved with the fixed R29 reason."
+  },
+  {
+   "id": "A32",
+   "rule": "R23",
+   "input": {
+    "description": "組立工資",
+    "code_cell": "M0101"
+   },
+   "proposed_expected": {
+    "C": "組立工資",
+    "D": null
+   },
+   "reason": "A cost-line code stays in raw text only."
+  },
+  {
+   "id": "A33",
+   "rule": "R25",
+   "input": {
+    "analysis_row": "組立工資 | 工 | 2",
+    "link": "heading links the block to demand item 盤體組立費 | 式 | 1"
+   },
+   "proposed_expected": {
+    "C": "組立工資",
+    "E": "工",
+    "F": 2,
+    "L": "same project-level value as the demand rows",
+    "P": null,
+    "Q": null
+   },
+   "reason": "Component rows carry their own unit and per-unit quantity, never multiplied."
+  },
+  {
+   "id": "A34",
+   "rule": "R26",
+   "input": {
+    "description": "產品甲，100V，端子台"
+   },
+   "proposed_expected": {
+    "C": "產品甲，端子台",
+    "D": "100V"
+   },
+   "reason": "One separator remains after a middle removal."
+  },
+  {
+   "id": "A35",
+   "rule": "R27",
+   "input": {
+    "row": "試運轉及管理費 | 式 | 1 | 50000 (no item number)"
+   },
+   "proposed_expected": {
+    "role": "demand",
+    "C": "試運轉及管理費",
+    "E": "式",
+    "F": 1
+   },
+   "reason": "A priced service line is a demand item even without an item number."
+  },
+  {
+   "id": "A36",
+   "rule": "R27",
+   "input": {
+    "row": "管理費 5% | 12000 (no unit, no quantity)"
+   },
+   "proposed_expected": {
+    "role": "financial_summary",
+    "demand_item": false
+   },
+   "reason": "An allocation or percentage line is financial_summary."
+  },
+  {
+   "id": "A36b",
+   "rule": "R27",
+   "input": {
+    "row": "管理費 | 式 | 1 | 30000 (no item number)"
+   },
+   "proposed_expected": {
+    "role": "financial_summary",
+    "demand_item": false
+   },
+   "reason": "A line naming only overhead is financial_summary even with 式 | 1."
+  },
+  {
+   "id": "A37",
+   "rule": "R28",
+   "input": {
+    "description": "沉水泵浦",
+    "remarks": "供加藥機使用"
+   },
+   "proposed_expected": {
+    "C": "沉水泵浦",
+    "D": null,
+    "remarks_kept_in": "raw text only",
+    "D_null_reason_mentions": "供加藥機使用 (purpose phrase kept in raw text, R28/R9)"
+   },
+   "reason": "Purpose phrases are not technical attributes."
+  },
+  {
+   "id": "A38",
+   "rule": "R29",
+   "input": {
+    "rows": "an empty row (no description, no label) whose amount cell holds a formula cache 0"
+   },
+   "proposed_expected": {
+    "role": "unresolved",
+    "reason": "formula cache on a row without an item; no listed role fits"
+   },
+   "reason": "Formula residue on an empty row has a fixed unresolved reason."
+  },
+  {
+   "id": "A39",
+   "rule": "R30",
+   "input": {
+    "description": "抽水機，沉水式"
+   },
+   "proposed_expected": {
+    "C": "抽水機",
+    "D": "沉水式"
+   },
+   "reason": "A delimited type word is a D attribute."
+  },
+  {
+   "id": "A40",
+   "rule": "R31",
+   "input": {
+    "description": "流量計(FM100)"
+   },
+   "proposed_expected": {
+    "C": "流量計",
+    "D": null,
+    "review_reason_mentions": "unidentified code token FM100 (R16)",
+    "I_and_D_null_reasons_mention": "FM100"
+   },
+   "reason": "A bracketed token with digits that is not a value or size is a code token."
+  },
+  {
+   "id": "A41",
+   "rule": "R32",
+   "input": {
+    "description": "電力監視器 RS485 220V"
+   },
+   "proposed_expected": {
+    "placement": "protocol/interface designation, undecided (R8)",
+    "option_C": {
+     "C": "電力監視器 RS485",
+     "D": "220V"
+    },
+    "option_D": {
+     "C": "電力監視器",
+     "D": "RS485 220V"
+    },
+    "note": "moved to D, the token joins the maximal run because nothing removed lies between it and 220V (R32)"
+   },
+   "reason": "Undecided-class tokens join the maximal run unless R4 separates them."
+  },
+  {
+   "id": "A42",
+   "rule": "R33",
+   "input": {
+    "heading": "三、控制盤",
+    "items_under": "無熔絲開關 3P50A; 電驛 AC110V"
+   },
+   "proposed_expected": {
+    "group": "控制盤",
+    "group_name_rule": "noun phrase after the section number 三、 (R33)",
+    "A": "控制盤 on both items",
+    "scope": "from the heading to the next same-level heading, subtotal or total row, or table end"
+   },
+   "reason": "A heading naming one panel whose contents follow establishes a group."
+  },
+  {
+   "id": "A43",
+   "rule": "R33",
+   "input": {
+    "heading": "二、控制盤及配線工程",
+    "items_under": "控制盤; 電纜 3.5mm²"
+   },
+   "proposed_expected": {
+    "group": null,
+    "A": null,
+    "A_null_reason_mentions": "heading 二、控制盤及配線工程 names a work category, not one panel"
+   },
+   "reason": "A work-category heading does not establish a group; the enclosure line follows P1."
+  },
+  {
+   "id": "A44",
+   "rule": "R34",
+   "input": {
+    "description": "W100線槽"
+   },
+   "proposed_expected": {
+    "C": "線槽",
+    "D": "W100"
+   },
+   "reason": "A size designation is a measurable value, fused or delimited."
+  },
+  {
+   "id": "A45",
+   "rule": "R35",
+   "input": {
+    "description": "CNS1234耐壓試驗"
+   },
+   "proposed_expected": {
+    "C": "耐壓試驗",
+    "D": null,
+    "review_reason_mentions": "document reference CNS1234 (R5)"
+   },
+   "reason": "A standard number fused before a test name is a document reference."
+  },
+  {
+   "id": "A46",
+   "rule": "R36",
+   "input": {
+    "description": "控制箱 含底座及工資"
+   },
+   "proposed_expected": {
+    "C": "控制箱",
+    "D": "含底座",
+    "review_reason_mentions": "工資 cost word, financial annotation (R1)"
+   },
+   "reason": "Split mixed inclusion clauses into object and cost parts."
+  },
+  {
+   "id": "A47",
+   "rule": "R37",
+   "input": {
+    "description": "電磁接觸器",
+    "remarks_rows": [
+     "附端子",
+     "蓋"
+    ]
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "附端子蓋"
+   },
+   "reason": "A continuation boundary between two CJK characters becomes nothing; otherwise one U+0020 (R37)."
+  },
+  {
+   "id": "A48",
+   "rule": "R38",
+   "input": {
+    "description": "端子台 ",
+    "note": "stored trailing space"
+   },
+   "proposed_expected": {
+    "C": "端子台",
+    "transformation_mentions": "trailing whitespace removed at the C edge (R38)"
+   },
+   "reason": "Edge whitespace is trimmed at C/D/J edges; other characters are copied exactly."
+  },
+  {
+   "id": "A49",
+   "rule": "R39",
+   "input": {
+    "description": "溫度計",
+    "remarks": "不使用"
+   },
+   "proposed_expected": {
+    "C": "溫度計",
+    "D": null,
+    "review_reason_mentions": "remark 不使用 about the item itself (R39); row kept, F unchanged",
+    "status": "research_draft",
+    "D_null_reason_mentions": "不使用 (R39, R9)"
+   },
+   "reason": "A bare item-status remark is raw text, never D, and never deletes the row."
+  },
+  {
+   "id": "A50",
+   "rule": "R40",
+   "input": {
+    "description": "電纜管",
+    "remarks": "改用不鏽鋼 因現場潮濕"
+   },
+   "proposed_expected": {
+    "C": "電纜管",
+    "D": "改用不鏽鋼",
+    "review_reason_mentions": "justification 因現場潮濕 (R40/R19)"
+   },
+   "reason": "The change phrase is a D attribute; its justification stays in raw text."
+  },
+  {
+   "id": "A51",
+   "rule": "R41",
+   "input": {
+    "description": "配線工程(含新設線路2處)"
+   },
+   "proposed_expected": {
+    "C": "配線工程",
+    "D": "含新設線路2處",
+    "proof_mentions": "R1 inclusion clause; status/count word belongs to the clause (R41)"
+   },
+   "reason": "Words inside an inclusion clause go with the clause."
+  },
+  {
+   "id": "A52",
+   "rule": "R42",
+   "input": {
+    "row": "詳設計圖 | 式 | 1 | 50000"
+   },
+   "proposed_expected": {
+    "status": "held",
+    "values_kept": true,
+    "limitation_mentions": "defining document not in the packet",
+    "basis": "R42(a): no object or specific work noun remains after removing the pointer"
+   },
+   "reason": "An item defined only by a missing document is held."
+  },
+  {
+   "id": "A53",
+   "rule": "R42",
+   "input": {
+    "row": "電纜 3.5mm² 依圖施作 | M | 100 | 120"
+   },
+   "proposed_expected": {
+    "status": "research_draft",
+    "C": "電纜",
+    "D": "3.5mm²",
+    "review_reason_mentions": "document reference 依圖施作 (R5)",
+    "basis": "R42: the item names an object; the pointer only adds detail"
+   },
+   "reason": "A pointer that only adds detail does not hold an item whose own text names the object."
+  },
+  {
+   "id": "A54",
+   "rule": "R43",
+   "input": {
+    "description": "電磁接觸器 (防塵型) AC220V"
+   },
+   "proposed_expected": {
+    "C": "電磁接觸器",
+    "D": "(防塵型) AC220V"
+   },
+   "reason": "A bracket at the start of a longer moved run stays verbatim."
+  },
+  {
+   "id": "A55",
+   "rule": "R42",
+   "input": {
+    "row": "配線工程 依圖施作 | 式 | 1 | 30000"
+   },
+   "proposed_expected": {
+    "status": "research_draft",
+    "C": "配線工程",
+    "review_reason_mentions": [
+     "document reference 依圖施作 (R5)",
+     "extent defined by the missing document (R42)"
+    ]
+   },
+   "reason": "A 式 item that names specific work is not held; its extent is flagged."
+  },
+  {
+   "id": "A56",
+   "rule": "R40",
+   "input": {
+    "description": "電纜管，鍍鋅",
+    "remarks": "改用不鏽鋼"
+   },
+   "proposed_expected": {
+    "C": "電纜管",
+    "D": "鍍鋅；改用不鏽鋼"
+   },
+   "reason": "A change does not delete the attribute it supersedes."
+  },
+  {
+   "id": "A57",
+   "rule": "R45",
+   "input": {
+    "row": "電力監視器 RS485 | 台 | 1; price cells empty",
+    "context": "outside any panel"
+   },
+   "proposed_expected": {
+    "demand_item": false,
+    "census_role": "excluded_supply",
+    "reason": "begins \"no enclosure and no estimate: not in the quoted supply (R45)\" and names the empty price cells"
+   },
+   "reason": "An unpriced line outside any panel is not a 未填 row."
+  },
+  {
+   "id": "A58",
+   "rule": "R45",
+   "input": {
+    "row": "無熔絲開關 3P50A | 只 | 2 | (empty price cells)",
+    "context": "in the scope of heading 三、控制盤"
+   },
+   "proposed_expected": {
+    "demand_item": true,
+    "A": "控制盤",
+    "C": "無熔絲開關",
+    "D": "3P50A"
+   },
+   "reason": "A line inside a panel is a row even without its own price."
+  },
+  {
+   "id": "A59",
+   "rule": "R45",
+   "input": {
+    "row": "流量計 | 台 | 1 | 業主供料",
+    "context": "outside any panel"
+   },
+   "proposed_expected": {
+    "demand_item": false,
+    "census_role": "excluded_supply",
+    "reason": "begins \"no enclosure and no estimate: not in the quoted supply (R45)\" and names 業主供料"
+   },
+   "reason": "Text stating no price counts as no quoted price."
+  },
+  {
+   "id": "A60",
+   "rule": "R46",
+   "input": {
+    "analysis_block": "heading 單價分析 第12號 抽水機組 | 式, components below",
+    "context": "no detail item matches the block reference, name or unit"
+   },
+   "proposed_expected": {
+    "components": 0,
+    "census_role": "analysis_unlinked (every cell of the block)"
+   },
+   "reason": "An analysis block for an item not among the demand items yields no components."
+  },
+  {
+   "id": "A61",
+   "rule": "R25",
+   "input": {
+    "analysis_block": "heading names 動力盤P-1; components 組立工資 | 工 | 2",
+    "parent": "demand item 動力盤P-1 製作 | 式 | 1"
+   },
+   "proposed_expected": {
+    "A": null,
+    "B": null,
+    "A_null_reason": "analysis component; A/B belong to 未填 rows (R25)",
+    "E": "工",
+    "F": 2
+   },
+   "reason": "Components never carry A/B."
+  },
+  {
+   "id": "A62",
+   "rule": "R47",
+   "input": {
+    "description": "可程式控制器(PLC) CPU模組"
+   },
+   "proposed_expected": {
+    "C": "可程式控制器(PLC) CPU模組",
+    "D": null
+   },
+   "reason": "A bracketed acronym after the full name stays in C with its brackets."
+  },
+  {
+   "id": "A63",
+   "rule": "R45",
+   "input": {
+    "contract": "one lump-sum total only; no line has its own price",
+    "row": "電纜 3.5mm² | M | 100, outside any panel"
+   },
+   "proposed_expected": {
+    "demand_item": true,
+    "review_reason_mentions": "contract without line prices (R45 doubt)",
+    "limitation": "contract has no line prices"
+   },
+   "reason": "Lump-sum contracts keep every line as a doubt; nothing is excluded."
+  },
+  {
+   "id": "A64",
+   "rule": "R45/R42",
+   "input": {
+    "row": "詳附表 | 式 | 1; price cells empty",
+    "context": "outside any panel"
+   },
+   "proposed_expected": {
+    "demand_item": true,
+    "status": "held",
+    "review_reason_mentions": "missing detail schedule (R42); no enclosure not established (R45)",
+    "limitation_mentions": "line kept and held; no enclosure not established (R42, R45)"
+   },
+   "reason": "A held line is kept, never excluded."
+  },
+  {
+   "id": "A65",
+   "rule": "R45",
+   "input": {
+    "rows": [
+     "1 儀表設備 | 式 | 1 | 300000",
+     "1.1 流量計 | 台 | 2 (price cells empty)"
+    ]
+   },
+   "proposed_expected": {
+    "1.1": {
+     "demand_item": true,
+     "review_reason_mentions": "price may be carried by priced parent line 1 (R45 doubt)",
+     "limitation_mentions": "unpriced breakdown kept as R45 doubt"
+    }
+   },
+   "reason": "An unpriced breakdown under a priced parent is a doubt, kept."
+  },
+  {
+   "id": "A66",
+   "rule": "R47/R31",
+   "input": {
+    "description": "電纜(PVC)"
+   },
+   "proposed_expected": {
+    "C": "電纜",
+    "D": "PVC"
+   },
+   "reason": "A letter-only bracketed material token is an R31 attribute designation, not an acronym gloss; its wrapping brackets enclose the whole moved span and are removed (R4)."
+  }
+ ],
+ "assumption": "Unless an example states otherwise, a line that the other rules make a demand item has a quoted price or lies inside a panel."
+}

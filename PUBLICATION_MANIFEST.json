@@ -1281,6 +1281,151 @@
       "path": "research/guideline046_005/DECISIONS_OWNER_O13_O16.md",
       "bytes": 2301,
       "sha256": "49ab512e2b22427fde7568dc73431276b96393b7d515a1a2332b8c2741321066"
+    },
+    {
+      "path": "research/guideline046_006/harness/EVALUATOR_BRIEF_TEMPLATE.md",
+      "bytes": 3912,
+      "sha256": "23b35a5ae80019b6a7b95996960cc372bc962d13a69685cd4358ab0e5f691d11"
+    },
+    {
+      "path": "research/guideline046_006/harness/GENERATOR_PROMPT_TEMPLATE.md",
+      "bytes": 1933,
+      "sha256": "5ecb1081ad6739c048a5d0adc30966727198f2a6ea27eec066ae4e0a44a370ca"
+    },
+    {
+      "path": "research/guideline046_006/harness/audit_transcript.py",
+      "bytes": 4039,
+      "sha256": "4fe2eee2ff078b4092c71fa7a0eda436f2d33b2fa2fda47b0529584ee137dde9"
+    },
+    {
+      "path": "research/guideline046_006/harness/freeze_admission.py",
+      "bytes": 1451,
+      "sha256": "89c29f78df38e6344cc66b888b740577234bc7e6ec67f83f96b041736ef4817b"
+    },
+    {
+      "path": "research/guideline046_006/harness/freeze_outputs.py",
+      "bytes": 1928,
+      "sha256": "0f1f85ca8400219a60f7c1e71fe6c645bdc784ab67f146e356173d35da691c7b"
+    },
+    {
+      "path": "research/guideline046_006/harness/fullpath_check.py",
+      "bytes": 1209,
+      "sha256": "6e2ff9236a88b17aa41d593145fa85250f6c67fcc19b22d352fb6b66a86fc2b2"
+    },
+    {
+      "path": "research/guideline046_006/harness/make_release.py",
+      "bytes": 2173,
+      "sha256": "4143196e0c911f9de5d342ddc1dabc463868a5f74195c8ff21a3cf31d778be85"
+    },
+    {
+      "path": "research/guideline046_006/harness/prepare_run.py",
+      "bytes": 2095,
+      "sha256": "2f0382525377d3ef66ec102460f78c4dd38b75086e3bd95bb8b0cadbc8a289cd"
+    },
+    {
+      "path": "research/guideline046_006/package/CPS_GUIDELINE.md",
+      "bytes": 9680,
+      "sha256": "2d5054cd05c430a7b6dda3629237f4a748d326b1ac9a601b15edab60a6f27542"
+    },
+    {
+      "path": "research/guideline046_006/package/PACKAGE_MANIFEST.json",
+      "bytes": 3227,
+      "sha256": "85efda95fd30de51fff79edda30ee791ec4c9f3df48dd90db310273d5b6e20c9"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/COLUMNS.json",
+      "bytes": 1497,
+      "sha256": "550fd6c36d710e79d5a4877c4019643d658f1657808c569a6e8c478df597142e"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/EXAMPLE_INVENTORY.json",
+      "bytes": 53469,
+      "sha256": "b72e8496de2d7df2a8db149c847198ed6ffa1843d27558e19a3b7dba96e0c8de"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/EXAMPLE_RESPONSE.json",
+      "bytes": 42182,
+      "sha256": "de21332ea7b8833a9b8fcfa33c304f4c7d3f8bdec29c5dd89104ba192764edb8"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/FIELD_ROLES.md",
+      "bytes": 43446,
+      "sha256": "f6da08ceb61dd68500a4c70dbffb94d01dc65eb5fd5b8d02c5a4d5ed84b5559e"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/NAME_POLICY.json",
+      "bytes": 1186,
+      "sha256": "dc9605cc473100e9c358a8c3668d998db961d0914e7a08a22c198a33748dfd8b"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/NAMING_RULES.md",
+      "bytes": 7055,
+      "sha256": "d3c84312371a25f387fbb114a7e63af8005676566bc3e9472ee70866a30b1fc2"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/OUTPUT_CONTRACT.md",
+      "bytes": 5825,
+      "sha256": "ac1188b53d2f512e94a243d16fdc52d899c87c95343468e269e83545d35f435d"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/REVIEW_CHECKLIST.md",
+      "bytes": 3300,
+      "sha256": "c3872bf6eef23f6306fb71695d7760d5435bb1d572972fc63135f923a2e3bf63"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/SEMANTIC_RESPONSE.schema.json",
+      "bytes": 15920,
+      "sha256": "81f9a20fabcdb5532c20ef79c515085350dde4000883c5d6f8e79c44dd28262e"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/SOURCE_INVENTORY.schema.json",
+      "bytes": 9247,
+      "sha256": "9250f130e7c8bca66a755ca6ade1c02a3f028db204ad1729fca844f0fc785358"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/SOURCE_READING.md",
+      "bytes": 4746,
+      "sha256": "49a1cc7086f62454cbf7255093b0cec20ce43dc0d295d2bdbb2843021bf19ba4"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/SOURCE_REFERENCE_CONTRACT.md",
+      "bytes": 15683,
+      "sha256": "923523fee3d4403a50908d01aa16abc2497d6a351f64ecf6c5fa1006ccba82cf"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/SYNTHETIC_ALLOCATION_CASES.json",
+      "bytes": 24213,
+      "sha256": "7835192b74f11e10780d409f0e6cfd5127e179c87cb2a0fa701867dbd164381d"
+    },
+    {
+      "path": "research/guideline046_006/package/resources/SYNTHETIC_NAMING_CASES.json",
+      "bytes": 9586,
+      "sha256": "2e9bbc9f22bb3d8948b4387e78f76c32f0fe9f8315b9d08b50ac35f0723c866f"
+    },
+    {
+      "path": "research/guideline046_006/package/tools/cps046b_route.py",
+      "bytes": 61001,
+      "sha256": "db43d38fc2b0a353918c5d2801eb78cb83cabb74b6d02de13cf5ff92f1bd5b91"
+    },
+    {
+      "path": "research/guideline046_006/route_tests/make_fixtures.py",
+      "bytes": 35244,
+      "sha256": "508960ebe5e36d823c6de1eb42d0dbe34e0132006d0c9a39e10b4722b9b5783e"
+    },
+    {
+      "path": "research/guideline046_006/route_tests/parity_batch.mjs",
+      "bytes": 622,
+      "sha256": "26c8aafb8ca43c7ca1d110421b3d862c555d606038972708b788231a014675f4"
+    },
+    {
+      "path": "research/guideline046_006/route_tests/run_route_tests.py",
+      "bytes": 23403,
+      "sha256": "d473551f0606f429c4c77a50ca4f4ef6847f83cbd76aaded7fe78b68988b4660"
+    },
+    {
+      "path": "research/guideline046_006/route_tests/test_compare_source047.py",
+      "bytes": 5702,
+      "sha256": "0cebb9e61fcc49108fcf7b4bd80699fd74b2517e4cd4ea786e43c3f569961a15"
     }
   ]
 }
