@@ -3,7 +3,8 @@ carrier's 未填 rows with the creator's historical 未填 workbook. Evaluation 
 
 Metric (declared before any qualification run; changes need a new version and review):
   Rows. Target rows are the non-empty rows below the 17-column header of the target sheet named 未填
-  (or the first sheet whose header row carries the 17 labels). CPS rows are the carrier `items`
+  (or the first sheet whose header row carries at least 15 of the 17 labels). Columns are mapped by
+  header label, not position (older templates swap 型號/廠牌); the map is reported (v1.1). CPS rows are the carrier `items`
   (demand rows; analysis components live on the composition-reference sheet and are not 未填 rows).
   Rows are aligned by an order-preserving dynamic programme maximizing total similarity; a pair is
   admitted only when its similarity is >= 0.5. Similarity = 0.7*sim(C+' '+D) + 0.15*eq(E) + 0.15*eq(F)
@@ -30,7 +31,7 @@ LABELS = ['盤體名稱', '盤體規格', '材料名稱', '規格', '單位', '�
           '工程編號', '訂購客戶', '使用客戶', '需要日期', '需要數量', '合約價']
 COLS = 'ABCDEFGHIJKLMNOPQ'
 SCORED = [i for i, c in enumerate(COLS) if c not in 'GH']
-VERSION = 'cps.target-comparison048.v1'
+VERSION = 'cps.target-comparison048.v1.1'
 
 
 def sha(p):
@@ -90,14 +91,21 @@ def load_target(path):
     for ws in sheets:
         rows = [list(r) for r in ws.iter_rows(values_only=True)]
         for hi, r in enumerate(rows[:30]):
-            cells = [str(x).strip() if x is not None else '' for x in (r + [None] * 17)[:17]]
-            if sum(1 for a, b in zip(cells, LABELS) if a == b) >= 15:
+            cells = [re.sub(r'\s+', '', str(x)) if x is not None else '' for x in r]
+            pos = {}
+            for ci, lab in enumerate(cells):
+                if lab in LABELS and lab not in pos:
+                    pos[lab] = ci
+            if len(pos) >= 15:
+                idx = [pos.get(lab) for lab in LABELS]
                 body = []
                 for j, r2 in enumerate(rows[hi + 1:], start=hi + 2):
-                    vals = (r2 + [None] * 17)[:17]
+                    vals = [r2[i] if i is not None and i < len(r2) else None for i in idx]
                     if any(norm(v, 'normalized') is not None for v in vals):
                         body.append({'row': j, 'values': vals})
-                return {'sheet': ws.title, 'header_row': hi + 1, 'rows': body}
+                return {'sheet': ws.title, 'header_row': hi + 1, 'rows': body,
+                        'column_map': {COLS[k]: (None if i is None else i + 1) for k, i in enumerate(idx)},
+                        'columns_in_canonical_order': idx == list(range(17))}
     raise SystemExit('TARGET_HEADER_NOT_FOUND')
 
 
@@ -170,6 +178,7 @@ def evaluate(target_path, carrier):
     C = [it['values'] for it in carrier['items']]
     pairs = align(T, C)
     out = {'schema': VERSION, 'target_sheet': tg['sheet'], 'target_header_row': tg['header_row'],
+           'target_column_map': tg['column_map'], 'target_columns_in_canonical_order': tg['columns_in_canonical_order'],
            'target_rows': len(T), 'cps_rows': len(C), 'paired_rows': len(pairs),
            'row_recall': (len(pairs) / len(T)) if T else None, 'row_precision': (len(pairs) / len(C)) if C else None,
            'unpaired_target_rows': [tg['rows'][i]['row'] for i in range(len(T)) if i not in {p[0] for p in pairs}],
