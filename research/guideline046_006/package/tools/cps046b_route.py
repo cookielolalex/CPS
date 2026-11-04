@@ -1,12 +1,30 @@
-"""CPS source-reference checker and carrier adapter, route v4 for candidate 046f (stdlib only).
+"""CPS source-reference checker and carrier adapter, route v4.1 for candidate 046f (stdlib only).
 v4 implements owner decision O13 (FIELD_ROLES R48, job inputs): L, M and N may be proven by
 context references alone (context:case_identity, context:customer_name, context:project_name);
 such proofs become selection_evidence in the carrier, and the Python writer port accepts
-selection_evidence for L, M and N only. This is the one documented divergence from the archived
-writer004 validateCarrier, which accepts selection_evidence for L only: a carrier with M/N
-selection evidence is exported through research/export/writer_portable.py --mode v2. Every
-other field proven only by context is still CONTEXT_ONLY_PROOF_UNREPRESENTABLE, and every other
-check is unchanged from v3 (census roles excluded_supply/analysis_unlinked, R45/R46/R25 checks).
+selection_evidence for L, M and N only. Every other field proven only by context is still
+CONTEXT_ONLY_PROOF_UNREPRESENTABLE, and every other check is unchanged from v3 (census roles
+excluded_supply/analysis_unlinked, R45/R46/R25 checks).
+
+v4.1 (FIELD_ROLES R52/R54/R56/R57, owner decision O16) changes exactly two checks:
+  (a) R57/R52: an item whose C is null may have status research_draft. v4 rejected it
+      (NULL_C_REQUIRES_HELD). The null proof with a nonblank reason is still required, and the
+      carrier still needs null_reasons.C. The route warns R57_NULL_C_RESEARCH_DRAFT.
+  (b) R54/O16: Q may be non-null when the inventory adoption status is not verified. v4 rejected
+      it (Q_REQUIRES_VERIFIED_ADOPTION); v4.1 warns O16_Q_UNVERIFIED_ADOPTION. Q must still equal
+      numericRaw(raw unit_price) and be proven by that single cell.
+  (c) R56: the one-row physical_enclosure group that carries A/B is unchanged; the route has never
+      required a member count, so a group with exactly one member is accepted.
+
+Writer port (validate_carrier_port) relaxations against the archived writer004 validateCarrier,
+documented in PORT_RELAXATIONS and removable with strict=True (exact writer004 semantics):
+  - o13_m_n_selection_evidence: selection_evidence accepted for L, M and N (writer004: L only,
+    SELECTION_ONLY_ENGINEERING_ID);
+  - r57_null_c_research_draft: a null C with status research_draft (writer004:
+    UNRESOLVED_ITEM_MUST_BE_HELD);
+  - o16_q_unverified_adoption: no port change; writer004 validateCarrier never reads the adoption
+    status, so a Q under unverified adoption needs no relaxation.
+A carrier that uses the first two is exported through research/export/writer_portable.py --mode v2.
 
 check-inventory : validate a source inventory before generation (writer source rules,
                   completeness, canonical text, unavoidable holds).
@@ -28,7 +46,7 @@ import argparse, copy, hashlib, json, math, re, sys
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = 'cps046f-route.v4'
+VERSION = 'cps046f-route.v4.1'
 RESPONSE_SCHEMA = 'cps.semantic-source-refs.v2'
 INVENTORY_SCHEMA = 'cps.source-inventory.cells.v2'
 PROFILE = 'cached-cell-raw-scalar-text.v2'
@@ -50,6 +68,18 @@ LIMIT = 20 * 1024 * 1024
 # O13 / FIELD_ROLES R48: job-input fields that may be proven by context alone (selection_evidence).
 # writer004 validateCarrier allows only L; the M/N relaxation is the route v4 divergence.
 SELECTION_COLS = ('L', 'M', 'N')
+WRITER004_SELECTION_COLS = ('L',)
+# The documented differences between validate_carrier_port (default) and writer004 validateCarrier.
+# validate_carrier_port(c, strict=True) applies none of them.
+PORT_RELAXATIONS = {
+    'o13_m_n_selection_evidence': 'selection_evidence is accepted for L, M and N; writer004 accepts it for L only '
+                                  '(SELECTION_ONLY_ENGINEERING_ID). Owner decision O13, FIELD_ROLES R48.',
+    'r57_null_c_research_draft': 'an item or component whose C is null may have status research_draft; writer004 requires '
+                                 'held (UNRESOLVED_ITEM_MUST_BE_HELD). null_reasons.C is still required. FIELD_ROLES R52, R57.',
+    'o16_q_unverified_adoption': 'no port change: writer004 validateCarrier and prepareMatrices never read the adoption status, '
+                                 'so a non-null Q under unverified adoption is accepted by both. The response check warns '
+                                 'O16_Q_UNVERIFIED_ADOPTION instead of rejecting (FIELD_ROLES R54, owner decision O16).',
+}
 MAX_SAFE = 9007199254740991
 ID_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', re.ASCII)
 CELL_REF_RE = re.compile(r'cell:S([1-9][0-9]{0,3})!([A-Z]{1,3})([1-9][0-9]{0,6})', re.ASCII)
@@ -397,8 +427,10 @@ def _js(v):
     return json.dumps(v, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
 
 
-def validate_carrier_port(c):
-    """Python port of writer004 validateCarrier + prepareMatrices review-cell checks."""
+def validate_carrier_port(c, strict=False):
+    """Python port of writer004 validateCarrier + prepareMatrices review-cell checks.
+    Default: with the PORT_RELAXATIONS (route v4.1). strict=True: exact writer004 semantics."""
+    selection_cols = WRITER004_SELECTION_COLS if strict else SELECTION_COLS
     _keys(c, ['schema', 'headers', 'case_id', 'family_id', 'source', 'metadata', 'groups', 'items', 'components', 'nonitems', 'limitations'], 'carrier')
     kind = c['source'].get('kind') if isinstance(c['source'], dict) else None
     if c['schema'] != ('cps.cached-xls-research-carrier.v1' if kind == 'cached_xls' else 'cps.cached-xlsx-research-carrier.v1'):
@@ -449,7 +481,9 @@ def validate_carrier_port(c):
         _strings(r['review_reasons'], p + '.review_reasons')
         if r['status'] == 'held' and not r['review_reasons']:
             _fail('HELD_REASON_REQUIRED', p)
-        if r['values'][2] is None and r['status'] != 'held':
+        # writer004: a null C must be held. Relaxation r57_null_c_research_draft: research_draft is also
+        # accepted (the status check above still admits only research_draft and held).
+        if strict and r['values'][2] is None and r['status'] != 'held':
             _fail('UNRESOLVED_ITEM_MUST_BE_HELD', p)
         _obj(r['evidence'], p + '.evidence'); _obj(r['null_reasons'], p + '.null_reasons')
         req_ev, req_null = [], []
@@ -471,7 +505,7 @@ def validate_carrier_port(c):
             e = r['evidence'].get(col)
             _obj(e, f'{p}.evidence.{col}')
             if 'selection_evidence' in e:
-                if col not in SELECTION_COLS:       # writer004: col !== 'L' (O13 relaxation adds M, N)
+                if col not in selection_cols:       # writer004: col !== 'L' (O13 relaxation adds M, N)
                     _fail('SELECTION_ONLY_ENGINEERING_ID', vp)
                 _keys(e, ['selection_evidence', 'transformation'], f'{p}.evidence.{col}')
                 _str(e['selection_evidence'], vp + '.selection_evidence'); _str(e['transformation'], vp + '.transformation')
@@ -789,6 +823,8 @@ def _check(inv, resp_raw, rep):
     items, demand_ids, component_ids = {}, set(), set()
     ident_owner, raw_owner, desc_anchor = {}, {}, []
     o13 = []        # item.column of M/N proven by job-input context alone (selection_evidence)
+    r57 = []        # items with C null and status research_draft (v4.1 relaxation (a))
+    q_unverified = []   # items with Q non-null while adoption is not verified (v4.1 relaxation (b))
     for i, it in enumerate(r['items']):
         w = f'items[{i}]'
         if not exact_keys(it, ('id', 'role', 'group_id', 'status', 'values', 'proofs', 'raw_refs',
@@ -826,8 +862,10 @@ def _check(inv, resp_raw, rep):
         if not isinstance(vals, list) or len(vals) != 17:
             rep.bad('SEVENTEEN_VALUES_REQUIRED', w + '.values')
             continue
-        if vals[2] is None and it['status'] != 'held':
-            rep.bad('NULL_C_REQUIRES_HELD', w)
+        # v4.1 (R52, R57): a null C may be research_draft. The null proof with a reason is still required
+        # (NULL_PROOF_REQUIRED below); v4 rejected this with NULL_C_REQUIRES_HELD.
+        if vals[2] is None and it['status'] == 'research_draft':
+            r57.append(iid)
         anchors = ref_list(it['anchor_refs'], w + '.anchor_refs', rep, inv, min_items=1)
         for x in anchors:
             use(x, f'{iid}.anchor')
@@ -955,8 +993,9 @@ def _check(inv, resp_raw, rep):
         if vals[5] is not None and isinstance(proofs.get('F'), dict) and 'refs' in proofs['F']:
             if proofs['F'].get('refs') != raw_cells.get('quantity'):
                 rep.bad('F_PROOF_MUST_BE_RAW_QUANTITY_CELL', w)
+        # v4.1 (R54, O16): Q does not wait for verified adoption; a warning replaces Q_REQUIRES_VERIFIED_ADOPTION.
         if vals[16] is not None and inv.adoption != 'verified':
-            rep.bad('Q_REQUIRES_VERIFIED_ADOPTION', w)
+            q_unverified.append(iid)
         if vals[4] is not None and vals[4] != raw_vals.get('unit'):
             rep.bad('SOURCE_UNIT_MISMATCH', w)
     if not demand_ids:
@@ -1067,7 +1106,18 @@ def _check(inv, resp_raw, rep):
                  'note': 'M/N proven by job-input context alone become selection_evidence. The archived writer004 '
                          'validateCarrier accepts selection_evidence for L only (SELECTION_ONLY_ENGINEERING_ID); export '
                          'this carrier with research/export/writer_portable.py --mode v2.'})
-    ctx = {'response': r, 'assigned': assigned, 'used': used, 'o13': o13}
+    if r57:
+        rep.warn('R57_NULL_C_RESEARCH_DRAFT', 'items', {'count': len(r57), 'first': r57[:10],
+                 'note': 'C is null on research_draft items (FIELD_ROLES R52, R57; route v4.1 relaxation). The archived writer004 '
+                         'validateCarrier requires status held for a null C (UNRESOLVED_ITEM_MUST_BE_HELD); export this carrier '
+                         'with research/export/writer_portable.py --mode v2.'})
+    if q_unverified:
+        rep.warn('O16_Q_UNVERIFIED_ADOPTION', 'items', {'count': len(q_unverified), 'first': q_unverified[:10],
+                 'adoption_status': inv.adoption,
+                 'note': 'Q is the quoted unit price (FIELD_ROLES R54, owner decision O16) although source adoption is not '
+                         'verified; it is not evidence of an accepted contract rate (SOURCE_READING). writer004 does not read '
+                         'the adoption status, so this does not change the export mode.'})
+    ctx = {'response': r, 'assigned': assigned, 'used': used, 'o13': o13, 'r57': r57, 'q_unverified': q_unverified}
     if not rep.violations:          # build exactly what convert writes and run the writer port on it
         carrier, _ = build_carrier(inv, resp_raw, ctx)
         try:
@@ -1261,16 +1311,26 @@ def main(argv=None):
         return 1
     cb = (json.dumps(carrier, ensure_ascii=False, indent=1, allow_nan=False) + '\n').encode('utf-8')
     (out / 'carrier.json').write_bytes(cb)
-    mn = sorted(f"{r['id']}.{k}" for r in carrier['items'] + carrier['components'] for k in ('M', 'N')
-                if 'selection_evidence' in r['evidence'].get(k, {}))
+    alls = carrier['items'] + carrier['components']
+    mn = sorted(f"{r['id']}.{k}" for r in alls for k in ('M', 'N') if 'selection_evidence' in r['evidence'].get(k, {}))
+    nc = [r['id'] for r in alls if r['values'][2] is None and r['status'] == 'research_draft']
+    qu = [r['id'] for r in alls if r['values'][16] is not None] if inv.adoption != 'verified' else []
     receipt.update(status='CARRIED_STRUCTURE_ONLY', carrier_sha256=sha256(cb), items=len(carrier['items']),
                    components=len(carrier['components']), groups=len(carrier['groups']),
                    nonitems=len(carrier['nonitems']), semantic_approval=False,
+                   # per relaxation class; export_mode_required at the top level is the one to use
                    o13_m_n_selection_evidence={'count': len(mn), 'first': mn[:10],
                                                'writer004_validateCarrier_accepts': not mn,
-                                               'export_mode_required': 'v2' if mn else 'v1'})
+                                               'export_mode_required': 'v2' if mn else 'v1'},
+                   r57_null_c_research_draft={'count': len(nc), 'first': nc[:10],
+                                              'writer004_validateCarrier_accepts': not nc,
+                                              'export_mode_required': 'v2' if nc else 'v1'},
+                   o16_q_unverified_adoption={'count': len(qu), 'first': qu[:10], 'adoption_status': inv.adoption,
+                                              'writer004_validateCarrier_accepts': True, 'export_mode_required': 'v1'},
+                   writer004_validateCarrier_accepts=not (mn or nc),
+                   export_mode_required='v2' if (mn or nc) else 'v1')
     (out / 'ADAPTER_RECEIPT.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
-    print(json.dumps({k: receipt[k] for k in ('status', 'carrier_sha256', 'items', 'components', 'nonitems')}))
+    print(json.dumps({k: receipt[k] for k in ('status', 'carrier_sha256', 'items', 'components', 'nonitems', 'export_mode_required')}))
     return 0
 
 

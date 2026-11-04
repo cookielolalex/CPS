@@ -1404,23 +1404,23 @@
     },
     {
       "path": "research/guideline046_006/package/tools/cps046b_route.py",
-      "bytes": 62990,
-      "sha256": "b01f34f52e840d806bf5c72cbc144da1f46831b08b5d3f47e0d98007acd3fdfd"
+      "bytes": 68150,
+      "sha256": "4063953736bca6fead04a7b8adecae4256c7ca3bc83f704a20a096549e21104e"
     },
     {
       "path": "research/guideline046_006/route_tests/make_fixtures.py",
-      "bytes": 41325,
-      "sha256": "96320006c3bce776c6733fd05efda50b5fcd1c114939d47ce2c89493412a746c"
+      "bytes": 46250,
+      "sha256": "2d5b6f1586e8165a4aff56f1c7b0a28d5e73408cc9534a580499ed2b173bf938"
     },
     {
       "path": "research/guideline046_006/route_tests/parity_batch.mjs",
-      "bytes": 622,
-      "sha256": "26c8aafb8ca43c7ca1d110421b3d862c555d606038972708b788231a014675f4"
+      "bytes": 765,
+      "sha256": "fb71b88e3fe4188d12b1b31a17b2b5cf56bf65aaa1a89229c882b9b5fb337349"
     },
     {
       "path": "research/guideline046_006/route_tests/run_route_tests.py",
-      "bytes": 35278,
-      "sha256": "b07888cdbee49ce4ac3ba6a38c53dfee42028ecd8a4849beeedfbb0d9dbe9528"
+      "bytes": 38767,
+      "sha256": "c5e38d61b903bd9801eaadd5fe3e572c317d6dcfd7a0e9aa03279c03a8b6da78"
     },
     {
       "path": "research/guideline046_006/route_tests/test_compare_source047.py",

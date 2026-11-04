@@ -1,16 +1,26 @@
-"""Actual-route tests for candidates 046b-046f (route v4) with invented fixtures only.
+"""Actual-route tests for candidates 046b-046f (route v4.1) with invented fixtures only.
 
 Route: response -> tools/cps046b_route.py (check/convert) -> archived writer004
 validate_carrier_v4.mjs (byte-identical original, @oai/artifact-tool import stubbed)
 -> frozen compare_source043.evaluate pairing interface (invented expectations).
-Route v4 (owner decision O13, FIELD_ROLES R48): L, M and N may be proven by job-input context
-alone. writer004 validateCarrier accepts selection_evidence for L only, so the writer-port parity
-fuzz allows exactly one divergence: a carrier with M/N selection evidence that writer004 rejects
-with SELECTION_ONLY_ENGINEERING_ID. The same carrier with M/N selection evidence converted to the
-documented placeholder location (research/export README, --mode v2) must pass writer004 itself.
+Route v4 (owner decision O13, FIELD_ROLES R48): L, M and N may be proven by job-input context alone.
+Route v4.1 (R52/R54/R56/R57, O16): a null C may be research_draft; Q may be non-null under
+unverified adoption (warning); the one-member physical_enclosure group still carries A/B.
+Writer-port parity fuzz against node writer004:
+  - validate_carrier_port(strict=True) must equal writer004 on every carrier;
+  - every divergence of the default (relaxed) port must be classified into a documented
+    relaxation class by writer004's own code and location: o13_m_n_selection_evidence
+    (SELECTION_ONLY_ENGINEERING_ID at items[i].values.M|N holding selection_evidence) or
+    r57_null_c_research_draft (UNRESOLVED_ITEM_MUST_BE_HELD at items[i] with C null and status
+    research_draft). The class o16_q_unverified_adoption has no divergence (writer004 never reads
+    the adoption status): every Q-under-unverified carrier must agree. Any other divergence fails;
+  - every carrier the relaxed port accepts must be accepted by writer004 after the documented
+    neutralization (research/export README, --mode v2): M/N selection evidence -> placeholder
+    location evidence; C-null research_draft -> status held, plus one placeholder review reason
+    when the item has none.
 Usage: python3 -I run_route_tests.py --writer-dir DIR --work NEWDIR
 """
-import argparse, copy, hashlib, importlib.util, json, subprocess, sys
+import argparse, copy, hashlib, importlib.util, json, re, subprocess, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -27,23 +37,75 @@ EXAMPLE_INV = PKG / 'resources' / 'EXAMPLE_INVENTORY.json'
 EXAMPLE_RESP = PKG / 'resources' / 'EXAMPLE_RESPONSE.json'
 
 
+def _rows(c):
+    try:
+        return [r for r in list(c['items']) + list(c['components']) if isinstance(r, dict)]
+    except (KeyError, TypeError):
+        return []
+
+
 def has_mn_selection(c):
-    return any('selection_evidence' in r['evidence'].get(k, {}) for r in c['items'] + c['components'] for k in ('M', 'N'))
+    return any(isinstance(r.get('evidence'), dict) and isinstance(r['evidence'].get(k), dict) and 'selection_evidence' in r['evidence'][k]
+               for r in _rows(c) for k in ('M', 'N'))
+
+
+def is_r57(r):
+    v = r.get('values')
+    return isinstance(v, list) and len(v) > 2 and v[2] is None and r.get('status') == 'research_draft'
+
+
+def has_r57(c):
+    return any(is_r57(r) for r in _rows(c))
+
+
+def has_q_unverified(c):
+    md = c.get('metadata') if isinstance(c, dict) else None
+    return (isinstance(md, dict) and md.get('source_adoption') != 'verified'
+            and any(isinstance(r.get('values'), list) and len(r['values']) == 17 and r['values'][16] is not None for r in _rows(c)))
+
+
+R57_PLACEHOLDER = ('R57 relaxation placeholder: C is null with status research_draft in the carrier; '
+                   'status held and this reason exist only in the writer004 validation copy.')
 
 
 def placeholder_copy(c):
-    """Documented O13 placeholder method (research/export README, --mode v2), written independently here:
-    each M/N selection_evidence becomes location evidence of the same item: location = the item's own
+    """Documented neutralization (research/export README, --mode v2), written independently here.
+    O13: each M/N selection_evidence becomes location evidence of the same item: location = the item's own
     location, anchor = the item's anchor, raw_text = the selection_evidence text; transformation and any
-    other key unchanged."""
+    other key unchanged. R57: an item or component with C null and status research_draft gets status held,
+    and, when its review_reasons is an empty list, the one placeholder review reason."""
     c = copy.deepcopy(c)
-    for r in c['items'] + c['components']:
+    for r in _rows(c):
+        ev = r.get('evidence')
         for k in ('M', 'N'):
-            e = r['evidence'].get(k)
+            e = ev.get(k) if isinstance(ev, dict) else None
             if isinstance(e, dict) and 'selection_evidence' in e:
                 rest = {x: y for x, y in e.items() if x != 'selection_evidence'}
-                r['evidence'][k] = dict(rest, location=copy.deepcopy(r['location']), anchor=r['anchor'], raw_text=e['selection_evidence'])
+                r['evidence'][k] = dict(rest, location=copy.deepcopy(r.get('location')), anchor=r.get('anchor'), raw_text=e['selection_evidence'])
+        if is_r57(r):
+            r['status'] = 'held'
+            if r.get('review_reasons') == []:
+                r['review_reasons'] = [R57_PLACEHOLDER]
     return c
+
+
+DIVERGENCE_LOC_RE = re.compile(r'items\[(0|[1-9][0-9]*)\](?:\.values\.([A-Q]))?')
+
+
+def classify_divergence(c, node_code, node_loc):
+    """Documented relaxation class of a port/writer004 divergence, from writer004's own code and location; else None."""
+    m = DIVERGENCE_LOC_RE.fullmatch(node_loc or '')
+    rows = list(c['items']) + list(c['components'])      # writer004 indexes [...items, ...components]
+    if not m or int(m[1]) >= len(rows) or not isinstance(rows[int(m[1])], dict):
+        return None
+    r = rows[int(m[1])]
+    if node_code == 'SELECTION_ONLY_ENGINEERING_ID' and m[2] in ('M', 'N'):
+        e = r.get('evidence', {}).get(m[2]) if isinstance(r.get('evidence'), dict) else None
+        if isinstance(e, dict) and 'selection_evidence' in e:
+            return 'o13_m_n_selection_evidence'
+    if node_code == 'UNRESOLVED_ITEM_MUST_BE_HELD' and m[2] is None and is_r57(r):
+        return 'r57_null_c_research_draft'
+    return None
 COLS = 'ABCDEFGHIJKLMNOPQ'
 results = []
 
@@ -188,7 +250,11 @@ def main():
                     'v4_I_brand_table_only': 'field_must_be_null', 'v4_J_brand_table_only': 'field_must_be_null',
                     'v4_C_glossary_only': 'field_must_be_null', 'v4_J_company_name_only': 'field_must_be_null',
                     'v4_K_company_name_only': 'field_must_be_null', 'v4_D_project_name_only': 'field_must_be_null',
-                    'v4_M_unknown_context': 'invalid', 'v4_N_numeric_value': 'invalid'}.get(mu['name'])
+                    'v4_M_unknown_context': 'invalid', 'v4_N_numeric_value': 'invalid',
+                    'v41_null_C_research_draft_no_reason': 'invalid', 'v41_null_C_research_draft_blank_reason': 'invalid',
+                    'v41_null_C_research_draft_reason_with_refs': 'invalid', 'v41_null_C_status_partial': 'invalid',
+                    'v41_Q_unverified_amount_not_unit_price': 'invalid', 'v41_Q_unverified_text_cell': 'field_must_be_null',
+                    'v41_Q_unverified_as_text': 'invalid'}.get(mu['name'])
         ok = code == 1 and mu['expected_code'] in codes and (want_cat is None or cats.get(mu['expected_code']) == want_cat)
         c2, out2, _ = route('convert', '--inventory', str(minv), '--response', str(fx / mu['file']), '--out-dir', str(work / ('mut_' + mu['name'])))
         refused = c2 == 1 and not (work / ('mut_' + mu['name']) / 'carrier.json').exists() and (work / ('mut_' + mu['name']) / 'CENSUS_LEDGER.json').exists()
@@ -249,7 +315,7 @@ def main():
     jv = fx / 'valid_response_job_inputs.json'
     code, out, _ = route('check', '--inventory', str(inv), '--response', str(jv))
     jrep = json.loads(out)
-    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == 'cps046f-route.v4'
+    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == 'cps046f-route.v4.1'
            and [w['code'] for w in jrep['warnings']] == ['O13_SELECTION_EVIDENCE_M_N'] and jrep['warnings'][0]['detail']['count'] == 18,
            jrep['violations'][:5] or jrep['warnings'])
     code, out, _ = route('convert', '--inventory', str(inv), '--response', str(jv), '--out-dir', str(work / 'jobs_out'))
@@ -264,7 +330,7 @@ def main():
         return set(e) == {'selection_evidence', 'transformation'} and json.loads(e['selection_evidence'])['context'][0]['value'] == r['values'][COLS.index(k)]
     record('v4_M_N_L_selection_evidence_from_job_inputs', all(sel(r, k) for r in jall for k in 'LMN')
            and all(r['values'][12] == ctxv['context:customer_name'] and r['values'][13] == ctxv['context:project_name'] for r in jall)
-           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == 'cps046f-route.v4')
+           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == 'cps046f-route.v4.1')
     record('v4_receipt_reports_O13', jrec['o13_m_n_selection_evidence']['count'] == 18 and jrec['o13_m_n_selection_evidence']['export_mode_required'] == 'v2'
            and jrec['o13_m_n_selection_evidence']['writer004_validateCarrier_accepts'] is False)
     r1j = next(r for r in jcarrier['items'] if r['id'] == 'R001')

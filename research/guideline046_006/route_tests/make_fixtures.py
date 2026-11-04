@@ -1,11 +1,16 @@
 """Invented route fixtures for candidates 046b-046f. No project data: every name/value is made up.
 
-Writes: fixture inventory (unverified adoption), a verified-adoption variant, one valid
+Writes: fixture inventory (unverified adoption), verified- and partial-adoption variants, one valid
 response, a job-input response (046f, owner decision O13 / FIELD_ROLES R48: L, M and N cite
 only job-input context facts), and single-defect mutations with the violation code each must
 trigger. Route v4: the inventory carries the job-input and company-resource context facts
 (context:case_identity, customer_name, project_name, company_name, glossary, brand_table) with
 INVENTED values; they are not the owner-reviewed company resources.
+Route v4.1 (R52/R54/R56/R57, O16) adds valid responses for the relaxations: C null with status
+research_draft (R003 with a review reason, component C001 without one), Q under unverified and
+partial adoption, all relaxations together with the job inputs, and a one-member
+physical_enclosure group. The v4 mutations null_C_not_held and Q_unverified are now valid
+responses and are no longer mutations.
 """
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -378,6 +383,53 @@ def job_input_response(base):
     return r
 
 
+def r57_response(base):
+    """Route v4.1 relaxation (a), FIELD_ROLES R52/R57: C null with status research_draft. R003 (a service line) keeps
+    a review reason; the analysis component C001 (labour) has none, so the writer's validation copy must add one."""
+    r = copy.deepcopy(base)
+    def it(i):
+        return next(x for x in r['items'] if x['id'] == i)
+    r3 = it('R003')
+    r3['values'][2], r3['values'][3] = None, '盤體組立費'
+    r3['proofs']['C'] = nul('Service line: C is null (R52).')
+    r3['proofs']['D'] = nn(['cell:S1!B7'], 'copied description', 'service line: D is the description (R52)')
+    r3['review_reasons'] = ['The remark 001.00 has no established technical role; it is kept in raw remarks.']
+    c1 = it('C001')
+    c1['values'][2], c1['values'][3] = None, '組立工資'
+    c1['proofs']['C'] = nul('Labour component: C is null (R52).')
+    c1['proofs']['D'] = nn(['cell:S2!A3'], 'copied description', 'labour line: D is the description (R52)')
+    c1['review_reasons'] = []
+    r['limitations'] = r['limitations'] + ['Invented route v4.1 variant: C null with status research_draft (R52, R57).']
+    return r
+
+
+def q_response(base, inv_sha):
+    """Route v4.1 relaxation (b), FIELD_ROLES R54/O16: Q is the unit price although adoption is not verified."""
+    r = copy.deepcopy(base)
+    r['inventory_sha256'] = inv_sha
+    r6 = next(x for x in r['items'] if x['id'] == 'R006')
+    r6['values'][16] = 50000
+    r6['proofs']['Q'] = nn(['cell:S1!E12'], 'copied unit price', 'priced line: Q is its unit price, never the amount (R54)')
+    r['limitations'] = r['limitations'] + ['Invented route v4.1 variant: Q under unverified adoption (R54, O16).']
+    return r
+
+
+def one_member_group_response(base):
+    """R56 mechanism: a physical_enclosure group with exactly one member carries A and B; no other row has A or B."""
+    r = copy.deepcopy(base)
+    g = r['groups'][0]
+    g.update(relationship='physical_enclosure', quantity_basis='the member row R001 only (R56)',
+             limitations=['One-row carrier group for A and B (R56); the route requires a group for A/B.'])
+    for x in r['items']:
+        if x['id'] in ('R002', 'R003'):
+            x['group_id'] = None
+            x['values'][0] = x['values'][1] = None
+            x['proofs']['A'] = nul('Not the enclosure row: A is null (R56).')
+            x['proofs']['B'] = nul('Not the enclosure row: B is null (R56).')
+    r['limitations'] = r['limitations'] + ['Invented route v4.1 variant: one-member physical_enclosure group (R56).']
+    return r
+
+
 def mutations(base):
     """(name, expected violation code, mutate(response)->response or raw bytes)."""
     S = 'cell:S1!'
@@ -401,7 +453,6 @@ def mutations(base):
         ('D_as_number', 'STRING_REQUIRED', m(lambda r: item(r, 'R001')['values'].__setitem__(3, 110))),
         ('G_nonnull', 'PURCHASE_PRICE_MUST_BE_BLANK', m(lambda r: (item(r, 'R002')['values'].__setitem__(6, 120.5), item(r, 'R002')['proofs'].update(G={'refs': [S + 'E6'], 'transformation': 't', 'role_basis': 'b'})))),
         ('item_partial', 'ITEM_STATUS', m(lambda r: item(r, 'R002').update(status='partial'))),
-        ('null_C_not_held', 'NULL_C_REQUIRES_HELD', m(lambda r: item(r, 'R007').update(status='research_draft'))),
         ('held_without_reason', 'HELD_REASON_REQUIRED', m(lambda r: item(r, 'R007').update(review_reasons=[]))),
         ('A_without_group', 'UNGROUPED_AB_MUST_BE_BLANK', m(lambda r: item(r, 'R002').update(group_id=None))),
         ('A_not_group_name', 'A_MUST_EQUAL_GROUP_NAME', m(lambda r: item(r, 'R002')['values'].__setitem__(0, '示例控制盤一'))),
@@ -411,7 +462,6 @@ def mutations(base):
         ('F_not_raw_quantity', 'SOURCE_QUANTITY_MISMATCH', m(lambda r: item(r, 'R002')['values'].__setitem__(5, 4))),
         ('F_proof_other_cell', 'F_PROOF_MUST_BE_RAW_QUANTITY_CELL', m(lambda r: item(r, 'R003')['proofs']['F'].update(refs=[S + 'D12']))),
         ('F_proof_text_cell', 'NONNUMERIC_SOURCE_TEXT_FIELD_MUST_BE_NULL', m(lambda r: item(r, 'R002')['proofs']['F'].update(refs=[S + 'B6']))),
-        ('Q_unverified', 'Q_REQUIRES_VERIFIED_ADOPTION', m(lambda r: (item(r, 'R006')['values'].__setitem__(16, 50000), item(r, 'R006')['proofs'].update(Q={'refs': [S + 'E12'], 'transformation': 'copied', 'role_basis': 'unit price column'})))),
         ('formula_like_D', 'FORMULA_LIKE_STRING_WHOLE_OUTPUT_HELD', m(lambda r: item(r, 'R005')['values'].__setitem__(3, '-20~60℃'))),
         ('raw_blank_cell', 'EMPTY_CELL_CITED_IN_RAW', m(lambda r: item(r, 'R001')['raw_refs'].update(remarks={'refs': [S + 'G4'], 'reason_if_empty': None}))),
         ('raw_covered_cell', 'EMPTY_CELL_CITED_IN_RAW', m(lambda r: item(r, 'R005')['raw_refs'].update(remarks={'refs': [S + 'G11', S + 'B13'], 'reason_if_empty': None}))),
@@ -485,8 +535,37 @@ def main():
     (OUT / 'valid_response_verified_Q.json').write_bytes(enc(q))
     jobs = job_input_response(base)
     (OUT / 'valid_response_job_inputs.json').write_bytes(enc(jobs))
+    # route v4.1 relaxations (R52/R57 C null research_draft; R54/O16 Q under unverified adoption; R56 one-member group)
+    inv_p, inv_p_raw = build_inventory('partial')
+    (OUT / 'fixture_inventory_partial.json').write_bytes(inv_p_raw)
+    inv_sha = hashlib.sha256(inv_raw).hexdigest()
+    r57 = r57_response(base)
+    (OUT / 'valid_response_r57_null_c.json').write_bytes(enc(r57))
+    (OUT / 'valid_response_q_unverified.json').write_bytes(enc(q_response(base, inv_sha)))
+    (OUT / 'valid_response_q_partial.json').write_bytes(enc(q_response(base, hashlib.sha256(inv_p_raw).hexdigest())))
+    (OUT / 'valid_response_relaxed_all.json').write_bytes(enc(job_input_response(q_response(r57, inv_sha))))
+    (OUT / 'valid_response_one_member_group.json').write_bytes(enc(one_member_group_response(base)))
     cases, raws = mutations(base)
     index = []
+    # route v4.1: the relaxations keep the null-reason requirement and every Q consistency check
+    def rm(name, code, f, src=r57):
+        rr = copy.deepcopy(src)
+        f(rr)
+        (OUT / f'mut_{name}.json').write_bytes(enc(rr))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code})
+    def ri(rr, i):
+        return next(x for x in rr['items'] if x['id'] == i)
+    rm('v41_null_C_research_draft_no_reason', 'NULL_PROOF_REQUIRED', lambda rr: ri(rr, 'R003')['proofs'].update(C={}))
+    rm('v41_null_C_research_draft_blank_reason', 'NONBLANK_STRING_REQUIRED', lambda rr: ri(rr, 'C001')['proofs'].update(C={'reason': '　'}))
+    rm('v41_null_C_research_draft_reason_with_refs', 'NULL_PROOF_REQUIRED',
+       lambda rr: ri(rr, 'R003')['proofs'].update(C={'reason': 'x', 'refs': ['cell:S1!B7']}))
+    rm('v41_null_C_status_partial', 'ITEM_STATUS', lambda rr: ri(rr, 'R003').update(status='partial'))
+    q_src = q_response(base, inv_sha)
+    rm('v41_Q_unverified_amount_not_unit_price', 'SOURCE_UNIT_PRICE_MISMATCH',
+       lambda rr: (ri(rr, 'R002')['values'].__setitem__(16, 361.5), ri(rr, 'R002')['proofs'].update(Q=nn(['cell:S1!F6'], 'copied', 'amount'))), q_src)
+    rm('v41_Q_unverified_text_cell', 'NONNUMERIC_SOURCE_TEXT_FIELD_MUST_BE_NULL',
+       lambda rr: ri(rr, 'R006')['proofs'].update(Q=nn(['cell:S1!B12'], 'copied', 'unit price')), q_src)
+    rm('v41_Q_unverified_as_text', 'FINITE_SAFE_NUMBER_REQUIRED', lambda rr: ri(rr, 'R006')['values'].__setitem__(16, '50000'), q_src)
     # route v4 (O13): only L, M and N may be proven by context alone
     def jm(name, code, f):
         rr = copy.deepcopy(jobs)
