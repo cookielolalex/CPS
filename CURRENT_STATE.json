@@ -285,7 +285,11 @@
  "owner_decisions_2026_11_04": {
   "O10": "owner-supplied panels excluded with contents unless a line inside has a quoted price (to verify against creator practice)",
   "O11": "decide non-solid rules (first 另案) from the historical creator majority practice on tuning cases",
-  "O12": "deployment threshold 95% match with historical 未填 (replacing 99%); metric defined prospectively"
+  "O12": "deployment threshold 95% match with historical 未填 (replacing 99%); metric defined prospectively",
+  "O13": "M/N/L from per-job inputs",
+  "O14": "company brand/model table resource (owner-reviewed, from non-reserved 未填)",
+  "O15": "abbreviation glossary resource for C (owner-reviewed)",
+  "O16": "Q = quoted unit price; I=J=不含估價 on not-estimated lines; enclosure row A/B/J per creator"
  },
  "portable_writer": {
   "path": "research/export",

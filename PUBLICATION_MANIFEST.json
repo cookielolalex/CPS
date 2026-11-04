@@ -14,13 +14,13 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 6230,
-      "sha256": "62c91e36001db0304941c6b638ba716406b3cc3dc900c9de7fccd281a905483b"
+      "bytes": 6590,
+      "sha256": "a9676d8d31ae61e14112dc815dd176b20f5a88404f594152c4946ba5d8094b58"
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 7710,
-      "sha256": "933eb45beb77fa5365e87529f25b470f56d7bf9570fba48120cc781883ab8ee6"
+      "bytes": 8012,
+      "sha256": "5363b2d37e50b9541cbabbca7030a6518433dbe3990ab9f78be6f1eb46f54ea0"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1276,6 +1276,11 @@
       "path": "research/guideline046_005/STUDY_CREATOR_PRACTICE_20261104.md",
       "bytes": 4169,
       "sha256": "8a572568b5b535438278db3fec92d5a928db1880cbfb4badd7428f9953aff951"
+    },
+    {
+      "path": "research/guideline046_005/DECISIONS_OWNER_O13_O16.md",
+      "bytes": 2301,
+      "sha256": "49ab512e2b22427fde7568dc73431276b96393b7d515a1a2332b8c2741321066"
     }
   ]
 }
