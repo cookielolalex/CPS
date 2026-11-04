@@ -1,7 +1,11 @@
-"""Invented route fixtures for candidate 046b. No project data: every name/value is made up.
+"""Invented route fixtures for candidates 046b-046f. No project data: every name/value is made up.
 
 Writes: fixture inventory (unverified adoption), a verified-adoption variant, one valid
-response, and single-defect mutations with the violation code each must trigger.
+response, a job-input response (046f, owner decision O13 / FIELD_ROLES R48: L, M and N cite
+only job-input context facts), and single-defect mutations with the violation code each must
+trigger. Route v4: the inventory carries the job-input and company-resource context facts
+(context:case_identity, customer_name, project_name, company_name, glossary, brand_table) with
+INVENTED values; they are not the owner-reviewed company resources.
 """
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -137,6 +141,7 @@ def build_inventory(adoption, overrides=None, extra_sheet=False):
                               'merge_anchor_ref': cov.get((r, c)), 'conflicts': conflicts, 'canonical_raw': canonical,
                               'usable_for_raw': usable, 'raw_limit_reason': reason, 'views': vv})
     fake_sha = hashlib.sha256(b'invented fixture workbook bytes').hexdigest()
+    job_sha = hashlib.sha256(b'invented fixture per-job config').hexdigest()
     inv = {'schema': 'cps.source-inventory.cells.v2', 'case_id': 'FIXTURE01', 'family_id': 'FIXTURE01',
            'representation_profile': 'cached-cell-raw-scalar-text.v2',
            'source': {'source_id': 'S', 'format': 'cached_xls', 'bytes': 1024, 'sha256': fake_sha,
@@ -149,10 +154,38 @@ def build_inventory(adoption, overrides=None, extra_sheet=False):
            'external_links': [], 'cells': cells,
            'context_facts': [{'ref': 'context:case_identity', 'namespace': 'cps.internal_case_id', 'value': 'FIXTURE01',
                               'basis': 'Invented selected case identity for route testing.',
-                              'authority_pins': [{'label': 'invented', 'sha256': fake_sha}]}],
+                              'authority_pins': [{'label': 'invented', 'sha256': fake_sha}]}] + JOB_CONTEXT(job_sha),
            'limitations': ['Invented fixture inventory for adapter route tests only.']}
     raw = serialize(inv).encode('utf-8')
     return inv, raw
+
+
+# 046f context facts (FIELD_ROLES R48, R58). INVENTED values for route testing only.
+CUSTOMER, PROJECT_NAME, COMPANY = '示例自來水事業處', '示例淨水場控制盤更新', '示例機電股份有限公司'
+GLOSSARY = json.dumps({'schema': 'cps.company-glossary.v1', 'invented': True, 'generic_prefix_words': ['產品'],
+                       'enclosure_word': '箱體', 'abbreviations': [{'device': '電磁接觸器', 'abbreviation': 'XM'},
+                                                                 {'device': '選擇開關', 'abbreviation': 'XS'}]},
+                      ensure_ascii=False, sort_keys=True)
+BRAND_TABLE = json.dumps({'schema': 'cps.company-brand-table.v1', 'invented': True,
+                          'entries': [{'device': '電磁接觸器', 'rating_band': 'all ratings', 'brand': '示例甲牌', 'model': 'XM-10'}]},
+                         ensure_ascii=False, sort_keys=True)
+
+
+def JOB_CONTEXT(job_sha):
+    def fact(name, namespace, value, basis, label, pin):
+        return {'ref': 'context:' + name, 'namespace': namespace, 'value': value, 'basis': basis,
+                'authority_pins': [{'label': label, 'sha256': pin}]}
+    res = lambda v: hashlib.sha256(v.encode('utf-8')).hexdigest()
+    return [fact('customer_name', 'cps.job_input.customer_full_name', CUSTOMER,
+                 'Invented job input: customer full name supplied with the job (O13, R48).', 'invented per-job config', job_sha),
+            fact('project_name', 'cps.job_input.project_short_name', PROJECT_NAME,
+                 'Invented job input: project short name supplied with the job (O13, R48).', 'invented per-job config', job_sha),
+            fact('company_name', 'cps.company_resource.company_name', COMPANY,
+                 'Invented company name resource (O16, R56, R58).', 'invented company resource', res(COMPANY)),
+            fact('glossary', 'cps.company_resource.glossary', GLOSSARY,
+                 'Invented abbreviation glossary resource (O15, R52, R58); not the owner-reviewed glossary.', 'invented company resource', res(GLOSSARY)),
+            fact('brand_table', 'cps.company_resource.brand_table', BRAND_TABLE,
+                 'Invented brand/model table resource (O14, R55, R58); not the owner-reviewed table.', 'invented company resource', res(BRAND_TABLE))]
 
 
 def nn(refs, t, rb):
@@ -320,6 +353,31 @@ def valid_response(inv_sha):
             'component_links': links, 'source_roles': roles, 'limitations': ['Invented fixture response.']}
 
 
+def job_input_response(base):
+    """046f job inputs (O13, R48): every item carries L, M and N proven by context alone; K and O null.
+    R001 also takes I/J from the invented brand table, citing its description cell plus context:brand_table (R55, R58)."""
+    r = copy.deepcopy(base)
+    for it in r['items']:
+        v, p = it['values'], it['proofs']
+        v[COLS.index('L')] = 'FIXTURE01'
+        p['L'] = nn(['context:case_identity'], 'copied job input', 'internal case id supplied with the job (R48)')
+        v[COLS.index('M')] = CUSTOMER
+        p['M'] = nn(['context:customer_name'], 'copied job input', 'customer full name supplied with the job (R48)')
+        v[COLS.index('N')] = PROJECT_NAME
+        p['N'] = nn(['context:project_name'], 'copied job input', 'project short name supplied with the job (R48)')
+        for col in ('K', 'O'):
+            v[COLS.index(col)] = None
+            p[col] = nul(f'{col} stays null (FIELD_ROLES R48).')
+    r1 = next(x for x in r['items'] if x['id'] == 'R001')
+    r1['values'][COLS.index('I')], r1['values'][COLS.index('J')] = 'XM-10', '示例甲牌'
+    r1['proofs']['I'] = nn(['cell:S1!B4', 'context:brand_table'], 'model from the company brand table entry for 電磁接觸器',
+                           'priced equipment line with no contract-stated model (R55, R58)')
+    r1['proofs']['J'] = nn(['cell:S1!B4', 'context:brand_table'], 'brand from the company brand table entry for 電磁接觸器',
+                           'priced equipment line with no contract-stated brand (R55, R58)')
+    r['limitations'] = r['limitations'] + ['Invented 046f job-input variant (O13, R48).']
+    return r
+
+
 def mutations(base):
     """(name, expected violation code, mutate(response)->response or raw bytes)."""
     S = 'cell:S1!'
@@ -425,8 +483,32 @@ def main():
     r6['values'][16] = 50000
     r6['proofs']['Q'] = {'refs': ['cell:S1!E12'], 'transformation': 'copied', 'role_basis': 'accepted unit rate column (invented verified adoption)'}
     (OUT / 'valid_response_verified_Q.json').write_bytes(enc(q))
+    jobs = job_input_response(base)
+    (OUT / 'valid_response_job_inputs.json').write_bytes(enc(jobs))
     cases, raws = mutations(base)
     index = []
+    # route v4 (O13): only L, M and N may be proven by context alone
+    def jm(name, code, f):
+        rr = copy.deepcopy(jobs)
+        f(rr)
+        (OUT / f'mut_{name}.json').write_bytes(enc(rr))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code, 'base': 'valid_response_job_inputs.json'})
+    def ji(rr, i):
+        return next(x for x in rr['items'] if x['id'] == i)
+    def ctx_only(col, value, ref, iid='R002'):
+        def f(rr):
+            it = ji(rr, iid)
+            it['values'][COLS.index(col)] = value
+            it['proofs'][col] = nn([ref], 'copied context fact', 'context only')
+        return f
+    jm('v4_I_brand_table_only', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', ctx_only('I', 'XM-10', 'context:brand_table'))
+    jm('v4_J_brand_table_only', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', ctx_only('J', '示例甲牌', 'context:brand_table'))
+    jm('v4_C_glossary_only', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', ctx_only('C', 'XS', 'context:glossary'))
+    jm('v4_J_company_name_only', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', ctx_only('J', COMPANY, 'context:company_name'))
+    jm('v4_K_company_name_only', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', ctx_only('K', COMPANY, 'context:company_name'))
+    jm('v4_D_project_name_only', 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', ctx_only('D', PROJECT_NAME, 'context:project_name'))
+    jm('v4_M_unknown_context', 'UNKNOWN_CONTEXT_REF', ctx_only('M', CUSTOMER, 'context:customer'))
+    jm('v4_N_numeric_value', 'STRING_REQUIRED', ctx_only('N', 7, 'context:project_name'))
     for name, code, f in cases:
         (OUT / f'mut_{name}.json').write_bytes(enc(f(base)))
         index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code})

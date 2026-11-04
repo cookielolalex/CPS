@@ -1,8 +1,13 @@
-"""Actual-route tests for candidate 046b with invented fixtures only.
+"""Actual-route tests for candidates 046b-046f (route v4) with invented fixtures only.
 
 Route: response -> tools/cps046b_route.py (check/convert) -> archived writer004
 validate_carrier_v4.mjs (byte-identical original, @oai/artifact-tool import stubbed)
 -> frozen compare_source043.evaluate pairing interface (invented expectations).
+Route v4 (owner decision O13, FIELD_ROLES R48): L, M and N may be proven by job-input context
+alone. writer004 validateCarrier accepts selection_evidence for L only, so the writer-port parity
+fuzz allows exactly one divergence: a carrier with M/N selection evidence that writer004 rejects
+with SELECTION_ONLY_ENGINEERING_ID. The same carrier with M/N selection evidence converted to the
+documented placeholder location (research/export README, --mode v2) must pass writer004 itself.
 Usage: python3 -I run_route_tests.py --writer-dir DIR --work NEWDIR
 """
 import argparse, copy, hashlib, importlib.util, json, subprocess, sys
@@ -12,9 +17,34 @@ HERE = Path(__file__).resolve().parent
 PKG = HERE.parent / 'package'
 ROUTE = PKG / 'tools' / 'cps046b_route.py'
 COMPARER = HERE.parents[1] / 'evaluation' / 'compare_source043.py'
-WRITER_SHA = {'writer004.mjs': '85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7',
-              'validate_carrier_v4.mjs': '984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013',
-              'receipt_bytes.mjs': 'b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c'}
+# writer004.mjs: archived original, or the public copy in research/checkpoint045/writer that differs only in the
+# redacted Windows helper path on line 218 (not reached by validateCarrier/prepareMatrices; see research/export).
+WRITER_SHA = {'writer004.mjs': ('85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7',
+                                '70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7'),
+              'validate_carrier_v4.mjs': ('984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013',),
+              'receipt_bytes.mjs': ('b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c',)}
+EXAMPLE_INV = PKG / 'resources' / 'EXAMPLE_INVENTORY.json'
+EXAMPLE_RESP = PKG / 'resources' / 'EXAMPLE_RESPONSE.json'
+
+
+def has_mn_selection(c):
+    return any('selection_evidence' in r['evidence'].get(k, {}) for r in c['items'] + c['components'] for k in ('M', 'N'))
+
+
+def placeholder_copy(c):
+    """Documented O13 placeholder method (research/export README, --mode v2), written independently here:
+    each M/N selection_evidence becomes location evidence of the same item: location = the item's own
+    location, anchor = the item's anchor, raw_text = the selection_evidence text; transformation and any
+    other key unchanged."""
+    c = copy.deepcopy(c)
+    for r in c['items'] + c['components']:
+        for k in ('M', 'N'):
+            e = r['evidence'].get(k)
+            if isinstance(e, dict) and 'selection_evidence' in e:
+                rest = {x: y for x, y in e.items() if x != 'selection_evidence'}
+                r['evidence'][k] = dict(rest, location=copy.deepcopy(r['location']), anchor=r['anchor'], raw_text=e['selection_evidence'])
+    return c
+COLS = 'ABCDEFGHIJKLMNOPQ'
 results = []
 
 
@@ -56,7 +86,7 @@ def main():
     wd, work = Path(a.writer_dir), Path(a.work)
     work.mkdir(parents=True, exist_ok=False)
     for f, h in WRITER_SHA.items():
-        record(f'writer_bytes_{f}', sha((wd / f).read_bytes()) == h)
+        record(f'writer_bytes_{f}', sha((wd / f).read_bytes()) in h)
     fx = work / 'fixtures'
     code, out, err = run([sys.executable, '-I', str(HERE / 'make_fixtures.py'), str(fx)])
     record('make_fixtures', code == 0, err[-300:] if code else None)
@@ -154,7 +184,11 @@ def main():
                     'unicode_digit_quantity': 'field_must_be_null', 'context_only_C': 'field_must_be_null',
                     'formula_like_D': 'unrepresentable_hold', 'component_link_held': 'unrepresentable_hold',
                     'long_packed_transformation': 'unrepresentable_hold', 'too_many_nonitems': 'unrepresentable_hold',
-                    'unknown_ref': 'invalid', 'dropped_item': 'invalid'}.get(mu['name'])
+                    'unknown_ref': 'invalid', 'dropped_item': 'invalid',
+                    'v4_I_brand_table_only': 'field_must_be_null', 'v4_J_brand_table_only': 'field_must_be_null',
+                    'v4_C_glossary_only': 'field_must_be_null', 'v4_J_company_name_only': 'field_must_be_null',
+                    'v4_K_company_name_only': 'field_must_be_null', 'v4_D_project_name_only': 'field_must_be_null',
+                    'v4_M_unknown_context': 'invalid', 'v4_N_numeric_value': 'invalid'}.get(mu['name'])
         ok = code == 1 and mu['expected_code'] in codes and (want_cat is None or cats.get(mu['expected_code']) == want_cat)
         c2, out2, _ = route('convert', '--inventory', str(minv), '--response', str(fx / mu['file']), '--out-dir', str(work / ('mut_' + mu['name'])))
         refused = c2 == 1 and not (work / ('mut_' + mu['name']) / 'carrier.json').exists() and (work / ('mut_' + mu['name']) / 'CENSUS_LEDGER.json').exists()
@@ -211,22 +245,138 @@ def main():
     variant('view_zero', lambda c: it(c, 'R002')['location'].update(views=[0]))
     variant('basis_unit_formula', lambda c: it(c, 'C001')['composition'].update(basis_unit='-x'))
     variant('basis_raw_unicode', lambda c: it(c, 'C001')['composition'].update(basis_raw='２'))
+    # 046f job-input carrier (M/N selection evidence on demand and component rows)
+    jv = fx / 'valid_response_job_inputs.json'
+    code, out, _ = route('check', '--inventory', str(inv), '--response', str(jv))
+    jrep = json.loads(out)
+    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == 'cps046f-route.v4'
+           and [w['code'] for w in jrep['warnings']] == ['O13_SELECTION_EVIDENCE_M_N'] and jrep['warnings'][0]['detail']['count'] == 18,
+           jrep['violations'][:5] or jrep['warnings'])
+    code, out, _ = route('convert', '--inventory', str(inv), '--response', str(jv), '--out-dir', str(work / 'jobs_out'))
+    record('v4_job_inputs_convert', code == 0, out[-300:])
+    jcarrier = json.loads((work / 'jobs_out' / 'carrier.json').read_text(encoding='utf-8'))
+    jrec = json.loads((work / 'jobs_out' / 'ADAPTER_RECEIPT.json').read_text(encoding='utf-8'))
+    jresp = json.loads(jv.read_text(encoding='utf-8'))
+    ctxv = {x['ref']: x['value'] for x in json.loads(inv.read_text(encoding='utf-8'))['context_facts']}
+    jall = jcarrier['items'] + jcarrier['components']
+    def sel(r, k):
+        e = r['evidence'][k]
+        return set(e) == {'selection_evidence', 'transformation'} and json.loads(e['selection_evidence'])['context'][0]['value'] == r['values'][COLS.index(k)]
+    record('v4_M_N_L_selection_evidence_from_job_inputs', all(sel(r, k) for r in jall for k in 'LMN')
+           and all(r['values'][12] == ctxv['context:customer_name'] and r['values'][13] == ctxv['context:project_name'] for r in jall)
+           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == 'cps046f-route.v4')
+    record('v4_receipt_reports_O13', jrec['o13_m_n_selection_evidence']['count'] == 18 and jrec['o13_m_n_selection_evidence']['export_mode_required'] == 'v2'
+           and jrec['o13_m_n_selection_evidence']['writer004_validateCarrier_accepts'] is False)
+    r1j = next(r for r in jcarrier['items'] if r['id'] == 'R001')
+    record('v4_resource_proof_cell_plus_context_is_location_evidence', set(r1j['evidence']['I']) == {'location', 'anchor', 'raw_text', 'transformation'}
+           and json.loads(r1j['evidence']['I']['transformation'])['context_refs'] == ['context:brand_table'] and r1j['values'][8] == 'XM-10'
+           and r1j['evidence']['I']['location']['cells'] == ['B4'])
+    record('v4_values_unchanged_type_exact', all(json.dumps(r['values'], ensure_ascii=False) == json.dumps(i['values'], ensure_ascii=False)
+                                                 for r, i in zip(jcarrier['items'] + jcarrier['components'], [x for x in jresp['items'] if x['role'] == 'demand'] + [x for x in jresp['items'] if x['role'] != 'demand'])))
+    code, res = node_validate(wd, work / 'jobs_out' / 'carrier.json')
+    record('v4_writer004_rejects_M_N_selection_evidence_documented_divergence', code == 1 and res.get('code') == 'SELECTION_ONLY_ENGINEERING_ID'
+           and '.values.M' in res.get('message', ''), res)
+    record('v4_python_port_accepts_M_N_selection_evidence', route_mod.validate_carrier_port(copy.deepcopy(jcarrier)) is True)
+    pc_path = work / 'jobs_placeholder_carrier.json'
+    pc_path.write_text(json.dumps(placeholder_copy(jcarrier), ensure_ascii=False), encoding='utf-8')
+    code, res = node_validate(wd, pc_path)
+    record('v4_writer004_accepts_placeholder_copy', code == 0 and res['status'] == 'WRITER_STRUCTURAL_VALIDATION_ONLY', res)
+    def port_code(c):
+        try:
+            route_mod.validate_carrier_port(c)
+            return 'PASS'
+        except route_mod.WriterReject as e:
+            return e.code
+    for col in ('C', 'I', 'K', 'O', 'P'):
+        bad = copy.deepcopy(jcarrier)
+        it(bad, 'R002')['values'][COLS.index(col)] = 2 if col == 'P' else 'x'
+        it(bad, 'R002')['null_reasons'].pop(col, None)
+        it(bad, 'R002')['evidence'][col] = dict(it(bad, 'R002')['evidence']['M'])
+        record(f'v4_port_rejects_selection_evidence_on_{col}', port_code(bad) == 'SELECTION_ONLY_ENGINEERING_ID')
+
+    def jvariant(label, f):
+        c = copy.deepcopy(jcarrier)
+        f(c)
+        fuzz.append(('jobs:' + label, c))
+    jvariant('unchanged', lambda c: None)
+    def component_only(c):      # demand rows converted to placeholders: only the components keep M/N selection evidence
+        pcopy = placeholder_copy(c)
+        for r, q in zip(c['items'], pcopy['items']):
+            r['evidence'] = q['evidence']
+    jvariant('component_only_MN', component_only)
+    jvariant('M_pathlike', lambda c: it(c, 'R002')['evidence']['M'].update(selection_evidence='C:\\x'))
+    jvariant('N_url', lambda c: it(c, 'C001')['evidence']['N'].update(selection_evidence='see https://x'))
+    jvariant('M_extra_key', lambda c: it(c, 'R002')['evidence']['M'].update(anchor='x'))
+    jvariant('N_blank_selection', lambda c: it(c, 'R003')['evidence']['N'].update(selection_evidence=' '))
+    jvariant('M_blank_transformation', lambda c: it(c, 'R003')['evidence']['M'].update(transformation='\u3000'))
+    jvariant('M_control_char', lambda c: it(c, 'R004')['evidence']['M'].update(selection_evidence='a\x07b'))
+    jvariant('N_long_30001', lambda c: it(c, 'R004')['evidence']['N'].update(selection_evidence='n' * 30001))
+    jvariant('N_review_cell_32768', lambda c: it(c, 'R005')['evidence']['N'].update(selection_evidence='n' * 29000, transformation='t' * 3000))
+    jvariant('M_value_formula', lambda c: it(c, 'R005')['values'].__setitem__(12, '-客戶'))
+    jvariant('M_value_number', lambda c: it(c, 'R006')['values'].__setitem__(12, 3))
+    jvariant('C_selection', lambda c: (it(c, 'R002')['values'].__setitem__(2, 'x'), it(c, 'R002')['evidence'].update(C=dict(it(c, 'R002')['evidence']['M']))))
+    jvariant('K_selection', lambda c: (it(c, 'R002')['values'].__setitem__(10, 'x'), it(c, 'R002')['null_reasons'].pop('K'), it(c, 'R002')['evidence'].update(K=dict(it(c, 'R002')['evidence']['M']))))
+    jvariant('qty_unicode', lambda c: (it(c, 'R002')['raw'].update(quantity='３'), it(c, 'R002')['evidence']['F'].update(raw_text='３')))
+    jvariant('formula_C', lambda c: it(c, 'R002')['values'].__setitem__(2, '=a'))
+    jvariant('ungrouped_ab', lambda c: it(c, 'R002').update(group_id=None))
+    jvariant('view_zero', lambda c: it(c, 'R002')['location'].update(views=[0]))
+    for label, c in list(fuzz):
+        if label.startswith('jobs:'):
+            fuzz.append((label + ':placeholder_copy', placeholder_copy(c)))
+
     fp = work / 'parity_carriers.json'
     fp.write_text(json.dumps([c for _, c in fuzz], ensure_ascii=False), encoding='utf-8')
     pcode, pout, perr = run(['node', str(HERE / 'parity_batch.mjs'), str((wd / 'writer004.mjs').resolve()), str(fp.resolve())])
     node_codes = json.loads(pout) if pcode == 0 else []
-    mism = []
+    mism, allowed = [], []
     for (label, c), nc in zip(fuzz, node_codes):
-        try:
-            route_mod.validate_carrier_port(c)
-            pc = 'PASS'
-        except route_mod.WriterReject as e:
-            pc = e.code
+        pc = port_code(c)
         if pc != nc:
-            mism.append({'case': label, 'python': pc, 'node': nc})
+            # the only permitted divergence: O13 M/N selection evidence that writer004 rejects (it allows L only)
+            if has_mn_selection(c) and nc == 'SELECTION_ONLY_ENGINEERING_ID':
+                allowed.append({'case': label, 'python': pc, 'node': nc})
+            else:
+                mism.append({'case': label, 'python': pc, 'node': nc, 'has_mn_selection': has_mn_selection(c)})
+    no_mn = [lab for lab, c in fuzz if not has_mn_selection(c)]
     record('writer_port_parity_fuzz', pcode == 0 and len(node_codes) == len(fuzz) and not mism,
-           {'cases': len(fuzz), 'node_pass': sum(x == 'PASS' for x in node_codes), 'mismatches': mism[:10], 'stderr': perr[-300:]})
+           {'cases': len(fuzz), 'cases_without_mn_selection': len(no_mn), 'node_pass': sum(x == 'PASS' for x in node_codes),
+            'mismatches': mism[:10], 'stderr': perr[-300:]})
+    record('writer_port_parity_only_divergence_is_O13', pcode == 0 and allowed and not mism
+           and all(has_mn_selection(c) for lab, c in fuzz if lab in {a['case'] for a in allowed})
+           and {a['case'] for a in allowed} >= {'jobs:unchanged', 'jobs:component_only_MN'},
+           {'allowed_divergences': len(allowed), 'labels': [a['case'] for a in allowed]})
     record('valid_carrier_port_pass', route_mod.validate_carrier_port(carrier) is True)
+
+    # package example (046f, R48-R58): check-inventory, check, convert, writer004 on the placeholder copy
+    code, out, _ = route('check-inventory', '--inventory', str(EXAMPLE_INV))
+    record('example_inventory_check_pass', code == 0 and json.loads(out)['status'] == 'PASS', out[-400:])
+    exinv = json.loads(EXAMPLE_INV.read_text(encoding='utf-8'))
+    record('example_inventory_has_046f_context_facts', {x['ref'] for x in exinv['context_facts']} >= {
+        'context:case_identity', 'context:customer_name', 'context:project_name', 'context:company_name', 'context:glossary', 'context:brand_table'})
+    code, out, _ = route('check', '--inventory', str(EXAMPLE_INV), '--response', str(EXAMPLE_RESP))
+    exrep = json.loads(out)
+    record('example_response_check_pass', code == 0 and exrep['status'] == 'PASS', exrep['violations'][:5])
+    code, out, _ = route('convert', '--inventory', str(EXAMPLE_INV), '--response', str(EXAMPLE_RESP), '--out-dir', str(work / 'example_out'))
+    ok = code == 0
+    if ok:
+        exc = json.loads((work / 'example_out' / 'carrier.json').read_text(encoding='utf-8'))
+        (work / 'example_placeholder_carrier.json').write_text(json.dumps(placeholder_copy(exc), ensure_ascii=False), encoding='utf-8')
+        c1, r1x = node_validate(wd, work / 'example_placeholder_carrier.json')
+        ok = c1 == 0 and route_mod.validate_carrier_port(exc) is True
+    record('example_convert_port_and_writer004_placeholder_pass', ok)
+    try:                        # optional: JSON-schema validation of the example (jsonschema is not stdlib)
+        import jsonschema
+    except ImportError:
+        jsonschema = None
+    schema_validation = 'skipped: jsonschema not installed'
+    if jsonschema is not None:
+        errs = {}
+        for data, schema in ((EXAMPLE_INV, 'SOURCE_INVENTORY.schema.json'), (EXAMPLE_RESP, 'SEMANTIC_RESPONSE.schema.json')):
+            sch = json.loads((PKG / 'resources' / schema).read_text(encoding='utf-8'))
+            v = jsonschema.validators.validator_for(sch)(sch)
+            errs[data.name] = [e.message[:200] for e in v.iter_errors(json.loads(data.read_text(encoding='utf-8')))][:5]
+        record('example_files_valid_under_package_schemas', not any(errs.values()), errs)
+        schema_validation = 'run'
 
     # 046e census roles (owner decisions O6/O7): excluded_supply and analysis_unlinked
     def roles_variant(name, mutate):
@@ -316,10 +466,10 @@ def main():
     code, out, _ = route('check', '--inventory', str(inv), '--response', str(v4))
     record('e_unused_demand_content_still_rejected', code != 0 and 'CONTENT_CELL_NOT_USED_BY_ANY_ITEM' in out)
 
-    summary = {'route': 'cps046e-route.v3', 'tests': len(results), 'passed': sum(r['pass'] for r in results),
+    summary = {'route': route_mod.VERSION, 'tests': len(results), 'passed': sum(r['pass'] for r in results),
                'failed': [r for r in results if not r['pass']], 'fixtures_invented': True,
                'route_sha256': sha(ROUTE.read_bytes()), 'comparer_sha256': sha(COMPARER.read_bytes()),
-               'writer_files': WRITER_SHA, 'export_attempted': False}
+               'writer_files': WRITER_SHA, 'export_attempted': False, 'example_schema_validation': schema_validation}
     (work / 'ROUTE_TEST_RESULTS.json').write_text(json.dumps({'summary': summary, 'results': results}, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps(summary, ensure_ascii=False, indent=1))
     return 0 if not summary['failed'] else 1

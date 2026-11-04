@@ -1,470 +1,384 @@
 {
- "schema": "cps.naming-examples.draft.v1",
+ "schema": "cps.creator-practice-examples.v1",
+ "candidate": "046f",
+ "part": "1 of 2: C, D, I and J (R52, R53, R55, R58); part 2 is SYNTHETIC_ALLOCATION_CASES.json",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
- "case_count": 30,
  "all_examples_invented": true,
  "private_project_inputs": false,
+ "replaces": "the 046e naming examples (cps.naming-examples.draft.v1), superseded for C and D by R52",
+ "rules": "FIELD_ROLES R48-R58 (candidate 046f)",
+ "resources": {
+  "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private.",
+  "context:glossary": {
+   "generic_prefix_words": [
+    "產品"
+   ],
+   "enclosure_word": "箱體",
+   "abbreviations": {
+    "電磁接觸器": "XMC",
+    "選擇開關": "XCS",
+    "無熔絲開關": "XNB",
+    "指示燈": "XPL"
+   }
+  },
+  "context:brand_table": [
+   {
+    "device": "電磁接觸器",
+    "rating_band": "all ratings",
+    "brand": "示例甲牌",
+    "model": "XM-10"
+   },
+   {
+    "device": "無熔絲開關",
+    "rating_band": "trip rating up to 100AT",
+    "brand": "示例乙牌",
+    "model": "XB-100"
+   }
+  ],
+  "context:company_name": "示例機電股份有限公司",
+  "job_inputs": {
+   "context:case_identity": "EXAMPLE046F",
+   "context:customer_name": "示例縣自來水事業處",
+   "context:project_name": "示例淨水場控制盤更新"
+  }
+ },
+ "assumptions": [
+  "Unless a case says otherwise, the line lies inside the quoted range (R49) of the detailed bill sheet, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
+  "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, remarks. A missing key means an empty cell.",
+  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role."
+ ],
+ "case_count": 17,
  "cases": [
   {
    "id": "N01",
-   "synthetic": true,
+   "rule": "R52, R58",
    "input": {
-    "description": "3P125A端子台"
+    "description": "產品，控制開關，選擇開關，30mm",
+    "unit": "個",
+    "quantity": 3,
+    "unit_price": 120,
+    "amount": 360
    },
-   "proposed_expected": {
-    "C": "端子台",
-    "D_contains": [
-     "3P125A"
-    ],
-    "I": null,
-    "reason": "Leading pole/current rating is not a model."
-   }
+   "expected": {
+    "row": true,
+    "C": "XCS",
+    "D": "30mm",
+    "cites": {
+     "C": [
+      "description cell",
+      "context:glossary"
+     ],
+     "D": [
+      "description cell"
+     ]
+    }
+   },
+   "reason": "Equipment line (switch). The glossary prefix 產品 is dropped with its delimiter, 控制開關 is the category chain, and the head noun 選擇開關 has a glossary entry, so C is its abbreviation. D is the rest, verbatim. C derived through the glossary cites the description cell and context:glossary (R58)."
   },
   {
    "id": "N02",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "端子台3P125A"
+    "description": "產品，計時器，限時繼電器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 650,
+    "amount": 1300
    },
-   "proposed_expected": {
-    "C": "端子台",
-    "D_contains": [
-     "3P125A"
-    ],
-    "I": null,
-    "reason": "Same supported identity despite suffix order."
-   }
+   "expected": {
+    "row": true,
+    "C": "限時繼電器",
+    "D": "AC220V"
+   },
+   "reason": "Equipment line (timer relay). The glossary has no entry for 限時繼電器, so C is the head noun: the first segment after the prefix and the category chain 計時器."
   },
   {
    "id": "N03",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "QX-620電磁接觸器 AC110V"
+    "description": "產品，電錶，電壓表96角型，0-300V",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 900,
+    "amount": 900
    },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "D_contains": [
-     "AC110V"
-    ],
-    "I": null,
-    "unresolved_tokens": [
-     "QX-620"
-    ],
-    "reason": "Recognize later noun without asserting unproven model role."
-   }
+   "expected": {
+    "row": true,
+    "C": "電壓表",
+    "D": "96角型，0-300V"
+   },
+   "reason": "Equipment line (meter). The head-noun segment 電壓表96角型 carries a digit, so C is cut before the first digit. D is the rest after removing the prefix, the category chain and C's leading noun part, verbatim."
   },
   {
    "id": "N04",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "型號QX-620 電磁接觸器 AC110V"
+    "description": "產品，按鈕開關(綠)，φ30",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": 90,
+    "amount": 360
    },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "I": "QX-620",
-    "D_contains": [
-     "AC110V"
-    ]
-   }
+   "expected": {
+    "row": true,
+    "C": "按鈕開關",
+    "D": "(綠)，φ30"
+   },
+   "reason": "Equipment line (switch) with no category chain and no glossary entry. The head-noun segment carries a bracket, so C is cut before it; the bracket and the rest go to D verbatim (a push-button switch is not a breaker-type line, so R53 does not apply)."
   },
   {
    "id": "N05",
-   "synthetic": true,
+   "rule": "R52, R58",
    "input": {
-    "description": "電磁接觸器",
-    "model_column": "QX-620",
-    "specification": "AC110V"
+    "description": [
+     "產品，電磁開關，電磁接觸器，AC110V，",
+     "附端子蓋"
+    ],
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000
    },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "I": "QX-620",
-    "D_contains": [
-     "AC110V"
-    ]
-   }
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC110V，附端子蓋"
+   },
+   "reason": "The continuation row is joined to the description with no separator. Category chain 電磁開關; head noun 電磁接觸器 has the glossary abbreviation XMC."
   },
   {
    "id": "N06",
-   "synthetic": true,
+   "rule": "R52, R55",
    "input": {
-    "description": "QX-620",
-    "specification": "電磁接觸器 AC110V",
-    "unit": "只",
-    "quantity": 2
+    "description": "產品，電線電纜，600V XLPE電纜，3C，2mm²",
+    "unit": "M",
+    "quantity": 120,
+    "unit_price": 45,
+    "amount": 5400
    },
-   "proposed_expected": {
-    "C": "電磁接觸器",
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "電線電纜，600V XLPE電纜，3C，2mm²",
     "I": null,
-    "unresolved_tokens": [
-     "QX-620"
-    ],
-    "must_not_drop": true
-   }
+    "J": null
+   },
+   "reason": "Material line (cable and wire): C is null and D is the description without the generic prefix, category chain kept, verbatim. Material lines leave I and J null even when priced (R55)."
   },
   {
    "id": "N07",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": null,
-    "specification": "電磁接觸器 AC110V",
+    "description": "產品，PLC，CPU模組，16DI/16DO",
     "unit": "只",
-    "quantity": 2,
-    "item_boundary": "verified numbered detail item"
+    "quantity": 1,
+    "unit_price": 18000,
+    "amount": 18000
    },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "must_not_drop": true,
-    "proof_cell_role": "specification"
-   }
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "PLC，CPU模組，16DI/16DO"
+   },
+   "reason": "PLC modules and software are material lines under R52: C null, D the description without the prefix."
   },
   {
    "id": "N08",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "QX-620",
-    "continuation": "電磁接觸器 AC110V",
-    "continuation_ownership": "proven same logical item"
+    "description": "50A 球塞閥",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1200,
+    "amount": 2400
    },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "I": null,
-    "unresolved_tokens": [
-     "QX-620"
-    ]
-   }
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "50A 球塞閥"
+   },
+   "reason": "A valve written size-first, and any description that starts with a digit, is a material line: C null, D verbatim."
   },
   {
    "id": "N09",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "產品，3P125A端子台"
+    "description": "產品，試車調整費",
+    "unit": "式",
+    "quantity": 1,
+    "unit_price": 6000,
+    "amount": 6000
    },
-   "proposed_expected": {
-    "C": "產品，端子台",
-    "D_contains": [
-     "3P125A"
-    ],
-    "reason": "Current draft explicitly preserves generic source prefix."
-   }
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "試車調整費"
+   },
+   "reason": "Service, labour and fee line: C null; D is the description without the generic prefix."
   },
   {
    "id": "N10",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "\"BX-07\"低壓配電盤",
-    "source_label": "盤號 BX-07"
+    "description": "流量計",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 50000,
+    "amount": 50000
    },
-   "proposed_expected": {
-    "C_contains": [
-     "低壓配電盤"
-    ],
-    "I": null,
-    "token_role": {
-     "BX-07": "panel_tag"
-    },
-    "no_group_assignment_without_relationship": true
-   }
+   "expected": {
+    "row": true,
+    "C": "流量計",
+    "D": null
+   },
+   "reason": "Single-segment description naming equipment (an instrument) with no glossary entry: the noun goes to C and D is null."
   },
   {
    "id": "N11",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "SUS316控制箱 t:1.5mm"
+    "description": "固定螺絲",
+    "unit": "包",
+    "quantity": 5,
+    "unit_price": 80,
+    "amount": 400
    },
-   "proposed_expected": {
-    "C": "控制箱",
-    "D_contains": [
-     "SUS316",
-     "t:1.5mm"
-    ],
-    "I": null
-   }
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "固定螺絲"
+   },
+   "reason": "Single-segment description that is not equipment (hardware): it goes to D and C is null."
   },
   {
    "id": "N12",
-   "synthetic": true,
+   "rule": "R52",
    "input": {
-    "description": "RS-485通訊隔離器"
+    "description": "產品，指示燈，AC220V",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": 150,
+    "amount": 600,
+    "remarks": "紅色 另附燈罩",
+    "code": "E-201"
    },
-   "proposed_expected": {
-    "C_contains": [
-     "通訊隔離器"
-    ],
-    "I": null,
-    "retained_token_role": {
-     "RS-485": "protocol"
-    },
-    "reason": "Exact C/D placement prospectively declared; protocol never discarded."
-   }
+   "expected": {
+    "row": true,
+    "C": "XPL",
+    "D": "AC220V"
+   },
+   "reason": "Remarks and code columns never enter C or D, even when they read like a specification; they stay in raw text. 指示燈 is the head noun (no category chain) and has the glossary abbreviation XPL."
   },
   {
    "id": "N13",
-   "synthetic": true,
+   "rule": "R53, R52",
    "input": {
-    "description": "NFB 2P63A"
+    "description": "產品，無熔絲開關，2P，20AT，(AC，Ics)",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 600,
+    "amount": 600
    },
-   "proposed_expected": {
-    "C": "NFB",
-    "D_contains": [
-     "2P63A"
-    ],
-    "no_translation": true
-   }
+   "expected": {
+    "row": true,
+    "C": "XNB",
+    "D": "2P 20AT AC Ics"
+   },
+   "reason": "Breaker-type line: D joins the rating tokens with single spaces and drops the wrapping brackets."
   },
   {
    "id": "N14",
-   "synthetic": true,
+   "rule": "R53 boundary, R52",
    "input": {
-    "description": "自動切換開關(ATS) 3P160A"
+    "description": "產品，電磁開關，電磁接觸器，(AC，220V)，附輔助接點",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 1500,
+    "amount": 1500
    },
-   "proposed_expected": {
-    "retain_acronym": "ATS",
-    "I": null,
-    "no_alias_replacement": true,
-    "acronym_gloss": "ATS",
-    "placement": "decided (R47, owner decision O8): C 自動切換開關(ATS), D 3P160A",
-    "C": "自動切換開關(ATS)",
-    "D": "3P160A"
-   }
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "(AC，220V)，附輔助接點"
+   },
+   "reason": "A contactor is not a breaker-type line, so its D keeps its punctuation and brackets verbatim."
   },
   {
    "id": "N15",
-   "synthetic": true,
+   "rule": "R55, R58",
    "input": {
-    "description": "QX-620接觸器用端子蓋"
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000
    },
-   "proposed_expected": {
-    "C": "接觸器用端子蓋",
-    "I": null,
-    "unresolved_tokens": [
-     "QX-620"
-    ],
-    "identity": "accessory",
-    "must_not_name_as": "接觸器"
-   }
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": "XM-10",
+    "J": "示例甲牌",
+    "cites": {
+     "I": [
+      "description cell",
+      "context:brand_table"
+     ],
+     "J": [
+      "description cell",
+      "context:brand_table"
+     ]
+    }
+   },
+   "reason": "Priced equipment line whose own cells state no brand or model: the brand table entry for the device type and rating band applies. The fields cite the description cell and context:brand_table (R58)."
   },
   {
    "id": "N16",
-   "synthetic": true,
+   "rule": "R55",
    "input": {
-    "description": "水量計安裝費 DN250"
+    "description": "流量計",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 50000,
+    "amount": 50000,
+    "remarks": "廠牌：示例儀器 型號：FM-100"
    },
-   "proposed_expected": {
-    "C": "水量計安裝費",
-    "D_contains": [
-     "DN250"
-    ],
-    "identity": "service",
-    "must_not_name_as": "水量計"
-   }
+   "expected": {
+    "row": true,
+    "C": "流量計",
+    "D": null,
+    "I": "FM-100",
+    "J": "示例儀器",
+    "cites": {
+     "I": [
+      "remarks cell"
+     ],
+     "J": [
+      "remarks cell"
+     ]
+    }
+   },
+   "reason": "A brand or model stated in the line's own cells is copied and takes precedence over the brand table. The remark supplies I and J but never enters D."
   },
   {
    "id": "N17",
-   "synthetic": true,
+   "rule": "R55 boundary, R53",
    "input": {
-    "description": "照明燈+門控開關",
-    "unit": "組",
-    "quantity": 1
-   },
-   "proposed_expected": {
-    "C": "照明燈+門控開關",
-    "no_quantity_split": true,
-    "plus_is_not_panel_dimension": true
-   }
-  },
-  {
-   "id": "N18",
-   "synthetic": true,
-   "input": {
-    "description": "接觸器三個及控制箱，含2只底座",
-    "unit": "組",
-    "quantity": 1
-   },
-   "proposed_expected": {
-    "C": "接觸器三個及控制箱",
-    "D_contains": [
-     "含2只底座"
-    ],
-    "composition_count_attached_to": "接觸器",
-    "quantity_unchanged": 1,
-    "D": "含2只底座",
-    "rule": "R3 included accessory after 含"
-   }
-  },
-  {
-   "id": "N19",
-   "synthetic": true,
-   "input": {
-    "description": "電磁接觸器",
-    "model_column": "QX-620",
-    "brand_column": "示例廠牌甲"
-   },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "I": "QX-620",
-    "J": "示例廠牌甲"
-   }
-  },
-  {
-   "id": "N20",
-   "synthetic": true,
-   "input": {
-    "description": "QX-620 電磁接觸器"
-   },
-   "proposed_expected": {
-    "C": "電磁接觸器",
-    "I": null,
-    "J": null,
-    "unresolved_tokens": [
-     "QX-620"
-    ],
-    "no_manufacturer_lookup": true
-   }
-  },
-  {
-   "id": "N21",
-   "synthetic": true,
-   "input": {
-    "description": null,
-    "specification": "詳配電盤規範",
-    "unit": "式",
+    "description": "產品，無熔絲開關，3P，225AT",
+    "unit": "只",
     "quantity": 1,
-    "item_boundary": "candidate only; no identified supplied object"
+    "unit_price": 9500,
+    "amount": 9500
    },
-   "proposed_expected": {
-    "status": "REVIEW_REQUIRED",
-    "must_not_invent_C": "配電盤"
-   }
-  },
-  {
-   "id": "N22",
-   "synthetic": true,
-   "input": {
-    "description": "產品，低壓配電盤，計量箱，不銹鋼"
-   },
-   "proposed_expected": {
-    "C": "產品，低壓配電盤，計量箱",
-    "D_contains": [
-     "不銹鋼"
-    ],
-    "reason": "Do not lose the specific identifying noun after category."
-   }
-  },
-  {
-   "id": "N23",
-   "synthetic": true,
-   "input": {
-    "description": "電纜托架，45度彎頭，W250"
-   },
-   "proposed_expected": {
-    "C": "電纜托架，彎頭",
-    "D": "45度；W250",
-    "reason": "R4: C keeps the delimiter between retained spans; D joins non-contiguous spans with U+FF1B."
-   }
-  },
-  {
-   "id": "N24",
-   "synthetic": true,
-   "input": {
-    "description": "PLC-CPU模組"
-   },
-   "proposed_expected": {
-    "C": "PLC-CPU模組",
-    "I": null,
-    "reason": "Compound lexical name is not a model merely because it has a hyphen."
-   }
-  },
-  {
-   "id": "N25",
-   "synthetic": true,
-   "input": {
-    "description": "STD-X42驗收試驗",
-    "source_label": "適用標準 STD-X42"
-   },
-   "proposed_expected": {
-    "C_contains": [
-     "驗收試驗"
-    ],
-    "I": null,
-    "retained_token_role": {
-     "STD-X42": "standard_reference"
-    },
-    "identity": "service",
-    "STD-X42": "document/standard reference kept in raw and review only (R5); never C or D"
-   }
-  },
-  {
-   "id": "N26",
-   "synthetic": true,
-   "input": {
-    "description": "不含估價",
-    "unit": "式",
-    "quantity": 1
-   },
-   "proposed_expected": {
-    "status": "REVIEW_REQUIRED",
+   "expected": {
+    "row": true,
+    "C": "XNB",
+    "D": "3P 225AT",
     "I": null,
     "J": null,
-    "must_not_treat_as_product": true
-   }
-  },
-  {
-   "id": "N27",
-   "synthetic": true,
-   "input": {
-    "description": "濾網",
-    "remarks": "不含估價"
+    "null_reason_I_J": "the brand table covers 無熔絲開關 only up to 100AT; the line states no brand or model"
    },
-   "proposed_expected": {
-    "C": "濾網",
-    "D_must_not_include": [
-     "不含估價"
-    ],
-    "not_automatically_excluded": true,
-    "financial_annotation_retained": "in raw remarks and a review reason (R1); the remark cell's primary role is demand_content"
-   }
-  },
-  {
-   "id": "N28",
-   "synthetic": true,
-   "input": {
-    "description": "控制器",
-    "specification": "DC24V",
-    "next_numbered_item": "電源模組"
-   },
-   "proposed_expected": {
-    "C": "控制器",
-    "D_contains": [
-     "DC24V"
-    ],
-    "must_not_join_next_item": "電源模組"
-   }
-  },
-  {
-   "id": "N29",
-   "synthetic": true,
-   "input": {
-    "description": "三段式選擇開關 AC110V"
-   },
-   "proposed_expected": {
-    "C": "三段式選擇開關",
-    "D_contains": [
-     "AC110V"
-    ],
-    "reason": "Functional position count retained in name; voltage allocated to specification."
-   }
-  },
-  {
-   "id": "N30",
-   "synthetic": true,
-   "input": {
-    "description": "污水導流管"
-   },
-   "proposed_expected": {
-    "C": "污水導流管",
-    "no_spelling_normalization": true,
-    "no_alias_replacement": true
-   }
+   "reason": "A rating the table does not cover leaves I and J null with a reason. The glossary abbreviation still applies to C."
   }
  ]
 }

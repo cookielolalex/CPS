@@ -1,3 +1,5 @@
+> **Superseded for C and D (candidate 046f, 2026-11-04).** FIELD_ROLES R52 (with R53 for breaker rating lists and R56 for the enclosure row) now decides C and D, including dropping the generic prefix named in the company glossary and using its abbreviations; I and J follow R55 (a brand or model stated in the line, else the owner-reviewed company brand table). Where this file and R48–R58 disagree, R48–R58 govern. The file is kept unchanged below as background and for earlier candidates.
+
 # Draft supply-name instructions for a contract-reading AI
 
 Status: proposed generic rules for review and future testing; NOT a deployment-approved guideline. This resource supplements a complete CPS contract-reading policy and does not authorize additional sources. Use only the source packet authorized for the current generation task.

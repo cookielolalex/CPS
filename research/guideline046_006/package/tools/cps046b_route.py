@@ -1,6 +1,12 @@
-"""CPS source-reference checker and carrier adapter, route v3 for candidate 046e (stdlib only).
-v3 adds the census roles excluded_supply and analysis_unlinked (FIELD_ROLES R45/R46) and the
-checks CENSUS_ONLY_CELL_USED_BY_ITEM and COMPONENT_GROUP_FORBIDDEN (R25); otherwise unchanged from v2.
+"""CPS source-reference checker and carrier adapter, route v4 for candidate 046f (stdlib only).
+v4 implements owner decision O13 (FIELD_ROLES R48, job inputs): L, M and N may be proven by
+context references alone (context:case_identity, context:customer_name, context:project_name);
+such proofs become selection_evidence in the carrier, and the Python writer port accepts
+selection_evidence for L, M and N only. This is the one documented divergence from the archived
+writer004 validateCarrier, which accepts selection_evidence for L only: a carrier with M/N
+selection evidence is exported through research/export/writer_portable.py --mode v2. Every
+other field proven only by context is still CONTEXT_ONLY_PROOF_UNREPRESENTABLE, and every other
+check is unchanged from v3 (census roles excluded_supply/analysis_unlinked, R45/R46/R25 checks).
 
 check-inventory : validate a source inventory before generation (writer source rules,
                   completeness, canonical text, unavoidable holds).
@@ -22,7 +28,7 @@ import argparse, copy, hashlib, json, math, re, sys
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = 'cps046e-route.v3'
+VERSION = 'cps046f-route.v4'
 RESPONSE_SCHEMA = 'cps.semantic-source-refs.v2'
 INVENTORY_SCHEMA = 'cps.source-inventory.cells.v2'
 PROFILE = 'cached-cell-raw-scalar-text.v2'
@@ -41,6 +47,9 @@ CENSUS_ROLES = ('item_identifier', 'header', 'section', 'financial_summary', 'co
 CONTENT_ROLES = ('demand_content', 'analysis_content')
 GROUP_RELATIONS = ('contractual_group', 'physical_enclosure', 'contractual_and_physical', 'unresolved')
 LIMIT = 20 * 1024 * 1024
+# O13 / FIELD_ROLES R48: job-input fields that may be proven by context alone (selection_evidence).
+# writer004 validateCarrier allows only L; the M/N relaxation is the route v4 divergence.
+SELECTION_COLS = ('L', 'M', 'N')
 MAX_SAFE = 9007199254740991
 ID_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', re.ASCII)
 CELL_REF_RE = re.compile(r'cell:S([1-9][0-9]{0,3})!([A-Z]{1,3})([1-9][0-9]{0,6})', re.ASCII)
@@ -462,7 +471,7 @@ def validate_carrier_port(c):
             e = r['evidence'].get(col)
             _obj(e, f'{p}.evidence.{col}')
             if 'selection_evidence' in e:
-                if col != 'L':
+                if col not in SELECTION_COLS:       # writer004: col !== 'L' (O13 relaxation adds M, N)
                     _fail('SELECTION_ONLY_ENGINEERING_ID', vp)
                 _keys(e, ['selection_evidence', 'transformation'], f'{p}.evidence.{col}')
                 _str(e['selection_evidence'], vp + '.selection_evidence'); _str(e['transformation'], vp + '.transformation')
@@ -779,6 +788,7 @@ def _check(inv, resp_raw, rep):
     # items
     items, demand_ids, component_ids = {}, set(), set()
     ident_owner, raw_owner, desc_anchor = {}, {}, []
+    o13 = []        # item.column of M/N proven by job-input context alone (selection_evidence)
     for i, it in enumerate(r['items']):
         w = f'items[{i}]'
         if not exact_keys(it, ('id', 'role', 'group_id', 'status', 'values', 'proofs', 'raw_refs',
@@ -902,8 +912,10 @@ def _check(inv, resp_raw, rep):
             ctx = [x for x in prefs if x.startswith('context:')]
             for x in cells:
                 use(x, f'{iid}.proof.{col}')
-            if not cells and ctx and col != 'L':
-                rep.null('CONTEXT_ONLY_PROOF_UNREPRESENTABLE', pw, 'Only L can be proven by context alone; leave this field null with a reason.')
+            if not cells and ctx and col not in SELECTION_COLS:
+                rep.null('CONTEXT_ONLY_PROOF_UNREPRESENTABLE', pw, 'Only L, M and N (job inputs, FIELD_ROLES R48) can be proven by context alone; leave this field null with a reason.')
+            elif not cells and ctx and col in ('M', 'N'):
+                o13.append(f'{iid}.{col}')
             if cells:
                 texts = [copy_text(inv, x, pw, rep, 'PROOF') for x in cells]
                 if all(t is not None for t in texts):
@@ -1050,7 +1062,12 @@ def _check(inv, resp_raw, rep):
     missing = [ref for ref, c in inv.cells.items() if Inventory.has_content(c) and ref not in assigned]
     if missing:
         rep.bad('UNCLASSIFIED_CONTENT_CELLS', 'source_roles', missing[:200] + (['...'] if len(missing) > 200 else []))
-    ctx = {'response': r, 'assigned': assigned, 'used': used}
+    if o13:
+        rep.warn('O13_SELECTION_EVIDENCE_M_N', 'items', {'count': len(o13), 'first': o13[:10],
+                 'note': 'M/N proven by job-input context alone become selection_evidence. The archived writer004 '
+                         'validateCarrier accepts selection_evidence for L only (SELECTION_ONLY_ENGINEERING_ID); export '
+                         'this carrier with research/export/writer_portable.py --mode v2.'})
+    ctx = {'response': r, 'assigned': assigned, 'used': used, 'o13': o13}
     if not rep.violations:          # build exactly what convert writes and run the writer port on it
         carrier, _ = build_carrier(inv, resp_raw, ctx)
         try:
@@ -1244,9 +1261,14 @@ def main(argv=None):
         return 1
     cb = (json.dumps(carrier, ensure_ascii=False, indent=1, allow_nan=False) + '\n').encode('utf-8')
     (out / 'carrier.json').write_bytes(cb)
+    mn = sorted(f"{r['id']}.{k}" for r in carrier['items'] + carrier['components'] for k in ('M', 'N')
+                if 'selection_evidence' in r['evidence'].get(k, {}))
     receipt.update(status='CARRIED_STRUCTURE_ONLY', carrier_sha256=sha256(cb), items=len(carrier['items']),
                    components=len(carrier['components']), groups=len(carrier['groups']),
-                   nonitems=len(carrier['nonitems']), semantic_approval=False)
+                   nonitems=len(carrier['nonitems']), semantic_approval=False,
+                   o13_m_n_selection_evidence={'count': len(mn), 'first': mn[:10],
+                                               'writer004_validateCarrier_accepts': not mn,
+                                               'export_mode_required': 'v2' if mn else 'v1'})
     (out / 'ADAPTER_RECEIPT.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps({k: receipt[k] for k in ('status', 'carrier_sha256', 'items', 'components', 'nonitems')}))
     return 0

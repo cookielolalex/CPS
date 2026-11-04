@@ -2,6 +2,8 @@
 
 **Status: NOT ADMITTED.** Built 2026-11-03 under the owner decision to add a portable writer so CPS can run saved 17-column workbook QA and visual QA. The admitted writer, `writer004.mjs`, needs `@oai/artifact-tool` and a Windows source-verification helper, and neither exists here (DECISIONS_046b R2). Nothing in this directory may be used for CPS saved-cell QA, visual QA or deployment evidence until an independent reviewer (not the author) admits it. A successful run or a passing test is not admission.
 
+**Mode v2 (added 2026-11-04 for candidate 046f; also NOT ADMITTED).** Owner decision O13 makes M and N job inputs, which route v4 carries as `selection_evidence`. The archived writer004 gate accepts selection evidence for L only. Mode v2 relaxes exactly that one check, by the method in "Mode v2" below. Mode v1 (the default) is unchanged.
+
 This directory holds code and invented test fixtures only. Do not commit case carriers, outputs, renders or reports made from case data. Write those outside the repository.
 
 ## Files
@@ -14,6 +16,7 @@ This directory holds code and invented test fixtures only. Do not commit case ca
 | `visual_qa.py` | LibreOffice PDF → pdftoppm PNGs, then writes `VISUAL_QA_MANIFEST.json`. A reviewer makes the visual judgement later |
 | `tests/run_export_tests.py` | Test suite (invented fixtures). Prints a JSON summary |
 | `tests/make_export_fixtures.py` | Builds invented carrier variants from the 046d route-test fixture carrier |
+| `tests/make_export_fixtures_v2.py` | Builds invented mode-v2 variants from two 046f route v4 fixture carriers (with and without M/N selection evidence) |
 | `tests/parity_matrices.mjs`, `tests/stringify_fuzz.mjs` | Test-only node probes, written separately from the runtime cross-check |
 
 ## Route
@@ -32,6 +35,19 @@ This directory holds code and invented test fixtures only. Do not commit case ca
 3. **Cross-check (every run).** writer004's own `prepareMatrices` runs on the same carrier through `writer004_matrices.mjs`. Its `JSON.stringify({sheets}, null, 2) + "\n"` must be byte-identical to the Python text, or the carrier is refused (`CROSS_CHECK_MISMATCH`). Each saved `EXPECTED_SAVED_VALUES.json` is therefore the exact text writer004 would have written for that carrier.
 4. **Writability.** The writer refuses cell text that the openpyxl/XML route cannot carry unambiguously. See "Extra refusals" below.
 5. **Assembly.** openpyxl writes the workbook from the matrices. Strings stay strings, numbers stay numbers, empty stays empty, and no formula is ever written. Output bytes are reproducible: the same carrier gives the same xlsx sha256.
+
+## Mode v2: the O13 relaxation for 046f carriers
+
+`--mode v2` is for carriers made by route v4 (`research/guideline046_006/package/tools/cps046b_route.py`, `cps046f-route.v4`). The route's convert receipt says when it is needed (`o13_m_n_selection_evidence.export_mode_required`).
+
+- **Carrier without M/N selection evidence:** exactly the v1 route above. The output bytes equal mode v1.
+- **Carrier with M/N selection evidence** (an evidence object for column M or N that holds `selection_evidence`):
+  1. **Placeholder copy.** In a copy of the carrier, each such M/N evidence object is replaced by the same object without `selection_evidence`, plus `location` = the item's own `location`, `anchor` = the item's `anchor` and `raw_text` = the `selection_evidence` text. `transformation` and any other key are unchanged, so a malformed object stays malformed. Nothing else changes. The copy has the shape writer004 requires for location evidence, and the item's own location is valid by construction.
+  2. **Gate (both must pass).** writer004 `validate_carrier_v4.mjs` runs unchanged on the copy (stage `gate:validate_carrier_v4:o13_placeholder_copy`). The route v4 Python port `validate_carrier_port` runs on the original carrier (stage `gate:route_v4_port`). The port is writer004's validateCarrier plus the prepareMatrices review-cell check, with one difference: it accepts `selection_evidence` for L, M and N. The route tests show by parity fuzzing that this is the only divergence from node writer004. The writer checks the port's `VERSION` and records its sha256.
+  3. **Cross-check.** writer004 `prepareMatrices` runs on the copy and must be byte-identical to the Python matrices of the copy (stage `cross_check:o13_placeholder_copy`).
+  4. **Allowed difference.** The Python matrices of the original carrier, which are saved, may differ from the copy's matrices only in columns C–E (evidence location, anchor and JSON text) of the review rows `欄位依據 <id>.M` and `<id>.N` of those fields. There, the original has writer004's own selection-evidence form: an empty location, the anchor `"已核對工程選取"` and the JSON of the selection evidence. That is the same code path writer004 uses for L. Any other difference refuses the carrier (`O13_DIFF_OUTSIDE_M_N_EVIDENCE`).
+  5. **Receipt.** `WRITER_RECEIPT.json` records `mode`, an `o13` section (fields, placeholder method, placeholder-copy sha256, route port path, sha256 and version, the copy cross-check, and every differing cell) and an extra limitation. `expected_saved_values.identical_to_writer004_prepareMatrices_output` is `false`, with `identical_to_writer004_prepareMatrices_on_o13_placeholder_copy_except_m_n_evidence_cells: true`.
+- **Refusals in mode v2.** Selection evidence on any column other than L, M or N is still refused by writer004 on the copy (`SELECTION_ONLY_ENGINEERING_ID`). Path-like or malformed M/N selection evidence is refused by writer004 on the copy or by the route port. Every other writer004 refusal is unchanged.
 
 ## What it reproduces
 
@@ -58,6 +74,7 @@ This directory holds code and invented test fixtures only. Do not commit case ca
 | L7 | **openpyxl workarounds.** (a) openpyxl writes numbers with `"%.16g"`, which loses 17-digit doubles (`openpyxl/compat/strings.py`). During save the writer substitutes JavaScript Number text in `openpyxl.cell._writer`, then restores it. (b) openpyxl types strings equal to Excel error literals (`#N/A`, `#REF!`, …) as error cells (`openpyxl/cell/cell.py` `_bind_value`). The writer forces string type. (c) openpyxl writes inline strings, not a shared-string table. The values are identical either way, and artifact-tool's choice is unknown. | Probe runs during development; the tests cover all three. |
 | L8 | **Reproducible bytes.** docProps `created`/`modified` and zip member times are fixed to 1980-01-01T00:00:00. The real run time is in `WRITER_RECEIPT.json`. `calcPr fullCalcOnLoad` is turned off (nothing to calculate). | — |
 | L9 | **Visual QA is a LibreOffice rendering, not Excel.** Fonts are substituted: Arial → Liberation Sans, and CJK → WenQuanYi Zen Hei here (recorded by `fc-match` in the manifest). Glyphs missing from the installed fonts show as boxes. | `VISUAL_QA_MANIFEST.json` `render_tools`. |
+| L10 | **Mode v2 is not writer004 on the original carrier.** For a carrier with M/N selection evidence, writer004 validates and builds matrices only on the placeholder copy. The relaxed check comes from the route v4 port, and the saved review cells of those M/N fields come from the Python reimplementation of writer004's selection-evidence branch (the branch used for L). | Mode v2 above; route tests `writer_port_parity_only_divergence_is_O13`. |
 
 ### Extra refusals (the portable writer refuses carriers writer004 might accept)
 
@@ -65,6 +82,7 @@ This directory holds code and invented test fixtures only. Do not commit case ca
 - **A written cell string containing a lone surrogate, U+FFFE or U+FFFF** (`PORTABLE_UNREPRESENTABLE` / `XML_UNREPRESENTABLE_CHARACTER`). XML 1.0 cannot carry these. A lone surrogate that occurs only inside a JSON-encoded review cell is escaped by `JSON.stringify` and is written normally.
 - **A literal OOXML escape sequence `_xHHHH_` in written text** (`LITERAL_OOXML_ESCAPE_SEQUENCE`). Spreadsheet applications decode it: LibreOffice reads an openpyxl-written `_x0041_` as `A` (measured), and openpyxl writes it unescaped. Escaping it as `_x005F_x0041_` would also make openpyxl readback differ from the value, so the route refuses. Partial patterns such as `AB_x12_` or `_x004` are fine.
 - **Any difference between the Python and node matrices** (`CROSS_CHECK_MISMATCH`).
+- **Mode v2:** any difference between the saved matrices and writer004's matrices of the placeholder copy outside the M/N evidence cells (`O13_DIFF_OUTSIDE_M_N_EVIDENCE`), and any refusal by the route v4 port.
 
 ## How to run
 
@@ -80,6 +98,7 @@ The CPS validation stub is enough for the writer directory. Put the stub at `<wr
 ```sh
 W=/abs/route/writer                      # writer004.mjs, validate_carrier_v4.mjs, receipt_bytes.mjs
 python3 -I -B research/export/writer_portable.py --carrier /abs/carrier.json --out /abs/new-output --writer-dir "$W"
+#   --mode v2             candidate 046f carriers (O13: M/N job-input selection evidence); default v1
 python3 -I -B research/export/saved_qa.py --output-dir /abs/new-output            # writes SAVED_QA.json there
 python3 -I -B research/export/visual_qa.py --xlsx /abs/new-output/research-draft.xlsx --dest /abs/new-visual-dir
 #   --mode exact          render an unmodified byte copy (LibreOffice default pagination)
@@ -122,9 +141,16 @@ What the tests prove:
 - **(a)** Python matrices and `EXPECTED_SAVED_VALUES.json` equal writer004 `prepareMatrices` (node + stub) on every fixture, byte for byte and structurally. A 3,000-value `JSON.stringify` fuzz test agrees with node.
 - **(b)** Write → saved_qa round trips show 0 mismatches, and the checkpoint045 saved QA passes. Four tampered workbooks are detected. Repeated builds are byte-identical.
 - **(c)** Every invalid carrier is refused at the expected stage with the expected code, and leaves no output. The suite confirms which refusals come from writer004 itself and which are portable-only. Usage, existing-output and unpinned-writer refusals are also covered.
-- **(d)** `visual_qa` produces PNGs for every sheet, every page maps to its sheet, the manifest hashes match the files, renders are reproducible, `--sheets` renders exactly the selected sheets' pages of the 407-item fixture, and exact mode works.
+- **(d)** `visual_qa` produces PNGs for every sheet, every page maps to its sheet, the manifest hashes match the files, renders are reproducible, `--sheets` renders exactly the selected sheets' pages of the 407-item fixture, and exact mode works. A mode-v2 output renders every sheet.
+- **(e) Mode v2.** The suite runs the 046f route's own `make_fixtures.py` and route v4 `convert` to get two invented carriers, one with and one without M/N selection evidence. It derives 6 valid and 9 invalid v2 variants. The tests show:
+  - writer004 refuses the original M/N carrier, and mode v1 still refuses it;
+  - the writer's placeholder copy equals a test-side implementation of the documented method;
+  - every valid v2 output has saved values equal to writer004 `prepareMatrices` on an independently built placeholder copy, except exactly the M/N evidence cells, which keep writer004's selection-evidence form;
+  - the receipt records the relaxation; saved QA and the checkpoint045 saved QA pass; repeated builds are byte-identical;
+  - a carrier without M/N selection evidence gives the same bytes in v1 and v2;
+  - each invalid v2 variant is refused at the expected stage with the expected code.
 
-Latest run (2026-11-03, author's run, not a review): 118 of 118 tests passed, with 11 valid and 21 invalid invented fixtures; visual tests included. That run used writer_portable.py `a20050ae…4aa0`, saved_qa.py `4db50b42…e89c`, visual_qa.py `ebfcb352…d59a` and writer004_matrices.mjs `028dbdae…b3f8`. The suite writes `EXPORT_TEST_RESULTS.json` in the work directory.
+Latest run (2026-11-04, author's run, not a review): 169 of 169 tests passed, with 11 valid and 21 invalid v1 fixtures and 6 valid and 9 invalid v2 fixtures; visual tests included; writer004 archived original. The same suite without visual tests also passed (159 of 159) against the public writer004 copy. That run used writer_portable.py `1cfe9ec9…b4fd`, saved_qa.py `4db50b42…e89c`, visual_qa.py `ebfcb352…d59a`, writer004_matrices.mjs `028dbdae…b3f8` and route v4 `cps046b_route.py` `b01f34f5…fdfd`. The previous run (2026-11-03, before mode v2) passed 118 of 118. The suite writes `EXPORT_TEST_RESULTS.json` in the work directory.
 
 ## Admission checklist for the independent reviewer
 
@@ -132,4 +158,5 @@ Latest run (2026-11-03, author's run, not a review): 118 of 118 tests passed, wi
 - Read `prepare_matrices`/`_review_rows` against writer004 lines 135–168, and `_format_sheet` against lines 152–158 and 184–191.
 - Decide whether L2–L5 are acceptable for CPS saved QA, or whether they need owner decisions.
 - Inspect a full `visual_qa` PNG set for one invented carrier.
+- Mode v2: read `o13_placeholder_copy`, `o13_matrix_difference` and the v2 branch of `build` against the method above; confirm from the route tests that the route v4 port differs from writer004 only in the L/M/N selection-evidence check; decide whether L10 is acceptable and whether the route port should be pinned by sha256 rather than by `VERSION`.
 - Record the admission decision outside this README. Until then the route stays NOT ADMITTED.

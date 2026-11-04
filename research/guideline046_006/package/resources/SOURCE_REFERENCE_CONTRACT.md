@@ -1,6 +1,6 @@
-# Source-reference and coverage contract v2 (candidate 046b)
+# Source-reference and coverage contract v2 (candidate 046f, route v4)
 
-Status: candidate interface for independent review and bounded source-only trials. It is not deployment approval. `tools/cps046b_route.py` (route v3) mechanically enforces every rule below that can be checked from references alone. Semantic choices, such as which cells are descriptive or which role a cell has, stay with the AI and an independent semantic review. Where this text and the tool disagree, the response is held and the disagreement is a defect to report. Do not adapt the response to whichever one is more lenient.
+Status: candidate interface for independent review and bounded source trials. It is not deployment approval. `tools/cps046b_route.py` (route v4, `cps046f-route.v4`) mechanically enforces every rule below that can be checked from references alone. Route v4 differs from route v3 (046e) in one rule only: L, M and N may be proven by job-input context facts alone (owner decision O13, FIELD_ROLES R48); see §3 Proofs and §5. Semantic choices, such as which cells are descriptive or which role a cell has, stay with the AI and an independent semantic review. Where this text and the tool disagree, the response is held and the disagreement is a defect to report. Do not adapt the response to whichever one is more lenient.
 
 The AI decides item identity, field roles, values and references. The route only validates and copies. It never selects a reference, edits a value, shortens a name, infers a brand, repairs a response or reads evaluator material.
 
@@ -13,10 +13,25 @@ A source preparer builds one inventory per pinned cached workbook (`cached_xls` 
 - `sheets`: every sheet, including empty and hidden ones, with index, visibility, dimensions, merges, formula-record count and `in_scope`.
 - `views`: reconstructed inspection images, each pinned by hash.
 - `cells`: **every** physical position of every in-scope sheet.
-- `context_facts`: separately authorized facts such as the selected internal case identity.
+- `context_facts`: separately authorized facts (§1a).
 - `limitations`.
 
 The response binds to the inventory by the SHA-256 of its file bytes.
+
+### 1a. Context facts (046f)
+
+Each context fact is `{ref, namespace, value, basis, authority_pins}`; `value` is a string, number or null, and `authority_pins` pins the private file it came from by SHA-256. The packet preparer adds them from a private per-job configuration (`harness/README.md`). A 046f packet carries:
+
+| Ref | Namespace | Value | Used by |
+|---|---|---|---|
+| `context:case_identity` | `cps.internal_case_id` | internal case id (job input) | L (R48) |
+| `context:customer_name` | `cps.job_input.customer_full_name` | customer full name (job input) | M (R48) |
+| `context:project_name` | `cps.job_input.project_short_name` | project short name (job input) | N (R48) |
+| `context:company_name` | `cps.company_resource.company_name` | the company name | J on the enclosure row (R56, R58) |
+| `context:glossary` | `cps.company_resource.glossary` | JSON text `cps.company-glossary.v1`: `generic_prefix_words`, `enclosure_word`, `abbreviations[{device, abbreviation}]` | C (R52, R56, R58) |
+| `context:brand_table` | `cps.company_resource.brand_table` | JSON text `cps.company-brand-table.v1`: `entries[{device, rating_band, brand, model}]` | I and J on priced equipment lines (R55, R58) |
+
+The company resources are owner-reviewed private company data. They never enter the public repository; the examples in this package use invented values. The route checks only that a cited context ref exists in the inventory (`UNKNOWN_CONTEXT_REF`); it does not read or interpret a resource.
 
 Cell reference IDs are `cell:S<sheet index>!<A1 address>`, for example `cell:S1!B12`. Matching is exact and case-sensitive. A reference is valid only if that exact ID exists in the inventory. Equal text in two cells does not make their references interchangeable. Context IDs are `context:<name>`.
 
@@ -40,7 +55,7 @@ Top level: `schema`, `case_id`, `family_id`, `inventory_sha256`, `status` (`rese
 **Items.** Each item has `id` (`^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$`, unique across groups and items), `role` (`demand|analysis_component`), `group_id` (a group ID or null), `status` (`research_draft|held`), `values`, `proofs`, `raw_refs`, `anchor_refs` and `review_reasons`. `values` holds exactly 17 values in A–Q order. An `analysis_component` has `group_id`, A and B null (FIELD_ROLES R25; `COMPONENT_GROUP_FORBIDDEN`).
 
 - Types: F, P and Q are finite numbers with absolute value at most 2^53−1, or null. G and H are always null. Every other position is a string or null. A string must be nonblank after JavaScript `trim`, at most 30,000 UTF-16 units, with no C0 control except TAB/LF/CR and no lone surrogate. A numeric-looking specification such as `110` is written as the string `"110"`.
-- A null C requires `status:"held"`. `held` requires at least one review reason.
+- A null C requires `status:"held"`. `held` requires at least one review reason. (046f open interface question 1: R52 makes C null on material, service and fee rows; see `OUTPUT_CONTRACT.md`.)
 
 **Proofs.** `proofs` maps every letter A–Q to exactly one of:
 
@@ -54,7 +69,7 @@ Proof rules:
 - F, P and Q are each proven by exactly one cell, whose canonical text parses (writer `numericRaw`) to the value. Only ASCII digits, an optional sign, optional `,` thousands grouping and one decimal point are accepted.
 - If the source cell for F, P or Q is not such a plain numeric literal (for example `2台`, full-width digits, or a date-typed cell), the field is **null** with a specific reason. Its raw text is still kept.
 - F's proof cell must be the item's raw `quantity` cell.
-- A field proven only by `context:` references is allowed for L alone. Any other field proven only by context must be null with a reason.
+- A field proven only by `context:` references is allowed for L, M and N alone (job inputs, R48). Any other field proven only by context must be null with a reason (`CONTEXT_ONLY_PROOF_UNREPRESENTABLE`, category `field_must_be_null`). A field derived through a company resource cites its source cell together with the context ref (R58), for example `["cell:S1!B5", "context:glossary"]`; such a proof is cell evidence, and its context refs are packed into the transformation.
 
 **Raw references.** `raw_refs` has the six raw fields `description, unit, quantity, unit_price, amount, remarks`. Each is `{"refs":[...], "reason_if_empty": string|null}`. A non-empty list requires `reason_if_empty:null`, and an empty list requires a specific reason.
 
@@ -64,7 +79,7 @@ Proof rules:
 - Every listed cell must have non-null `canonical_raw`; empty cells are never listed. The copied raw text is the canonical texts joined with U+000A.
 - A content cell that cannot be carried (date, boolean, error, or control characters) is never listed. A raw role that would need such a cell has an empty selection and a specific reason. The cell stays in the census.
 - A description cell or anchor cell belongs to exactly one item. Sharing one across items is an item-boundary error.
-- Consistency: a non-null E equals the copied raw unit exactly. A non-null F equals `numericRaw(raw quantity)`. A non-null Q equals `numericRaw(raw unit_price)`.
+- Consistency: a non-null E equals the copied raw unit exactly. A non-null F equals `numericRaw(raw quantity)`. A non-null Q equals `numericRaw(raw unit_price)`, and requires inventory `adoption_status: "verified"` (`Q_REQUIRES_VERIFIED_ADOPTION`; 046f open interface question 3, since R54 replaces the adoption hold).
 
 **Anchors and location.** `anchor_refs` (at least one) are the cells that carry the item's identity on its first physical row, normally its item-number cell.
 
@@ -79,7 +94,7 @@ Proof rules:
 
 - `relationship` is one of `contractual_group|physical_enclosure|contractual_and_physical|unresolved`.
 - A non-null name or specification needs its proof references. A null name needs at least one limitation.
-- A non-null A or B needs a non-null `group_id`. A must equal that group's `name` exactly, and B must equal its `specification` exactly.
+- A non-null A or B needs a non-null `group_id`. A must equal that group's `name` exactly, and B must equal its `specification` exactly. (046f open interface question 2: R56 forms no response groups, so the enclosure row's A and B are carried by a one-row group; see `OUTPUT_CONTRACT.md`.)
 - A contractual grouping alone does not prove physical ownership or enclosure count.
 
 **Component links.** Every `analysis_component` item has exactly one link, and a demand item has none. A link is `{component_id, parent_id, status, basis_quantity, basis_raw_ref, basis_unit_ref, refs, reason}`.
@@ -87,8 +102,9 @@ Proof rules:
 - `supported` (basis cells per FIELD_ROLES R21: the component row's own quantity and unit cells): the parent is a demand item other than itself, `basis_quantity` is greater than 0, `basis_raw_ref` is one cell whose canonical text parses to `basis_quantity`, and `basis_unit_ref` is one nonblank, non-formula-like cell of saved type `text`. All basis cells are on one sheet. Never multiply by the parent quantity.
 - `held`: the admitted writer cannot carry a held or unlinked component, so the **whole export is held**. The response and census are still retained. Never delete a component or invent a link to avoid this. An analysis block whose referenced item is not a demand item of this response is not a component at all (FIELD_ROLES R46): its cells take the census role `analysis_unlinked`.
 
-**Source roles.** Each source role is `{role, refs, reason}`, with role one of `demand_content, analysis_content, item_identifier, header, section, financial_summary, commercial_note, document_reference, footer, unresolved, excluded_supply, analysis_unlinked`. `excluded_supply` marks every cell of a line that is not a 未填 row under FIELD_ROLES R45; `analysis_unlinked` marks every cell of an analysis block with no parent demand item, except page/column headers and footers inside it (R46). No item, group or link may cite an `excluded_supply` or `analysis_unlinked` cell (`CENSUS_ONLY_CELL_USED_BY_ITEM`).
+**Source roles.** Each source role is `{role, refs, reason}`, with role one of `demand_content, analysis_content, item_identifier, header, section, financial_summary, commercial_note, document_reference, footer, unresolved, excluded_supply, analysis_unlinked`. `excluded_supply` marks every cell of a line that is not a 未填 row under FIELD_ROLES R50 (no price and no status, reason per R45; or outside the quoted range, reason "outside the quoted range (R49)"); `analysis_unlinked` marks every cell of an analysis block with no parent demand item, except page/column headers and footers inside it (R46). No item, group or link may cite an `excluded_supply` or `analysis_unlinked` cell (`CENSUS_ONLY_CELL_USED_BY_ITEM`).
 
+- The parent line of analysis components listed as rows takes `section` with the reason "parent of analysis components listed as rows (R51)".
 - Every content cell has **exactly one** primary role, and empty cells take no role.
 - An item's own description, unit, quantity, price, amount and remark cells are `demand_content` (or `analysis_content`), even when a remark is commercial in tone.
 - Every `demand_content`/`analysis_content` cell must be cited by some item or group (raw, proof, anchor, group proof or basis). This detects dropped items.
@@ -104,16 +120,17 @@ The same whole-output hold applies to:
 - a held component link;
 - a cell outside every view;
 - a view that no item, group or census cell covers;
-- text with control characters;
-- a non-L field proven only by context.
+- text with control characters.
+
+A field other than L, M and N proven only by context is not a hold: it is `field_must_be_null` (§3).
 
 The route reports three categories:
 
 - `invalid`: a defect in the response. Correct it from the source.
-- `field_must_be_null`: the cited source cannot be carried for that field or raw role, for example a date, boolean or error cell, non-ASCII digits or text with units, or a non-L context-only proof. Leave the field or selection empty with a specific reason; never alter the source meaning.
+- `field_must_be_null`: the cited source cannot be carried for that field or raw role, for example a date, boolean or error cell, non-ASCII digits or text with units, or a context-only proof of a field other than L, M and N. Leave the field or selection empty with a specific reason; never alter the source meaning.
 - `unrepresentable_hold`: the admitted writer cannot carry a true answer. Keep the answer; the export is held.
 
-Before `check` passes, it builds exactly the carrier that `convert` would write and runs a Python port of writer004 `validateCarrier` and `prepareMatrices` on it. This port is parity-tested against the real writer. Any overflow of the writer's count or length caps by an adapter-built string or list is reported as `WRITER_WOULD_REJECT_*` (`unrepresentable_hold`).
+Before `check` passes, it builds exactly the carrier that `convert` would write and runs a Python port of writer004 `validateCarrier` and `prepareMatrices` on it. This port is parity-tested against the real writer. Its one documented divergence (route v4, O13) is that it accepts `selection_evidence` for L, M and N, where writer004 accepts it for L only (`SELECTION_ONLY_ENGINEERING_ID`); the parity tests assert that no other divergence occurs. When M or N is proven by context alone, `check` warns `O13_SELECTION_EVIDENCE_M_N`. Any overflow of the writer's count or length caps by an adapter-built string or list is reported as `WRITER_WOULD_REJECT_*` (`unrepresentable_hold`).
 
 ## 5. Carrier mapping (adapter output)
 
@@ -122,7 +139,7 @@ Before `check` passes, it builds exactly the carrier that `convert` would write 
 - `source` is the inventory `carrier_source`, copied verbatim. `metadata` holds the response schema/status, the inventory, response and ledger hashes, the adapter version, the profile and the adoption status, with no path strings.
 - Demand items go to `items` and analysis components to `components`, in response order. Values, status and review reasons are copied unchanged, and a type-exact comparison of values is asserted.
 - `raw` is the copied canonical text.
-- Non-null fields become evidence. A field with cell refs becomes `{location, anchor, raw_text (the cited canonical texts joined with LF), transformation}`. Its transformation is a JSON string `{"transformation","role_basis","context_refs"}`, so `role_basis` is kept losslessly. L proven only by context becomes `{selection_evidence, transformation}`, where `selection_evidence` is JSON with the fact's ref, namespace, value and basis plus the role basis.
+- Non-null fields become evidence. A field with cell refs becomes `{location, anchor, raw_text (the cited canonical texts joined with LF), transformation}`. Its transformation is a JSON string `{"transformation","role_basis","context_refs"}`, so `role_basis` is kept losslessly. L, M or N proven only by context becomes `{selection_evidence, transformation}`, where `selection_evidence` is JSON with the fact's ref, namespace, value and basis plus the role basis. The convert receipt reports the M/N selection-evidence fields (`o13_m_n_selection_evidence`); such a carrier is exported with `research/export/writer_portable.py --mode v2`, which gates it with writer004 on a documented placeholder copy and with the route v4 port.
 - Null fields become `null_reasons`.
 - Groups map to writer groups, with the relationship and references packed into `anchor` JSON.
 - Each supported link becomes `composition{parent_id, basis_quantity, basis_unit, basis_location, basis_raw}`.
