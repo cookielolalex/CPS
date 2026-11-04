@@ -1491,6 +1491,21 @@
       "path": "docs/handoff/QUALIFICATION_SCREEN_20261104.md",
       "bytes": 5138,
       "sha256": "fc2445df8e3064be62d21f683bfa63ac97251b8e1835b0b815e373108466006e"
+    },
+    {
+      "path": "research/evaluation/compare_target049.py",
+      "bytes": 15228,
+      "sha256": "fbc210b5f6bb3a3677afd99f7ef333fd27f9c3eee63fe7f3ec6fbec4529ddb13"
+    },
+    {
+      "path": "research/evaluation/tests/test_compare_target049.py",
+      "bytes": 5251,
+      "sha256": "038c3c2e02b370ad23b11149ea45bf21308e2ca0fd2a1f5bdf51ed2c9986ce7e"
+    },
+    {
+      "path": "research/evaluation/PROPOSAL_049.md",
+      "bytes": 3434,
+      "sha256": "80c2c9e241ce7dd8df428754a3652edff201f18ad865601b74715e72c34902b0"
     }
   ]
 }
