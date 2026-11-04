@@ -2,7 +2,7 @@
  "schema": "cps.semantic-source-refs.v2",
  "case_id": "EXAMPLE046F",
  "family_id": "EXAMPLE046F",
- "inventory_sha256": "9e2e581c7c12458a1d4ab1acfc87d32f4117f1faf99249e6572f21574dd82207",
+ "inventory_sha256": "8645ac9ea63fb8b293c0f0ce9194354512d4abd5416310fc6a50bceca31d96b1",
  "status": "research_draft",
  "groups": [
   {
@@ -203,8 +203,8 @@
     2,
     null,
     null,
-    "XM-10",
-    "示例甲牌",
+    null,
+    null,
     null,
     "EXAMPLE046F",
     "示例縣自來水事業處",
@@ -257,20 +257,10 @@
      "reason": "H stays null (R57)."
     },
     "I": {
-     "refs": [
-      "cell:S1!B5",
-      "context:brand_table"
-     ],
-     "transformation": "model from the brand-table entry 電磁接觸器 (all ratings)",
-     "role_basis": "priced equipment line; the brand and model cells G5 and H5 are empty, so the brand table applies (R47b, R55, R58)"
+     "reason": "The line's brand and model cells (廠牌 G5, 型號 H5) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
     },
     "J": {
-     "refs": [
-      "cell:S1!B5",
-      "context:brand_table"
-     ],
-     "transformation": "brand from the brand-table entry 電磁接觸器 (all ratings)",
-     "role_basis": "priced equipment line; the brand and model cells G5 and H5 are empty, so the brand table applies (R47b, R55, R58)"
+     "reason": "The line's brand and model cells (廠牌 G5, 型號 H5) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
     },
     "K": {
      "reason": "K stays null (R48)."
@@ -576,14 +566,14 @@
       "cell:S1!H8"
      ],
      "transformation": "copied model cell",
-     "role_basis": "model stated in the line's own 型號 cell; it takes precedence over the brand table (R47b, R55)"
+     "role_basis": "model stated in the line's own 型號 cell; with a 材料清單, I and J come only from its cells (R47b, R55)"
     },
     "J": {
      "refs": [
       "cell:S1!G8"
      ],
      "transformation": "copied brand cell",
-     "role_basis": "brand stated in the line's own 廠牌 cell; it takes precedence over the brand table (R47b, R55)"
+     "role_basis": "brand stated in the line's own 廠牌 cell; with a 材料清單, I and J come only from its cells (R47b, R55)"
     },
     "K": {
      "reason": "K stays null (R48)."
@@ -876,10 +866,10 @@
      "reason": "H stays null (R57)."
     },
     "I": {
-     "reason": "The brand table has no entry for 自動切換開關, and the line's brand and model cells (廠牌 G10, 型號 H10) are empty (R55)."
+     "reason": "The line's brand and model cells (廠牌 G10, 型號 H10) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
     },
     "J": {
-     "reason": "The brand table has no entry for 自動切換開關, and the line's brand and model cells (廠牌 G10, 型號 H10) are empty (R55)."
+     "reason": "The line's brand and model cells (廠牌 G10, 型號 H10) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
     },
     "K": {
      "reason": "K stays null (R48)."
@@ -1323,10 +1313,10 @@
      "reason": "H stays null (R57)."
     },
     "I": {
-     "reason": "The brand table has no entry for 指示燈, and the line's brand and model cells (廠牌 G13, 型號 H13) are empty (R55)."
+     "reason": "The line's brand and model cells (廠牌 G13, 型號 H13) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
     },
     "J": {
-     "reason": "The brand table has no entry for 指示燈, and the line's brand and model cells (廠牌 G13, 型號 H13) are empty (R55)."
+     "reason": "The line's brand and model cells (廠牌 G13, 型號 H13) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
     },
     "K": {
      "reason": "K stays null (R48)."
@@ -1876,12 +1866,12 @@
   }
  ],
  "limitations": [
-  "Invented example for candidate 046f (R47b-R58, route v4.1). No real material list, contract, customer, company or resource; the glossary and brand table are invented placeholders.",
-  "Source: the company material list (材料清單), the primary job source (R47b, O17). This example has no contract packet.",
+  "Invented example for candidate 046f (R47b-R58, route v4.2). No real material list, contract, customer, company or resource; the glossary is an invented placeholder.",
+  "Source: the company material list (材料清單), the bound job source (R47b, O17). The contract is not packed for the generator, and the packet has no brand table: I and J come only from the material list's cells (R55, O17), so R002, R006 and R009 leave them null.",
   "Quoted range: rows 4-19 of 材料清單, ending at row 20 (合計 in the unit-price column E20). The 合計 in B16 is a block total in the description column (R49).",
   "Totals observed, not repaired (R10): the block total F16 = 104800 equals the amounts of rows 4-13; the end total F20 = 108200 adds F18 and F19.",
   "G1 is the one-row physical_enclosure carrier group of the R56 enclosure row R001.",
-  "R005, R007, R008, R010 and R011 have C null under R52 and stay research_draft (R57; route v4.1 warns R57_NULL_C_RESEARCH_DRAFT, and the export needs the portable writer mode v2).",
-  "Q is filled although source adoption is unverified (R54, O16; route v4.1 warns O16_Q_UNVERIFIED_ADOPTION). It is the quoted unit price, not evidence of an accepted contract rate."
+  "R005, R007, R008, R010 and R011 have C null under R52 and stay research_draft (R57; route v4.2 warns R57_NULL_C_RESEARCH_DRAFT, and the export needs the portable writer mode v2).",
+  "Q is filled although source adoption is unverified (R54, O16; route v4.2 warns O16_Q_UNVERIFIED_ADOPTION). It is the quoted unit price, not evidence of an accepted contract rate."
  ]
 }

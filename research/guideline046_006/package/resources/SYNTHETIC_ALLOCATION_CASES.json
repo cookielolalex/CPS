@@ -6,9 +6,9 @@
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e allocation examples (cps.allocation-examples.draft.v1, R1-R47)",
- "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.1)",
+ "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.2)",
  "resources": {
-  "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private.",
+  "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
   "context:glossary": {
    "generic_prefix_words": [
     "產品"
@@ -57,12 +57,12 @@
   ]
  },
  "assumptions": [
-  "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
+  "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, so the packet has no brand table (O17); the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
   "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
-  "A category chain is a run of delimited segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words (R52). It is dropped on every line type.",
-  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57, route v4.1)."
+  "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
+  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2)."
  ],
- "case_count": 25,
+ "case_count": 34,
  "cases": [
   {
    "id": "A01",
@@ -249,7 +249,7 @@
      ]
     }
    },
-   "reason": "A not-estimated line (amount cell holds the literal 不含估價) is a row. I and J both hold the status text, citing the amount cell; Q is null."
+   "reason": "A not-estimated line (its unit-price or amount cell contains 不含估價) is a row. I and J both hold the status text, citing the cell that contains it, here the amount cell; Q is null."
   },
   {
    "id": "A07",
@@ -305,7 +305,7 @@
     "anchor": "description cell (no item number)",
     "status": "research_draft"
    },
-   "reason": "The sender's unnumbered fee lines before the end row (freight, drawing, design or management fee) are rows. A fee line has C null and the description in D."
+   "reason": "The sender's unnumbered fee lines before the end row (freight, drawing, design or management fee) are rows when priced or not estimated. A fee line has C null and the description in D."
   },
   {
    "id": "A10",
@@ -356,10 +356,10 @@
    "expected": {
     "rows": [],
     "census": {
-     "lines 3, 3.1, 3.2": "excluded_supply; the reason names the marker 業主供料 and the provisional O10 omission (R50 states no census role for O10 omissions; excluded_supply is the role for lines that are not 未填 rows)"
+     "lines 3, 3.1, 3.2": "excluded_supply; the reason names the marker 業主供料 and says \"owner-supplied panel with no priced line inside the quoted range (R50, provisional O10)\""
     }
    },
-   "reason": "Provisionally (O10), a panel line marked owner-supplied is omitted together with its contents when no line inside it has a price inside the quoted range. This also omits the not-estimated line 3.1, which R50 alone would make a row."
+   "reason": "Provisionally (O10), a panel line marked owner-supplied is omitted together with the lines inside it (its numbered descendants 3.1 and 3.2) when no line inside it has a price inside the quoted range. R50 gives the omitted cells the census role excluded_supply. This also omits the not-estimated line 3.1, which R50 alone would make a row."
   },
   {
    "id": "A12",
@@ -399,7 +399,7 @@
      "line 3": "excluded_supply under the R50 row tests (no price and no status; the marker does not decide inclusion)"
     }
    },
-   "reason": "A line inside the panel has a price inside the range, so the O10 omission does not apply and each line follows the R50 row tests: the not-estimated and priced lines are rows; the panel line itself has no price and no status. (The O10 decision record reads \"the panel group stays and its lines are rows\"; R50 as written does not make the unpriced panel line a row. This is recorded as an open question.)"
+   "reason": "A line inside the panel has a price inside the range, so the O10 omission does not apply and each line follows the R50 row tests: the not-estimated and priced lines are rows; the panel line itself has no price and no status. Two readings are open for the owner (FIELD_ROLES R50, note for the owner): the O10 record says \"the panel group stays and its lines are rows\", which can be read as making line 3 a row too; R50 does not. Under O11, R50 also supersedes O7/R45, which kept every in-panel line. Evaluators declare both readings before scoring."
   },
   {
    "id": "A13",
@@ -496,13 +496,13 @@
      "block 計 row": "financial_summary (not a row)"
     }
    },
-   "reason": "The bill line has no price and no status and its analysis block lies in range, so the components are the rows instead of the parent, in analysis order, written as demand items. They follow R52-R57: their own unit, quantity and unit price; I = J = 不含估價 when not estimated. 限時繼電器 is a single segment the glossary does not list, so it goes to D."
+   "reason": "The bill line has no price and no status and its analysis block lies inside the quoted range, so the components are the rows instead of the parent, in analysis order, written as demand items. They follow R52-R57: their own unit, quantity and unit price; I = J = 不含估價 when not estimated. 限時繼電器 is a single segment the glossary does not list, so it goes to D."
   },
   {
    "id": "A15",
    "rule": "R51",
    "input": {
-    "bill_lines": "every bill line has no unit price and no amount (a contract without line prices); each has an analysis block on the analysis sheet"
+    "bill_lines": "every bill line has no price and no status (a contract without line prices); each has an analysis block on the analysis sheet"
    },
    "expected": {
     "rows": "the components of every block, block by block in analysis order, as demand items",
@@ -511,7 +511,7 @@
      "block totals": "financial_summary"
     }
    },
-   "reason": "When every bill line is unpriced, rows come from the analysis sheet instead (R49, R51)."
+   "reason": "When every bill line has no price and no status, rows come from the analysis sheet instead (R49, R51)."
   },
   {
    "id": "A16",
@@ -769,9 +769,274 @@
    },
    "expected": {
     "rows": "only from the 材料清單 lines, in its source order",
-    "contract": "gives no rows; it serves only to resolve doubts the 材料清單 leaves (for example a missing dimension)"
+    "contract": "not given to the generator (046f has no reference channel); it gives no rows and no values, not even a missing dimension, which stays a null with a reason or a review reason"
    },
-   "reason": "When the packet has a material list, it is the primary source: rows, descriptions, units, quantities, prices, brands, models and status come from it, and the contract is never a second source of rows."
+   "reason": "When the job has a material list, it is the bound source: rows, descriptions, units, quantities, prices, brands, models and status come from it. The contract is not packed for the generator and is never a second source of rows or values (R47b)."
+  },
+  {
+   "id": "A26",
+   "rule": "R51 boundary",
+   "input": {
+    "lines": [
+     {
+      "item_no": "6",
+      "description": "盤體組立配線",
+      "unit": "式",
+      "quantity": 1
+     },
+     {
+      "position": "its analysis block 盤體組立配線 單價分析 is on the separate 單價分析 sheet, outside the quoted range; the other bill lines are priced"
+     }
+    ]
+   },
+   "expected": {
+    "rows": [],
+    "census": {
+     "line 6": "excluded_supply, reason per R45 (no price and no status)",
+     "the analysis block": "analysis_unlinked (R46)"
+    }
+   },
+   "reason": "Components replace a no-price, no-status parent only when its analysis block lies inside the quoted range (or when every bill line has no price and no status). Here the block lies outside the range, so the line is excluded_supply and its block is analysis_unlinked."
+  },
+  {
+   "id": "A27",
+   "rule": "R49 boundary",
+   "input": {
+    "lines": [
+     {
+      "item_no": "1",
+      "description": "產品，指示燈，AC220V",
+      "unit": "只",
+      "quantity": 4,
+      "unit_price": 150,
+      "amount": 600
+     },
+     {
+      "unit_price": "甲站合計",
+      "amount": 600
+     },
+     {
+      "item_no": "2",
+      "description": "產品，無熔絲開關，3P，50AT",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 800,
+      "amount": 800
+     },
+     {
+      "unit_price": "總計",
+      "amount": 1400
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     "line 1",
+     "line 3"
+    ],
+    "census": {
+     "line 2": "financial_summary (block total)",
+     "line 4": "financial_summary (end row)"
+    }
+   },
+   "reason": "A total labelled for a block (小計, 甲站合計) does not end the range, even in the unit-price column; the range runs on to 總計."
+  },
+  {
+   "id": "A28",
+   "rule": "R50 (heading not inherited)",
+   "input": {
+    "heading": "以下不含估價",
+    "lines": [
+     {
+      "item_no": "5",
+      "description": "溫度計",
+      "unit": "支",
+      "quantity": 1,
+      "unit_price": 900,
+      "amount": 900
+     },
+     {
+      "item_no": "6",
+      "description": "壓力計",
+      "unit": "支",
+      "quantity": 1
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "line": 5,
+      "C": null,
+      "D": "溫度計",
+      "I": null,
+      "J": null,
+      "Q": 900
+     }
+    ],
+    "census": {
+     "heading": "section",
+     "line 6": "excluded_supply, reason per R45 (no price and no status)"
+    }
+   },
+   "reason": "A 以下不含估價 heading is not inherited: each line is tested by its own cells. Line 5 is priced; line 6 has no price and no status, so it is not a row, and neither line takes 不含估價 in I or J."
+  },
+  {
+   "id": "A29",
+   "rule": "R50, R55 (status in the unit-price cell)",
+   "input": {
+    "description": "產品，指示燈，AC220V",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": "不含估價"
+   },
+   "expected": {
+    "row": true,
+    "C": "XPL",
+    "D": "AC220V",
+    "I": "不含估價",
+    "J": "不含估價",
+    "Q": null,
+    "cites": {
+     "I": [
+      "unit-price cell"
+     ],
+     "J": [
+      "unit-price cell"
+     ]
+    }
+   },
+   "reason": "A line is not estimated when its unit-price or amount cell contains 不含估價; I and J cite that cell."
+  },
+  {
+   "id": "A30",
+   "rule": "R50 (fee line without price)",
+   "input": {
+    "description": "運費",
+    "unit": "式",
+    "quantity": 1,
+    "item_no": null
+   },
+   "expected": {
+    "row": false,
+    "census": "excluded_supply (all cells)",
+    "reason_begins": "no enclosure and no estimate: not in the quoted supply (R45)"
+   },
+   "reason": "Fee lines are rows only when priced or not estimated. An unnumbered fee line with no price and no status is not a row."
+  },
+  {
+   "id": "A31",
+   "rule": "R56 (not an enclosure)",
+   "input": {
+    "description": "接線盒，PVC",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": 120,
+    "amount": 480
+   },
+   "expected": {
+    "row": true,
+    "A": null,
+    "B": null,
+    "C": null,
+    "D": "接線盒，PVC",
+    "J": null,
+    "Q": 120,
+    "status": "research_draft"
+   },
+   "reason": "An enclosure is a 盤, 箱 or 櫃 housing devices; 接線盒, 拉線箱 and 既設盤 are not. This is an ordinary material row: no group, A and B null, C null, and no company name in J."
+  },
+  {
+   "id": "A32",
+   "rule": "R56 (寬/高/深 labels)",
+   "input": {
+    "description": "產品，箱體，控制箱，寬600×高800×深250mm，SUS304",
+    "unit": "面",
+    "quantity": 1,
+    "unit_price": 18000,
+    "amount": 18000
+   },
+   "expected": {
+    "row": true,
+    "A": "控制箱",
+    "B": "600W*800H*250D",
+    "C": "箱體",
+    "D": "SUS304",
+    "I": null,
+    "J": "示例機電股份有限公司",
+    "Q": 18000,
+    "cites": {
+     "C": [
+      "description cell",
+      "context:glossary"
+     ],
+     "J": [
+      "description cell",
+      "context:company_name"
+     ]
+    }
+   },
+   "reason": "B reads dimensions labelled W/H/D or 寬/高/深 in mm (here 寬, 高, 深 with mm) and is null without mm dimensions. The brand cell is empty, so J is the company name, exactly as the resource states it."
+  },
+  {
+   "id": "A33",
+   "rule": "R56 (not-estimated enclosure)",
+   "input": {
+    "description": "產品，箱體，控制盤，W600×H800×D300",
+    "unit": "面",
+    "quantity": 1,
+    "amount": "不含估價"
+   },
+   "expected": {
+    "row": true,
+    "A": null,
+    "B": null,
+    "C": null,
+    "D": "箱體，控制盤，W600×H800×D300",
+    "I": "不含估價",
+    "J": "不含估價",
+    "Q": null,
+    "group": "none",
+    "status": "research_draft"
+   },
+   "reason": "A not-estimated enclosure is an ordinary row: no group, A and B null, C and D per R52 (an enclosure is not an equipment noun, so C is null and D is the description without the prefix), and I = J = 不含估價."
+  },
+  {
+   "id": "A34",
+   "rule": "R50 boundary (inside, provisional O10)",
+   "input": {
+    "lines": [
+     {
+      "item_no": "3",
+      "description": "控制盤",
+      "unit": "面",
+      "quantity": 1,
+      "amount": "業主供料"
+     },
+     {
+      "item_no": "3.1",
+      "description": "產品，指示燈，AC220V",
+      "unit": "只",
+      "quantity": 4
+     },
+     {
+      "item_no": "4",
+      "description": "產品，無熔絲開關，3P，50AT",
+      "unit": "只",
+      "quantity": 1,
+      "amount": "不含估價"
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     "line 4: C XNB, D 3P 50AT, I 不含估價, J 不含估價"
+    ],
+    "census": {
+     "lines 3 and 3.1": "excluded_supply with the provisional O10 reason"
+    }
+   },
+   "reason": "Inside means a numbered descendant (3 → 3.1) or the R33 heading scope. Line 4 is a flat-numbered sibling, not inside the panel, so the O10 omission does not reach it and it follows its own row test."
   }
  ]
 }

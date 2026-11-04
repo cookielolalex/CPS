@@ -6,9 +6,9 @@
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e naming examples (cps.naming-examples.draft.v1), superseded for C and D by R52",
- "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.1)",
+ "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.2)",
  "resources": {
-  "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private.",
+  "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
   "context:glossary": {
    "generic_prefix_words": [
     "產品"
@@ -57,12 +57,12 @@
   ]
  },
  "assumptions": [
-  "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
+  "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, so the packet has no brand table (O17); the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
   "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
-  "A category chain is a run of delimited segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words (R52). It is dropped on every line type.",
-  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57, route v4.1)."
+  "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
+  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2)."
  ],
- "case_count": 23,
+ "case_count": 30,
  "cases": [
   {
    "id": "N01",
@@ -322,8 +322,9 @@
   },
   {
    "id": "N15",
-   "rule": "R55, R58, R47b",
+   "rule": "R55, R58, R47b (contract source)",
    "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
     "description": "產品，電磁開關，電磁接觸器，AC220V",
     "unit": "只",
     "quantity": 2,
@@ -347,7 +348,7 @@
      ]
     }
    },
-   "reason": "Priced equipment line whose brand and model cells are empty: the brand table entry for the device type and rating band applies (the table is the fallback when neither source states a brand or model). The fields cite the description cell and context:brand_table (R58)."
+   "reason": "Contract job (no 材料清單): a priced equipment line whose own cells state no brand or model takes the brand-table entry for its device type and rating band. The fields cite the description cell and context:brand_table (R58). With a 材料清單 the table is never used (O17)."
   },
   {
    "id": "N16",
@@ -376,12 +377,13 @@
      ]
     }
    },
-   "reason": "A brand or model stated in the line's own cells (the material list's 廠牌 and 型號 columns) is copied and takes precedence over the brand table. The single-segment description goes to D (R52)."
+   "reason": "A brand or model stated in the line's own cells (the material list's 廠牌 and 型號 columns) is copied. With a 材料清單, I and J come only from its cells (R55, O17). The single-segment description goes to D (R52)."
   },
   {
    "id": "N17",
-   "rule": "R55 boundary, R53",
+   "rule": "R55 boundary (O18, contract source), R53",
    "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
     "description": "產品，無熔絲開關，3P，225AT",
     "unit": "只",
     "quantity": 1,
@@ -393,10 +395,16 @@
     "C": "XNB",
     "D": "3P 225AT",
     "I": null,
-    "J": null,
-    "null_reason_I_J": "the brand table covers 無熔絲開關 only up to 100AT; the line's brand and model cells are empty"
+    "J": "示例乙牌",
+    "cites": {
+     "J": [
+      "description cell",
+      "context:brand_table"
+     ]
+    },
+    "null_reason_I": "the brand table covers 無熔絲開關 only up to 100AT, so no entry gives a model for 225AT; the contract cells state no brand or model"
    },
-   "reason": "A rating the table does not cover leaves I and J null with a reason. The glossary abbreviation still applies to C."
+   "reason": "A breaker whose rating no table entry covers takes J = the table's breaker brand (the brand its breaker entries carry; O18 gives them one brand), and I stays null with a reason. The glossary abbreviation still applies to C."
   },
   {
    "id": "N18",
@@ -430,7 +438,7 @@
     "C": "SPD",
     "D": "3P 40kA"
    },
-   "reason": "A Latin acronym fused to the noun also gives C = the acronym alone."
+   "reason": "突波吸收器 is a surge protector, one of the equipment families (R52). The digit-free Latin acronym fused to the noun gives C = the acronym alone; D is the rest with the rating tokens joined by a space (R53)."
   },
   {
    "id": "N20",
@@ -476,7 +484,7 @@
      ]
     }
    },
-   "reason": "The material list states the brand and model, so they are copied; the brand table (which would give 示例乙牌 / XB-100 for this rating) is not used."
+   "reason": "The material list states the brand and model, so they are copied. With a 材料清單, I and J come only from its cells and the brand table is never used (O17)."
   },
   {
    "id": "N22",
@@ -499,7 +507,7 @@
      ]
     }
    },
-   "reason": "A single-segment description whose noun the glossary lists: C is the abbreviation and D is null."
+   "reason": "A single segment that is a glossary device: C is the abbreviation and D is the rest of the segment, here nothing, so null."
   },
   {
    "id": "N23",
@@ -529,6 +537,168 @@
     }
    },
    "reason": "Without a material list the contract is the source. A brand or model stated in the line's own cells, here its remark, is copied and takes precedence over the brand table. The remark supplies I and J but never enters D."
+  },
+  {
+   "id": "N24",
+   "rule": "R52 (segments)",
+   "input": {
+    "description": "電磁接觸器 AC220V",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 1500,
+    "amount": 1500
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "cites": {
+     "C": [
+      "description cell",
+      "context:glossary"
+     ]
+    }
+   },
+   "reason": "Segments are separated by ，,、；; only, so this description is one segment. It begins with a glossary device, so C is the abbreviation and D is the rest of the segment (a single glossary segment gives D = the rest, or null). AC220V is not lost."
+  },
+  {
+   "id": "N25",
+   "rule": "R52 (acronym), R53",
+   "input": {
+    "description": "產品，燈具(LED)，AC220V，20W",
+    "unit": "盞",
+    "quantity": 6,
+    "unit_price": 800,
+    "amount": 4800
+   },
+   "expected": {
+    "row": true,
+    "C": "燈具",
+    "D": "(LED)，AC220V 20W"
+   },
+   "reason": "LED names the light source; it is not an acronym of the noun, so it stays in D and does not become C. C is the head noun of a lamp line, cut before the bracket. (LED) is not rating-like, so the comma after it stays; AC220V and 20W are joined by a space (R53)."
+  },
+  {
+   "id": "N26",
+   "rule": "R52 (acronym), R53",
+   "input": {
+    "description": "產品，電力監視器(RS485)，AC110V",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 9000,
+    "amount": 9000
+   },
+   "expected": {
+    "row": true,
+    "C": "電力監視器",
+    "D": "(RS485)，AC110V"
+   },
+   "reason": "RS485 is a protocol designation, not a digit-free acronym of the noun: it stays in D. It is not rating-like either (R53), so the comma stays. C is the head noun of a meter line."
+  },
+  {
+   "id": "N27",
+   "rule": "R52 (chain boundary)",
+   "input": {
+    "description": "產品，電磁開關",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1200,
+    "amount": 2400
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "電磁開關",
+    "status": "research_draft"
+   },
+   "reason": "A chain segment is dropped only while a later noun segment remains. 電磁開關 is a glossary category word but the last segment, so it stays as the noun. What remains after the prefix is one segment that begins with no glossary device, so C is null and D is the text."
+  },
+  {
+   "id": "N28",
+   "rule": "R55 (contract source, brand only)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "remarks": "廠牌：示例甲牌"
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": "XM-10",
+    "J": "示例甲牌",
+    "cites": {
+     "I": [
+      "description cell",
+      "context:brand_table"
+     ],
+     "J": [
+      "remarks cell"
+     ]
+    }
+   },
+   "reason": "A contract line that states only a brand keeps it in J and takes the missing model from the table entry only when the entry's brand matches. The 電磁接觸器 entry is 示例甲牌, so I = its model. The remark never enters D."
+  },
+  {
+   "id": "N29",
+   "rule": "R55 boundary (contract source, brand only)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "remarks": "廠牌：示例丙牌"
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": null,
+    "J": "示例丙牌",
+    "cites": {
+     "J": [
+      "remarks cell"
+     ]
+    },
+    "null_reason_I": "the brand-table entry for 電磁接觸器 is another brand, so its model is not used; the line states no model"
+   },
+   "reason": "The stated brand does not match the table entry's brand, so the table supplies nothing and I stays null with a reason."
+  },
+  {
+   "id": "N30",
+   "rule": "R55 (contract source, model only)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "remarks": "型號：XM-10"
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": "XM-10",
+    "J": "示例甲牌",
+    "cites": {
+     "I": [
+      "remarks cell"
+     ],
+     "J": [
+      "description cell",
+      "context:brand_table"
+     ]
+    }
+   },
+   "reason": "A contract line that states only a model takes the brand from the table entry only when the entry's brand matches the model, that is when the entry lists that model. The 電磁接觸器 entry lists XM-10, so J = its brand."
   }
  ]
 }

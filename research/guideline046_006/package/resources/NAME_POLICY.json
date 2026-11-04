@@ -1,5 +1,5 @@
 {
-  "superseded_for_C_D": "Candidate 046f (2026-11-04): FIELD_ROLES R52 (with R53 and R56) decides C and D, including the company glossary prefix and abbreviations; I and J follow R55 (contract-stated brand or model, else the owner-reviewed company brand table). R48-R58 govern where this policy disagrees. Kept unchanged below as background and for earlier candidates.",
+  "superseded_for_C_D": "Candidate 046f (2026-11-04): FIELD_ROLES R52 (with R53 and R56) decides C and D, including the company glossary prefix, category chain and abbreviations and the order glossary, acronym, single segment, head noun, other; I and J follow R55 (a brand or model stated in the bound source; with a 材料清單 only its cells; on a contract job only, the owner-reviewed company brand table; O17, O18). R47b-R58 govern where this policy disagrees. Kept unchanged below as background and for earlier candidates.",
   "schema": "cps.naming-policy.draft.v1",
   "status": "DRAFT_UNTESTED_NOT_DEPLOYED",
   "default": "Preserve source-language lexical names and exact source spelling; no automatic translation or canonical abbreviation.",

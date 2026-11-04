@@ -10,17 +10,21 @@ verbatim into SOURCE_INVENTORY.json:
 
 Usage: python3 -I -B make_job_config.py --job /abs/private/JOB.json --out /abs/new/BUILDER_CONFIG.json
 
-Job JSON (schema cps.job-config.v2; one source per config: a job with both a 材料清單 and a contract needs two):
-  required: schema, case_id, customer_name, project_name, company_name, glossary_path, brand_table_path,
-            source_path, source_kind ("材料清單" or "contract"), carrier_path (the original Windows path of the
-            source, provenance only, e.g. "X:\\Jobs\\...\\file.xlsx")
+Job JSON (schema cps.job-config.v2; one config per job, for its bound source: the 材料清單 when the job has
+one, otherwise the contract (FIELD_ROLES R47b); the other document is not packed for the generator):
+  required: schema, case_id, customer_name, project_name, company_name, glossary_path, source_path,
+            source_kind ("材料清單" or "contract"), carrier_path (the original Windows path of the source,
+            provenance only, e.g. "X:\\Jobs\\...\\file.xlsx")
+  brand_table_path: required when source_kind is "contract"; refused when it is "材料清單" (owner decision O17:
+            the brand table is used only when the job has no 材料清單, R47b, R55)
   optional: family_id (default case_id), adoption_status ("verified"|"partial"|"unverified", default
             "unverified"), adoption_basis, views ("auto" or the builder's view list, default "auto"),
             provenance {job_inputs, glossary_review, brand_table_review} (strings for the facts' basis)
-Context facts written (route v4.1 names): context:case_identity, context:customer_name, context:project_name,
-context:company_name, context:glossary, context:brand_table. The glossary and brand table values are their
-files' JSON re-serialised as compact JSON text (key order kept); each basis names the sha256 of the file bytes
-and of the embedded text, and both are pinned in authority_pins.
+Context facts written (route v4.2 names): context:case_identity, context:customer_name, context:project_name,
+context:company_name, context:glossary, and for a contract job only context:brand_table. A 材料清單 packet has no
+context:brand_table, so a response citing it fails the route's UNKNOWN_CONTEXT_REF check (O17). The glossary and
+brand table values are their files' JSON re-serialised as compact JSON text (key order kept); each basis names the
+sha256 of the file bytes and of the embedded text, and both are pinned in authority_pins.
 """
 import argparse, hashlib, importlib.util, json, sys
 from pathlib import Path
@@ -30,10 +34,12 @@ HERE = Path(__file__).resolve().parent
 ROUTE = HERE.parent / 'package' / 'tools' / 'cps046b_route.py'
 JOB_SCHEMA = 'cps.job-config.v2'
 CONFIG_SCHEMA = 'cps.source-prep-builder-config.v2'
-KINDS = {'材料清單': 'company material list (材料清單), the primary job source when present (O17, FIELD_ROLES R47b)',
+KINDS = {'材料清單': 'company material list (材料清單), the bound job source when present (O17, FIELD_ROLES R47b); '
+                     'the packet has no brand table (O17)',
          'contract': 'contract; the job has no material list, so rows come from the contract (FIELD_ROLES R47b)'}
-REQUIRED = ('schema', 'case_id', 'customer_name', 'project_name', 'company_name', 'glossary_path', 'brand_table_path',
+REQUIRED = ('schema', 'case_id', 'customer_name', 'project_name', 'company_name', 'glossary_path',
             'source_path', 'source_kind', 'carrier_path')
+BRAND_TABLE_KEY = 'brand_table_path'     # contract jobs only (O17)
 OPTIONAL = ('family_id', 'adoption_status', 'adoption_basis', 'views', 'provenance')
 BUILDERS = {'.xlsx': ('cached_xlsx', 'research/guideline046_003/source_prep/build_inventory_xlsx_v2.py'),
             '.xls': ('cached_xls', 'research/guideline046_003/source_prep/build_inventory_v2.py')}
@@ -103,9 +109,14 @@ def build_config(job_path):
     if not isinstance(job, dict):
         raise Refused('JOB_OBJECT_REQUIRED')
     missing = [k for k in REQUIRED if k not in job]
-    extra = [k for k in job if k not in REQUIRED + OPTIONAL]
+    extra = [k for k in job if k not in REQUIRED + OPTIONAL + (BRAND_TABLE_KEY,)]
+    if job.get('source_kind') == 'contract' and BRAND_TABLE_KEY not in job:
+        missing.append(BRAND_TABLE_KEY)
     if missing or extra:
         raise Refused('JOB_KEYS', {'missing': missing, 'unexpected': extra})
+    if job['source_kind'] == '材料清單' and BRAND_TABLE_KEY in job:
+        raise Refused('BRAND_TABLE_NOT_USED_WITH_MATERIAL_LIST',
+                      'O17: with a 材料清單, I and J come only from its cells; omit brand_table_path (FIELD_ROLES R47b, R55)')
     if job['schema'] != JOB_SCHEMA:
         raise Refused('JOB_SCHEMA', {'expected': JOB_SCHEMA})
     family = job.get('family_id', job['case_id'])
@@ -140,7 +151,9 @@ def build_config(job_path):
     except Exception:               # noqa: BLE001 - a non-string path
         raise Refused('CARRIER_PATH_REQUIRED')
     glossary, g_file, g_text = resource(route, 'glossary', job['glossary_path'])
-    brands, b_file, b_text = resource(route, 'brand_table', job['brand_table_path'])
+    with_brands = job['source_kind'] == 'contract'      # O17: no brand table on a 材料清單 job
+    if with_brands:
+        brands, b_file, b_text = resource(route, 'brand_table', job[BRAND_TABLE_KEY])
     job_sha = sha(job_raw)
     who = prov.get('job_inputs', 'no provenance statement in the job config')
 
@@ -162,12 +175,14 @@ def build_config(job_path):
              'Owner-reviewed company abbreviation glossary (O15, FIELD_ROLES R52, R58), embedded as compact JSON text. '
              f'File sha256 {g_file}; embedded text sha256 {g_text}. Review: {prov.get("glossary_review", "no review statement in the job config")}.',
              [('owner-reviewed glossary file', g_file), ('embedded compact JSON text', g_text)]),
-        fact('brand_table', 'cps.company_resource.brand_table', brands,
-             'Owner-reviewed company brand/model table (O14, O18, FIELD_ROLES R55, R58), the fallback when no source states a brand or model '
-             f'(R47b), embedded as compact JSON text. File sha256 {b_file}; embedded text sha256 {b_text}. '
-             f'Review: {prov.get("brand_table_review", "no review statement in the job config")}.',
-             [('owner-reviewed brand table file', b_file), ('embedded compact JSON text', b_text)]),
     ]
+    if with_brands:
+        facts.append(fact('brand_table', 'cps.company_resource.brand_table', brands,
+                          'Owner-reviewed company brand/model table (O14, O18, FIELD_ROLES R55, R58). This job has no 材料清單, so the '
+                          'table is the fallback on priced equipment lines whose contract cells state no brand or model (O17, R47b). '
+                          f'Embedded as compact JSON text. File sha256 {b_file}; embedded text sha256 {b_text}. '
+                          f'Review: {prov.get("brand_table_review", "no review statement in the job config")}.',
+                          [('owner-reviewed brand table file', b_file), ('embedded compact JSON text', b_text)]))
     for f in facts:                 # the route's own inventory rule for context refs
         assert route.CONTEXT_REF_RE.fullmatch(f['ref'])
     basis = f"Source document kind: {job['source_kind']} - {KINDS[job['source_kind']]}. "
@@ -178,7 +193,7 @@ def build_config(job_path):
            'carrier_path': job['carrier_path'], 'views': views,
            'adoption_status': adoption, 'adoption_basis': basis,
            'job_config_sha256': job_sha,
-           'resource_files_sha256': {'glossary': g_file, 'brand_table': b_file},
+           'resource_files_sha256': {'glossary': g_file, 'brand_table': b_file if with_brands else None},
            'context_facts': facts}
     return cfg
 

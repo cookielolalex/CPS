@@ -1,6 +1,6 @@
-"""Invented carrier fixtures for the portable writer's mode v2 (candidate 046f, route v4.1 relaxations). No project data.
+"""Invented carrier fixtures for the portable writer's mode v2 (candidate 046f, route v4.2 with the v4.1 relaxations). No project data.
 
-Inputs: carriers produced by the 046f route v4.1 from invented inputs (guideline046_006/route_tests/make_fixtures.py
+Inputs: carriers produced by the 046f route v4.2 from invented inputs (guideline046_006/route_tests/make_fixtures.py
 and the package's invented EXAMPLE_INVENTORY.json/EXAMPLE_RESPONSE.json -> cps046b_route.py convert):
   JOBS    - valid_response_job_inputs.json: L, M and N proven by job-input context (O13: M/N selection evidence);
   PLAIN   - valid_response.json: no relaxation;
@@ -8,6 +8,8 @@ and the package's invented EXAMPLE_INVENTORY.json/EXAMPLE_RESPONSE.json -> cps04
   Q       - valid_response_q_unverified.json: Q under unverified adoption (O16), no other relaxation;
   ALL     - valid_response_relaxed_all.json: all three classes;
   EXAMPLE - the package example (材料清單-style source; all three classes).
+JOBS and ALL are converted on fixture_inventory_jobs.json, a 046f job packet (route v4.2 policy checks applied);
+PLAIN, R57 and Q on fixture_inventory.json, the pre-046f mechanics fixture (policy checks not applied).
 Output: valid and invalid variants for `writer_portable.py --mode v2` plus FIXTURES_V2.json
 (expected outcome, refusal code and stage for each; relaxed_expected = the writer must use the placeholder copy).
 Usage: python3 -I -B make_export_fixtures_v2.py JOBS PLAIN R57 Q ALL EXAMPLE /abs/new_out_dir
@@ -110,7 +112,7 @@ write('x01_C_selection_with_mn', variant(lambda c: (item(c, 'R002')['values'].__
                                                     item(c, 'R002')['evidence'].update(C=dict(item(c, 'R002')['evidence']['M'])))),
       False, 'SELECTION_ONLY_ENGINEERING_ID', GATE_COPY, note='selection evidence outside L/M/N stays refused by writer004 itself')
 write('x02_M_pathlike', variant(lambda c: item(c, 'R002')['evidence']['M'].update(selection_evidence='C:\\x')),
-      False, 'EXTRA_SOURCE_REFERENCE', PORT, note='the copy carries the text as raw_text; the route v4.1 port refuses the selection evidence')
+      False, 'EXTRA_SOURCE_REFERENCE', PORT, note='the copy carries the text as raw_text; the route v4.2 port refuses the selection evidence')
 write('x03_M_extra_key', variant(lambda c: item(c, 'R002')['evidence']['M'].update(note='x')),
       False, 'EXACT_KEYS_REQUIRED', GATE_COPY, note='other keys survive the conversion, so writer004 refuses the copy')
 write('x04_formula_D_with_mn', variant(lambda c: set_text(c, 'R002', 'D', '-20~60℃')),

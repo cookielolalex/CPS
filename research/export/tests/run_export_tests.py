@@ -8,9 +8,9 @@ Proves on invented carriers:
   (c) invalid carriers are refused (writer004 gate codes, prepareMatrices review-cell code,
       documented portable-only refusals) and leave no output;
   (d) visual_qa produces PNGs reproducibly;
-  (e) mode v2 (candidate 046f, route v4.1 relaxations): carriers with M/N job-input selection evidence
+  (e) mode v2 (candidate 046f, route v4.2 with the v4.1 relaxations): carriers with M/N job-input selection evidence
       (O13) and/or C null with status research_draft (R57) pass writer004 on the documented placeholder
-      copy plus the route v4.1 port, and the saved values equal writer004 prepareMatrices on that copy
+      copy plus the sha256-pinned route v4.2 port, and the saved values equal writer004 prepareMatrices on that copy
       except the documented cells (checked here by an independent content-based alignment); carriers
       without those (including Q under unverified adoption, O16) take the v1 route unchanged; v2
       refusals come from writer004 or the route port as documented.
@@ -333,18 +333,19 @@ def main():
 
     # ------------------------------------------------ (e) mode v2: route v4.1 relaxations for 046f carriers
     r46 = load(ROUTE46F, 'cps046f_route_reference')
-    record('e_route_v4_version_matches_writer', r46.VERSION == wp.ROUTE_V4_VERSION == 'cps046f-route.v4.1'
+    record('e_route_v4_version_matches_writer', r46.VERSION == wp.ROUTE_V4_VERSION == 'cps046f-route.v4.2'
            and wp.ROUTE_V4_TOOL.resolve() == ROUTE46F.resolve() and set(r46.PORT_RELAXATIONS) == set(wp.RELAXATION_CLASSES))
+    record('e_route_port_pinned_by_sha256', wp.ROUTE_V4_SHA256 == sha(ROUTE46F.read_bytes()), {'pinned': wp.ROUTE_V4_SHA256})
     fx6 = work / 'route046f_fixtures'
     code, out, err = run(PY + [ROUTE46F_FIXTURES, fx6])
     record('e_route046f_make_fixtures', code == 0, err[-300:])
     carriers6 = {}
     res6 = ROUTE46F_DIR / 'package' / 'resources'
-    for tag, inv_path, resp in (('jobs', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_job_inputs.json'),
+    for tag, inv_path, resp in (('jobs', fx6 / 'fixture_inventory_jobs.json', fx6 / 'valid_response_job_inputs.json'),
                                 ('plain', fx6 / 'fixture_inventory.json', fx6 / 'valid_response.json'),
                                 ('r57', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_r57_null_c.json'),
                                 ('q', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_q_unverified.json'),
-                                ('all', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_relaxed_all.json'),
+                                ('all', fx6 / 'fixture_inventory_jobs.json', fx6 / 'valid_response_relaxed_all.json'),
                                 ('example', res6 / 'EXAMPLE_INVENTORY.json', res6 / 'EXAMPLE_RESPONSE.json')):
         code, out, err = run(PY + [ROUTE46F, 'convert', '--inventory', inv_path, '--response', resp, '--out-dir', work / f'route046f_{tag}'])
         carriers6[tag] = work / f'route046f_{tag}' / 'carrier.json'
@@ -401,8 +402,9 @@ def main():
                       and cls.get('o16_q_unverified_adoption', {}).get('source_adoption') == obj['metadata'].get('source_adoption'))
         if x['relaxed_expected']:
             ok = (rc['mode'] == 'v2' and rx.get('applied') is True and classes_ok
-                  and rx['route_v4_port']['result'] == 'PASS' and rx['route_v4_port']['version'] == 'cps046f-route.v4.1'
-                  and rx['route_v4_port']['sha256'] == sha(ROUTE46F.read_bytes())
+                  and rx['route_v4_port']['result'] == 'PASS' and rx['route_v4_port']['version'] == 'cps046f-route.v4.2'
+                  and rx['route_v4_port']['sha256'] == sha(ROUTE46F.read_bytes()) == wp.ROUTE_V4_SHA256
+                  and rx['route_v4_port']['sha256_pinned'] is True
                   and rx['writer004_cross_check_on_placeholder_copy']['result'] == 'BYTE_IDENTICAL'
                   and rc['gate']['result']['status'] == 'WRITER_STRUCTURAL_VALIDATION_ONLY'
                   and rc['expected_saved_values']['identical_to_writer004_prepareMatrices_output'] is False
@@ -477,17 +479,32 @@ def main():
     guard('placeholder_row_text', lambda mc: mc['review'][row_ix(mc, '待確認', 'C001.1')].__setitem__(4, '"other"'), 'RELAXATION_DIFF_FORM')
     guard('placeholder_row_removed', lambda mc: mc['review'].pop(row_ix(mc, '待確認', 'C001.1')), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
     guard('nonitem_row_changed', lambda mc: mc['review'][-1].__setitem__(5, '"x"'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
-    # the writer refuses a route tool whose VERSION or documented relaxations do not match
+    # the writer refuses a route tool whose bytes are not the pinned ones (046f review N3), before executing it,
+    # and still checks VERSION and the documented relaxations of a tool whose bytes are pinned
     tool_dir = work / 'fake_route'
     tool_dir.mkdir()
     fake = tool_dir / 'cps046b_route.py'
-    fake.write_text(ROUTE46F.read_text(encoding='utf-8').replace("VERSION = 'cps046f-route.v4.1'", "VERSION = 'cps046f-route.v4'", 1), encoding='utf-8')
+    fake.write_text(ROUTE46F.read_text(encoding='utf-8') + '\n# one extra comment: same VERSION, different bytes\n', encoding='utf-8')
+    def try_build(tool, out_name):
+        try:
+            wp.build(Path(carriers6['r57']), work / out_name, wd, mode='v2', route_tool=tool)
+            return None
+        except wp.Refused as e:
+            return (e.code, e.stage)
+    fr = try_build(fake, 'fake_route_out')
+    record('e_v2_refuses_unpinned_route_bytes', fr == ('ROUTE_V4_TOOL_NOT_PINNED', 'gate:route_v4_port') and not (work / 'fake_route_out').exists(), fr)
+    fake2 = tool_dir / 'cps046b_route_v4.py'
+    fake2.write_text(ROUTE46F.read_text(encoding='utf-8').replace("VERSION = 'cps046f-route.v4.2'", "VERSION = 'cps046f-route.v4.1'", 1), encoding='utf-8')
+    fr = try_build(fake2, 'fake_route2_out')
+    pinned = wp.ROUTE_V4_SHA256
     try:
-        wp.build(Path(carriers6['r57']), work / 'fake_route_out', wd, mode='v2', route_tool=fake)
-        fr = None
-    except wp.Refused as e:
-        fr = (e.code, e.stage)
-    record('e_v2_refuses_unpinned_route_version', fr == ('ROUTE_V4_TOOL_VERSION', 'gate:route_v4_port') and not (work / 'fake_route_out').exists(), fr)
+        wp.ROUTE_V4_SHA256 = sha(fake2.read_bytes())       # pin the fake: the VERSION check must still refuse it
+        fr2 = try_build(fake2, 'fake_route3_out')
+    finally:
+        wp.ROUTE_V4_SHA256 = pinned
+    record('e_v2_refuses_unpinned_route_version', fr == ('ROUTE_V4_TOOL_NOT_PINNED', 'gate:route_v4_port')
+           and fr2 == ('ROUTE_V4_TOOL_VERSION', 'gate:route_v4_port') and not (work / 'fake_route2_out').exists()
+           and not (work / 'fake_route3_out').exists(), [fr, fr2])
 
     # ------------------------------------------------ (d) visual QA
     if not a.skip_visual:

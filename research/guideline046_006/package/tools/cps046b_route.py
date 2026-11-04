@@ -1,4 +1,4 @@
-"""CPS source-reference checker and carrier adapter, route v4.1 for candidate 046f (stdlib only).
+"""CPS source-reference checker and carrier adapter, route v4.2 for candidate 046f (stdlib only).
 v4 implements owner decision O13 (FIELD_ROLES R48, job inputs): L, M and N may be proven by
 context references alone (context:case_identity, context:customer_name, context:project_name);
 such proofs become selection_evidence in the carrier, and the Python writer port accepts
@@ -15,6 +15,23 @@ v4.1 (FIELD_ROLES R52/R54/R56/R57, owner decision O16) changes exactly two check
       numericRaw(raw unit_price) and be proven by that single cell.
   (c) R56: the one-row physical_enclosure group that carries A/B is unchanged; the route has never
       required a member count, so a group with exactly one member is accepted.
+
+v4.2 (FIELD_ROLES R48, R56, R58; 046f semantic review S12) adds invalid checks that need inventory
+data only. They apply when the inventory is a 046f job packet, that is when it carries a job-input
+context fact context:customer_name or context:project_name (harness/make_job_config.py always
+writes both, with context:case_identity). check, convert and check-inventory report the state as
+policy_checks; an inventory without them is a pre-046f mechanics fixture and gets no R48/R56 checks.
+  - R48_JOB_INPUT_FACT_MISSING: a job packet lacks one of the three job-input facts.
+  - on every item (demand and analysis_component): L, M and N are non-null
+    (R48_JOB_INPUT_REQUIRED), cite exactly their own context ref and nothing else
+    (L context:case_identity, M context:customer_name, N context:project_name; R48_JOB_INPUT_REF)
+    and equal that fact's value (R48_JOB_INPUT_VALUE_MISMATCH); K, O and P are null
+    (R48_FIELD_MUST_BE_NULL);
+  - every group has relationship physical_enclosure (R56_GROUP_RELATIONSHIP) and exactly one member
+    (R56_GROUP_ONE_MEMBER_REQUIRED).
+  On every inventory: a J that cites context:company_name equals that fact's value
+  (R56_J_COMPANY_NAME_MISMATCH). No semantic enclosure detection is attempted. The writer port and
+  its PORT_RELAXATIONS are unchanged from v4.1.
 
 Writer port (validate_carrier_port) relaxations against the archived writer004 validateCarrier,
 documented in PORT_RELAXATIONS and removable with strict=True (exact writer004 semantics):
@@ -46,7 +63,7 @@ import argparse, copy, hashlib, json, math, re, sys
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = 'cps046f-route.v4.1'
+VERSION = 'cps046f-route.v4.2'
 RESPONSE_SCHEMA = 'cps.semantic-source-refs.v2'
 INVENTORY_SCHEMA = 'cps.source-inventory.cells.v2'
 PROFILE = 'cached-cell-raw-scalar-text.v2'
@@ -69,6 +86,11 @@ LIMIT = 20 * 1024 * 1024
 # writer004 validateCarrier allows only L; the M/N relaxation is the route v4 divergence.
 SELECTION_COLS = ('L', 'M', 'N')
 WRITER004_SELECTION_COLS = ('L',)
+# v4.2 policy checks (FIELD_ROLES R48, R56, R58): each job-input field cites exactly its own fact.
+JOB_INPUT_REFS = {'L': 'context:case_identity', 'M': 'context:customer_name', 'N': 'context:project_name'}
+JOB_PACKET_MARKERS = ('context:customer_name', 'context:project_name')
+R48_NULL_COLS = ('K', 'O', 'P')
+COMPANY_NAME_REF = 'context:company_name'
 # The documented differences between validate_carrier_port (default) and writer004 validateCarrier.
 # validate_carrier_port(c, strict=True) applies none of them.
 PORT_RELAXATIONS = {
@@ -429,7 +451,7 @@ def _js(v):
 
 def validate_carrier_port(c, strict=False):
     """Python port of writer004 validateCarrier + prepareMatrices review-cell checks.
-    Default: with the PORT_RELAXATIONS (route v4.1). strict=True: exact writer004 semantics."""
+    Default: with the PORT_RELAXATIONS (route v4.1, unchanged in v4.2). strict=True: exact writer004 semantics."""
     selection_cols = WRITER004_SELECTION_COLS if strict else SELECTION_COLS
     _keys(c, ['schema', 'headers', 'case_id', 'family_id', 'source', 'metadata', 'groups', 'items', 'components', 'nonitems', 'limitations'], 'carrier')
     kind = c['source'].get('kind') if isinstance(c['source'], dict) else None
@@ -639,8 +661,32 @@ class Inventory:
         return False
 
 
+def policy_state(inv):
+    """v4.2: the R48/R56 policy checks apply to a 046f job packet, an inventory carrying a job-input fact."""
+    return 'applied' if any(x in inv.context for x in JOB_PACKET_MARKERS) else 'not_applied_no_job_input_facts'
+
+
+def check_job_facts(inv, rep):
+    """v4.2 (R48): a job packet carries all three job-input facts, each a nonblank string."""
+    if policy_state(inv) != 'applied':
+        return
+    missing = [x for x in JOB_INPUT_REFS.values() if x not in inv.context]
+    if missing:
+        rep.bad('R48_JOB_INPUT_FACT_MISSING', 'context_facts', {'missing': missing,
+                'note': 'a 046f job packet carries context:case_identity, context:customer_name and context:project_name (R48); '
+                        'rebuild the packet with harness/make_job_config.py'})
+    for x in JOB_INPUT_REFS.values():
+        f = inv.context.get(x)
+        if f is not None and (not isinstance(f.get('value'), str) or js_blank(f['value'])):
+            rep.bad('R48_JOB_INPUT_FACT_VALUE', 'context_facts', {'ref': x, 'note': 'a job input is a nonblank string'})
+
+
 def check_inventory(inv):
     rep = Report()
+    check_job_facts(inv, rep)
+    if policy_state(inv) != 'applied':
+        rep.warn('NOT_A_046F_JOB_PACKET', 'context_facts', {'note': 'no job-input context fact (context:customer_name, '
+                 'context:project_name): the route v4.2 R48/R56 policy checks are not applied to responses on this inventory'})
     ident(inv.case_id, 'case_id', rep)
     ident(inv.family_id, 'family_id', rep)
     try:
@@ -759,6 +805,8 @@ def _check(inv, resp_raw, rep):
         rep.bad('INVENTORY_HASH_MISMATCH', 'inventory_sha256')
     if r['status'] not in ('research_draft', 'partial', 'held'):
         rep.bad('RESPONSE_STATUS', 'status')
+    policy = policy_state(inv) == 'applied'       # v4.2 R48/R56 policy checks
+    check_job_facts(inv, rep)
     for k in ('groups', 'items', 'component_links', 'source_roles', 'limitations'):
         if not isinstance(r[k], list):
             rep.bad('ARRAY_REQUIRED', k)
@@ -972,6 +1020,25 @@ def _check(inv, resp_raw, rep):
                                      'The cited cell is not a plain ASCII numeric literal the writer accepts; leave the field null with a specific reason and keep the raw text.')
                         elif n != float(v):
                             rep.bad('NUMERIC_EVIDENCE_MISMATCH', pw, {'value': v})
+        if policy:              # v4.2 (R48, R58): job inputs on every item, cited only by their own fact
+            for col, ref in JOB_INPUT_REFS.items():
+                j = COLS.index(col)
+                if vals[j] is None:
+                    rep.bad('R48_JOB_INPUT_REQUIRED', f'{w}.values.{col}', {'expected_refs': [ref]})
+                    continue
+                p = proofs[col]
+                if not (isinstance(p, dict) and p.get('refs') == [ref]):
+                    rep.bad('R48_JOB_INPUT_REF', f'{w}.proofs.{col}', {'expected_refs': [ref]})
+                fact = inv.context.get(ref)
+                if fact is not None and vals[j] != fact.get('value'):
+                    rep.bad('R48_JOB_INPUT_VALUE_MISMATCH', f'{w}.values.{col}', {'ref': ref, 'note': 'copy the job input exactly'})
+            for col in R48_NULL_COLS:
+                if vals[COLS.index(col)] is not None:
+                    rep.bad('R48_FIELD_MUST_BE_NULL', f'{w}.values.{col}', 'K, O and P stay null (FIELD_ROLES R48)')
+        jp = proofs['J']        # v4.2 (R56, R58): a J derived through the company name equals it
+        if (vals[9] is not None and isinstance(jp, dict) and isinstance(jp.get('refs'), list) and COMPANY_NAME_REF in jp['refs']
+                and COMPANY_NAME_REF in inv.context and vals[9] != inv.context[COMPANY_NAME_REF].get('value')):
+            rep.bad('R56_J_COMPANY_NAME_MISMATCH', f'{w}.values.J', {'ref': COMPANY_NAME_REF, 'note': 'copy the company name exactly'})
         if it['group_id'] is None and (vals[0] is not None or vals[1] is not None):
             rep.bad('UNGROUPED_AB_MUST_BE_BLANK', w)
         g = groups.get(it['group_id']) if isinstance(it['group_id'], str) else None
@@ -1000,6 +1067,19 @@ def _check(inv, resp_raw, rep):
             rep.bad('SOURCE_UNIT_MISMATCH', w)
     if not demand_ids:
         rep.bad('DEMAND_ITEM_REQUIRED', 'items')
+    if policy:                  # v4.2 (R56): the only groups are one-row physical_enclosure carriers
+        members = {}
+        for it in r['items']:
+            if isinstance(it, dict) and isinstance(it.get('group_id'), str):
+                members.setdefault(it['group_id'], []).append(it.get('id'))
+        for i, g in enumerate(r['groups']):
+            if not isinstance(g, dict) or g.get('id') not in groups or groups[g['id']] is not g:
+                continue
+            if g['relationship'] != 'physical_enclosure':
+                rep.bad('R56_GROUP_RELATIONSHIP', f'groups[{i}].relationship', {'expected': 'physical_enclosure'})
+            n = len(members.get(g['id'], []))
+            if n != 1:
+                rep.bad('R56_GROUP_ONE_MEMBER_REQUIRED', f'groups[{i}]', {'members': n, 'note': 'a group only carries A/B of one enclosure row (R56)'})
     if len(demand_ids) > 2000 or len(component_ids) > 2000:
         rep.hold('ITEM_LIMIT_FOR_WRITER', 'items')
 
@@ -1281,7 +1361,8 @@ def main(argv=None):
     if a.cmd == 'check-inventory':
         rep = check_inventory(inv)
         print(json.dumps({'status': 'PASS' if not rep.violations else 'REJECTED', 'route': VERSION,
-                          'inventory_sha256': inv.sha256, 'violations': rep.violations, 'warnings': rep.warnings},
+                          'inventory_sha256': inv.sha256, 'policy_checks': policy_state(inv),
+                          'violations': rep.violations, 'warnings': rep.warnings},
                          ensure_ascii=False, indent=1))
         return 0 if not rep.violations else 1
     resp_raw = Path(a.response).read_bytes()
@@ -1289,8 +1370,8 @@ def main(argv=None):
         rep, _ = check(inv, resp_raw)
         status = 'PASS' if not rep.violations else 'REJECTED'
         print(json.dumps({'status': status, 'route': VERSION, 'inventory_sha256': inv.sha256,
-                          'response_sha256': sha256(resp_raw), 'violations': rep.violations,
-                          'warnings': rep.warnings}, ensure_ascii=False, indent=1))
+                          'response_sha256': sha256(resp_raw), 'policy_checks': policy_state(inv),
+                          'violations': rep.violations, 'warnings': rep.warnings}, ensure_ascii=False, indent=1))
         return 0 if status == 'PASS' else 1
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=False)
@@ -1302,7 +1383,8 @@ def main(argv=None):
         return 3
     (out / 'CENSUS_LEDGER.json').write_bytes(ledger)
     receipt = {'route': VERSION, 'inventory_sha256': inv.sha256, 'response_sha256': sha256(resp_raw),
-               'census_ledger_sha256': sha256(ledger), 'violations': rep.violations, 'warnings': rep.warnings}
+               'census_ledger_sha256': sha256(ledger), 'policy_checks': policy_state(inv),
+               'violations': rep.violations, 'warnings': rep.warnings}
     if carrier is None:
         receipt['status'] = 'NOT_CARRIED'
         receipt['categories'] = sorted({v['category'] for v in rep.violations})

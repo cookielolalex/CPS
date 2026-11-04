@@ -16,8 +16,9 @@ Route
      types (strings stay strings, numbers stay numbers, no formulas), and the writer004
      formatting that openpyxl can express. Bytes are reproducible (fixed zip/docProps times).
 
-Mode v2 (candidate 046f carriers made by route v4.1; FIELD_ROLES R48, R52, R54, R57; O13, O16)
-  The route v4.1 Python writer port (validate_carrier_port) differs from writer004 validateCarrier in
+Mode v2 (candidate 046f carriers made by route v4.2, which keeps the route v4.1 relaxations unchanged;
+FIELD_ROLES R48, R52, R54, R57; O13, O16)
+  The route v4.2 Python writer port (validate_carrier_port) differs from writer004 validateCarrier in
   exactly the documented relaxation classes (cps046b_route.PORT_RELAXATIONS):
   - o13_m_n_selection_evidence: M/N proven by job-input context facts carry selection_evidence, which
     writer004 accepts for L only (SELECTION_ONLY_ENGINEERING_ID);
@@ -30,8 +31,8 @@ Mode v2 (candidate 046f carriers made by route v4.1; FIELD_ROLES R48, R52, R54, 
   each relaxation is neutralized (O13: each M/N selection_evidence object becomes an equivalent-shaped
   location evidence object: location = the item's own location, anchor = the item's anchor, raw_text =
   the selection_evidence text, transformation and any other key unchanged; R57: status held, plus one
-  placeholder review reason when review_reasons is empty), and (b) the route v4.1 Python port on the
-  original carrier. writer004 prepareMatrices runs on the copy and must equal the Python matrices of
+  placeholder review reason when review_reasons is empty), and (b) the route v4.2 Python port on the
+  original carrier. The port file is pinned by sha256 (ROUTE_V4_SHA256), checked before it is executed. writer004 prepareMatrices runs on the copy and must equal the Python matrices of
   the copy byte for byte; the Python matrices of the original may differ from them only in the
   documented review cells: columns C-E of 欄位依據 <id>.M/.N rows of the O13 fields; column G (狀態)
   of every review row of each R57 item; and, where the copy added the placeholder reason, column F of
@@ -44,18 +45,20 @@ Usage
 Outputs in --out (created; must not exist): research-draft.xlsx, EXPECTED_SAVED_VALUES.json,
 WRITER_RECEIPT.json. A refusal creates nothing and prints a JSON refusal on stderr (exit 1).
 """
-import argparse, copy, datetime, hashlib, importlib.util, io, json, math, os, platform, re, subprocess, sys, tempfile, zipfile, zlib
+import argparse, copy, datetime, hashlib, io, json, math, os, platform, re, subprocess, sys, tempfile, types, zipfile, zlib
 from decimal import Decimal
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.1'
+VERSION = 'cps-export-writer-portable.v2.2'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
-# Mode v2: the route v4.1 Python writer port (candidate 046f). Its VERSION is checked and its sha256 recorded.
+# Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
+# checked before the module is executed; its VERSION and PORT_RELAXATIONS keys are checked after.
 ROUTE_V4_TOOL = HERE.parent / 'guideline046_006' / 'package' / 'tools' / 'cps046b_route.py'
-ROUTE_V4_VERSION = 'cps046f-route.v4.1'
+ROUTE_V4_VERSION = 'cps046f-route.v4.2'
+ROUTE_V4_SHA256 = '9db8033b8cb4fab6add87f60ba8b37e1994af6ff7f0559f305e892936df4811d'
 RELAXATION_CLASSES = ('o13_m_n_selection_evidence', 'r57_null_c_research_draft', 'o16_q_unverified_adoption')
 O13_COLS = ('M', 'N')
 O13_PLACEHOLDER_METHOD = ('Each M/N evidence object holding selection_evidence is replaced in the copy of the carrier by: '
@@ -131,10 +134,10 @@ LIMITATIONS = [
 ]
 
 
-RELAXATION_LIMITATION = ('Route v4.1 relaxations (candidate 046f): this carrier uses M/N job-input selection_evidence (O13, R48; '
+RELAXATION_LIMITATION = ('Route v4.1 relaxations (candidate 046f; route v4.2 keeps them unchanged): this carrier uses M/N job-input selection_evidence (O13, R48; '
                          'writer004 accepts it for L only) and/or a null C with status research_draft (R52, R57; writer004 requires '
                          'held). It was gated by writer004 validate_carrier_v4 on the placeholder copy, in which each relaxation is '
-                         'neutralized, and by the route v4.1 Python port on the original. writer004 prepareMatrices on the copy equals '
+                         'neutralized, and by the sha256-pinned route v4.2 Python port on the original. writer004 prepareMatrices on the copy equals '
                          'the Python matrices of the copy; the saved matrices differ from it only in the documented review cells '
                          '(M/N evidence columns C-E; the status column of neutralized items; the review-reason column of the 項目 row '
                          'and one added 待確認 row where the copy added the placeholder reason).')
@@ -597,16 +600,22 @@ def o13_placeholder_copy(c):
 
 
 def load_route_port(path):
+    """Load the route port from the exact bytes whose sha256 equals ROUTE_V4_SHA256 (read once, hashed, then
+    executed from those bytes, so no other file content can run); then check VERSION and PORT_RELAXATIONS."""
     if not path.is_file():
         raise Refused('ROUTE_V4_TOOL_MISSING', 'gate:route_v4_port', str(path))
-    spec = importlib.util.spec_from_file_location('cps046f_route_v4_port', path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    raw = path.read_bytes()
+    h = sha256(raw)
+    if h != ROUTE_V4_SHA256:
+        raise Refused('ROUTE_V4_TOOL_NOT_PINNED', 'gate:route_v4_port', {'sha256': h, 'pinned': ROUTE_V4_SHA256})
+    mod = types.ModuleType('cps046f_route_v4_port')
+    mod.__file__ = str(path)
+    exec(compile(raw, str(path), 'exec'), mod.__dict__)      # noqa: S102 - pinned bytes only
     if getattr(mod, 'VERSION', None) != ROUTE_V4_VERSION or not hasattr(mod, 'validate_carrier_port'):
         raise Refused('ROUTE_V4_TOOL_VERSION', 'gate:route_v4_port', getattr(mod, 'VERSION', None))
     if set(getattr(mod, 'PORT_RELAXATIONS', {})) != set(RELAXATION_CLASSES):
         raise Refused('ROUTE_V4_TOOL_RELAXATIONS', 'gate:route_v4_port', sorted(getattr(mod, 'PORT_RELAXATIONS', {})))
-    return mod, sha256(path.read_bytes())
+    return mod, h
 
 
 def _review_spans(c):
@@ -759,13 +768,14 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         diff = relaxation_matrix_difference(m, m_copy, carrier, copy_carrier, scan)
         expected = expected_saved_values(m)
         relax.update(applied=True, placeholder_scope=PLACEHOLDER_SCOPE, placeholder_carrier_sha256=sha256(copy_bytes),
-                     route_v4_port={'path': str(route_tool), 'sha256': port_sha, 'version': ROUTE_V4_VERSION, 'result': 'PASS'},
+                     route_v4_port={'path': str(route_tool), 'sha256': port_sha, 'sha256_pinned': port_sha == ROUTE_V4_SHA256,
+                                    'version': ROUTE_V4_VERSION, 'result': 'PASS'},
                      writer004_cross_check_on_placeholder_copy={'result': 'BYTE_IDENTICAL', 'sha256': sha256(node_copy)},
                      saved_matrices_differ_from_placeholder_copy_only_in=diff)
         cross = {'tool': 'writer004 prepareMatrices via writer004_matrices.mjs (node) on the placeholder copy',
                  'result': 'BYTE_IDENTICAL_ON_PLACEHOLDER_COPY', 'sha256': sha256(node_copy),
                  'saved_values_differ_only_in': len(diff['cells']), 'rows_added_in_copy': len(diff['rows_added_in_copy'])}
-        gate_rec = {'tool': 'writer004 validate_carrier_v4.mjs (node) on the placeholder copy, plus the route v4.1 Python port '
+        gate_rec = {'tool': 'writer004 validate_carrier_v4.mjs (node) on the placeholder copy, plus the sha256-pinned route v4.2 Python port '
                             'on the original carrier', 'result': gate}
     problems = portable_writability(m)
     if problems:
@@ -827,7 +837,7 @@ def main(argv=None):
     ap.add_argument('--writer-dir', required=True, help='directory holding the archived writer004.mjs and validate_carrier_v4.mjs')
     ap.add_argument('--node', default='node')
     ap.add_argument('--mode', default='v1', choices=('v1', 'v2'),
-                    help='v2: candidate 046f carriers (route v4.1 relaxations: M/N selection evidence, C-null research_draft); '
+                    help='v2: candidate 046f carriers (route v4.2, with the v4.1 relaxations: M/N selection evidence, C-null research_draft); '
                          'v1: unchanged writer004 gate')
     a = ap.parse_args(argv)
     try:

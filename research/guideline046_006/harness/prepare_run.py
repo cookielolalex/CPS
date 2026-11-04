@@ -1,4 +1,6 @@
-"""Prepare one bounded generator run directory: exact package + exact contract packet only.
+"""Prepare one bounded generator run directory: exact package + exact source packet only (the job's bound source,
+FIELD_ROLES R47b: the 材料清單 when the job has one, otherwise the contract; 046f has no reference channel, so the
+other document is never copied in).
 Usage: python3 -I -B prepare_run.py --package DIR --packet DIR --run NEWDIR --case ID --reader A|B
 """
 import argparse, hashlib, json, shutil, stat

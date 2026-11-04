@@ -1,4 +1,4 @@
-"""Actual-route tests for candidates 046b-046f (route v4.1) with invented fixtures only.
+"""Actual-route tests for candidates 046b-046f (route v4.2) with invented fixtures only.
 
 Route: response -> tools/cps046b_route.py (check/convert) -> archived writer004
 validate_carrier_v4.mjs (byte-identical original, @oai/artifact-tool import stubbed)
@@ -6,6 +6,11 @@ validate_carrier_v4.mjs (byte-identical original, @oai/artifact-tool import stub
 Route v4 (owner decision O13, FIELD_ROLES R48): L, M and N may be proven by job-input context alone.
 Route v4.1 (R52/R54/R56/R57, O16): a null C may be research_draft; Q may be non-null under
 unverified adoption (warning); the one-member physical_enclosure group still carries A/B.
+Route v4.2 (R48, R56, R58; 046f review S12): on a 046f job packet (an inventory with job-input facts),
+L, M and N on every item cite exactly their own fact and equal it, K, O and P are null, and every group
+is a one-member physical_enclosure group; on every inventory a J citing context:company_name equals it.
+The reviewer's eight probes are applied to the package example as negative tests, and the O17 boundary
+(a 材料清單 packet has no context:brand_table) is checked on the example and on make_job_config.
 Writer-port parity fuzz against node writer004:
   - validate_carrier_port(strict=True) must equal writer004 on every carrier;
   - every divergence of the default (relaxed) port must be classified into a documented
@@ -34,6 +39,7 @@ WRITER_SHA = {'writer004.mjs': ('85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050
               'validate_carrier_v4.mjs': ('984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013',),
               'receipt_bytes.mjs': ('b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c',)}
 EXAMPLE_INV = PKG / 'resources' / 'EXAMPLE_INVENTORY.json'
+JOB_CONFIG = HERE.parent / 'harness' / 'make_job_config.py'
 EXAMPLE_RESP = PKG / 'resources' / 'EXAMPLE_RESPONSE.json'
 
 
@@ -153,11 +159,14 @@ def main():
     code, out, err = run([sys.executable, '-I', str(HERE / 'make_fixtures.py'), str(fx)])
     record('make_fixtures', code == 0, err[-300:] if code else None)
     inv, valid = fx / 'fixture_inventory.json', fx / 'valid_response.json'
+    jinv = fx / 'fixture_inventory_jobs.json'
 
     # positive route
     code, out, _ = route('check', '--inventory', str(inv), '--response', str(valid))
     rep = json.loads(out)
     record('valid_check_pass', code == 0 and rep['status'] == 'PASS', rep['violations'][:5])
+    record('v42_legacy_fixture_policy_checks_not_applied', rep.get('policy_checks') == 'not_applied_no_job_input_facts'
+           and rep['warnings'] == [], rep.get('policy_checks'))
     code, out, _ = route('convert', '--inventory', str(inv), '--response', str(valid), '--out-dir', str(work / 'valid_out'))
     record('valid_convert', code == 0, out[-300:])
     carrier_path = work / 'valid_out' / 'carrier.json'
@@ -254,7 +263,7 @@ def main():
                     'v41_null_C_research_draft_no_reason': 'invalid', 'v41_null_C_research_draft_blank_reason': 'invalid',
                     'v41_null_C_research_draft_reason_with_refs': 'invalid', 'v41_null_C_status_partial': 'invalid',
                     'v41_Q_unverified_amount_not_unit_price': 'invalid', 'v41_Q_unverified_text_cell': 'field_must_be_null',
-                    'v41_Q_unverified_as_text': 'invalid'}.get(mu['name'])
+                    'v41_Q_unverified_as_text': 'invalid'}.get(mu['name'], 'invalid' if mu['name'].startswith('v42_') else None)
         ok = code == 1 and mu['expected_code'] in codes and (want_cat is None or cats.get(mu['expected_code']) == want_cat)
         c2, out2, _ = route('convert', '--inventory', str(minv), '--response', str(fx / mu['file']), '--out-dir', str(work / ('mut_' + mu['name'])))
         refused = c2 == 1 and not (work / ('mut_' + mu['name']) / 'carrier.json').exists() and (work / ('mut_' + mu['name']) / 'CENSUS_LEDGER.json').exists()
@@ -313,24 +322,28 @@ def main():
     variant('basis_raw_unicode', lambda c: it(c, 'C001')['composition'].update(basis_raw='２'))
     # 046f job-input carrier (M/N selection evidence on demand and component rows)
     jv = fx / 'valid_response_job_inputs.json'
-    code, out, _ = route('check', '--inventory', str(inv), '--response', str(jv))
+    code, out, _ = route('check', '--inventory', str(jinv), '--response', str(jv))
     jrep = json.loads(out)
-    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == 'cps046f-route.v4.1'
+    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == 'cps046f-route.v4.2'
            and [w['code'] for w in jrep['warnings']] == ['O13_SELECTION_EVIDENCE_M_N'] and jrep['warnings'][0]['detail']['count'] == 18,
            jrep['violations'][:5] or jrep['warnings'])
-    code, out, _ = route('convert', '--inventory', str(inv), '--response', str(jv), '--out-dir', str(work / 'jobs_out'))
+    record('v42_job_packet_policy_checks_applied', jrep.get('policy_checks') == 'applied', jrep.get('policy_checks'))
+    code, out, _ = route('convert', '--inventory', str(jinv), '--response', str(jv), '--out-dir', str(work / 'jobs_out'))
     record('v4_job_inputs_convert', code == 0, out[-300:])
     jcarrier = json.loads((work / 'jobs_out' / 'carrier.json').read_text(encoding='utf-8'))
     jrec = json.loads((work / 'jobs_out' / 'ADAPTER_RECEIPT.json').read_text(encoding='utf-8'))
     jresp = json.loads(jv.read_text(encoding='utf-8'))
-    ctxv = {x['ref']: x['value'] for x in json.loads(inv.read_text(encoding='utf-8'))['context_facts']}
+    ctxv = {x['ref']: x['value'] for x in json.loads(jinv.read_text(encoding='utf-8'))['context_facts']}
     jall = jcarrier['items'] + jcarrier['components']
     def sel(r, k):
         e = r['evidence'][k]
         return set(e) == {'selection_evidence', 'transformation'} and json.loads(e['selection_evidence'])['context'][0]['value'] == r['values'][COLS.index(k)]
     record('v4_M_N_L_selection_evidence_from_job_inputs', all(sel(r, k) for r in jall for k in 'LMN')
            and all(r['values'][12] == ctxv['context:customer_name'] and r['values'][13] == ctxv['context:project_name'] for r in jall)
-           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == 'cps046f-route.v4.1')
+           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == 'cps046f-route.v4.2'
+           and all(r['values'][k] is None for r in jall for k in (10, 14, 15))
+           and [r['id'] for r in jcarrier['items'] if r['group_id'] is not None] == ['R001'])
+    record('v42_receipt_reports_policy_checks', jrec.get('policy_checks') == 'applied', jrec.get('policy_checks'))
     record('v4_receipt_reports_O13', jrec['o13_m_n_selection_evidence']['count'] == 18 and jrec['o13_m_n_selection_evidence']['export_mode_required'] == 'v2'
            and jrec['o13_m_n_selection_evidence']['writer004_validateCarrier_accepts'] is False)
     r1j = next(r for r in jcarrier['items'] if r['id'] == 'R001')
@@ -363,14 +376,14 @@ def main():
         record(f'v4_port_rejects_selection_evidence_on_{col}', port_code(bad) == 'SELECTION_ONLY_ENGINEERING_ID')
 
     # ------------------------------------------------ route v4.1 relaxations (a) R57, (b) O16 Q, (c) R56 one-member group
-    record('v41_route_version_and_documented_port_relaxations', route_mod.VERSION == 'cps046f-route.v4.1'
+    record('v41_route_version_and_documented_port_relaxations', route_mod.VERSION == 'cps046f-route.v4.2'
            and set(route_mod.PORT_RELAXATIONS) == {'o13_m_n_selection_evidence', 'r57_null_c_research_draft', 'o16_q_unverified_adoption'}
            and route_mod.SELECTION_COLS == ('L', 'M', 'N') and route_mod.WRITER004_SELECTION_COLS == ('L',))
     v41 = {}
     for tag, resp_name, inv_name in (('r57', 'valid_response_r57_null_c.json', 'fixture_inventory.json'),
                                      ('q', 'valid_response_q_unverified.json', 'fixture_inventory.json'),
                                      ('q_partial', 'valid_response_q_partial.json', 'fixture_inventory_partial.json'),
-                                     ('all', 'valid_response_relaxed_all.json', 'fixture_inventory.json'),
+                                     ('all', 'valid_response_relaxed_all.json', 'fixture_inventory_jobs.json'),
                                      ('group1', 'valid_response_one_member_group.json', 'fixture_inventory.json')):
         code, out, _ = route('check', '--inventory', str(fx / inv_name), '--response', str(fx / resp_name))
         rep_ = json.loads(out)
@@ -479,7 +492,7 @@ def main():
     jvariant('K_selection', lambda c: (it(c, 'R002')['values'].__setitem__(10, 'x'), it(c, 'R002')['null_reasons'].pop('K'), it(c, 'R002')['evidence'].update(K=dict(it(c, 'R002')['evidence']['M']))))
     jvariant('qty_unicode', lambda c: (it(c, 'R002')['raw'].update(quantity='３'), it(c, 'R002')['evidence']['F'].update(raw_text='３')))
     jvariant('formula_C', lambda c: it(c, 'R002')['values'].__setitem__(2, '=a'))
-    jvariant('ungrouped_ab', lambda c: it(c, 'R002').update(group_id=None))
+    jvariant('ungrouped_ab', lambda c: it(c, 'R001').update(group_id=None))
     jvariant('view_zero', lambda c: it(c, 'R002')['location'].update(views=[0]))
 
     # v4.1 relaxation variants: C null research_draft (R57) and Q under unverified adoption (O16), on both base carriers
@@ -580,12 +593,13 @@ def main():
            {'accepted_relaxed': len(accepted), 'failures': bad_n[:5], 'stderr': nerr[-300:]})
     record('valid_carrier_port_pass', route_mod.validate_carrier_port(carrier) is True and route_mod.validate_carrier_port(carrier, strict=True) is True)
 
-    # package example (046f, R48-R58): check-inventory, check, convert, writer004 on the placeholder copy
+    # package example (046f, R47b-R58): check-inventory, check, convert, writer004 on the placeholder copy
     code, out, _ = route('check-inventory', '--inventory', str(EXAMPLE_INV))
     record('example_inventory_check_pass', code == 0 and json.loads(out)['status'] == 'PASS', out[-400:])
     exinv = json.loads(EXAMPLE_INV.read_text(encoding='utf-8'))
-    record('example_inventory_has_046f_context_facts', {x['ref'] for x in exinv['context_facts']} >= {
-        'context:case_identity', 'context:customer_name', 'context:project_name', 'context:company_name', 'context:glossary', 'context:brand_table'})
+    record('example_inventory_has_046f_context_facts_without_brand_table', {x['ref'] for x in exinv['context_facts']} == {
+        'context:case_identity', 'context:customer_name', 'context:project_name', 'context:company_name', 'context:glossary'}
+           and json.loads(out).get('policy_checks') == 'applied', 'a 材料清單 packet carries no context:brand_table (O17, R47b, R55)')
     code, out, _ = route('check', '--inventory', str(EXAMPLE_INV), '--response', str(EXAMPLE_RESP))
     exrep = json.loads(out)
     record('example_response_check_pass', code == 0 and exrep['status'] == 'PASS', exrep['violations'][:5])
@@ -612,6 +626,84 @@ def main():
         null_c = [x for x in exc['items'] if x['values'][2] is None]
         record('example_null_C_rows_are_research_draft', null_c and all(x['status'] == 'research_draft' and x['null_reasons'].get('C') for x in null_c),
                [x['id'] for x in null_c])
+    # route v4.2 negative tests (046f review S12): the semantic reviewer's eight probes, rebuilt here as the same single
+    # mutations of the current package example (the reviewer's files pin the earlier example inventory), plus O17
+    exbase = json.loads(EXAMPLE_RESP.read_text(encoding='utf-8'))
+    def ex_it(r, i):
+        return next(x for x in r['items'] if x['id'] == i)
+    def ex_set(iid, col, value, proof):
+        def f(r):
+            ex_it(r, iid)['values'][COLS.index(col)] = value
+            ex_it(r, iid)['proofs'][col] = proof
+        return f
+    def ex_second_member(r):
+        x = ex_it(r, 'R002')
+        x['group_id'] = 'G1'
+        x['values'][0], x['values'][1] = '控制盤', '600W*800H*300D'
+        x['proofs']['A'] = {'refs': ['cell:S1!B4'], 'transformation': 't', 'role_basis': 'b'}
+        x['proofs']['B'] = {'refs': ['cell:S1!B4'], 'transformation': 't', 'role_basis': 'b'}
+    def ex_wrong_ref(iid, col, ref):
+        return lambda r: ex_it(r, iid)['proofs'][col].update(refs=[ref])
+    probes = [
+        ('m_value_mismatch', ex_set('R002', 'M', '示例客戶甲', ex_it(exbase, 'R002')['proofs']['M']), 'R48_JOB_INPUT_VALUE_MISMATCH'),
+        ('m_wrong_ref', ex_wrong_ref('R002', 'M', 'context:project_name'), 'R48_JOB_INPUT_REF'),
+        ('l_wrong_ref', ex_wrong_ref('R002', 'L', 'context:customer_name'), 'R48_JOB_INPUT_REF'),
+        ('m_letterhead_cell', ex_set('R002', 'M', '示例淨水場控制盤更新工程 材料清單',
+                                     {'refs': ['cell:S1!A1'], 'transformation': 'copied job input', 'role_basis': 'customer full name supplied with the job (R48)'}),
+         'R48_JOB_INPUT_REF'),
+        ('k_from_footer', ex_set('R002', 'K', '示例供應商', {'refs': ['cell:S1!A23'], 'transformation': 't', 'role_basis': 'b'}), 'R48_FIELD_MUST_BE_NULL'),
+        ('m_null', ex_set('R002', 'M', None, {'reason': 'not given'}), 'R48_JOB_INPUT_REQUIRED'),
+        ('ab_second_member', ex_second_member, 'R56_GROUP_ONE_MEMBER_REQUIRED'),
+        ('j_company_mismatch', ex_set('R001', 'J', '別的公司', {'refs': ['cell:S1!B4', 'context:company_name'], 'transformation': 't', 'role_basis': 'b'}),
+         'R56_J_COMPANY_NAME_MISMATCH'),
+        ('o17_brand_table_on_material_list', lambda r: (ex_set('R002', 'I', 'XM-10', {'refs': ['cell:S1!B5', 'context:brand_table'],
+                                                                                       'transformation': 'brand-table model', 'role_basis': 'b'})(r),
+                                                        ex_set('R002', 'J', '示例甲牌', {'refs': ['cell:S1!B5', 'context:brand_table'],
+                                                                                       'transformation': 'brand-table brand', 'role_basis': 'b'})(r)),
+         'UNKNOWN_CONTEXT_REF'),
+        ('group_contractual', lambda r: r['groups'][0].update(relationship='contractual_group'), 'R56_GROUP_RELATIONSHIP'),
+    ]
+    for name, f, want in probes:
+        pr = copy.deepcopy(exbase)
+        f(pr)
+        pp = work / f'probe_{name}.json'
+        pp.write_text(json.dumps(pr, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+        code, out, _ = route('check', '--inventory', str(EXAMPLE_INV), '--response', str(pp))
+        got = {v['code'].split(':')[0]: v['category'] for v in json.loads(out)['violations']}
+        record(f'v42_probe_{name}', code == 1 and got.get(want) == 'invalid', sorted(got))
+    # make_job_config (B1, O17): a 材料清單 job gets no context:brand_table, a contract job does; invented inputs only
+    mj = work / 'job_config'
+    mj.mkdir()
+    (mj / 'glossary.json').write_text(json.dumps({'schema': 'cps.company-glossary.v1', 'invented': True, 'generic_prefix_words': ['產品'],
+                                                  'enclosure_word': '箱體', 'category_words': ['電磁開關'],
+                                                  'abbreviations': [{'device': '電磁接觸器', 'abbreviation': 'XMC'}]}, ensure_ascii=False), encoding='utf-8')
+    (mj / 'brand_table.json').write_text(json.dumps({'schema': 'cps.company-brand-table.v1', 'invented': True,
+                                                     'entries': [{'device': '電磁接觸器', 'rating_band': 'all ratings', 'brand': '示例甲牌', 'model': 'XM-10'}]},
+                                                    ensure_ascii=False), encoding='utf-8')
+    (mj / 'invented_source.xlsx').write_bytes(b'invented workbook bytes; make_job_config pins only size and sha256')
+    def job_config(tag, kind, brand_table):
+        job = {'schema': 'cps.job-config.v2', 'case_id': 'JOBTEST01', 'customer_name': '示例自來水事業處', 'project_name': '示例淨水場更新',
+               'company_name': '示例機電股份有限公司', 'glossary_path': str(mj / 'glossary.json'), 'source_path': str(mj / 'invented_source.xlsx'),
+               'source_kind': kind, 'carrier_path': 'X:\\Jobs\\JOBTEST01\\invented_source.xlsx'}
+        if brand_table:
+            job['brand_table_path'] = str(mj / 'brand_table.json')
+        (mj / f'job_{tag}.json').write_text(json.dumps(job, ensure_ascii=False), encoding='utf-8')
+        code, out, err = run([sys.executable, '-I', '-B', str(JOB_CONFIG), '--job', str(mj / f'job_{tag}.json'), '--out', str(mj / f'config_{tag}.json')])
+        cfg = json.loads((mj / f'config_{tag}.json').read_text(encoding='utf-8')) if code == 0 else None
+        return code, (json.loads(err) if code == 1 and err.strip() else {}), cfg
+    base_refs = ['context:case_identity', 'context:customer_name', 'context:project_name', 'context:company_name', 'context:glossary']
+    c_, e_, cfg = job_config('matlist', '材料清單', False)
+    record('v42_make_job_config_material_list_has_no_brand_table', c_ == 0 and [f['ref'] for f in cfg['context_facts']] == base_refs
+           and cfg['resource_files_sha256']['brand_table'] is None, e_)
+    c_, e_, cfg = job_config('contract', 'contract', True)
+    record('v42_make_job_config_contract_has_brand_table', c_ == 0 and [f['ref'] for f in cfg['context_facts']] == base_refs + ['context:brand_table'], e_)
+    c_, e_, cfg = job_config('matlist_brand', '材料清單', True)
+    record('v42_make_job_config_refuses_brand_table_with_material_list', c_ == 1 and e_.get('code') == 'BRAND_TABLE_NOT_USED_WITH_MATERIAL_LIST'
+           and cfg is None and not (mj / 'config_matlist_brand.json').exists(), e_)
+    c_, e_, cfg = job_config('contract_nobrand', 'contract', False)
+    record('v42_make_job_config_contract_requires_brand_table', c_ == 1 and e_.get('code') == 'JOB_KEYS'
+           and e_.get('detail', {}).get('missing') == ['brand_table_path'], e_)
+
     try:                        # optional: JSON-schema validation of the example (jsonschema is not stdlib)
         import jsonschema
     except ImportError:
