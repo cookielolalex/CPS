@@ -29,7 +29,7 @@ For continuation without the original machine, follow `docs/handoff/PORTABILITY.
 
 ## Evaluation and continuation
 
-Never lower the deployment bar: 30 independently eligible, revision-compatible pairs including 10 reserved; at least 99% source-core correctness per case, applicable detail/component stratum, claimed layout, and overall; complete raw/provenance/nonitem/manual obligations; zero unresolved critical errors; two-reader correctness and assembly repeatability; saved 17-column and visual QA.
+Never lower the deployment bar below the owner's current decision: 30 independently eligible, revision-compatible pairs including 10 reserved; at least 95% match with the creator's historical 未填 (owner decision O12, 2026-11-04, replacing 99% source-core correctness; metric defined prospectively in the historical-match evaluator) per case, applicable detail/component stratum, claimed layout, and overall; complete raw/provenance/nonitem/manual obligations; zero unresolved critical errors; two-reader correctness and assembly repeatability; saved 17-column and visual QA.
 
 Source-only accuracy is not historical reconstruction accuracy. Structural provenance, null agreement, reader agreement, synthetic tests, assembly fidelity, and visual QA cannot replace semantic correctness. Report exact denominators and scope. Keep failure evidence and do not present mixed-case/configuration delivery history as a reliability rate.
 

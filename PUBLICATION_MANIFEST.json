@@ -14,13 +14,13 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 6040,
-      "sha256": "ae0adb016f42baec639907fc8bd8451a90c39f37043b7cb2a11495652f06a389"
+      "bytes": 6230,
+      "sha256": "62c91e36001db0304941c6b638ba716406b3cc3dc900c9de7fccd281a905483b"
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 6854,
-      "sha256": "85139fa828f0c0e8d94d5944c51fbd7cdbf16a216f058f8dcda7c8520d587baf"
+      "bytes": 7710,
+      "sha256": "933eb45beb77fa5365e87529f25b470f56d7bf9570fba48120cc781883ab8ee6"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1251,6 +1251,11 @@
       "path": "research/export/writer_portable.py",
       "bytes": 29759,
       "sha256": "a20050aed412e8d2b934219d9373e3f5fd7a780bd5a9f42324c689fbf0af4aa0"
+    },
+    {
+      "path": "research/guideline046_005/DECISIONS_OWNER_O10_O12.md",
+      "bytes": 2325,
+      "sha256": "7ba68888788b03e120328937bf56c07a0ba5ee4136cc9368b04cbb232bb46827"
     }
   ]
 }

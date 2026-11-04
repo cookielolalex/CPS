@@ -1,0 +1,11 @@
+# Owner decisions O10–O12 (2026-11-04)
+
+The owner gave these in the conversation, after the 046e freeze. The quotes are verbatim. Where the scope is ambiguous, the interpretation below is the orchestrator's reading, recorded for the owner to correct. The owner said "Some decisions will be answered in post-training when delivered."
+
+| ID | Owner text | Interpretation and effect |
+|---|---|---|
+| O10 | "Owner-supplied panels excluded as long as no one the supplies inside the panel has a quoted price i think." | A panel line whose own price text marks it as owner-supplied (業主供料, 甲供) is excluded together with its contents when no line inside it has a quoted price. If any line inside has a quoted price, the panel group stays and its lines are rows. The owner marked this "i think", so it is to be checked against the creator's majority practice (O11) before it becomes a rule. |
+| O11 | "Investigate 另案 (separate contract) project samples to decide, some rules are not solid, the creator 未填 makes mistakes as well, just infer what she does most often in most cases." | Rules that are not solid are decided from the historical 未填 creator's majority practice, measured on non-reserved tuning cases in an evaluation-role study. First: 另案 lines and owner-supplied panels. Then any other convention where the study shows a clear majority. The resulting rules are generic. No historical target, value or case text enters a generator context. Reserved cases stay closed. |
+| O12 | "95 percent match will be go for deployment." | The deployment threshold is 95% match, replacing the earlier 99%. Because the owner notes that the creator also makes mistakes, "match" is read as agreement with the creator's historical 未填 on eligible, revision-compatible pairs. The exact metric (row alignment, the fields counted, and per-case versus overall) is defined prospectively in the historical-match evaluator and recorded before any qualification run. The other bar elements are unchanged unless the owner changes them: 30 pairs including 10 reserved, two-reader repeatability, zero unresolved critical errors, and saved 17-column and visual QA. |
+
+These decisions do not reopen frozen candidates, expectations or scores. They take effect from candidate 046f and the historical-match evaluator onward.
