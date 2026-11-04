@@ -19,8 +19,8 @@
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 8616,
-      "sha256": "2a65121dfb23472425622d181fdf01a2212f078ff81091257c47482de70d4ad7"
+      "bytes": 8968,
+      "sha256": "1e98102cf1e8e05abab8975284eb2cf242c9326eaa7296d04ddc97401bdc2b86"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1481,6 +1481,11 @@
       "path": "docs/handoff/RESULTS_046F_DEV.md",
       "bytes": 3048,
       "sha256": "27a9983ddeb9781ea0c5b41bd93d6900b7a13a77a4635e1c4cecac2b53c1c48f"
+    },
+    {
+      "path": "research/guideline046_005/DECISIONS_OWNER_O21_O22.md",
+      "bytes": 881,
+      "sha256": "f50ffc36c6cb68f6b75f33d2e6ccf58c964b5777c3a5d5b15d7b64a8301b75e2"
     }
   ]
 }

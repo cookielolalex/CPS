@@ -293,7 +293,9 @@
   "O17": "company 材料清單 is a job input (brand table is fallback)",
   "O18": "breaker brand fallback = most common",
   "O19": "95% excludes C/D wording; C/D scored as one description with target 0.75",
-  "O20": "acronym alone in C (reverses O8)"
+  "O20": "acronym alone in C (reverses O8)",
+  "O21": "old-template targets excluded from qualification",
+  "O22": "qualification uses 113-115 only; report any shortfall"
  },
  "portable_writer": {
   "path": "research/export",
