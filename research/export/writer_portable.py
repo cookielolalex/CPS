@@ -16,22 +16,27 @@ Route
      types (strings stay strings, numbers stay numbers, no formulas), and the writer004
      formatting that openpyxl can express. Bytes are reproducible (fixed zip/docProps times).
 
-Mode v2 (candidate 046f carriers; owner decision O13, FIELD_ROLES R48)
-  046f proves M and N (customer full name, project short name) from job-input context facts,
-  so the route v4 carrier carries them as selection_evidence. writer004 validateCarrier accepts
-  selection_evidence for L only (SELECTION_ONLY_ENGINEERING_ID). That is the only relaxation:
-  - a carrier without M/N selection evidence takes exactly the v1 route above;
-  - a carrier with M/N selection evidence is validated twice: (a) writer004 validate_carrier_v4
-    on an O13 placeholder copy, in which only each M/N selection_evidence object is converted to
-    an equivalent-shaped location evidence object (location = the item's own location, anchor =
-    the item's anchor, raw_text = the selection_evidence text, transformation and any other key
-    unchanged), and (b) the route v4 Python port (validate_carrier_port, which allows
-    selection_evidence for L, M and N only) on the original carrier;
-  - writer004 prepareMatrices runs on the placeholder copy and must equal the Python matrices of
-    the copy byte for byte; the Python matrices of the original may differ from them only in
-    columns C-E of the review rows 欄位依據 <id>.M / <id>.N of those M/N fields (the evidence
-    location, anchor and JSON text). The workbook and EXPECTED_SAVED_VALUES.json are built from
-    the original carrier.
+Mode v2 (candidate 046f carriers made by route v4.1; FIELD_ROLES R48, R52, R54, R57; O13, O16)
+  The route v4.1 Python writer port (validate_carrier_port) differs from writer004 validateCarrier in
+  exactly the documented relaxation classes (cps046b_route.PORT_RELAXATIONS):
+  - o13_m_n_selection_evidence: M/N proven by job-input context facts carry selection_evidence, which
+    writer004 accepts for L only (SELECTION_ONLY_ENGINEERING_ID);
+  - r57_null_c_research_draft: an item whose C is null has status research_draft, which writer004
+    refuses (UNRESOLVED_ITEM_MUST_BE_HELD);
+  - o16_q_unverified_adoption: a non-null Q while metadata.source_adoption is not verified. writer004
+    never reads the adoption status, so this class needs no neutralization and no copy.
+  A carrier with neither of the first two classes takes exactly the v1 route above (same bytes).
+  Otherwise it is validated twice: (a) writer004 validate_carrier_v4 on a placeholder copy in which
+  each relaxation is neutralized (O13: each M/N selection_evidence object becomes an equivalent-shaped
+  location evidence object: location = the item's own location, anchor = the item's anchor, raw_text =
+  the selection_evidence text, transformation and any other key unchanged; R57: status held, plus one
+  placeholder review reason when review_reasons is empty), and (b) the route v4.1 Python port on the
+  original carrier. writer004 prepareMatrices runs on the copy and must equal the Python matrices of
+  the copy byte for byte; the Python matrices of the original may differ from them only in the
+  documented review cells: columns C-E of 欄位依據 <id>.M/.N rows of the O13 fields; column G (狀態)
+  of every review row of each R57 item; and, where the copy added the placeholder reason, column F of
+  that item's 項目 row plus the one added 待確認 row of the copy. The workbook and
+  EXPECTED_SAVED_VALUES.json are built from the original carrier.
 
 Usage
   python3 -I -B writer_portable.py --carrier /abs/carrier.json --out /abs/new-dir \
@@ -45,17 +50,28 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2'
+VERSION = 'cps-export-writer-portable.v2.1'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
-# Mode v2: the route v4 Python writer port (candidate 046f). Its VERSION is checked and its sha256 recorded.
+# Mode v2: the route v4.1 Python writer port (candidate 046f). Its VERSION is checked and its sha256 recorded.
 ROUTE_V4_TOOL = HERE.parent / 'guideline046_006' / 'package' / 'tools' / 'cps046b_route.py'
-ROUTE_V4_VERSION = 'cps046f-route.v4'
+ROUTE_V4_VERSION = 'cps046f-route.v4.1'
+RELAXATION_CLASSES = ('o13_m_n_selection_evidence', 'r57_null_c_research_draft', 'o16_q_unverified_adoption')
 O13_COLS = ('M', 'N')
-O13_PLACEHOLDER_METHOD = ('Each M/N evidence object holding selection_evidence is replaced in a copy of the carrier by: '
+O13_PLACEHOLDER_METHOD = ('Each M/N evidence object holding selection_evidence is replaced in the copy of the carrier by: '
                           'the same object without selection_evidence, plus location = the item\'s own location, anchor = '
                           'the item\'s anchor and raw_text = the selection_evidence text (transformation and any other key '
-                          'unchanged). Nothing else in the carrier changes.')
+                          'unchanged).')
+R57_PLACEHOLDER_REASON = ('R57 relaxation placeholder: C is null with status research_draft in the carrier; '
+                          'status held and this reason exist only in the writer004 validation copy.')
+R57_PLACEHOLDER_METHOD = ('Each item or component whose C (values[2]) is null and whose status is research_draft gets, in the same '
+                          'copy, status held; when its review_reasons is an empty list it also gets the one review reason '
+                          + json.dumps(R57_PLACEHOLDER_REASON, ensure_ascii=False) + '. Its values, raw, evidence, null_reasons and '
+                          'every other key are unchanged.')
+O16_METHOD = ('No neutralization: writer004 validateCarrier and prepareMatrices never read metadata.source_adoption, so a non-null Q '
+              'under unverified adoption passes writer004 unchanged; when a copy is made for another class, Q and the metadata are '
+              'unchanged in it.')
+PLACEHOLDER_SCOPE = 'Nothing else in the carrier changes: groups, nonitems, metadata, limitations and every other item are copied unchanged.'
 XLSX_NAME = 'research-draft.xlsx'
 INPUT_LIMIT = 20 * 1024 * 1024
 MAX_SAFE = 9007199254740991
@@ -115,11 +131,13 @@ LIMITATIONS = [
 ]
 
 
-O13_LIMITATION = ('O13 relaxation (candidate 046f, FIELD_ROLES R48): M/N carry job-input selection_evidence, which writer004 '
-                  'validateCarrier accepts for L only. This carrier was gated by writer004 validate_carrier_v4 on the O13 '
-                  'placeholder copy and by the route v4 Python port on the original; writer004 prepareMatrices on the copy '
-                  'equals the Python matrices of the copy, and the saved matrices differ from it only in the review cells '
-                  'of the listed M/N evidence fields.')
+RELAXATION_LIMITATION = ('Route v4.1 relaxations (candidate 046f): this carrier uses M/N job-input selection_evidence (O13, R48; '
+                         'writer004 accepts it for L only) and/or a null C with status research_draft (R52, R57; writer004 requires '
+                         'held). It was gated by writer004 validate_carrier_v4 on the placeholder copy, in which each relaxation is '
+                         'neutralized, and by the route v4.1 Python port on the original. writer004 prepareMatrices on the copy equals '
+                         'the Python matrices of the copy; the saved matrices differ from it only in the documented review cells '
+                         '(M/N evidence columns C-E; the status column of neutralized items; the review-reason column of the 項目 row '
+                         'and one added 待確認 row where the copy added the placeholder reason).')
 
 
 class Refused(Exception):
@@ -515,37 +533,67 @@ def node_matrices(node, writer_dir, carrier_path, stage='cross_check:writer004.p
     return out
 
 
-# ------------------------------------------------------------------ mode v2: O13 relaxation (M/N selection evidence)
-def o13_fields(raw):
-    """[(item index in items+components, id, column)] for M/N evidence holding selection_evidence.
+# ------------------------------------------------------------------ mode v2: route v4.1 relaxations
+def r57_item(r):
+    """C null with status research_draft (relaxation r57_null_c_research_draft)."""
+    v = r.get('values') if isinstance(r, dict) else None
+    return isinstance(v, list) and len(v) > 2 and v[2] is None and r.get('status') == 'research_draft'
+
+
+def relaxation_scan(raw):
+    """The relaxation classes a carrier uses, as lists of (row index in items+components, id, ...).
     Decoded like node (invalid UTF-8 replaced) so detection does not depend on the later UTF-8 refusal;
-    an unparsable or unexpectedly shaped carrier has none and takes the v1 route."""
+    an unparsable or unexpectedly shaped carrier uses none and takes the v1 route (the gates report the real defect)."""
+    scan = {'o13': [], 'r57': [], 'o16': [], 'source_adoption': None}
     try:
         text = raw.decode('utf-8', 'replace')
-        c = json.loads(text[1:] if text.startswith('\ufeff') else text)     # node: .replace(/^\ufeff/, '')
+        c = json.loads(text[1:] if text.startswith('﻿') else text)     # node: .replace(/^﻿/, '')
         rows = list(c['items']) + list(c['components'])
-        out = []
-        for i, r in enumerate(rows):
-            for k in O13_COLS:
-                e = r['evidence'].get(k) if isinstance(r, dict) and isinstance(r.get('evidence'), dict) else None
-                if isinstance(e, dict) and 'selection_evidence' in e:
-                    out.append((i, r.get('id'), k))
-        return out
-    except Exception:          # noqa: BLE001 - detection only; the gates report the real defect
-        return []
+        md = c.get('metadata')
+    except Exception:          # noqa: BLE001 - detection only
+        return scan
+    adoption = md.get('source_adoption') if isinstance(md, dict) else None
+    scan['source_adoption'] = adoption
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            continue
+        ev = r.get('evidence')
+        for k in O13_COLS:
+            e = ev.get(k) if isinstance(ev, dict) else None
+            if isinstance(e, dict) and 'selection_evidence' in e:
+                scan['o13'].append((i, r.get('id'), k))
+        if r57_item(r):
+            scan['r57'].append((i, r.get('id'), r.get('review_reasons') == []))
+        v = r.get('values')
+        if isinstance(v, list) and len(v) == 17 and v[16] is not None and adoption != 'verified':
+            scan['o16'].append((i, r.get('id')))
+    return scan
+
+
+def placeholder_copy(c):
+    """The documented placeholder copy (O13_PLACEHOLDER_METHOD, R57_PLACEHOLDER_METHOD, O16_METHOD, PLACEHOLDER_SCOPE).
+    Input and output are json.loads objects."""
+    c = copy.deepcopy(c)
+    for r in list(c['items']) + list(c['components']):
+        if not isinstance(r, dict):
+            continue
+        ev = r.get('evidence')
+        for k in O13_COLS:
+            e = ev.get(k) if isinstance(ev, dict) else None
+            if isinstance(e, dict) and 'selection_evidence' in e:
+                new = {x: y for x, y in e.items() if x != 'selection_evidence'}
+                new.update(location=copy.deepcopy(r.get('location')), anchor=r.get('anchor'), raw_text=e['selection_evidence'])
+                ev[k] = new
+        if r57_item(r):
+            r['status'] = 'held'
+            if r.get('review_reasons') == []:
+                r['review_reasons'] = [R57_PLACEHOLDER_REASON]
+    return c
 
 
 def o13_placeholder_copy(c):
-    """The documented O13 placeholder copy (O13_PLACEHOLDER_METHOD). Input and output are json.loads objects."""
-    c = copy.deepcopy(c)
-    for r in list(c['items']) + list(c['components']):
-        for k in O13_COLS:
-            e = r['evidence'].get(k)
-            if isinstance(e, dict) and 'selection_evidence' in e:
-                new = {x: y for x, y in e.items() if x != 'selection_evidence'}
-                new.update(location=copy.deepcopy(r['location']), anchor=r['anchor'], raw_text=e['selection_evidence'])
-                r['evidence'][k] = new
-    return c
+    """Name kept from writer v2.0; the copy now also neutralizes R57 items (placeholder_copy)."""
+    return placeholder_copy(c)
 
 
 def load_route_port(path):
@@ -556,42 +604,89 @@ def load_route_port(path):
     spec.loader.exec_module(mod)
     if getattr(mod, 'VERSION', None) != ROUTE_V4_VERSION or not hasattr(mod, 'validate_carrier_port'):
         raise Refused('ROUTE_V4_TOOL_VERSION', 'gate:route_v4_port', getattr(mod, 'VERSION', None))
+    if set(getattr(mod, 'PORT_RELAXATIONS', {})) != set(RELAXATION_CLASSES):
+        raise Refused('ROUTE_V4_TOOL_RELAXATIONS', 'gate:route_v4_port', sorted(getattr(mod, 'PORT_RELAXATIONS', {})))
     return mod, sha256(path.read_bytes())
 
 
-def o13_review_rows(review, fields):
-    """Row indexes (0-based, header included) of the review rows 欄位依據 <id>.<M|N> for the O13 fields."""
-    want = {f'{iid}.{k}' for _, iid, k in fields}
-    rows = [i for i, row in enumerate(review) if row and row[0] == '欄位依據' and row[1] in want]
-    if len(rows) != len(want):
-        raise Refused('O13_REVIEW_ROWS_NOT_FOUND', 'cross_check:o13', {'expected': len(want), 'found': len(rows)})
-    return rows
+def _review_spans(c):
+    """0-based row ranges (row 0 = header) of each item/component block in the review matrix (_review_rows order),
+    and the row where the nonitem rows start."""
+    i = 1 + 2 + len(c['metadata']) + len(c['limitations']) + len(c['groups'])
+    spans = []
+    for r in list(c['items']) + list(c['components']):
+        n = 1 + len(r['raw']) + len(r['evidence']) + len(r['null_reasons']) + len(r['review_reasons'])
+        spans.append((i, i + n))
+        i += n
+    return spans, i
 
 
-def o13_matrix_difference(m, m_copy, fields):
-    """The saved matrices (original carrier) may differ from the placeholder-copy matrices only in columns
-    C-E (evidence location, anchor, JSON) of the O13 review rows. Returns the differing cells."""
+def relaxation_matrix_difference(m, m_copy, c, c_copy, scan):
+    """The saved matrices (original carrier) may differ from the placeholder-copy matrices only in the documented
+    review cells. Rows are aligned positionally from the writer004 review-row layout of both carriers, so every row of
+    both matrices is accounted for. Returns the differing cells (saved-matrix coordinates) and the added copy rows."""
+    D, stage = 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS', 'cross_check:relaxations'
     for name in ('main', 'components', 'links'):
         if js_stringify(m[name]) != js_stringify(m_copy[name]):
-            raise Refused('O13_DIFF_OUTSIDE_M_N_EVIDENCE', 'cross_check:o13', name)
+            raise Refused(D, stage, name)
     a, b = m['review'], m_copy['review']
-    if len(a) != len(b):
-        raise Refused('O13_DIFF_OUTSIDE_M_N_EVIDENCE', 'cross_check:o13', 'review row count')
-    allowed = set(o13_review_rows(a, fields))
-    if allowed != set(o13_review_rows(b, fields)):
-        raise Refused('O13_DIFF_OUTSIDE_M_N_EVIDENCE', 'cross_check:o13', 'review row positions')
+    sa, na = _review_spans(c)
+    sb, nb = _review_spans(c_copy)
+    if len(sa) != len(sb) or len(a) != na + len(c['nonitems']) or len(b) != nb + len(c_copy['nonitems']):
+        raise Refused(D, stage, 'review row layout')
+    rows = list(c['items']) + list(c['components'])
+    rows_copy = list(c_copy['items']) + list(c_copy['components'])
+    o13 = {(i, k) for i, _, k in scan['o13']}
+    r57 = {i: added for i, _, added in scan['r57']}
+    first_a, first_b = (sa[0][0] if sa else na), (sb[0][0] if sb else nb)
+    if first_a != first_b:
+        raise Refused(D, stage, 'review prefix rows')
+    pairs = [(t, t, frozenset()) for t in range(first_a)]
+    added_rows = []
+    for k, ((a0, a1), (b0, b1)) in enumerate(zip(sa, sb)):
+        added = r57.get(k, False)
+        if b1 - b0 != (a1 - a0) + (1 if added else 0):
+            raise Refused(D, stage, f'review rows of item {k + 1}')
+        ev_keys = js_keys(rows[k]['evidence'])
+        ev0 = 1 + len(rows[k]['raw'])
+        for t in range(a1 - a0):
+            allowed = set()
+            if k in r57:
+                allowed.add(6)
+                if t == 0 and added:
+                    allowed.add(5)
+            if ev0 <= t < ev0 + len(ev_keys) and (k, ev_keys[t - ev0]) in o13:
+                allowed |= {2, 3, 4}
+            pairs.append((a0 + t, b0 + t, frozenset(allowed), k, t))
+        if added:
+            rc = rows_copy[k]
+            want = ['待確認', f"{rc['id']}.1", js_stringify(rc['location']), js_stringify(rc['anchor']),
+                    js_stringify(R57_PLACEHOLDER_REASON), '保留受阻列', 'held']
+            if js_stringify(b[b1 - 1]) != js_stringify(want):
+                raise Refused('RELAXATION_DIFF_FORM', stage, f'{SHEET_REVIEW}!R{b1} (copy placeholder row)')
+            added_rows.append(f'{SHEET_REVIEW}!R{b1} (copy)')
+    pairs += [(na + t, nb + t, frozenset()) for t in range(len(c['nonitems']))]
     cells = []
-    for i, (ra, rb) in enumerate(zip(a, b)):
+    for pr in pairs:
+        ia, ib, allowed = pr[0], pr[1], pr[2]
+        ra, rb = a[ia], b[ib]
         if len(ra) != len(rb):
-            raise Refused('O13_DIFF_OUTSIDE_M_N_EVIDENCE', 'cross_check:o13', f'review row {i + 1} width')
+            raise Refused(D, stage, f'review row {ia + 1} width')
         for j, (x, y) in enumerate(zip(ra, rb)):
-            if js_stringify(x) != js_stringify(y):
-                if i not in allowed or j not in (2, 3, 4):
-                    raise Refused('O13_DIFF_OUTSIDE_M_N_EVIDENCE', 'cross_check:o13', f'{SHEET_REVIEW}!R{i + 1}C{j + 1}')
-                cells.append(f'{SHEET_REVIEW}!R{i + 1}C{j + 1}')
-        if i in allowed and (ra[2] is not None or ra[3] != js_stringify('已核對工程選取')):
-            raise Refused('O13_SELECTION_ROW_FORM', 'cross_check:o13', f'{SHEET_REVIEW}!R{i + 1}')
-    return {'sheet': SHEET_REVIEW, 'rows': sorted(r + 1 for r in allowed), 'cells': cells}
+            if js_stringify(x) == js_stringify(y):
+                continue
+            if j not in allowed:
+                raise Refused(D, stage, f'{SHEET_REVIEW}!R{ia + 1}C{j + 1}')
+            cells.append(f'{SHEET_REVIEW}!R{ia + 1}C{j + 1}')
+        if len(pr) == 5:                     # item rows: check the documented forms of the relaxed cells
+            k, t = pr[3], pr[4]
+            if k in r57 and (ra[6] != 'research_draft' or rb[6] != 'held'):
+                raise Refused('RELAXATION_DIFF_FORM', stage, f'{SHEET_REVIEW}!R{ia + 1}C7')
+            if k in r57 and t == 0 and r57[k] and (ra[5] != '[]' or rb[5] != js_stringify([R57_PLACEHOLDER_REASON])):
+                raise Refused('RELAXATION_DIFF_FORM', stage, f'{SHEET_REVIEW}!R{ia + 1}C6')
+            if {2, 3, 4} <= allowed and (ra[2] is not None or ra[3] != js_stringify('已核對工程選取')):
+                raise Refused('RELAXATION_DIFF_FORM', stage, f'{SHEET_REVIEW}!R{ia + 1}')
+    return {'sheet': SHEET_REVIEW, 'cells': cells, 'rows_added_in_copy': added_rows}
 
 
 def _first_difference(a, b):
@@ -618,9 +713,18 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         raise Refused('INPUT_SIZE_LIMIT', 'usage')
     carrier_sha = sha256(raw)
     pins = check_writer_dir(writer_dir)
-    fields = o13_fields(raw) if mode == 'v2' else []
-    o13 = {'applied': False}
-    if not fields:                       # v1 route (also v2 without M/N selection evidence)
+    scan = relaxation_scan(raw) if mode == 'v2' else None
+    needs_copy = bool(scan and (scan['o13'] or scan['r57']))
+    relax = {'applied': False, 'scanned': scan is not None}
+    if scan is not None:
+        relax['classes'] = {
+            'o13_m_n_selection_evidence': {'fields': [f'{iid}.{k}' for _, iid, k in scan['o13']], 'neutralization': O13_PLACEHOLDER_METHOD},
+            'r57_null_c_research_draft': {'items': [iid for _, iid, _ in scan['r57']],
+                                          'placeholder_reason_added_to': [iid for _, iid, added in scan['r57'] if added],
+                                          'neutralization': R57_PLACEHOLDER_METHOD},
+            'o16_q_unverified_adoption': {'items': [iid for _, iid in scan['o16']], 'source_adoption': scan['source_adoption'],
+                                          'neutralization': O16_METHOD}}
+    if not needs_copy:                   # v1 route (also v2 without O13/R57; an O16 Q needs no neutralization)
         gate = node_gate(node, writer_dir, carrier_path, carrier_sha)
         carrier = js_parse(raw)
         m = prepare_matrices(carrier)
@@ -631,38 +735,37 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         cross = {'tool': 'writer004 prepareMatrices via writer004_matrices.mjs (node)', 'result': 'BYTE_IDENTICAL',
                  'sha256': sha256(node_expected)}
         gate_rec = {'tool': 'writer004 validate_carrier_v4.mjs (node)', 'result': gate}
-    else:                                # v2 with the O13 relaxation
+    else:                                # v2 with the route v4.1 relaxations
         carrier = js_parse(raw)
         text = raw.decode('utf-8')
-        plain = json.loads(text[1:] if text.startswith('\ufeff') else text)
-        copy_bytes = (json.dumps(o13_placeholder_copy(plain), ensure_ascii=True, indent=1) + '\n').encode('ascii')
-        with tempfile.TemporaryDirectory(prefix='cps_o13_') as td:
-            cp = Path(td) / 'o13_placeholder_carrier.json'
+        plain = json.loads(text[1:] if text.startswith('﻿') else text)
+        copy_bytes = (json.dumps(placeholder_copy(plain), ensure_ascii=True, indent=1) + '\n').encode('ascii')
+        with tempfile.TemporaryDirectory(prefix='cps_relax_') as td:
+            cp = Path(td) / 'placeholder_carrier.json'
             cp.write_bytes(copy_bytes)
-            gate = node_gate(node, writer_dir, cp, sha256(copy_bytes), 'gate:validate_carrier_v4:o13_placeholder_copy')
+            gate = node_gate(node, writer_dir, cp, sha256(copy_bytes), 'gate:validate_carrier_v4:placeholder_copy')
             port, port_sha = load_route_port(route_tool)
             try:
                 port.validate_carrier_port(plain)
             except port.WriterReject as e:
                 raise Refused(e.code, 'gate:route_v4_port', e.where)
             m = prepare_matrices(carrier)
-            m_copy = prepare_matrices(js_parse(copy_bytes))
+            copy_carrier = js_parse(copy_bytes)
+            m_copy = prepare_matrices(copy_carrier)
             expected_copy = expected_saved_values(m_copy)
-            node_copy = node_matrices(node, writer_dir, cp, 'cross_check:writer004.prepareMatrices:o13_placeholder_copy')
+            node_copy = node_matrices(node, writer_dir, cp, 'cross_check:writer004.prepareMatrices:placeholder_copy')
         if expected_copy != node_copy:
-            raise Refused('CROSS_CHECK_MISMATCH', 'cross_check:o13_placeholder_copy', _first_difference(expected_copy, node_copy))
-        diff = o13_matrix_difference(m, m_copy, fields)
+            raise Refused('CROSS_CHECK_MISMATCH', 'cross_check:placeholder_copy', _first_difference(expected_copy, node_copy))
+        diff = relaxation_matrix_difference(m, m_copy, carrier, copy_carrier, scan)
         expected = expected_saved_values(m)
-        o13 = {'applied': True, 'rule': 'owner decision O13 / FIELD_ROLES R48: M and N proven by job-input context facts',
-               'fields': [f'{iid}.{k}' for _, iid, k in fields], 'placeholder_method': O13_PLACEHOLDER_METHOD,
-               'placeholder_carrier_sha256': sha256(copy_bytes),
-               'route_v4_port': {'path': str(route_tool), 'sha256': port_sha, 'version': ROUTE_V4_VERSION, 'result': 'PASS'},
-               'writer004_cross_check_on_placeholder_copy': {'result': 'BYTE_IDENTICAL', 'sha256': sha256(node_copy)},
-               'saved_matrices_differ_from_placeholder_copy_only_in': diff}
-        cross = {'tool': 'writer004 prepareMatrices via writer004_matrices.mjs (node) on the O13 placeholder copy',
+        relax.update(applied=True, placeholder_scope=PLACEHOLDER_SCOPE, placeholder_carrier_sha256=sha256(copy_bytes),
+                     route_v4_port={'path': str(route_tool), 'sha256': port_sha, 'version': ROUTE_V4_VERSION, 'result': 'PASS'},
+                     writer004_cross_check_on_placeholder_copy={'result': 'BYTE_IDENTICAL', 'sha256': sha256(node_copy)},
+                     saved_matrices_differ_from_placeholder_copy_only_in=diff)
+        cross = {'tool': 'writer004 prepareMatrices via writer004_matrices.mjs (node) on the placeholder copy',
                  'result': 'BYTE_IDENTICAL_ON_PLACEHOLDER_COPY', 'sha256': sha256(node_copy),
-                 'saved_values_differ_only_in': len(diff['cells'])}
-        gate_rec = {'tool': 'writer004 validate_carrier_v4.mjs (node) on the O13 placeholder copy, plus the route v4 Python port '
+                 'saved_values_differ_only_in': len(diff['cells']), 'rows_added_in_copy': len(diff['rows_added_in_copy'])}
+        gate_rec = {'tool': 'writer004 validate_carrier_v4.mjs (node) on the placeholder copy, plus the route v4.1 Python port '
                             'on the original carrier', 'result': gate}
     problems = portable_writability(m)
     if problems:
@@ -683,14 +786,14 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
             lxml_version = None
         receipt = {
             'schema': 'cps.export.writer-receipt.v1', 'status': 'PORTABLE_ASSEMBLED_NOT_ADMITTED', 'writer': VERSION,
-            'mode': mode, 'o13': o13,
+            'mode': mode, 'relaxations': relax,
             'admitted': False, 'required_review': 'Independent review of the portable writer before any CPS use.',
             'input_carrier': {'path': str(carrier_path), 'sha256': carrier_sha, 'bytes': len(raw)},
             'output_xlsx': {'file': XLSX_NAME, 'sha256': sha256(xlsx), 'bytes': len(xlsx)},
             'expected_saved_values': {'file': 'EXPECTED_SAVED_VALUES.json', 'sha256': sha256(expected),
-                                      'identical_to_writer004_prepareMatrices_output': not o13['applied'],
-                                      **({'identical_to_writer004_prepareMatrices_on_o13_placeholder_copy_except_m_n_evidence_cells': True}
-                                         if o13['applied'] else {})},
+                                      'identical_to_writer004_prepareMatrices_output': not relax['applied'],
+                                      **({'identical_to_writer004_prepareMatrices_on_placeholder_copy_except_documented_cells': True}
+                                         if relax['applied'] else {})},
             'matrices_sha256': {name: sha256(js_stringify(rows).encode('utf-8')) for name, rows in sheet_matrices(m)},
             'matrices_sha256_definition': 'sha256 of UTF-8 JSON.stringify(values) (compact, JavaScript semantics) per sheet',
             'sheets': [{'name': name, 'rows': len(rows), 'columns': len(rows[0]),
@@ -703,7 +806,7 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
                               'writer_portable.py_sha256': sha256(Path(__file__).read_bytes()),
                               'writer004_matrices.mjs_sha256': sha256(NODE_MATRICES.read_bytes())},
             'formulas_written': False, 'arithmetic': False, 'semantic_source_validation': False, 'native_excel_validation': False,
-            'limitations': LIMITATIONS + ([O13_LIMITATION] if o13['applied'] else []), 'started': started,
+            'limitations': LIMITATIONS + ([RELAXATION_LIMITATION] if relax['applied'] else []), 'started': started,
             'ended': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         with open(out_dir / 'WRITER_RECEIPT.json', 'x', encoding='utf-8') as f:
@@ -712,7 +815,7 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         with open(out_dir / 'WRITER_FAILURE.json', 'x', encoding='utf-8') as f:
             f.write(json.dumps({'status': 'FAILED_PARTIAL_OUTPUT_PRESERVED', 'error': repr(e)[:2000]}, ensure_ascii=False, indent=2) + '\n')
         raise
-    return {'status': receipt['status'], 'mode': mode, 'o13_applied': o13['applied'], 'out': str(out_dir),
+    return {'status': receipt['status'], 'mode': mode, 'relaxations_applied': relax['applied'], 'out': str(out_dir),
             'xlsx_sha256': receipt['output_xlsx']['sha256'],
             'expected_sha256': receipt['expected_saved_values']['sha256'], 'sheets': receipt['sheets']}
 
@@ -724,7 +827,8 @@ def main(argv=None):
     ap.add_argument('--writer-dir', required=True, help='directory holding the archived writer004.mjs and validate_carrier_v4.mjs')
     ap.add_argument('--node', default='node')
     ap.add_argument('--mode', default='v1', choices=('v1', 'v2'),
-                    help='v2: candidate 046f carriers (O13 relaxation for M/N selection evidence); v1: unchanged writer004 gate')
+                    help='v2: candidate 046f carriers (route v4.1 relaxations: M/N selection evidence, C-null research_draft); '
+                         'v1: unchanged writer004 gate')
     a = ap.parse_args(argv)
     try:
         res = build(Path(a.carrier), Path(a.out), Path(a.writer_dir), a.node, a.mode)

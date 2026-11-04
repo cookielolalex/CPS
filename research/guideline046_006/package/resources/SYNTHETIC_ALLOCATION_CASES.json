@@ -1,12 +1,12 @@
 {
  "schema": "cps.creator-practice-examples.v1",
  "candidate": "046f",
- "part": "2 of 2: job inputs, quoted range, rows, components, Q, enclosure row, E/F (R48-R51, R54, R56-R58); part 1 is SYNTHETIC_NAMING_CASES.json",
+ "part": "2 of 2: sources, job inputs, quoted range, rows, components, Q, enclosure row, E/F, statuses (R47b-R51, R54, R56-R58); part 1 is SYNTHETIC_NAMING_CASES.json",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e allocation examples (cps.allocation-examples.draft.v1, R1-R47)",
- "rules": "FIELD_ROLES R48-R58 (candidate 046f)",
+ "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.1)",
  "resources": {
   "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private.",
   "context:glossary": {
@@ -14,6 +14,9 @@
     "產品"
    ],
    "enclosure_word": "箱體",
+   "category_words": [
+    "電磁開關"
+   ],
    "abbreviations": {
     "電磁接觸器": "XMC",
     "選擇開關": "XCS",
@@ -40,20 +43,32 @@
    "context:case_identity": "EXAMPLE046F",
    "context:customer_name": "示例縣自來水事業處",
    "context:project_name": "示例淨水場控制盤更新"
-  }
+  },
+  "material_list_columns": [
+   "項次",
+   "品名規格",
+   "單位",
+   "數量",
+   "單價",
+   "複價",
+   "廠牌",
+   "型號",
+   "備註"
+  ]
  },
  "assumptions": [
-  "Unless a case says otherwise, the line lies inside the quoted range (R49) of the detailed bill sheet, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
-  "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, remarks. A missing key means an empty cell.",
-  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role."
+  "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
+  "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
+  "A category chain is a run of delimited segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words (R52). It is dropped on every line type.",
+  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57, route v4.1)."
  ],
- "case_count": 20,
+ "case_count": 25,
  "cases": [
   {
    "id": "A01",
    "rule": "R48, R58",
    "input": {
-    "description": "產品，控制開關，選擇開關，30mm",
+    "description": "產品，控制開關類，選擇開關，30mm",
     "unit": "個",
     "quantity": 3,
     "unit_price": 120,
@@ -151,7 +166,7 @@
     "lines": [
      {
       "item_no": "1",
-      "description": "產品，計時器，限時繼電器，AC220V",
+      "description": "產品，計時器類，限時繼電器，AC220V",
       "unit": "只",
       "quantity": 2,
       "unit_price": 650,
@@ -201,7 +216,7 @@
     }
    },
    "expected": {
-    "rows": "every priced, not-estimated or zero-state line of both sites and both subsections on 詳細表",
+    "rows": "every priced or not-estimated line, and every unnumbered fee line before the end row, of both sites and both subsections on 詳細表",
     "census": {
      "總表 cells": "financial_summary or header; no rows",
      "section and subsection headings": "section"
@@ -213,7 +228,7 @@
    "id": "A06",
    "rule": "R50, R54, R55",
    "input": {
-    "description": "產品，控制開關，選擇開關，30mm",
+    "description": "產品，控制開關類，選擇開關，30mm",
     "unit": "個",
     "quantity": 3,
     "amount": "不含估價"
@@ -238,22 +253,20 @@
   },
   {
    "id": "A07",
-   "rule": "R50, R54, R55",
+   "rule": "R50, R45",
    "input": {
-    "description": "產品，計時器，限時繼電器，AC220V",
+    "item_no": "8",
+    "description": "產品，計時器類，限時繼電器，AC220V",
     "unit": "只",
     "quantity": 2,
     "amount": "0 (cached formula)"
    },
    "expected": {
-    "row": true,
-    "C": "限時繼電器",
-    "D": "AC220V",
-    "I": null,
-    "J": null,
-    "Q": null
+    "row": false,
+    "census": "excluded_supply (all cells, including the item number)",
+    "reason_begins": "no enclosure and no estimate: not in the quoted supply (R45)"
    },
-   "reason": "A zero-state line (a cached 0 amount with no unit price) is a row with I, J and Q null."
+   "reason": "A zero-state line (a cached 0 or empty amount with no unit price and no status) is not a row. Its cells take excluded_supply, and the reason names the zero amount and the empty unit price."
   },
   {
    "id": "A08",
@@ -289,7 +302,8 @@
     "E": "式",
     "F": 1,
     "Q": 3000,
-    "anchor": "description cell (no item number)"
+    "anchor": "description cell (no item number)",
+    "status": "research_draft"
    },
    "reason": "The sender's unnumbered fee lines before the end row (freight, drawing, design or management fee) are rows. A fee line has C null and the description in D."
   },
@@ -389,7 +403,7 @@
   },
   {
    "id": "A13",
-   "rule": "R50",
+   "rule": "R50, R52",
    "input": {
     "description": "按鈕開關及指示燈組",
     "unit": "組",
@@ -400,10 +414,11 @@
    "expected": {
     "row": true,
     "rows_from_this_line": 1,
-    "C": "按鈕開關及指示燈組",
-    "D": null
+    "C": null,
+    "D": "按鈕開關及指示燈組",
+    "status": "research_draft"
    },
-   "reason": "Never split or merge lines and never add rows: a line naming two devices is one row. Single-segment equipment noun with no glossary entry: C is the noun, D null (R52)."
+   "reason": "Never split or merge lines and never add rows: a line naming two devices is one row. Its description is a single segment the glossary does not list, so it goes to D with C null (R52)."
   },
   {
    "id": "A14",
@@ -466,8 +481,8 @@
      },
      {
       "role": "demand",
-      "C": "限時繼電器",
-      "D": null,
+      "C": null,
+      "D": "限時繼電器",
       "E": "只",
       "F": 2,
       "I": "不含估價",
@@ -481,7 +496,7 @@
      "block 計 row": "financial_summary (not a row)"
     }
    },
-   "reason": "The bill line has no price and no status and its analysis block lies in range, so the components are the rows instead of the parent, in analysis order, written as demand items. They follow R52-R57: their own unit, quantity and unit price; I = J = 不含估價 when not estimated."
+   "reason": "The bill line has no price and no status and its analysis block lies in range, so the components are the rows instead of the parent, in analysis order, written as demand items. They follow R52-R57: their own unit, quantity and unit price; I = J = 不含估價 when not estimated. 限時繼電器 is a single segment the glossary does not list, so it goes to D."
   },
   {
    "id": "A15",
@@ -553,7 +568,7 @@
    "id": "A18",
    "rule": "R56, R58",
    "input": {
-    "description": "產品，箱體，控制盤，W600×H800×D300，SUS304，1.5t",
+    "description": "產品，箱體，控制盤，W600×H800×D300，SUS304，髮絲面",
     "unit": "面",
     "quantity": 1,
     "unit_price": 25000,
@@ -564,12 +579,13 @@
     "A": "控制盤",
     "B": "600W*800H*300D",
     "C": "箱體",
-    "D": "SUS304，1.5t",
+    "D": "SUS304，髮絲面",
     "E": "面",
     "F": 1,
     "I": null,
     "J": "示例機電股份有限公司",
     "Q": 25000,
+    "group": "one-row physical_enclosure group whose name and specification equal A and B; the row is its only member",
     "cites": {
      "C": [
       "description cell",
@@ -581,7 +597,7 @@
      ]
     }
    },
-   "reason": "A priced line supplying an enclosure is one row. A is the enclosure noun from the line, B is built from the stated dimensions, C is the glossary's generic enclosure word, D is what remains after the prefix, the category word, the enclosure noun and the dimensions, I is null and J is the company name."
+   "reason": "A priced line supplying an enclosure is one row. A is the enclosure noun from the line, B is built from the stated dimensions, C is the glossary's generic enclosure word, D is what remains after the prefix, the category word, the enclosure noun and the dimensions (SUS304 and 髮絲面 are not rating tokens, so the comma stays), I is null. The brand cell is empty, so J is the company name."
   },
   {
    "id": "A19",
@@ -621,13 +637,14 @@
      {
       "A": null,
       "B": null,
-      "C": "電度表",
-      "D": null,
-      "Q": 900
+      "C": null,
+      "D": "電度表",
+      "Q": 900,
+      "status": "research_draft"
      }
     ]
    },
-   "reason": "The enclosure line names only a generic box, so A comes from its section heading; no dimensions are stated, so B is null. No other row carries A or B, and no groups are formed for the section."
+   "reason": "The enclosure line names only a generic box, so A comes from its section heading; no dimensions are stated, so B is null. No other row carries A or B, and no groups are formed for the section. 電度表 is a single segment the glossary does not list, so it goes to D (R52)."
   },
   {
    "id": "A20",
@@ -647,9 +664,114 @@
     "F": 0.5,
     "G": null,
     "H": null,
-    "Q": 2000
+    "Q": 2000,
+    "status": "research_draft"
    },
    "reason": "E and F are copied verbatim from the line's own unit and quantity cells, even when they look implausible. G and H stay null."
+  },
+  {
+   "id": "A21",
+   "rule": "R56, R47b",
+   "input": {
+    "description": "產品，箱體，控制盤，W600×H800×D300，SUS304，髮絲面",
+    "unit": "面",
+    "quantity": 1,
+    "unit_price": 25000,
+    "amount": 25000,
+    "brand": "示例機電"
+   },
+   "expected": {
+    "row": true,
+    "A": "控制盤",
+    "B": "600W*800H*300D",
+    "C": "箱體",
+    "D": "SUS304，髮絲面",
+    "I": null,
+    "J": "示例機電",
+    "cites": {
+     "J": [
+      "brand cell"
+     ]
+    }
+   },
+   "reason": "When the material list states the enclosure's brand column, J is that value, not the company name."
+  },
+  {
+   "id": "A22",
+   "rule": "R57",
+   "input": {
+    "description": "產品，五金類，固定螺絲，M6",
+    "unit": "包",
+    "quantity": "5包",
+    "unit_price": 80,
+    "amount": 400
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "固定螺絲，M6",
+    "E": "包",
+    "F": null,
+    "Q": 80,
+    "null_reason_F": "the quantity cell holds the text 5包, a number written with a unit; F must be a number"
+   },
+   "reason": "F must be a number: a quantity written as text with a unit leaves F null with a reason, and the text stays in raw quantity. 五金類 is the category chain; M6 follows a word that is not a rating token, so the comma stays."
+  },
+  {
+   "id": "A23",
+   "rule": "R57 (route v4.1)",
+   "input": {
+    "description": "盤體組立配線工資",
+    "unit": "式",
+    "quantity": 1,
+    "unit_price": 8000,
+    "amount": 8000
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "盤體組立配線工資",
+    "status": "research_draft",
+    "null_reason_C": "service and labour line: C is null (R52)"
+   },
+   "reason": "A row whose C is null under R52 is research_draft, not held, and still gives a specific null reason for C. The route accepts it with the warning R57_NULL_C_RESEARCH_DRAFT; the export then needs the portable writer mode v2."
+  },
+  {
+   "id": "A24",
+   "rule": "R54 (O16, route v4.1)",
+   "input": {
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "source_adoption_status": "unverified"
+   },
+   "expected": {
+    "row": true,
+    "Q": 1500,
+    "cites": {
+     "Q": [
+      "unit-price cell"
+     ]
+    }
+   },
+   "reason": "Q does not wait for adoption to be verified: it is the quoted unit price. The route accepts it with the warning O16_Q_UNVERIFIED_ADOPTION; the value is still not evidence of an accepted contract rate."
+  },
+  {
+   "id": "A25",
+   "rule": "R47b",
+   "input": {
+    "packet": {
+     "材料清單": "bill with brand and model columns, every line priced or not estimated",
+     "contract": "detailed bill listing the same items without brands"
+    }
+   },
+   "expected": {
+    "rows": "only from the 材料清單 lines, in its source order",
+    "contract": "gives no rows; it serves only to resolve doubts the 材料清單 leaves (for example a missing dimension)"
+   },
+   "reason": "When the packet has a material list, it is the primary source: rows, descriptions, units, quantities, prices, brands, models and status come from it, and the contract is never a second source of rows."
   }
  ]
 }

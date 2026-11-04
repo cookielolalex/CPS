@@ -8,10 +8,12 @@ Proves on invented carriers:
   (c) invalid carriers are refused (writer004 gate codes, prepareMatrices review-cell code,
       documented portable-only refusals) and leave no output;
   (d) visual_qa produces PNGs reproducibly;
-  (e) mode v2 (candidate 046f, owner decision O13): carriers with M/N job-input selection evidence
-      pass writer004 on the documented placeholder copy plus the route v4 port, and the saved values
-      equal writer004 prepareMatrices on that copy except the M/N evidence cells; carriers without
-      it take the v1 route unchanged; v2 refusals come from writer004 or the route port as documented.
+  (e) mode v2 (candidate 046f, route v4.1 relaxations): carriers with M/N job-input selection evidence
+      (O13) and/or C null with status research_draft (R57) pass writer004 on the documented placeholder
+      copy plus the route v4.1 port, and the saved values equal writer004 prepareMatrices on that copy
+      except the documented cells (checked here by an independent content-based alignment); carriers
+      without those (including Q under unverified adoption, O16) take the v1 route unchanged; v2
+      refusals come from writer004 or the route port as documented.
 Usage: python3 -I -B run_export_tests.py --writer-dir /abs/archived/writer --work /abs/new-dir [--skip-visual]
 Prints a JSON summary with passed and failed lists; exit 0 only if nothing failed.
 """
@@ -103,8 +105,13 @@ def fuzz_values(n, seed=46):
     return [value(0) for _ in range(n)]
 
 
+R57_PLACEHOLDER = ('R57 relaxation placeholder: C is null with status research_draft in the carrier; '
+                   'status held and this reason exist only in the writer004 validation copy.')
+
+
 def placeholder_copy_independent(c):
-    """Test-side implementation of the documented O13 placeholder method (README, mode v2)."""
+    """Test-side implementation of the documented neutralization (README, mode v2): O13 M/N selection evidence ->
+    location evidence; R57 C-null research_draft -> held, plus the placeholder reason when review_reasons is empty."""
     c = copy.deepcopy(c)
     for r in c['items'] + c['components']:
         for k in ('M', 'N'):
@@ -112,11 +119,56 @@ def placeholder_copy_independent(c):
             if isinstance(e, dict) and 'selection_evidence' in e:
                 rest = {x: y for x, y in e.items() if x != 'selection_evidence'}
                 r['evidence'][k] = dict(rest, location=copy.deepcopy(r['location']), anchor=r['anchor'], raw_text=e['selection_evidence'])
+        if r['values'][2] is None and r['status'] == 'research_draft':
+            r['status'] = 'held'
+            if r['review_reasons'] == []:
+                r['review_reasons'] = [R57_PLACEHOLDER]
     return c
 
 
 def mn_fields(c):
     return [f"{r['id']}.{k}" for r in c['items'] + c['components'] for k in ('M', 'N') if 'selection_evidence' in r['evidence'].get(k, {})]
+
+
+def r57_ids(c):
+    return [r['id'] for r in c['items'] + c['components'] if r['values'][2] is None and r['status'] == 'research_draft']
+
+
+def q_ids(c):
+    return [r['id'] for r in c['items'] + c['components'] if r['values'][16] is not None] if c['metadata'].get('source_adoption') != 'verified' else []
+
+
+def documented_difference(mine, theirs, obj):
+    """Independent, content-based check that the saved sheets (mine) equal writer004's sheets of the copy (theirs) except
+    the documented cells. Returns (differing cells, cells outside the documented set, placeholder rows removed)."""
+    fields, r57 = set(mn_fields(obj)), set(r57_ids(obj))
+    added = {r['id'] for r in obj['items'] + obj['components'] if r['id'] in r57 and r['review_reasons'] == []}
+    kinds = ('項目', '原文', '欄位依據', '空白原因', '待確認')
+    diffs, outside, removed = [], [], 0
+    for sa, sb in zip(mine, theirs):
+        va, vb = sa['values'], sb['values']
+        if sa['name'] == '來源與審查':
+            keep = []
+            for row in vb:          # drop the copy's placeholder 待確認 rows of items that had no review reason
+                if row[0] == '待確認' and row[1].rsplit('.', 1)[0] in added and row[4] == json.dumps(R57_PLACEHOLDER, ensure_ascii=False):
+                    removed += 1
+                    continue
+                keep.append(row)
+            vb = keep
+        if sa['name'] != sb['name'] or len(va) != len(vb):
+            outside.append((sa['name'], 'rows', len(va), len(vb)))
+            continue
+        for i, (ra, rb) in enumerate(zip(va, vb)):
+            for j, (x, y) in enumerate(zip(ra, rb)):
+                if same_value(x, y):
+                    continue
+                owner = ra[1] if ra[0] == '項目' else (ra[1].rsplit('.', 1)[0] if ra[0] in kinds else None)
+                ok = sa['name'] == '來源與審查' and (
+                    (ra[0] == '欄位依據' and ra[1] in fields and j in (2, 3, 4)) or
+                    (owner in r57 and j == 6 and x == 'research_draft' and y == 'held') or
+                    (ra[0] == '項目' and ra[1] in added and j == 5 and x == '[]' and y == json.dumps([R57_PLACEHOLDER], ensure_ascii=False)))
+                (diffs if ok else outside).append((sa['name'], i + 1, j + 1))
+    return diffs, outside, removed
 
 
 def main():
@@ -279,41 +331,51 @@ def main():
     code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', valid[0]['file'], '--out', work / 'tampered_out', '--writer-dir', alt])
     record('c_refused_unpinned_writer', code == 1 and json.loads(err)['code'] == 'WRITER_FILE_NOT_PINNED' and not (work / 'tampered_out').exists())
 
-    # ------------------------------------------------ (e) mode v2: O13 relaxation for 046f carriers
+    # ------------------------------------------------ (e) mode v2: route v4.1 relaxations for 046f carriers
     r46 = load(ROUTE46F, 'cps046f_route_reference')
-    record('e_route_v4_version_matches_writer', r46.VERSION == wp.ROUTE_V4_VERSION == 'cps046f-route.v4'
-           and wp.ROUTE_V4_TOOL.resolve() == ROUTE46F.resolve())
+    record('e_route_v4_version_matches_writer', r46.VERSION == wp.ROUTE_V4_VERSION == 'cps046f-route.v4.1'
+           and wp.ROUTE_V4_TOOL.resolve() == ROUTE46F.resolve() and set(r46.PORT_RELAXATIONS) == set(wp.RELAXATION_CLASSES))
     fx6 = work / 'route046f_fixtures'
     code, out, err = run(PY + [ROUTE46F_FIXTURES, fx6])
     record('e_route046f_make_fixtures', code == 0, err[-300:])
     carriers6 = {}
-    for tag, resp in (('jobs', 'valid_response_job_inputs.json'), ('plain', 'valid_response.json')):
-        code, out, err = run(PY + [ROUTE46F, 'convert', '--inventory', fx6 / 'fixture_inventory.json', '--response', fx6 / resp,
-                                   '--out-dir', work / f'route046f_{tag}'])
+    res6 = ROUTE46F_DIR / 'package' / 'resources'
+    for tag, inv_path, resp in (('jobs', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_job_inputs.json'),
+                                ('plain', fx6 / 'fixture_inventory.json', fx6 / 'valid_response.json'),
+                                ('r57', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_r57_null_c.json'),
+                                ('q', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_q_unverified.json'),
+                                ('all', fx6 / 'fixture_inventory.json', fx6 / 'valid_response_relaxed_all.json'),
+                                ('example', res6 / 'EXAMPLE_INVENTORY.json', res6 / 'EXAMPLE_RESPONSE.json')):
+        code, out, err = run(PY + [ROUTE46F, 'convert', '--inventory', inv_path, '--response', resp, '--out-dir', work / f'route046f_{tag}'])
         carriers6[tag] = work / f'route046f_{tag}' / 'carrier.json'
         record(f'e_route046f_convert_{tag}', code == 0 and carriers6[tag].is_file(), (out + err)[-300:])
     ef2 = work / 'export_fixtures_v2'
-    code, out, err = run(PY + [HERE / 'make_export_fixtures_v2.py', carriers6['jobs'], carriers6['plain'], ef2])
+    code, out, err = run(PY + [HERE / 'make_export_fixtures_v2.py'] + [carriers6[t] for t in ('jobs', 'plain', 'r57', 'q', 'all', 'example')] + [ef2])
     record('e_make_export_fixtures_v2', code == 0, err[-300:])
     index2 = json.loads((ef2 / 'FIXTURES_V2.json').read_text(encoding='utf-8'))['fixtures']
     valid2 = [x for x in index2 if x['valid']]
     invalid2 = [x for x in index2 if not x['valid']]
-    record('e_fixture_counts_v2', len(valid2) >= 6 and len(invalid2) >= 9, {'valid': len(valid2), 'invalid': len(invalid2)})
-    jobs_obj = json.loads(carriers6['jobs'].read_text(encoding='utf-8'))
+    record('e_fixture_counts_v2', len(valid2) >= 11 and len(invalid2) >= 17, {'valid': len(valid2), 'invalid': len(invalid2)})
+    objs6 = {t: json.loads(carriers6[t].read_text(encoding='utf-8')) for t in carriers6}
     record('e_writer_placeholder_method_equals_test_implementation',
-           same_value(wp.o13_placeholder_copy(jobs_obj), placeholder_copy_independent(jobs_obj)) and len(mn_fields(jobs_obj)) == 18)
-    # writer004 itself still refuses the original 046f carrier (documented divergence), in v1 mode too
-    c2, o2, e2 = run(['node', wd / 'validate_carrier_v4.mjs', '--carrier', carriers6['jobs']])
-    record('e_writer004_refuses_original_mn_selection', c2 == 1 and json.loads(e2).get('code') == 'SELECTION_ONLY_ENGINEERING_ID')
-    code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', carriers6['jobs'], '--out', outs / 'v1mode_jobs', '--writer-dir', wd])
-    ref = json.loads(err.strip().splitlines()[-1]) if err.strip() else {}
-    record('e_v1_mode_refuses_mn_selection_unchanged', code == 1 and ref.get('code') == 'SELECTION_ONLY_ENGINEERING_ID'
-           and ref.get('stage') == 'gate:validate_carrier_v4' and not (outs / 'v1mode_jobs').exists(), ref)
+           all(same_value(wp.placeholder_copy(objs6[t]), placeholder_copy_independent(objs6[t])) for t in objs6)
+           and len(mn_fields(objs6['jobs'])) == 18 and r57_ids(objs6['r57']) == ['R003', 'C001'] and q_ids(objs6['q']) == ['R006']
+           and len(r57_ids(objs6['example'])) == 5 and len(q_ids(objs6['example'])) == 10 and mn_fields(objs6['example']))
+    # writer004 itself still refuses the relaxed originals (documented divergences), and mode v1 is unchanged
+    for tag, want in (('jobs', 'SELECTION_ONLY_ENGINEERING_ID'), ('r57', 'UNRESOLVED_ITEM_MUST_BE_HELD')):
+        c2, o2, e2 = run(['node', wd / 'validate_carrier_v4.mjs', '--carrier', carriers6[tag]])
+        record(f'e_writer004_refuses_original_{tag}', c2 == 1 and json.loads(e2).get('code') == want)
+        code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', carriers6[tag], '--out', outs / f'v1mode_{tag}', '--writer-dir', wd])
+        ref = json.loads(err.strip().splitlines()[-1]) if err.strip() else {}
+        record(f'e_v1_mode_refuses_{tag}_unchanged', code == 1 and ref.get('code') == want
+               and ref.get('stage') == 'gate:validate_carrier_v4' and not (outs / f'v1mode_{tag}').exists(), ref)
+    c2, o2, e2 = run(['node', wd / 'validate_carrier_v4.mjs', '--carrier', carriers6['q']])
+    record('e_writer004_accepts_q_unverified_original', c2 == 0 and json.loads(o2).get('status') == 'WRITER_STRUCTURAL_VALIDATION_ONLY')
     # independent copies for the node parity probe
     probe = []
     for x in valid2:
         text = Path(x['file']).read_bytes().decode('utf-8')
-        obj = json.loads(text[1:] if text.startswith('\ufeff') else text)
+        obj = json.loads(text[1:] if text.startswith('﻿') else text)
         pc = work / f"v2_copy_{x['name']}.json"
         pc.write_text(json.dumps(placeholder_copy_independent(obj), ensure_ascii=True), encoding='ascii')
         probe.append((x, obj, pc))
@@ -329,42 +391,41 @@ def main():
             continue
         rc = json.loads((od / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
         exp = (od / 'EXPECTED_SAVED_VALUES.json').read_bytes()
-        fields = mn_fields(obj)
-        if x['o13_expected']:
-            ok = (rc['mode'] == 'v2' and rc['o13']['applied'] is True and rc['o13']['fields'] == fields
-                  and rc['o13']['route_v4_port']['result'] == 'PASS' and rc['o13']['route_v4_port']['version'] == 'cps046f-route.v4'
-                  and rc['o13']['route_v4_port']['sha256'] == sha(ROUTE46F.read_bytes())
-                  and rc['o13']['writer004_cross_check_on_placeholder_copy']['result'] == 'BYTE_IDENTICAL'
+        rx = rc.get('relaxations', {})
+        cls = rx.get('classes', {})
+        classes_ok = (rx.get('scanned') is True and cls.get('o13_m_n_selection_evidence', {}).get('fields') == mn_fields(obj)
+                      and cls.get('r57_null_c_research_draft', {}).get('items') == r57_ids(obj)
+                      and cls.get('r57_null_c_research_draft', {}).get('placeholder_reason_added_to')
+                      == [i for i in r57_ids(obj) if next(r for r in obj['items'] + obj['components'] if r['id'] == i)['review_reasons'] == []]
+                      and cls.get('o16_q_unverified_adoption', {}).get('items') == q_ids(obj)
+                      and cls.get('o16_q_unverified_adoption', {}).get('source_adoption') == obj['metadata'].get('source_adoption'))
+        if x['relaxed_expected']:
+            ok = (rc['mode'] == 'v2' and rx.get('applied') is True and classes_ok
+                  and rx['route_v4_port']['result'] == 'PASS' and rx['route_v4_port']['version'] == 'cps046f-route.v4.1'
+                  and rx['route_v4_port']['sha256'] == sha(ROUTE46F.read_bytes())
+                  and rx['writer004_cross_check_on_placeholder_copy']['result'] == 'BYTE_IDENTICAL'
                   and rc['gate']['result']['status'] == 'WRITER_STRUCTURAL_VALIDATION_ONLY'
                   and rc['expected_saved_values']['identical_to_writer004_prepareMatrices_output'] is False
-                  and any(l.startswith('O13 relaxation') for l in rc['limitations']) and rc['admitted'] is False)
-            record(f"e_receipt_v2_{x['name']}", ok, {k: rc.get(k) for k in ('mode', 'o13')})
-            # independent check: saved values == writer004 prepareMatrices on the copy, except M/N evidence cells
+                  and rc['expected_saved_values'].get('identical_to_writer004_prepareMatrices_on_placeholder_copy_except_documented_cells') is True
+                  and any(l.startswith('Route v4.1 relaxations') for l in rc['limitations']) and rc['admitted'] is False)
+            record(f"e_receipt_v2_{x['name']}", ok, {k: rc.get(k) for k in ('mode', 'relaxations')})
+            # independent check: saved values == writer004 prepareMatrices on the copy, except the documented cells
             mine = json.loads(exp.decode('utf-8'))['sheets']
             theirs = json.loads(nr['text'])['sheets'] if nr.get('ok') else []
-            diffs, outside = [], []
-            for sa, sb in zip(mine, theirs):
-                if sa['name'] != sb['name'] or len(sa['values']) != len(sb['values']):
-                    outside.append(sa['name'])
-                    continue
-                for i, (ra, rb) in enumerate(zip(sa['values'], sb['values'])):
-                    for j, (va, vb) in enumerate(zip(ra, rb)):
-                        if not same_value(va, vb):
-                            if sa['name'] == '來源與審查' and ra[0] == '欄位依據' and ra[1] in fields and j in (2, 3, 4):
-                                diffs.append((ra[1], j))
-                            else:
-                                outside.append((sa['name'], i + 1, j + 1))
-            sel_rows = [ra for s_ in mine if s_['name'] == '來源與審查' for ra in s_['values'] if ra[0] == '欄位依據' and ra[1] in fields]
-            record(f"e_saved_values_equal_writer004_on_copy_except_mn_evidence_{x['name']}",
-                   len(mine) == len(theirs) == 4 and not outside and {d[0] for d in diffs} == set(fields)
-                   and len(diffs) == len(rc['o13']['saved_matrices_differ_from_placeholder_copy_only_in']['cells'])
-                   and all(ra[2] is None and ra[3] == '"已核對工程選取"' for ra in sel_rows) and len(sel_rows) == len(fields),
-                   {'outside': outside[:5], 'diff_fields': len({d[0] for d in diffs}), 'fields': len(fields)})
+            diffs, outside, removed = documented_difference(mine, theirs, obj)
+            n_added = len(cls['r57_null_c_research_draft']['placeholder_reason_added_to'])
+            sel_rows = [ra for s_ in mine if s_['name'] == '來源與審查' for ra in s_['values'] if ra[0] == '欄位依據' and ra[1] in mn_fields(obj)]
+            record(f"e_saved_values_equal_writer004_on_copy_except_documented_cells_{x['name']}",
+                   len(mine) == len(theirs) == 4 and not outside and removed == n_added
+                   and {d for d in diffs} == {tuple(['來源與審查'] + [int(v) for v in c_.split('!R')[1].split('C')]) for c_ in rx['saved_matrices_differ_from_placeholder_copy_only_in']['cells']}
+                   and len(rx['saved_matrices_differ_from_placeholder_copy_only_in']['rows_added_in_copy']) == n_added
+                   and all(ra[2] is None and ra[3] == '"已核對工程選取"' for ra in sel_rows) and len(sel_rows) == len(mn_fields(obj)),
+                   {'outside': outside[:5], 'diffs': len(diffs), 'removed': removed, 'added': n_added})
         else:
-            record(f"e_receipt_v2_{x['name']}", rc['mode'] == 'v2' and rc['o13'] == {'applied': False}
-                   and rc['cross_check']['result'] == 'BYTE_IDENTICAL' and exp == nr['text'].encode('utf-8'), rc.get('o13'))
+            record(f"e_receipt_v2_{x['name']}", rc['mode'] == 'v2' and rx.get('applied') is False and classes_ok
+                   and rc['cross_check']['result'] == 'BYTE_IDENTICAL' and exp == nr['text'].encode('utf-8'), rc.get('relaxations'))
             code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', x['file'], '--out', outs / ('v1_' + x['name']), '--writer-dir', wd])
-            record(f"e_v2_without_mn_equals_v1_bytes_{x['name']}", code == 0
+            record(f"e_v2_without_copy_equals_v1_bytes_{x['name']}", code == 0
                    and (outs / ('v1_' + x['name']) / 'research-draft.xlsx').read_bytes() == (od / 'research-draft.xlsx').read_bytes()
                    and (outs / ('v1_' + x['name']) / 'EXPECTED_SAVED_VALUES.json').read_bytes() == exp)
         code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od])
@@ -374,9 +435,10 @@ def main():
                and t.get('value_type_mismatches') == 0 and t.get('formulas') == 0 and t.get('formatting_failures') == 0, t)
         code, out, err = run(PY + [QA045, '--output', od, '--report', work / f"qa045_v2_{x['name']}.json"])
         record(f"e_checkpoint045_saved_qa_v2_{x['name']}", code == 0 and json.loads(out)['status'] == 'SAVED_ALL_CELL_VALUE_TYPE_PASS', (out + err)[-300:])
-    code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', valid2[0]['file'], '--out', work / 'repeat_v2', '--writer-dir', wd, '--mode', 'v2'])
-    record('e_repeat_build_v2_byte_identical', code == 0 and (work / 'repeat_v2' / 'research-draft.xlsx').read_bytes() == (outs / ('v2_' + valid2[0]['name']) / 'research-draft.xlsx').read_bytes()
-           and (work / 'repeat_v2' / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (outs / ('v2_' + valid2[0]['name']) / 'EXPECTED_SAVED_VALUES.json').read_bytes())
+    for name in ('w01_job_inputs', 'w09_relaxed_all'):
+        code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef2 / 'valid' / f'{name}.json', '--out', work / f'repeat_v2_{name}', '--writer-dir', wd, '--mode', 'v2'])
+        record(f'e_repeat_build_v2_byte_identical_{name}', code == 0 and (work / f'repeat_v2_{name}' / 'research-draft.xlsx').read_bytes() == (outs / ('v2_' + name) / 'research-draft.xlsx').read_bytes()
+               and (work / f'repeat_v2_{name}' / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (outs / ('v2_' + name) / 'EXPECTED_SAVED_VALUES.json').read_bytes())
     for x in invalid2:
         od = outs / ('v2_' + x['name'])
         code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', x['file'], '--out', od, '--writer-dir', wd, '--mode', 'v2'])
@@ -386,6 +448,46 @@ def main():
             ref = {}
         record(f"e_refused_v2_{x['name']}", code == 1 and not od.exists() and ref.get('status') == 'REFUSED'
                and ref.get('code') == x['expected_code'] and ref.get('stage') == x['expected_stage'], ref)
+    # the documented-difference guard is not vacuous: hidden changes to the copy's matrices are refused
+    raw_all = carriers6['all'].read_bytes()
+    scan_all = wp.relaxation_scan(raw_all)
+    c_all = wp.js_parse(raw_all)
+    cp_bytes = (json.dumps(wp.placeholder_copy(json.loads(raw_all.decode('utf-8'))), ensure_ascii=True, indent=1) + '\n').encode('ascii')
+    c_cp = wp.js_parse(cp_bytes)
+    m0, mc0 = wp.prepare_matrices(c_all), wp.prepare_matrices(c_cp)
+    base_diff = wp.relaxation_matrix_difference(m0, mc0, c_all, c_cp, scan_all)
+    record('e_diff_guard_baseline', base_diff['cells'] and len(base_diff['rows_added_in_copy']) == 1, base_diff['rows_added_in_copy'])
+    def row_ix(mat, kind, ident):
+        return next(i for i, r_ in enumerate(mat['review']) if r_[0] == kind and r_[1] == ident)
+    def guard(name, mutate, want):
+        mc = copy.deepcopy(mc0)
+        mutate(mc)
+        try:
+            wp.relaxation_matrix_difference(m0, mc, c_all, c_cp, scan_all)
+            got = None
+        except wp.Refused as e:
+            got = e.code
+        record(f'e_diff_guard_{name}', got == want, got)
+    guard('metadata_row_changed', lambda mc: mc['review'][row_ix(mc, '識別資料', '"adapter"')].__setitem__(4, '"x"'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    guard('main_sheet_changed', lambda mc: mc['main'][1].__setitem__(2, 'x'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    guard('status_of_item_without_r57', lambda mc: mc['review'][row_ix(mc, '項目', 'R001')].__setitem__(6, 'held'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    guard('o13_row_status_column', lambda mc: mc['review'][row_ix(mc, '欄位依據', 'R001.M')].__setitem__(6, 'held'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    guard('r57_raw_text_changed', lambda mc: mc['review'][row_ix(mc, '原文', 'R003.description')].__setitem__(4, '"x"'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    guard('r57_status_not_held_in_copy', lambda mc: mc['review'][row_ix(mc, '項目', 'R003')].__setitem__(6, 'research_draft'), 'RELAXATION_DIFF_FORM')
+    guard('placeholder_row_text', lambda mc: mc['review'][row_ix(mc, '待確認', 'C001.1')].__setitem__(4, '"other"'), 'RELAXATION_DIFF_FORM')
+    guard('placeholder_row_removed', lambda mc: mc['review'].pop(row_ix(mc, '待確認', 'C001.1')), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    guard('nonitem_row_changed', lambda mc: mc['review'][-1].__setitem__(5, '"x"'), 'RELAXATION_DIFF_OUTSIDE_DOCUMENTED_CELLS')
+    # the writer refuses a route tool whose VERSION or documented relaxations do not match
+    tool_dir = work / 'fake_route'
+    tool_dir.mkdir()
+    fake = tool_dir / 'cps046b_route.py'
+    fake.write_text(ROUTE46F.read_text(encoding='utf-8').replace("VERSION = 'cps046f-route.v4.1'", "VERSION = 'cps046f-route.v4'", 1), encoding='utf-8')
+    try:
+        wp.build(Path(carriers6['r57']), work / 'fake_route_out', wd, mode='v2', route_tool=fake)
+        fr = None
+    except wp.Refused as e:
+        fr = (e.code, e.stage)
+    record('e_v2_refuses_unpinned_route_version', fr == ('ROUTE_V4_TOOL_VERSION', 'gate:route_v4_port') and not (work / 'fake_route_out').exists(), fr)
 
     # ------------------------------------------------ (d) visual QA
     if not a.skip_visual:
@@ -416,9 +518,10 @@ def main():
         record('d_visual_qa_sheet_filter_large_fixture', code == 0 and [i['page'] for i in mf['images']] == want_pages and len(want_pages) >= 3
                and {i['sheet'] for i in mf['images']} == set(keep) and mf['pdf']['pages'] > len(want_pages) and mf['complete_render'] is False,
                {'stderr': err[-300:], 'rendered': len(mf.get('images', [])), 'pdf_pages': mf.get('pdf', {}).get('pages')})
-        code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v2_w01_job_inputs' / 'research-draft.xlsx', '--dest', vis / 'v2_w01'])
-        mv = json.loads((vis / 'v2_w01' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
-        record('d_visual_qa_v2_o13_output', code == 0 and {i['sheet'] for i in mv.get('images', [])} >= set(wp.SHEET_ORDER) and mv.get('complete_render'), err[-300:])
+        for name in ('w01_job_inputs', 'w10_example046f'):
+            code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / f'v2_{name}' / 'research-draft.xlsx', '--dest', vis / f'v2_{name}'])
+            mv = json.loads((vis / f'v2_{name}' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
+            record(f'd_visual_qa_v2_output_{name}', code == 0 and {i['sheet'] for i in mv.get('images', [])} >= set(wp.SHEET_ORDER) and mv.get('complete_render'), err[-300:])
         code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v04_text_edges' / 'research-draft.xlsx', '--dest', vis / 'v04_exact', '--mode', 'exact'])
         me = json.loads((vis / 'v04_exact' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
         record('d_visual_qa_exact_mode', code == 0 and me.get('pages', 0) >= 1 and me['render_copy']['identical_to_saved'], err[-300:])

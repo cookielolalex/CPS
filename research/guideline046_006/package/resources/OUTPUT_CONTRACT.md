@@ -66,13 +66,13 @@ Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semanti
 
 Use IDs such as `R001…` for rows in source order and `C001…` for `analysis_component` items in analysis order. Do not form groups for contractual sections: no row except the enclosure row carries A or B (R56).
 
-## Open interface questions (route v4 unchanged on these points)
+## Interface points (route v4.1)
 
-R48–R58 change field roles; route v4 changed only the context-only proof rule for L, M and N (O13). Three route and writer constraints still bind every response and are recorded for the package author's decision. Until then, follow them and state them in `limitations`; do not change a value to avoid them.
+Route v4.1 resolves two of the interface questions recorded for 046f and keeps one mechanism. Follow them; do not change a value to avoid a warning.
 
-1. **A null C requires `status: "held"`** (route `NULL_C_REQUIRES_HELD`, writer004 `UNRESOLVED_ITEM_MUST_BE_HELD`). Under R52, material, bulk, service, labour and fee rows have C null, so they are held with a review reason saying they are held only for this reason.
-2. **A non-null A or B requires a group** whose `name` equals A and whose `specification` equals B (route `UNGROUPED_AB_MUST_BE_BLANK`, `A_MUST_EQUAL_GROUP_NAME`, `B_MUST_EQUAL_GROUP_SPECIFICATION`; writer004 `UNGROUPED_AB_MUST_BE_BLANK`). R56 forms no response groups. The example carries the enclosure row's A and B through a one-row group (`relationship: physical_enclosure`) whose only member is that row, and names the question in the group's limitations.
-3. **Q requires verified source adoption** (route `Q_REQUIRES_VERIFIED_ADOPTION`), although R54 replaces the adoption hold. With unverified or partial adoption, a non-null Q is an `invalid` violation.
+1. **A null C may be `research_draft`** (FIELD_ROLES R57). Give C a specific null reason as for any null field. `check` warns `R57_NULL_C_RESEARCH_DRAFT`; the export then needs the portable writer's mode v2 (writer004 itself requires `held` for a null C).
+2. **A non-null A or B requires a group** whose `name` equals A and whose `specification` equals B (route `UNGROUPED_AB_MUST_BE_BLANK`, `A_MUST_EQUAL_GROUP_NAME`, `B_MUST_EQUAL_GROUP_SPECIFICATION`; writer004 `UNGROUPED_AB_MUST_BE_BLANK`). R56 keeps this as the mechanism: the enclosure row's A and B are carried by a one-row group (`relationship: physical_enclosure`) whose only member is that row. The route accepts a group with exactly one member.
+3. **Q does not require verified adoption** (R54, O16). With unverified or partial adoption, a non-null Q gives the warning `O16_Q_UNVERIFIED_ADOPTION`, not a violation.
 
 One policy question is also open and recorded for the package author: 4. R50 names no census role or reason for lines omitted under the provisional O10 rule; the table above uses `excluded_supply`, and A11/A12 in `SYNTHETIC_ALLOCATION_CASES.json` show the literal R50 reading.
 
@@ -87,7 +87,7 @@ python3 -I tools/cps046b_route.py check --inventory SOURCE_INVENTORY.json --resp
 - `invalid` violations are structural defects, such as an unknown or wrong-case reference, a missing proof, a wrong type, a mismatched unit or quantity, a missing role, a duplicate role, or a content cell that no item uses. Correct the response from the source, not by deleting meaning.
 - `field_must_be_null` violations mean the cited source cannot be carried for that field. Examples: a quantity written as text with a unit or with full-width digits, a date-typed or error cell, or a field other than L, M and N proven only by context (for example I or C citing only `context:brand_table` or `context:glossary`: cite the source cell too). Set that field null, or that raw selection empty, with a specific reason. The source cell stays in the census.
 - `unrepresentable_hold` violations mean a true answer cannot be carried by the admitted writer. Examples: a value that begins with `-`, `=`, `+` or `@`, or a held component link. Do not change a true value to make one disappear. Keep it, explain it in `limitations`, and return the response. The export is then held, and that outcome is recorded honestly.
-- The warning `O13_SELECTION_EVIDENCE_M_N` is expected whenever M and N cite job inputs. It tells the orchestrator to export with the portable writer's mode v2. It is not a violation.
+- The warnings `O13_SELECTION_EVIDENCE_M_N` (M and N cite job inputs), `R57_NULL_C_RESEARCH_DRAFT` (a null C on a `research_draft` row) and `O16_Q_UNVERIFIED_ADOPTION` (Q under unverified adoption) are expected under R48, R57 and R54. The first two tell the orchestrator to export with the portable writer's mode v2. None is a violation.
 - A passing check proves structure only. It is not semantic approval.
 
 ## Prohibited
@@ -101,4 +101,4 @@ python3 -I tools/cps046b_route.py check --inventory SOURCE_INVENTORY.json --resp
 
 ## After return (not the generator's job)
 
-The orchestrator freezes the response bytes, then runs `convert` to produce the carrier and census ledger. A carrier with M/N selection evidence is not accepted by the unchanged writer004 gate; the portable writer's mode v2 (`research/export/README.md`) validates it with writer004 on a documented placeholder copy plus the route v4 port. Evaluation happens in a separate role. Workbook export, saved-cell QA and visual QA need an admitted export runtime. Where none is available, they are recorded as unattempted.
+The orchestrator freezes the response bytes, then runs `convert` to produce the carrier and census ledger. A carrier with M/N selection evidence or a null C on a `research_draft` row is not accepted by the unchanged writer004 gate; the portable writer's mode v2 (`research/export/README.md`) validates it with writer004 on a documented placeholder copy plus the route v4.1 port. Evaluation happens in a separate role. Workbook export, saved-cell QA and visual QA need an admitted export runtime. Where none is available, they are recorded as unattempted.
