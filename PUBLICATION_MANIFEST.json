@@ -19,8 +19,8 @@
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 8265,
-      "sha256": "562442f2b6bec8b9e875c56a1c35269657e00e395ce9d803cb95c24928472783"
+      "bytes": 8616,
+      "sha256": "2a65121dfb23472425622d181fdf01a2212f078ff81091257c47482de70d4ad7"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1471,6 +1471,11 @@
       "path": "research/guideline046_005/STUDY_CD_FOLLOWUP_20261104.md",
       "bytes": 2034,
       "sha256": "9c6e1fc96678ee71efd9136bd82c5042bd6bd1718291a41567c75687ed5be7c0"
+    },
+    {
+      "path": "research/guideline046_006/ADMISSION_046f_dev_a.json",
+      "bytes": 16276,
+      "sha256": "9e95f214ff5de33736999589d496015c3ac9899c2d597ae12685e1556458f0a0"
     }
   ]
 }
