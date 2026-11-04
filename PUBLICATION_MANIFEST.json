@@ -1446,6 +1446,11 @@
       "path": "research/guideline046_005/STUDY_MATLIST_20261104.md",
       "bytes": 2220,
       "sha256": "f1e9ce1cc38c557d961aef94c92982a0c0ff3b23cab86dee9bcc85d32c1f5df3"
+    },
+    {
+      "path": "research/guideline046_005/STUDY_PHRASEBOOK_20261104.md",
+      "bytes": 2085,
+      "sha256": "d5454c18ec2886794fb8ff55897c69e935c1155e0f8c1537581b409a4c5d5cea"
     }
   ]
 }
