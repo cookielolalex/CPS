@@ -347,18 +347,113 @@ def main():
     pc_path.write_text(json.dumps(placeholder_copy(jcarrier), ensure_ascii=False), encoding='utf-8')
     code, res = node_validate(wd, pc_path)
     record('v4_writer004_accepts_placeholder_copy', code == 0 and res['status'] == 'WRITER_STRUCTURAL_VALIDATION_ONLY', res)
-    def port_code(c):
+    def port_code(c, strict=False):
         try:
-            route_mod.validate_carrier_port(c)
+            route_mod.validate_carrier_port(c, strict=strict)
             return 'PASS'
         except route_mod.WriterReject as e:
             return e.code
+        except Exception as e:      # a crash is a defect: it never matches a writer004 code
+            return 'PORT_EXCEPTION:' + type(e).__name__
     for col in ('C', 'I', 'K', 'O', 'P'):
         bad = copy.deepcopy(jcarrier)
         it(bad, 'R002')['values'][COLS.index(col)] = 2 if col == 'P' else 'x'
         it(bad, 'R002')['null_reasons'].pop(col, None)
         it(bad, 'R002')['evidence'][col] = dict(it(bad, 'R002')['evidence']['M'])
         record(f'v4_port_rejects_selection_evidence_on_{col}', port_code(bad) == 'SELECTION_ONLY_ENGINEERING_ID')
+
+    # ------------------------------------------------ route v4.1 relaxations (a) R57, (b) O16 Q, (c) R56 one-member group
+    record('v41_route_version_and_documented_port_relaxations', route_mod.VERSION == 'cps046f-route.v4.1'
+           and set(route_mod.PORT_RELAXATIONS) == {'o13_m_n_selection_evidence', 'r57_null_c_research_draft', 'o16_q_unverified_adoption'}
+           and route_mod.SELECTION_COLS == ('L', 'M', 'N') and route_mod.WRITER004_SELECTION_COLS == ('L',))
+    v41 = {}
+    for tag, resp_name, inv_name in (('r57', 'valid_response_r57_null_c.json', 'fixture_inventory.json'),
+                                     ('q', 'valid_response_q_unverified.json', 'fixture_inventory.json'),
+                                     ('q_partial', 'valid_response_q_partial.json', 'fixture_inventory_partial.json'),
+                                     ('all', 'valid_response_relaxed_all.json', 'fixture_inventory.json'),
+                                     ('group1', 'valid_response_one_member_group.json', 'fixture_inventory.json')):
+        code, out, _ = route('check', '--inventory', str(fx / inv_name), '--response', str(fx / resp_name))
+        rep_ = json.loads(out)
+        c2, out2, _ = route('convert', '--inventory', str(fx / inv_name), '--response', str(fx / resp_name), '--out-dir', str(work / f'v41_{tag}_out'))
+        ok = c2 == 0 and (work / f'v41_{tag}_out' / 'carrier.json').is_file()
+        v41[tag] = {'check_code': code, 'report': rep_, 'convert_ok': ok,
+                    'carrier': json.loads((work / f'v41_{tag}_out' / 'carrier.json').read_text(encoding='utf-8')) if ok else None,
+                    'receipt': json.loads((work / f'v41_{tag}_out' / 'ADAPTER_RECEIPT.json').read_text(encoding='utf-8')) if ok else None,
+                    'path': work / f'v41_{tag}_out' / 'carrier.json'}
+        record(f'v41_{tag}_check_pass_and_convert', code == 0 and rep_['status'] == 'PASS' and ok, rep_['violations'][:5])
+    wcodes = lambda tag: [w['code'] for w in v41[tag]['report']['warnings']]
+    # (a) R57: C null with status research_draft
+    a_ = v41['r57']
+    ca = a_['carrier']
+    w57 = next((w for w in a_['report']['warnings'] if w['code'] == 'R57_NULL_C_RESEARCH_DRAFT'), {})
+    record('v41_a_r57_warning_not_violation', wcodes('r57') == ['R57_NULL_C_RESEARCH_DRAFT'] and w57['detail']['count'] == 2
+           and w57['detail']['first'] == ['R003', 'C001'], a_['report']['warnings'])
+    record('v41_a_r57_carrier_keeps_null_reason_and_status', ca is not None
+           and all(it(ca, i)['values'][2] is None and it(ca, i)['status'] == 'research_draft' and isinstance(it(ca, i)['null_reasons'].get('C'), str)
+                   and 'C' not in it(ca, i)['evidence'] for i in ('R003', 'C001'))
+           and it(ca, 'C001')['review_reasons'] == [] and it(ca, 'R003')['review_reasons'] != [])
+    ra = a_['receipt']
+    record('v41_a_r57_receipt_requires_mode_v2', ra['r57_null_c_research_draft'] == {'count': 2, 'first': ['R003', 'C001'],
+           'writer004_validateCarrier_accepts': False, 'export_mode_required': 'v2'} and ra['export_mode_required'] == 'v2'
+           and ra['writer004_validateCarrier_accepts'] is False and ra['o13_m_n_selection_evidence']['count'] == 0, ra)
+    code, res = node_validate(wd, a_['path'])
+    r3i = [x['id'] for x in ca['items'] + ca['components']].index('R003')
+    record('v41_a_writer004_rejects_null_c_research_draft_documented_divergence', code == 1 and res.get('code') == 'UNRESOLVED_ITEM_MUST_BE_HELD'
+           and res.get('message', '').endswith(f'items[{r3i}]'), res)
+    record('v41_a_port_relaxed_accepts_strict_rejects', port_code(copy.deepcopy(ca)) == 'PASS' and port_code(copy.deepcopy(ca), strict=True) == 'UNRESOLVED_ITEM_MUST_BE_HELD')
+    nc_ = copy.deepcopy(ca)
+    it(nc_, 'R003')['null_reasons'].pop('C')
+    record('v41_a_port_still_requires_null_reason_C', port_code(nc_) in ('STRING_REQUIRED', 'EXACT_KEYS_REQUIRED'), port_code(nc_))
+    nc_ = copy.deepcopy(ca)
+    it(nc_, 'C001')['null_reasons']['C'] = ' '
+    record('v41_a_port_rejects_blank_null_reason_C', port_code(nc_) == 'STRING_REQUIRED')
+    nc_ = copy.deepcopy(ca)
+    it(nc_, 'R003')['status'] = 'partial'
+    record('v41_a_port_still_rejects_other_status', port_code(nc_) == 'REVIEW_STATUS_REQUIRED')
+    p57 = work / 'v41_r57_neutralized_copy.json'
+    p57.write_text(json.dumps(placeholder_copy(ca), ensure_ascii=False), encoding='utf-8')
+    code, res = node_validate(wd, p57)
+    pcopy = json.loads(p57.read_text(encoding='utf-8'))
+    record('v41_a_writer004_accepts_neutralized_copy', code == 0 and res['status'] == 'WRITER_STRUCTURAL_VALIDATION_ONLY'
+           and it(pcopy, 'C001')['review_reasons'] == [R57_PLACEHOLDER] and it(pcopy, 'R003')['review_reasons'] == it(ca, 'R003')['review_reasons']
+           and it(pcopy, 'R003')['status'] == it(pcopy, 'C001')['status'] == 'held', res)
+    # (b) O16: Q under unverified (and partial) adoption
+    for tag, status_ in (('q', 'unverified'), ('q_partial', 'partial')):
+        b_ = v41[tag]
+        wq = next((w for w in b_['report']['warnings'] if w['code'] == 'O16_Q_UNVERIFIED_ADOPTION'), {})
+        record(f'v41_b_{tag}_warning_not_violation', wcodes(tag) == ['O16_Q_UNVERIFIED_ADOPTION'] and wq['detail']['count'] == 1
+               and wq['detail']['first'] == ['R006'] and wq['detail']['adoption_status'] == status_, b_['report']['warnings'])
+        cb = b_['carrier']
+        rb = b_['receipt']
+        record(f'v41_b_{tag}_carrier_and_receipt', cb is not None and it(cb, 'R006')['values'][16] == 50000
+               and it(cb, 'R006')['evidence']['Q']['raw_text'] == '50000' and cb['metadata']['source_adoption'] == status_
+               and rb['o16_q_unverified_adoption']['count'] == 1 and rb['o16_q_unverified_adoption']['adoption_status'] == status_
+               and rb['export_mode_required'] == 'v1' and rb['writer004_validateCarrier_accepts'] is True, rb)
+        code, res = node_validate(wd, b_['path'])
+        record(f'v41_b_{tag}_writer004_accepts_directly_no_adoption_check', code == 0 and res['status'] == 'WRITER_STRUCTURAL_VALIDATION_ONLY', res)
+        record(f'v41_b_{tag}_port_relaxed_and_strict_accept', port_code(copy.deepcopy(cb)) == 'PASS' and port_code(copy.deepcopy(cb), strict=True) == 'PASS')
+    code, out, _ = route('check', '--inventory', str(fx / 'fixture_inventory_verified.json'), '--response', str(fx / 'valid_response_verified_Q.json'))
+    record('v41_b_verified_adoption_Q_has_no_warning', code == 0 and json.loads(out)['warnings'] == [], json.loads(out)['warnings'])
+    # all relaxations together with the job inputs
+    al = v41['all']
+    record('v41_all_three_warnings', wcodes('all') == ['O13_SELECTION_EVIDENCE_M_N', 'R57_NULL_C_RESEARCH_DRAFT', 'O16_Q_UNVERIFIED_ADOPTION'], wcodes('all'))
+    code, res = node_validate(wd, al['path'])
+    record('v41_all_writer004_rejects_original', code == 1 and res.get('code') in ('SELECTION_ONLY_ENGINEERING_ID', 'UNRESOLVED_ITEM_MUST_BE_HELD'), res)
+    pal = work / 'v41_all_neutralized_copy.json'
+    pal.write_text(json.dumps(placeholder_copy(al['carrier']), ensure_ascii=False), encoding='utf-8')
+    code, res = node_validate(wd, pal)
+    record('v41_all_port_accepts_and_writer004_accepts_neutralized_copy', code == 0 and port_code(copy.deepcopy(al['carrier'])) == 'PASS'
+           and al['receipt']['export_mode_required'] == 'v2', res)
+    # (c) R56: a physical_enclosure group with exactly one member
+    g_ = v41['group1']
+    cg = g_['carrier']
+    members = [x['id'] for x in cg['items'] + cg['components'] if x['group_id'] == 'G1']
+    code, res = node_validate(wd, g_['path'])
+    record('v41_c_one_member_group_accepted', wcodes('group1') == [] and len(cg['groups']) == 1 and members == ['R001']
+           and json.loads(cg['groups'][0]['anchor'])['relationship'] == 'physical_enclosure'
+           and all(x['values'][0] is None and x['values'][1] is None for x in cg['items'] if x['id'] != 'R001')
+           and it(cg, 'R001')['values'][:2] == [cg['groups'][0]['name'], cg['groups'][0]['specification']]
+           and code == 0 and port_code(copy.deepcopy(cg)) == 'PASS' == port_code(copy.deepcopy(cg), strict=True), res)
 
     def jvariant(label, f):
         c = copy.deepcopy(jcarrier)
@@ -386,32 +481,104 @@ def main():
     jvariant('formula_C', lambda c: it(c, 'R002')['values'].__setitem__(2, '=a'))
     jvariant('ungrouped_ab', lambda c: it(c, 'R002').update(group_id=None))
     jvariant('view_zero', lambda c: it(c, 'R002')['location'].update(views=[0]))
+
+    # v4.1 relaxation variants: C null research_draft (R57) and Q under unverified adoption (O16), on both base carriers
+    def null_c(c, i, reason='Service or labour line: C is null (R52).', reasons=None):
+        r = it(c, i)
+        r['values'][2] = None
+        r['evidence'].pop('C', None)
+        if reason is not None:
+            r['null_reasons']['C'] = reason
+        r['status'] = 'research_draft'
+        if reasons is not None:
+            r['review_reasons'] = reasons
+    def q_on(c, i='R006', value=50000, raw_text='50000', adoption=None):
+        r = it(c, i)
+        r['values'][16] = value
+        r['null_reasons'].pop('Q', None)
+        r['evidence']['Q'] = dict(r['evidence']['F'], raw_text=raw_text)
+        if adoption is not None:
+            c['metadata']['source_adoption'] = adoption
+    for tag, base_c in (('r57', carrier), ('jobs_r57', jcarrier)):
+        def rv(label, f, base_c=base_c, tag=tag):
+            c = copy.deepcopy(base_c)
+            f(c)
+            fuzz.append((f'{tag}:{label}', c))
+        rv('R007_research_draft_with_reasons', lambda c: it(c, 'R007').update(status='research_draft'))
+        rv('R007_research_draft_no_reasons', lambda c: it(c, 'R007').update(status='research_draft', review_reasons=[]))
+        rv('C001_null_c_no_reasons', lambda c: null_c(c, 'C001', reasons=[]))
+        rv('R003_null_c_with_reason', lambda c: null_c(c, 'R003', reasons=['kept for review']))
+        rv('two_null_c', lambda c: (null_c(c, 'R003', reasons=[]), null_c(c, 'C002', reasons=[])))
+        rv('null_c_missing_null_reason', lambda c: null_c(c, 'R003', reason=None, reasons=[]))
+        rv('null_c_blank_null_reason', lambda c: null_c(c, 'C001', reason='\u3000', reasons=[]))
+        rv('null_c_held_reasons_empty', lambda c: (null_c(c, 'R003', reasons=[]), it(c, 'R003').update(status='held')))
+        rv('null_c_status_partial', lambda c: (null_c(c, 'R003'), it(c, 'R003').update(status='partial')))
+        rv('null_c_reasons_not_list', lambda c: null_c(c, 'C001', reasons='x'))
+        rv('null_c_then_qty_mismatch', lambda c: (null_c(c, 'R003', reasons=[]), it(c, 'R003')['raw'].update(quantity='+4')))
+        rv('null_c_then_formula_D', lambda c: (null_c(c, 'R004', reasons=[]), it(c, 'R004')['values'].__setitem__(3, '-x'),
+                                              it(c, 'R004')['null_reasons'].pop('D', None), it(c, 'R004')['evidence'].update(D=dict(it(c, 'R004')['evidence']['F'], raw_text='-x'))))
+        rv('null_c_then_review_cell_long', lambda c: (null_c(c, 'R003', reasons=['r' * 30000, 'r' * 3000])))
+        rv('null_c_and_q', lambda c: (null_c(c, 'R003', reasons=[]), q_on(c)))
+    for tag, base_c in (('q', carrier), ('jobs_q', jcarrier)):
+        def qv(label, f, base_c=base_c, tag=tag):
+            c = copy.deepcopy(base_c)
+            f(c)
+            fuzz.append((f'{tag}:{label}', c))
+        qv('unverified', lambda c: q_on(c, adoption='unverified'))
+        qv('partial', lambda c: q_on(c, adoption='partial'))
+        qv('adoption_key_missing', lambda c: (q_on(c), c['metadata'].pop('source_adoption')))
+        qv('value_mismatch', lambda c: q_on(c, value=50001))
+        qv('raw_mismatch', lambda c: q_on(c, value=50001, raw_text='50001'))
+        qv('unicode_raw', lambda c: q_on(c, raw_text='５0000'))
+        qv('as_text', lambda c: q_on(c, value='50000'))
+        qv('q_R002_decimal', lambda c: q_on(c, 'R002', value=120.5, raw_text='120.5'))
+    for tag in ('r57', 'q', 'q_partial', 'all', 'group1'):
+        if v41[tag]['carrier'] is not None:
+            fuzz.append((f'convert:{tag}', copy.deepcopy(v41[tag]['carrier'])))
     for label, c in list(fuzz):
-        if label.startswith('jobs:'):
-            fuzz.append((label + ':placeholder_copy', placeholder_copy(c)))
+        if has_mn_selection(c) or has_r57(c):
+            fuzz.append((label + ':neutralized_copy', placeholder_copy(c)))
 
     fp = work / 'parity_carriers.json'
     fp.write_text(json.dumps([c for _, c in fuzz], ensure_ascii=False), encoding='utf-8')
     pcode, pout, perr = run(['node', str(HERE / 'parity_batch.mjs'), str((wd / 'writer004.mjs').resolve()), str(fp.resolve())])
-    node_codes = json.loads(pout) if pcode == 0 else []
-    mism, allowed = [], []
-    for (label, c), nc in zip(fuzz, node_codes):
-        pc = port_code(c)
-        if pc != nc:
-            # the only permitted divergence: O13 M/N selection evidence that writer004 rejects (it allows L only)
-            if has_mn_selection(c) and nc == 'SELECTION_ONLY_ENGINEERING_ID':
-                allowed.append({'case': label, 'python': pc, 'node': nc})
-            else:
-                mism.append({'case': label, 'python': pc, 'node': nc, 'has_mn_selection': has_mn_selection(c)})
-    no_mn = [lab for lab, c in fuzz if not has_mn_selection(c)]
-    record('writer_port_parity_fuzz', pcode == 0 and len(node_codes) == len(fuzz) and not mism,
-           {'cases': len(fuzz), 'cases_without_mn_selection': len(no_mn), 'node_pass': sum(x == 'PASS' for x in node_codes),
-            'mismatches': mism[:10], 'stderr': perr[-300:]})
-    record('writer_port_parity_only_divergence_is_O13', pcode == 0 and allowed and not mism
-           and all(has_mn_selection(c) for lab, c in fuzz if lab in {a['case'] for a in allowed})
-           and {a['case'] for a in allowed} >= {'jobs:unchanged', 'jobs:component_only_MN'},
-           {'allowed_divergences': len(allowed), 'labels': [a['case'] for a in allowed]})
-    record('valid_carrier_port_pass', route_mod.validate_carrier_port(carrier) is True)
+    node_res = json.loads(pout) if pcode == 0 else []
+    strict_mism, unclassified, classified, q_cases, q_div = [], [], [], [], []
+    for (label, c), nr in zip(fuzz, node_res):
+        nc, nloc = nr['code'], nr['location']
+        ps, pr = port_code(c, strict=True), port_code(c)
+        if ps != nc:
+            strict_mism.append({'case': label, 'python_strict': ps, 'node': nc, 'location': nloc})
+        if has_q_unverified(c):
+            q_cases.append(label)
+            if not has_mn_selection(c) and not has_r57(c) and pr != nc:
+                q_div.append({'case': label, 'python': pr, 'node': nc})
+        if pr != nc:
+            cls = classify_divergence(c, nc, nloc)
+            (classified if cls else unclassified).append({'case': label, 'class': cls, 'python': pr, 'node': nc, 'location': nloc})
+    ran = pcode == 0 and len(node_res) == len(fuzz)
+    record('writer_port_strict_equals_writer004_on_every_carrier', ran and not strict_mism,
+           {'cases': len(fuzz), 'mismatches': strict_mism[:10], 'stderr': perr[-300:]})
+    record('writer_port_parity_fuzz_every_divergence_classified', ran and not unclassified,
+           {'cases': len(fuzz), 'node_pass': sum(x['code'] == 'PASS' for x in node_res), 'unclassified': unclassified[:10]})
+    classes = {d['class'] for d in classified}
+    record('writer_port_parity_divergence_classes_documented_and_exercised', ran and classes == {'o13_m_n_selection_evidence', 'r57_null_c_research_draft'}
+           and {d['case'] for d in classified} >= {'jobs:unchanged', 'jobs:component_only_MN', 'r57:R007_research_draft_no_reasons',
+                                                    'r57:C001_null_c_no_reasons', 'convert:r57', 'convert:all'}
+           and all(has_mn_selection(c) or has_r57(c) for lab, c in fuzz if lab in {d['case'] for d in classified}),
+           {'classified': len(classified), 'by_class': {k: sum(d['class'] == k for d in classified) for k in classes}})
+    record('writer_port_parity_q_unverified_class_has_no_divergence', ran and len(q_cases) >= 10 and not q_div,
+           {'q_cases': len(q_cases), 'divergences': q_div[:5]})
+    # completeness of the documented neutralization: whatever the relaxed port accepts, writer004 accepts after neutralization
+    accepted = [(lab, c) for lab, c in fuzz if port_code(c) == 'PASS' and (has_mn_selection(c) or has_r57(c))]
+    np_ = work / 'parity_neutralized.json'
+    np_.write_text(json.dumps([placeholder_copy(c) for _, c in accepted], ensure_ascii=False), encoding='utf-8')
+    ncode, nout, nerr = run(['node', str(HERE / 'parity_batch.mjs'), str((wd / 'writer004.mjs').resolve()), str(np_.resolve())])
+    nres = json.loads(nout) if ncode == 0 else []
+    bad_n = [{'case': lab, 'node_on_copy': r['code'], 'location': r['location']} for (lab, _), r in zip(accepted, nres) if r['code'] != 'PASS']
+    record('writer_port_relaxed_accept_implies_writer004_accepts_neutralized_copy', ncode == 0 and len(nres) == len(accepted) >= 8 and not bad_n,
+           {'accepted_relaxed': len(accepted), 'failures': bad_n[:5], 'stderr': nerr[-300:]})
+    record('valid_carrier_port_pass', route_mod.validate_carrier_port(carrier) is True and route_mod.validate_carrier_port(carrier, strict=True) is True)
 
     # package example (046f, R48-R58): check-inventory, check, convert, writer004 on the placeholder copy
     code, out, _ = route('check-inventory', '--inventory', str(EXAMPLE_INV))
@@ -422,14 +589,29 @@ def main():
     code, out, _ = route('check', '--inventory', str(EXAMPLE_INV), '--response', str(EXAMPLE_RESP))
     exrep = json.loads(out)
     record('example_response_check_pass', code == 0 and exrep['status'] == 'PASS', exrep['violations'][:5])
+    record('example_uses_all_three_v41_relaxations_as_warnings', [w['code'] for w in exrep.get('warnings', [])]
+           == ['O13_SELECTION_EVIDENCE_M_N', 'R57_NULL_C_RESEARCH_DRAFT', 'O16_Q_UNVERIFIED_ADOPTION']
+           and exinv['source']['adoption_status'] == 'unverified', exrep.get('warnings'))
     code, out, _ = route('convert', '--inventory', str(EXAMPLE_INV), '--response', str(EXAMPLE_RESP), '--out-dir', str(work / 'example_out'))
     ok = code == 0
+    exc = None
     if ok:
         exc = json.loads((work / 'example_out' / 'carrier.json').read_text(encoding='utf-8'))
         (work / 'example_placeholder_carrier.json').write_text(json.dumps(placeholder_copy(exc), ensure_ascii=False), encoding='utf-8')
         c1, r1x = node_validate(wd, work / 'example_placeholder_carrier.json')
-        ok = c1 == 0 and route_mod.validate_carrier_port(exc) is True
+        c0, r0x = node_validate(wd, work / 'example_out' / 'carrier.json')
+        ok = c1 == 0 and route_mod.validate_carrier_port(exc) is True and c0 == 1 and port_code(copy.deepcopy(exc), strict=True) == r0x.get('code')
     record('example_convert_port_and_writer004_placeholder_pass', ok)
+    if exc is not None:         # R56: the enclosure row is the only member of a one-row physical_enclosure group
+        exresp = json.loads(EXAMPLE_RESP.read_text(encoding='utf-8'))
+        ab = [x['id'] for x in exc['items'] + exc['components'] if x['values'][0] is not None or x['values'][1] is not None]
+        grp = exresp['groups']
+        record('example_R56_one_row_physical_enclosure_group', len(grp) == 1 and grp[0]['relationship'] == 'physical_enclosure'
+               and [x['id'] for x in exc['items'] if x['group_id'] == grp[0]['id']] == ab and len(ab) == 1
+               and all(x['group_id'] is None for x in exc['items'] if x['id'] not in ab), {'ab_rows': ab})
+        null_c = [x for x in exc['items'] if x['values'][2] is None]
+        record('example_null_C_rows_are_research_draft', null_c and all(x['status'] == 'research_draft' and x['null_reasons'].get('C') for x in null_c),
+               [x['id'] for x in null_c])
     try:                        # optional: JSON-schema validation of the example (jsonschema is not stdlib)
         import jsonschema
     except ImportError:
