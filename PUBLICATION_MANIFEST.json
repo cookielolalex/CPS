@@ -19,8 +19,8 @@
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 8012,
-      "sha256": "5363b2d37e50b9541cbabbca7030a6518433dbe3990ab9f78be6f1eb46f54ea0"
+      "bytes": 8265,
+      "sha256": "562442f2b6bec8b9e875c56a1c35269657e00e395ce9d803cb95c24928472783"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1349,8 +1349,8 @@
     },
     {
       "path": "research/guideline046_006/package/resources/FIELD_ROLES.md",
-      "bytes": 43446,
-      "sha256": "f6da08ceb61dd68500a4c70dbffb94d01dc65eb5fd5b8d02c5a4d5ed84b5559e"
+      "bytes": 45275,
+      "sha256": "80f0009b6aeeba26db9b24422c7da358326183346b1c5ff22233e76e899a2bfb"
     },
     {
       "path": "research/guideline046_006/package/resources/NAME_POLICY.json",
