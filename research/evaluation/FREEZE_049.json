@@ -1,0 +1,26 @@
+{
+ "schema": "cps.evaluator-freeze.v1",
+ "frozen_utc": "2026-11-05T05:31:25.132434+00:00",
+ "evaluator": {
+  "path": "research/evaluation/compare_target049.py",
+  "sha256": "b600c04619c943ec78f577c4a681df3cc3d035638fab36f9be3f946eea5904c9",
+  "output_schema": "cps.target-comparison049.v1"
+ },
+ "tests": {
+  "path": "research/evaluation/tests/test_compare_target049.py",
+  "sha256": "6133b9792cb4935777eba255acc49dfd80afc3349926cfd1f3b985e547b6cee6",
+  "result": "36/36 (author and delta reviewer)"
+ },
+ "governs": "qualification under owner decision O23; v2 compare_target048.py (sha256 98a30acfaf6b10ede3e81a55a721741f2c7ac701925ce052bfc4ced1f7af73d6) stays frozen, is reported beside v3, and governs every result recorded before this freeze",
+ "reviews": [
+  "round 1: APPROVE_AFTER_LISTED_FIXES (B1-B3, S1-S5)",
+  "delta: APPROVE_AFTER_LISTED_FIXES, document-only fixes F1-F4 (applied); code approved at this sha256"
+ ],
+ "decisions": [
+  "O19",
+  "O23",
+  "O24"
+ ],
+ "reading": "a case matches at governing normalized score >= 0.95; description_cd reported against 0.75, not gating (O24)",
+ "pending_at_freeze": "S4: the 046f harness README, EVALUATOR_BRIEF_TEMPLATE, CPS_GUIDELINE and REVIEW_CHECKLIST still name v2; they are byte-pinned by the frozen 046f admission and are updated only in the next candidate/harness version, before any qualification admission"
+}

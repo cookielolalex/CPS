@@ -9,3 +9,28 @@ The owner chose these through the session's question tool. The question texts ar
 | O25 | If fewer than 20 independent non-reserved pairs remain, how should the 30 pairs be reached? | "Use more reserved (Recommended)" | The bar stays at 30 independently eligible pairs, at least 10 of them reserved. A shortfall in non-reserved pairs is filled from the reserved 113–115 cases. Reserved answers stay closed until all outputs are frozen, and each reserved case used is spent. Independence rules apply to reserved cases as well. |
 
 These decisions do not reopen frozen candidates, outputs or scores.
+
+## Addendum (2026-11-05, after the v3 delta review; the table above is kept as written)
+
+The O23 cell says the stricter key "only removes fills". That is wrong. The revision also replaced equal-count positional pairing with an order-preserving maximum matching inside each gap. On some inputs that adds fills compared with the first proposal: reviewer fixture C8c rises from 0.024 to 0.954, and C10a from 0.717 to 0.896. Both versions were reviewed, and the matching is what the review asked for, so the change is still within "if review OK". The delta review approved the revised code. It is frozen at sha256 `b600c046…` (`research/evaluation/FREEZE_049.json`).
+
+## O26 (2026-11-05): the qualification pool short of 30
+
+**Question.** After the family-independence review, the counts were:
+- 14 independent non-reserved candidates in 113–115 (7 without the large-workbook method);
+- 14 independent reserved candidates in 113–115.
+
+That totals 28 of 30, before any reserved target is found to be old-template. Year 112 has 30 unexposed non-reserved cases, not yet screened.
+
+**Owner answer:** "Accept borderline cases".
+
+**Effect.** Two borderline independence cases are counted:
+- the non-reserved case whose only overlap with an exposed case comes from a shared designer specification library, containment 0.646 (1150202);
+- the reserved case with a weak project-series tie to exposed cases (listing only; not named in public).
+
+The pool is exactly 30: 15 non-reserved and 15 reserved, with no margin. Year 112 stays outside (O22).
+
+**Consequences.**
+- Any pair that turns out ineligible leaves the bar unreachable from this pool, and that goes back to the owner. This includes a reserved target found to be old-template once opened after all outputs are frozen.
+- The pool is not refilled by choosing replacements after the answers are seen. The single pre-declared alternate for the one reserved duplicate-family pair is recorded privately before generation.
+

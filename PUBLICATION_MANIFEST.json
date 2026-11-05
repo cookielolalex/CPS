@@ -1504,18 +1504,23 @@
     },
     {
       "path": "research/evaluation/PROPOSAL_049.md",
-      "bytes": 5655,
-      "sha256": "13e5564eb15a0458ec79f65f245802d4c3353d9146aabfad01700451f59731cd"
+      "bytes": 8105,
+      "sha256": "3e3ddd357b328318c6dd1d0393111d0c3e7ea10dec2830b837896b3f46cf11d2"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O23_O25.md",
-      "bytes": 2190,
-      "sha256": "e26d08260db09ddfc30daf3ff6770f344530bde8e4e502f917587db44baf09b5"
+      "bytes": 4160,
+      "sha256": "0873509797d6bebd3c8b30aa0e09bf0d68d9e2e8025a4db1c78049d7a908b98a"
     },
     {
       "path": "research/export/tests/make_tamper_fixtures.py",
       "bytes": 13748,
       "sha256": "3464bbfd2b4efcc10fafa6327b7e7f500c8ae4e558387ee004c8edc4859ab541"
+    },
+    {
+      "path": "research/evaluation/FREEZE_049.json",
+      "bytes": 1371,
+      "sha256": "cb18bfcabc41e4f180a6d299721b640b966e785a08577d622500a1f9cd7d0f4e"
     }
   ]
 }
