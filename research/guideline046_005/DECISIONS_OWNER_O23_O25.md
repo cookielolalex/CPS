@@ -80,3 +80,12 @@ All 3 files from March–May 115 put each panel's A/B on every row of its group.
 - The exact group-membership rule is derived from the three window files in an evaluation-role study, then reviewed. Like every R56 change, it goes into a candidate before generation.
 
 **Exposure note.** Rolling-validation case 1150107 was read for this decision (its A/B columns and row count only). From here on it counts as tuning-informed.
+
+## O33–O34 (2026-11-05): deliverable naming and the G/H shading
+
+The owner reviewed sample CPS outputs and asked for these two changes.
+
+| ID | Owner instruction | Effect |
+|---|---|---|
+| O33 | "the CPS sheet should be named project code and project name followed by 未填, not 未填研究草稿". Asked which form, the owner answered "decide from evidence". Asked whether the file should be named like the creator's, the owner answered "Yes, like hers (Recommended)". | **Evidence.** All 65 non-reserved 未填 file titles in the listing end in `(未填)`. Of 61 with a registry folder title, the folder title with the dash after the customer short name removed, plus `(未填)`, reproduces 36. The folder title as written, plus `(未填)`, reproduces 30. **Rule.** The deliverable name is the project folder title (case id + customer short name + project, as a per-job input like L/M/N under O13), with the first dash after the customer short name removed, followed by `(未填)`. The file is `<name>.xlsx`, with characters Windows forbids replaced by `-`. The main sheet is `<name>`, with the characters Excel forbids (`: \ / ? * [ ]`) replaced by `-` and the text cut to 31 characters while keeping `(未填)`. Writer v2.6. |
+| O34 | "why is the 單價 and 復價 column greyout? make sure its not greyed out." | G and H (單價, 複價) are no longer shaded. They look like the other body columns and stay blank, as in the creator's 未填. The visual-QA checklist item for G/H changes to match. Writer v2.6. |
