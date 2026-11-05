@@ -14,13 +14,13 @@
     },
     {
       "path": "AGENTS.md",
-      "bytes": 6753,
-      "sha256": "4de78e632972cfbecf28ec0af1f99ffe5a72a8076752bdccf29449b1924014f4"
+      "bytes": 6891,
+      "sha256": "20eeb228bb02e1c153aad9d1020d3b5d4b839778c6f7d7e7d6d1a1de84f7063c"
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 10966,
-      "sha256": "6cf312b71859a193a1e014f1c4802b1fe4094966fd39f6670e5cfdc39ce72f19"
+      "bytes": 11323,
+      "sha256": "80116ad5a4f7ba0ac6a466884d36381d92693e11c95bb77f60b850b76c8a10bf"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1209,8 +1209,8 @@
     },
     {
       "path": "research/export/README.md",
-      "bytes": 57410,
-      "sha256": "3f36ab54025d9f70156a2d836ce3b03754d23256e2150a41f9b546371bde033b"
+      "bytes": 59100,
+      "sha256": "2b4511cee3a1faf2dd27b051ba1bc0459f8765f4b783377b7bd464bdf53992c8"
     },
     {
       "path": "research/export/saved_qa.py",
@@ -1509,8 +1509,8 @@
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O23_O25.md",
-      "bytes": 6448,
-      "sha256": "b0831efbd003245c56685f43b944aa3585a9b7fc27c425238e2ea99ca658a667"
+      "bytes": 8063,
+      "sha256": "f53fd6157524acb1683294392169a455814e01656cb58b60d62471d599001c9a"
     },
     {
       "path": "research/export/tests/make_tamper_fixtures.py",

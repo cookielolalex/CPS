@@ -62,13 +62,9 @@
  "fixed_deployment_bar": {
   "independently_eligible_revision_compatible_pairs": 30,
   "reserved_pairs_minimum": 10,
-  "source_core_percent_minimum": 99,
   "applies_per": [
-   "case",
-   "applicable detail stratum",
-   "applicable component stratum",
-   "claimed layout",
-   "overall"
+   "pooled over the 30 pairs (>=0.95)",
+   "each case (>=0.90)"
   ],
   "required": [
    "complete raw records",
@@ -80,7 +76,15 @@
    "assembly repeatability",
    "saved 17-column workbook QA",
    "visual QA"
-  ]
+  ],
+  "history": "source_core_percent_minimum 99 per case/stratum/layout/overall was replaced by O12 (95% historical match) and O31 (2026-11-05)",
+  "historical_match": {
+   "evaluator": "research/evaluation/compare_target049.py (v3, frozen b600c046, O23)",
+   "pooled_minimum": 0.95,
+   "per_case_floor": 0.9,
+   "applies": "per reader, over the 30 qualification pairs (O31)",
+   "description_cd": "reported against 0.75, not gating (O24)"
+  }
  },
  "next_after_explicit_resume": {
   "step": "Historical-match evaluator (prospective metric) and creator-practice study on tuning targets (另案, owner-supplied panels); diagnostic historical match of frozen batch-1 outputs; portable writer review; batch-2 expectation updates (interrupted by usage limit; partial work saved)",
