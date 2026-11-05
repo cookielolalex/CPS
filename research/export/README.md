@@ -508,7 +508,12 @@ What the tests prove:
   - Visual helpers: printed gridlines are added only to sheets that show them; `possibly_cut_cells` lists the 16,000-character cells of the titled `v05_long_text` deliverable and nothing in its internal workbook (whose cells wrap), and `possibly_clipped_cells` checks no deliverable cell.
   - With visual tests, (d) also renders two deliverables: one sheet, printed gridlines, at least 1,000 `#C0C0C0` pixels and at most 50 `#29445D` pixels per page, and for `v05_long_text` at least two `possibly_cut_cells`. The L05 tamper is rendered as a control: at least 1,000 `#29445D` pixels.
 
-Latest run (2026-11-05, writer v2.6 engineer's run for owner decisions O33–O34, not a review). Each suite ran from a fresh work directory:
+Latest run (2026-11-05, writer v2.7 engineer's run for owner decision O38, not a review). Each suite ran from a fresh work directory, with writer_portable.py `7a82da6f…b556` (`cps-export-writer-portable.v2.7`), saved_qa.py `ef5882de…c0c8` (`cps-export-saved-qa.v6`), visual_qa.py `f71abb5c…0cef` (`cps-export-visual-qa.v4`) and tests/make_tamper_fixtures.py `58fd8af3…65bf`:
+
+- **With visual tests,** against the archived writer004 original: 569 of 569 passed, in 546 s. A first run had 567 of 569: two test-side errors, fixed in the fixtures and expectations. K12's consistent re-titling did not update the deliverable's `bytes` in the receipt, which v6 compares. L14's provenance failure is a `receipt_claim_mismatch`, not a byte difference.
+- **Without visual tests,** against the public copy `deploy/writer_route/writer`: 549 of 549 passed.
+
+Before v2.7: 2026-11-05, writer v2.6 engineer's run for owner decisions O33–O34, not a review. Each suite ran from a fresh work directory:
 
 - **With visual tests,** against the archived writer004 original: 529 of 529 passed (17 visual), in 516 s.
 - **Without visual tests,** against the second reviewer's public-copy writer directory (`writer_review2/pubroute/writer`): 512 of 512 passed, in 413 s.
