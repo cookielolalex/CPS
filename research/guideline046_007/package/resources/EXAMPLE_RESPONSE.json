@@ -56,7 +56,7 @@
       "cell:S1!B4"
      ],
      "transformation": "the line's own enclosure noun phrase: prefix 產品 and category segment 箱體 dropped; first segment naming a box, 甲-1 控制盤, cut after its enclosure word 盤; the tag 甲-1 is kept",
-     "role_basis": "enclosure row; its section heading 機電工程 (B3) names work, not a panel, so A comes from the line (R56, O30)"
+     "role_basis": "enclosure row; its section heading 機電工程 (B3) names no panel (without the work word 工程 its panel name 機電 holds no box noun), so A comes from the line (R56, O30)"
     },
     "B": {
      "refs": [
@@ -1866,12 +1866,12 @@
   }
  ],
  "limitations": [
-  "Invented example for candidate 046f (R47b-R58, route v4.2), revised for 046g (R56 under O30: A keeps the line's tag). No real material list, contract, customer, company or resource; the glossary is an invented placeholder.",
+  "Invented example for candidate 046f (R47b-R58, route v4.2), revised for 046g (R47b-R59, route v4.3; R56 under O30 and the round-1 review: A keeps the line's tag, and the work heading 機電工程 names no panel). No real material list, contract, customer, company or resource; the glossary is an invented placeholder.",
   "Source: the company material list (材料清單), the bound job source (R47b, O17). The contract is not packed for the generator, and the packet has no brand table: I and J come only from the material list's cells (R55, O17), so R002, R006 and R009 leave them null.",
   "Quoted range: rows 4-19 of 材料清單, ending at row 20 (合計 in the unit-price column E20). The 合計 in B16 is a block total in the description column (R49).",
   "Totals observed, not repaired (R10): the block total F16 = 104800 equals the amounts of rows 4-13; the end total F20 = 108200 adds F18 and F19.",
   "G1 is the one-row physical_enclosure carrier group of the R56 enclosure row R001.",
-  "R005, R007, R008, R010 and R011 have C null under R52 and stay research_draft (R57; route v4.2 warns R57_NULL_C_RESEARCH_DRAFT, and the export needs the portable writer mode v2).",
-  "Q is filled although source adoption is unverified (R54, O16; route v4.2 warns O16_Q_UNVERIFIED_ADOPTION). It is the quoted unit price, not evidence of an accepted contract rate."
+  "R005, R007, R008, R010 and R011 have C null under R52 and stay research_draft (R57; route v4.3, like v4.2, warns R57_NULL_C_RESEARCH_DRAFT, and the export needs the portable writer mode v2).",
+  "Q is filled although source adoption is unverified (R54, O16; route v4.3, like v4.2, warns O16_Q_UNVERIFIED_ADOPTION). It is the quoted unit price, not evidence of an accepted contract rate."
  ]
 }

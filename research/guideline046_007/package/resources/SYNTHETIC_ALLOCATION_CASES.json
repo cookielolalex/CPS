@@ -6,7 +6,7 @@
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e allocation examples (cps.allocation-examples.draft.v1, R1-R47)",
- "rules": "FIELD_ROLES R47b-R59 (candidate 046g, route v4.3; R56 revised under O30)",
+ "rules": "FIELD_ROLES R47b-R59 (candidate 046g, route v4.3; R56 revised under O30 and after the round-1 review)",
  "resources": {
   "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
   "context:glossary": {
@@ -62,9 +62,9 @@
   "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
   "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2).",
   "Scoped packets (A35-A37): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet.",
-  "Enclosure rows (R56; A18, A19, A21, A31-A33, A38-A46): unless a case gives a section heading or analysis-block title, the line is not under one that names a panel, so A comes from the line. Each enclosure row is carried by its own one-row physical_enclosure group whose name and specification equal A and B; no other row carries A or B (O30)."
+  "Enclosure rows (R56; A18, A19, A21, A31-A33, A38-A48): unless a case gives a section heading or analysis-block title, the line is not under one that names a panel, so A comes from the line. Dimensions without a unit are millimetres. Each enclosure row is carried by its own one-row physical_enclosure group whose name and specification equal A and B; no other row carries A or B (O30)."
  ],
- "case_count": 46,
+ "case_count": 48,
  "cases": [
   {
    "id": "A01",
@@ -603,7 +603,7 @@
      ]
     }
    },
-   "reason": "The heading 機電工程 names work, not a panel (it contains no enclosure word), so A is the line's own enclosure noun phrase: the prefix 產品 and the category segment 箱體 are dropped, and the first segment naming a box, 甲-1 控制盤, is cut after its enclosure word. The tag 甲-1 is kept (046f dropped it). B is built from the W/H/D-labelled dimensions in the description. C is the glossary's generic enclosure word. D is what remains after the prefix, the category segment, the text A took from the line and the dimensions, each with its delimiter (SUS304 and 髮絲面 are not rating tokens, so the comma stays). I is null. The brand cell is empty, so J is the company name."
+   "reason": "Without its item label 壹、 and the trailing work word 工程, the heading's panel name is 機電, which holds no box noun, so the heading names no panel and A is the line's own enclosure noun phrase. The prefix 產品 and the glossary's enclosure word 箱體 (箱 followed by 體, so it names no box) are dropped, and the first segment naming a box, 甲-1 控制盤, is cut after the enclosure word that ends its box noun. The tag 甲-1 is kept (046f dropped it). B is built from the W/H/D-labelled dimensions in the description; they have no unit, so they are millimetres. C is the glossary's generic enclosure word. D is what remains after the prefix, the category segment, the text A took from the line and the dimensions, each with its delimiter (SUS304 and 髮絲面 are not rating tokens, so the comma stays). I is null. The brand cell is empty, so J is the company name."
   },
   {
    "id": "A19",
@@ -655,7 +655,7 @@
      }
     ]
    },
-   "reason": "The heading 三、電錶箱 names a panel: without its item label 三、 its panel name 電錶箱 contains the enclosure word 箱. Line 1 is the first enclosure row in its scope, so A is that panel name, cited from the heading cell. No dimensions are stated, so B is null with a reason. D drops the prefix and the category segment 箱體 (A took nothing from the line). Line 2 is a device listed with the panel: A and B stay on the enclosure row only (O30), and no group is formed for the section. 電度表 is a single segment the glossary does not list, so it goes to D (R52)."
+   "reason": "The heading 三、電錶箱 names a panel: without its item label 三、 its panel name 電錶箱 holds exactly one box noun and ends with it. Line 1 is the only enclosure row in its scope and holds no box noun of its own, so it is not a subsidiary box: A is the panel name, cited from the heading cell (the tag exception does not apply, since the row's own line has no box noun). No dimensions are stated, so B is null with a reason. D drops the prefix and the category segment 箱體 (A took nothing from the line). Line 2 is a device listed with the panel: A and B stay on the enclosure row only (O30), and no group is formed for the section. 電度表 is a single segment the glossary does not list, so it goes to D (R52)."
   },
   {
    "id": "A20",
@@ -1369,7 +1369,7 @@
      }
     ]
    },
-   "reason": "Without its item label the heading's panel name 甲-1 PANEL contains the enclosure word PANEL, so the heading names a panel. Line 1 is the first enclosure row in its scope, so A is the panel name, cited from the heading cell. B comes from the W/H/D-labelled dimensions in the line's own description. D drops the prefix, the category segment 箱體 and the dimensions; A took nothing from the line. Line 2 is a device of the same panel: A and B stay on the enclosure row only (O30)."
+   "reason": "Without its item label the heading's panel name 甲-1 PANEL holds exactly one box noun and ends with it, so the heading names a panel. Line 1 is the first enclosure row in its scope and holds no box noun, so it is not a subsidiary box: A is the panel name, cited from the heading cell. B comes from the W/H/D-labelled dimensions in the line's own description (no unit, so millimetres). D drops the prefix, the category segment 箱體 and the dimensions; A took nothing from the line. Line 2 is a device of the same panel: A and B stay on the enclosure row only (O30)."
   },
   {
    "id": "A39",
@@ -1426,7 +1426,7 @@
     ],
     "groups": "two one-row physical_enclosure groups, one per enclosure row"
    },
-   "reason": "The panel name drops the item label [1] and the leading category segment 低壓配電盤 (a panel type followed by a segment with an enclosure word) and keeps the site in brackets. Line 1 is the first enclosure row in the heading's scope, so A is the panel name; A did not come from the line, so the line's own noun 低壓配電盤 stays in D. Line 2 is a later enclosure row in the same scope, so A is its own noun phrase: the first segment naming a box is cut after 箱 and keeps the qualifier 雙層式 (never reduced to 電表箱). Each enclosure has its own row, group, A and B."
+   "reason": "The panel name drops the item label [1] and the leading category segment 低壓配電盤 (a panel type followed by a segment that names a box) and keeps the site in its one bracket: 乙 PANEL (丙站) holds one box noun followed only by a bracketed qualifier, so the heading names a panel. Line 1's box noun 低壓配電盤 is not a subsidiary box, so line 1 is the first enclosure row in the scope that is not one, and A is the panel name; it has the tag 乙, so the tag exception does not apply. A did not come from the line, so the line's own noun 低壓配電盤 stays in D. Line 2's box noun 雙層式電表箱 contains 電表, a subsidiary box, so it takes A from its own line: the first segment naming a box is cut after 箱 and keeps the qualifier 雙層式 (never reduced to 電表箱). Each enclosure has its own row, group, A and B."
   },
   {
    "id": "A40",
@@ -1452,7 +1452,7 @@
     "D": "控制盤，2.0t",
     "Q": 42000
    },
-   "reason": "The panel name drops the item label <3> and the trailing 設備; 丁2盤 contains 盤. The line is the first enclosure row under the heading, so A = 丁2盤 and the line's noun 控制盤 stays in D. B has no unit and no thickness: 2.0t stays in D, and the comma before it stays because 控制盤 is not rating-like (R53)."
+   "reason": "The panel name drops the item label <3> and the trailing 設備; 丁2盤 holds one box noun and ends with it, and it carries the tag 丁2. The line is the first enclosure row under the heading and 控制盤 is not a subsidiary box, so A = 丁2盤 and the line's noun 控制盤 stays in D. B has no unit (millimetres) and no thickness: 2.0t is a separate segment that stays in D, and the comma before it stays because 控制盤 is not rating-like (R53)."
   },
   {
    "id": "A41",
@@ -1535,7 +1535,7 @@
      "block 合計 row": "financial_summary"
     }
    },
-   "reason": "The components are the rows (R51). The block title's last segment 戊 PNL contains the enclosure word PNL, so the title names a panel and 戊 PNL is its panel name. The first enclosure row among the block's component rows takes A = 戊 PNL, cited from the title cell; its D drops the category segment 箱體 and the dimensions. The breaker and the labour line belong to the same panel but carry no A or B (O30)."
+   "reason": "The components are the rows (R51). Component rows are in no section heading's scope; only the block title counts. The title's last segment 戊 PNL holds one box noun and ends with it, so the title names a panel and 戊 PNL is its panel name. The enclosure component row is an enclosure row (R51, R56) and the first one among the block's component rows, so it takes A = 戊 PNL, cited from the title cell; its D drops the category segment 箱體 and the dimensions. The breaker and the labour line belong to the same panel but carry no A or B (O30)."
   },
   {
    "id": "A42",
@@ -1556,7 +1556,7 @@
     "D": null,
     "Q": 52000
    },
-   "reason": "The work heading contains no enclosure word, so it names no panel and A comes from the line. 低壓配電盤 ends in an enclosure word and is joined by a hyphen to the box's own name, so it is dropped with the hyphen; A is 丁盤, tag kept. Once the dropped word, the text A took and the dimensions are removed, nothing remains, so D is null with a reason."
+   "reason": "Without its item label and the trailing work word 工程, the heading's panel name 甲站機電 holds no box noun, so it names no panel and A comes from the line. 低壓配電盤 ends in an enclosure word and is joined by a hyphen to the following box noun 丁盤, so it is dropped with the hyphen; A is 丁盤, tag kept. The dimensions have no unit, so they are millimetres. Once the dropped word, the text A took and the dimensions are removed, nothing remains, so D is null with a reason."
   },
   {
    "id": "A43",
@@ -1577,7 +1577,7 @@
     "Q": 6500,
     "group": "one-row physical_enclosure group whose name equals A, with specification null and no specification_refs"
    },
-   "reason": "The first segment naming a box is 分電箱. 己 PNL is a bare panel tag in a later segment, not a second box, so it goes directly before the noun. The line states no W/H/D dimensions, so B is null with a reason. D drops the text A took (分電箱 and 己 PNL, each with a delimiter)."
+   "reason": "The first segment naming a box is 分電箱. 己 PNL is a bare panel tag in a later segment, not a second box, so it goes directly before the noun. 鋼板 is a material, not a tag, and holds no enclosure word. The line states no W/H/D dimensions, so B is null with a reason. D drops the text A took (分電箱 and 己 PNL, each with a delimiter)."
   },
   {
    "id": "A44",
@@ -1597,7 +1597,7 @@
     "D": "甲端子箱(含銅排)，(含配件)",
     "Q": 4800
    },
-   "reason": "A test box is an enclosure. The line names two boxes, so A is the last, cut after its enclosure word; the inclusion clause (含配件) is not a type parenthesis, so it stays in D with the first box. B drops the unit mm; the dimensions leave D with their dash, labels, unit and the delimiter before them."
+   "reason": "A test box and a terminal box are enclosures. The line names two boxes, neither introduced by 附 or 含, so A is the last, cut after the enclosure word that ends its box noun. The inclusion parenthesis (含配件) does not end in 型 or 式 and is not a tag, so it leaves A and stays in D with the first box. B drops the unit mm; the dimensions leave D with their leading dash, labels, unit and the delimiter before them."
   },
   {
    "id": "A45",
@@ -1649,7 +1649,7 @@
      }
     ]
    },
-   "reason": "A type parenthesis directly after the enclosure word stays in A. A material parenthesis does not; it is not a dimension, so it stays in D verbatim. The cut leaves the opening bracket of (庚型電表箱 unpaired at the start of A, so A drops it; in D the bracket stays and closes after 30A以上. The third line states no dimensions, so B is null with a reason."
+   "reason": "A parenthesis directly after the box noun whose text ends in 型 stays in A. A material parenthesis does not; it is not a dimension, so it stays in D verbatim. The cut leaves the opening bracket of (庚型電表箱 unpaired at the start of A, so A drops it; in D the bracket stays and closes after 30A以上. The first two lines' dimensions are in millimetres (mm, or no unit). The third line states no dimensions, so B is null with a reason."
   },
   {
    "id": "A46",
@@ -1727,6 +1727,126 @@
     ]
    },
    "reason": "An isolation box is an enclosure. Its dimensions are only in the remark cell, so B is null with a reason, and the remark never enters D (R52), which is null once the prefix, the category segment and the noun are removed. A pull box, work on an existing panel and an enclosure part (a door) are not enclosures: they are ordinary rows under R52, with no group, A and B null and no company name in J."
+  },
+  {
+   "id": "A47",
+   "rule": "R56 (a subsidiary box before the main enclosure in a panel heading's scope)",
+   "input": {
+    "heading": "[2] 甲-1 PANEL",
+    "lines": [
+     {
+      "item_no": "1",
+      "description": "產品，箱體，雙層式電表箱 SUS304，W:400，H:600，D:200",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 9000,
+      "amount": 9000
+     },
+     {
+      "item_no": "2",
+      "description": "產品，箱體，W:800，H:2000，D:600",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 60000,
+      "amount": 60000
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "A": "雙層式電表箱",
+      "B": "400W*600H*200D",
+      "C": "箱體",
+      "D": "SUS304",
+      "I": null,
+      "J": "示例機電股份有限公司",
+      "Q": 9000,
+      "cites": {
+       "A": [
+        "description cell"
+       ]
+      }
+     },
+     {
+      "A": "甲-1 PANEL",
+      "B": "800W*2000H*600D",
+      "C": "箱體",
+      "D": null,
+      "I": null,
+      "J": "示例機電股份有限公司",
+      "Q": 60000,
+      "cites": {
+       "A": [
+        "heading cell"
+       ],
+       "B": [
+        "description cell"
+       ]
+      }
+     }
+    ],
+    "groups": "two one-row physical_enclosure groups, one per enclosure row; the second group's name_refs cite the heading cell"
+   },
+   "reason": "The heading's panel name 甲-1 PANEL holds one box noun and ends with it, so the heading names a panel. Line 1's box noun 雙層式電表箱 contains 電表, so it is a subsidiary box; line 2 holds no box noun, so it is the first enclosure row in the scope that is not a subsidiary box and takes A = 甲-1 PANEL, cited from the heading cell. Line 1 is another enclosure row in the scope, so it takes A from its own line: 雙層式電表箱, qualifier kept. Both B values come from the W/H/D-labelled dimensions in each line's own description (no unit, so millimetres). Line 1's D is SUS304, the rest after the prefix, the category segment 箱體, the text A took and the dimensions. Line 2's D drops the prefix, 箱體 and the dimensions; nothing remains, so D is null with a reason."
+  },
+  {
+   "id": "A48",
+   "rule": "R56 (a panel name without a tag over a line whose box noun has one)",
+   "input": {
+    "note": "two separate invented packets with the same heading",
+    "packets": [
+     {
+      "heading": "壹、控制盤工程",
+      "description": "產品，箱體，甲-1 控制盤，W600×H800×D300，SUS304",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 25000,
+      "amount": 25000
+     },
+     {
+      "heading": "壹、控制盤工程",
+      "description": "產品，箱體，W600×H800×D300，SUS304",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 25000,
+      "amount": 25000
+     }
+    ]
+   },
+   "expected": {
+    "packets": [
+     {
+      "A": "甲-1 控制盤",
+      "B": "600W*800H*300D",
+      "C": "箱體",
+      "D": "SUS304",
+      "I": null,
+      "J": "示例機電股份有限公司",
+      "Q": 25000,
+      "cites": {
+       "A": [
+        "description cell"
+       ]
+      }
+     },
+     {
+      "A": "控制盤",
+      "B": "600W*800H*300D",
+      "C": "箱體",
+      "D": "SUS304",
+      "I": null,
+      "J": "示例機電股份有限公司",
+      "Q": 25000,
+      "cites": {
+       "A": [
+        "heading cell"
+       ]
+      }
+     }
+    ]
+   },
+   "reason": "Without its item label 壹、 and the trailing work word 工程, the heading's panel name is 控制盤, which holds one box noun and ends with it, so the heading names a panel. In each packet the line is the first enclosure row in the scope and is not a subsidiary box. In the first packet the panel name has no tag and the row's own box noun 甲-1 控制盤 has the tag 甲-1, so A comes from the line and keeps the tag (a tag is never lost); D drops the text A took. In the second packet the line has no box noun, so A is the panel name 控制盤, cited from the heading cell. B comes from the W/H/D-labelled dimensions in the line's own description (no unit, so millimetres), and D is SUS304 in both packets."
   }
  ]
 }
