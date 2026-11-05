@@ -1,3 +1,21 @@
+# Status addendum — 2026-11-05 (late)
+
+- **Done since the last status:**
+  - The portable writer v2.5 / saved_qa v4 is **admitted** (`research/export/ADMISSION_WRITER_V25.json`, four review rounds).
+  - The O31 gate aggregator is frozen (`research/evaluation/FREEZE_AGG_O31.json`).
+  - 046g round-1 review fixes are applied, plus the 箱體 exception from the creator-data replay. Route tests pass 284/284 and scope-stage tests 62/62. A delta review is in progress.
+  - The 9-case dev-trial packets are built, with metadata-only job inputs and leave-one-out tables.
+- **Main risk to qualification: year-115 A/B convention.**
+  - Of the 5 exposed year-115 targets, the 3 from March–May put each panel's A/B on every row of its group. The January and June ones put it on the enclosure row only.
+  - All 9 year-115 pool cases (Feb–May) fall in that window. Under O30, enclosure row only, a group-wide target scores about 0.7, below the O31 per-case floor of 0.90.
+  - The owner asked for one more exposed check (1150107, plus late-114 cases) before deciding.
+- **Estimate given to the owner:**
+  - about 3–4 session days to a qualification result if nothing else fails;
+  - about a week with one more candidate revision after the dev trial.
+  - A failed qualification spends the reserved cases, and no fresh 113–115 pool remains.
+
+---
+
 # Current status — 2026-11-05 (pool fixed at 30; evaluator v3 frozen; 046g in progress)
 
 **Not deployment-ready.**
