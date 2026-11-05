@@ -5,19 +5,19 @@
   "parent_manifest_sha256": "5f5502a7117e734c5a2f999227c6f0a8a95927c7dce959d28f11e11dbb620467",
   "status": "DRAFT_UNDER_INDEPENDENT_REVIEW_NOT_FROZEN",
   "target_runtime": "Owner-adopted qualification runtime claude-opus-5-5 (decision 2026-11-03); every run records the actual model, effort and tools.",
-  "semantic_review": "pending: no independent review of 046g yet (R59, route v4.3, scope-stage harness)",
+  "semantic_review": "round 1 (2026-11-05, one fresh independent context): SEMANTIC_APPROVE_AFTER_LISTED_FIXES on R56/O30 (enclosure-row A/B), R59 (scoped packets), route v4.3 and the scope-stage harness. The round-1 fixes (B1, Q1-Q3, S1-S10, S12, S13, S15, N1-N3, N6, N7) are applied in this draft and await a confirmation review; S11 is open pending an evaluation-role replay; the R56 heading-test replay (Q1) is not yet run",
   "route": {
     "path": "tools/cps046b_route.py",
     "version": "cps046g-route.v4.3"
   },
-  "utf8_bytes": 472553,
+  "utf8_bytes": 488877,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 21503,
-      "sha256": "51cc8b442f26811ee63e6ffe6027c158ba9821601b1bc8985adf7c879046e021"
+      "bytes": 24632,
+      "sha256": "a95dbc262227a7514aa9ef522be2e5131a5182483972cde11fbcfbc2301181d4"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -31,13 +31,13 @@
     },
     {
       "path": "resources/EXAMPLE_RESPONSE.json",
-      "bytes": 42704,
-      "sha256": "3407d6461b544dbaf1b9697ba06ae0ab458947ab3d4d8758db9e9ee3bf2da98c"
+      "bytes": 42885,
+      "sha256": "0fb159d4a73fa6d338630335f09ad077721113363f8dda1a7bc983c7091f5fdb"
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 69404,
-      "sha256": "a3b1e2130f61e5bb9e7c755827212634e21f3c988c200e57672f0eb50c860069"
+      "bytes": 74282,
+      "sha256": "6e7bbdb4e5c8a32676882ab960685170dd35c0f9dfda079fd7134dad88cb4275"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -51,13 +51,13 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 20730,
-      "sha256": "a1942a83dbd14e670240b7e6a5a4c54eb5b0c7cb2537a29247e8f4d29936f04b"
+      "bytes": 21541,
+      "sha256": "ae73b8de8b1768333d4c2d4532594b6cfe03048dc7d1337ba2bc7cb2ecbb4f7e"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
-      "bytes": 10933,
-      "sha256": "ec13f31e5406604d6feaaab5600182be6878d0c1fbaaf0db3d44cd2e21b4d34e"
+      "bytes": 12319,
+      "sha256": "5e5b9a64453e9118ff088b238c6e2ae1549fd9828ba80e6d6241f13e82538cd2"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
@@ -76,13 +76,13 @@
     },
     {
       "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 26026,
-      "sha256": "479ba0b750c199b2676b22356f453d37dbb01bdca0862cf7c1be276d8d93a660"
+      "bytes": 26416,
+      "sha256": "f2cf308098adf88865961bc5a4341a10ac77daa05377f41a22b0777aa8eeb1d9"
     },
     {
       "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 53131,
-      "sha256": "c3193169598658032e95ddd5b865163e71a28230e0328dd07ace4453b08500f1"
+      "bytes": 58680,
+      "sha256": "7b39f0bfa7bb74aac62ade1a80dd5b08e2260f3bf3b5fd813e4718ee2b8b0641"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
