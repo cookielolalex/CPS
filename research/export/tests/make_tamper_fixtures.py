@@ -346,8 +346,9 @@ def update_receipt(d):
     r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
     r['output_xlsx']['sha256'] = sha((d / r['output_xlsx']['file']).read_bytes())
     dx = r.get('deliverable_xlsx')
-    if isinstance(dx, dict) and (d / dx['file']).is_file():          # v2.7 (O38): the deliverable's hash too
+    if isinstance(dx, dict) and (d / dx['file']).is_file():          # v2.7 (O38): the deliverable's hash and size too
         dx['sha256'] = sha((d / dx['file']).read_bytes())
+        dx['bytes'] = len((d / dx['file']).read_bytes())
     r['expected_saved_values']['sha256'] = sha((d / 'EXPECTED_SAVED_VALUES.json').read_bytes())
     (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
@@ -526,6 +527,7 @@ def make_naming_tampers(src, dest, title2):
             r['output_xlsx']['sha256'] = sha((d / out_name).read_bytes())          # consistent receipt hash
         if isinstance(r.get('deliverable_xlsx'), dict) and r['deliverable_xlsx']['file'] == dn_out:
             r['deliverable_xlsx']['sha256'] = sha((d / dn_out).read_bytes())
+            r['deliverable_xlsx']['bytes'] = len((d / dn_out).read_bytes())     # a compared receipt claim (v6)
         (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         index.append({'name': name, 'dir': str(d), 'group': 'naming', 'findings': findings, 'only': only, 'provenance': prov,
                       'provenance_result': 'JOB_TITLE_INVALID' if name.startswith('K13_') else results[prov],

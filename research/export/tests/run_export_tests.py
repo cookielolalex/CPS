@@ -1348,7 +1348,11 @@ def main():
         else:
             no_prov = (c1 == 1 and q1.get('status') == 'SAVED_QA_FAILED' and set(t['deliverable_findings']) | set(t['other_findings']) <= set(f1)
                        and tagged_ok)
-        prov = (c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED' and 'provenance' in f2
+        # L14: the bytes are the writer's, so the rerun finds no byte difference; the dropped deliverable_xlsx is a receipt claim
+        prov = (c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED'
+                and (('receipt_claim_mismatch' in f2 and pv.get('deliverable_xlsx_byte_identical') is True
+                      and 'deliverable_xlsx' in pv.get('receipt_claims', {}).get('mismatched_fields', []))
+                     if t['name'].startswith('L14') else 'provenance' in f2)
                 and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False
                 and (t['name'][:3] in ('L07', 'L14') or pv.get('deliverable_xlsx_byte_identical') is False or t['name'].startswith('L15')))
         record(f"l_deliverable_tamper_{t['name']}", no_prov and prov and 'Traceback' not in e1 + e2,
