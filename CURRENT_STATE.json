@@ -306,7 +306,8 @@
   "status": "BUILT_NOT_ADMITTED",
   "author_tests": "118/118",
   "needs": "independent review",
-  "status_2026_11_05": "ADMITTED v2.5 / saved_qa v4 under research/export/ADMISSION_WRITER_V25.json (round 4 ADMIT)"
+  "status_2026_11_05": "ADMITTED v2.5 / saved_qa v4 under research/export/ADMISSION_WRITER_V25.json (round 4 ADMIT)",
+  "status_2026_11_05_late": "ADMITTED v2.7 / saved_qa v6.1 / visual_qa v4.1 under research/export/ADMISSION_WRITER_V27.json (owner decisions O33, O34, O38; review ADMIT_AFTER_LISTED_FIXES W1, D1, then delta ADMIT; 579/579 and 559/559). The delivered workbook is the one-sheet <name>(未填).xlsx in the creator's format; INTERNAL_QA_WORKBOOK.xlsx is never delivered."
  },
  "candidate_046f": {
   "path": "research/guideline046_006/package",
@@ -389,7 +390,7 @@
   "pool_canonical_sha256": "bb949367ca023a7c89217f17d08fdaf8315c35cba7db2957e24962c96851bcf8",
   "decision": "O31"
  },
- "deployment_artifact_export": "research/export/ADMISSION_WRITER_V25.json",
+ "deployment_artifact_export": "research/export/ADMISSION_WRITER_V27.json",
  "evaluator_v4": {
   "path": "research/evaluation/compare_target050.py",
   "sha256": "fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859",

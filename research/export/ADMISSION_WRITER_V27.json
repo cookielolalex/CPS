@@ -1,0 +1,80 @@
+{
+ "schema": "cps.writer-admission.v1",
+ "admitted_utc": "2026-11-05T14:45:06.343024+00:00",
+ "subject": "CPS portable export writer v2.7 (cps-export-writer-portable.v2.7), saved_qa v6.1 (cps-export-saved-qa.v6.1), visual_qa v4.1 (cps-export-visual-qa.v4.1)",
+ "decision": "ADMITTED for CPS qualification evidence and delivery under the conditions below. Supersedes ADMISSION_WRITER_V25.json for new runs; outputs already recorded under v2.5 keep that record.",
+ "owner_decisions": [
+  "O33 deliverable naming (v2.6)",
+  "O34 G/H not shaded (v2.6)",
+  "O38 delivered workbook: one sheet in the creator's format; four-sheet INTERNAL_QA_WORKBOOK.xlsx kept for QA, never delivered (v2.7)"
+ ],
+ "reviews": [
+  "v2.6+v2.7 review (independent reviewer, of writer v2.7 7a82da6f / saved_qa v6 ef5882de / visual_qa v4 f71abb5c): ADMIT_AFTER_LISTED_FIXES W1 (column widths read as LibreOffice reads them), D1 (invented test titles); notes N1-N7",
+  "delta review (same reviewer, commit 1c9f07e, saved_qa v6.1 / visual_qa v4.1, writer unchanged): ADMIT"
+ ],
+ "tests": {
+  "with_visual_archived_writer004": "579/579",
+  "skip_visual_public_copy": "559/559"
+ },
+ "files_sha256": {
+  "research/export/writer_portable.py": "7a82da6f66812f80f0ae0c149f52f00e8468ab544681d2c7831bf6e1ba51b556",
+  "research/export/saved_qa.py": "4c9ed14b3d409c15386992b2b495e9a83f833cd1b2c436eba62a54e90ed5ddd0",
+  "research/export/visual_qa.py": "969639cd43612261a9b3d342ad0068e8da9c79eced17eab67f1745d151559237",
+  "research/export/writer004_matrices.mjs": "028dbdae55a9e42c686fbbaf371d956168bf4eeee9cfeea1642f6dda3713b3f8",
+  "research/export/README.md": "852c289eb98cf7fcb598754be52b43f7351f1d67ae76629f60a19714d8cd82ae",
+  "research/export/tests/run_export_tests.py": "f5fb18ee4608967a577816f3066f4fe16dd77b509cf4b57395cb3849d4111160",
+  "research/export/tests/make_tamper_fixtures.py": "58fd8af312a9c51278743f7d8e0183e4f2c8ac9b5160d624a95660e1ec4565bf",
+  "research/export/tests/make_export_fixtures.py": "716ee0a4472a2e66a3045e34c6d4a0d19a519688d9b092eeae84fea8d0638293",
+  "research/export/tests/make_export_fixtures_v2.py": "a00503aa3c01f6154286be8bfd6b892cd4791d83ed170ae10579b63c19b16199",
+  "research/guideline046_006/package/tools/cps046b_route.py": "9db8033b8cb4fab6add87f60ba8b37e1994af6ff7f0559f305e892936df4811d"
+ },
+ "writer_dir_sha256": {
+  "writer004.mjs": {
+   "archived_original": "85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7",
+   "public_copy": "70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7"
+  },
+  "validate_carrier_v4.mjs": "984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013",
+  "receipt_bytes.mjs": "b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c",
+  "artifact_tool_stub_index.mjs": "67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4",
+  "artifact_tool_stub_package.json": "5a93295fdcc83c399de1f1616040ddce237eddd9f40d3a69933cb2c5a461b46d"
+ },
+ "checker_node": {
+  "path": "/opt/node22/bin/node",
+  "sha256": "2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff",
+  "version": "v22.23.4"
+ },
+ "environment": {
+  "python": "3.13.18",
+  "openpyxl": "3.1.5",
+  "lxml": "6.1.3",
+  "libreoffice": "24.2.7.2"
+ },
+ "deliverable_pins": {
+  "format": "owner_O38_creator_format_v1",
+  "deliverable_styles_xml_sha256": "59f01b1510a60a56aaa6fb6654fb998aa80632d30369ae5e76c9a469784fb5f0",
+  "deliverable_workbook_template_sha256": "06baba0b2acbe1af0d2b8c215bd95d4ae588fa7072d8003476bbd447f2090b27",
+  "internal_workbook_template_sha256": "3b831f50f102d38062f2c4abe30ef190f8a755daa20f48fe36363afd7b31f13a"
+ },
+ "conditions_of_use": [
+  "1 Required runs: saved QA with --carrier = the frozen route carrier (expected_provenance.carrier_sha256 checked against ADAPTER_RECEIPT.json carrier_sha256 or the freeze record, and the check recorded), --writer-dir, without --no-formatting; status SAVED_ALL_CELL_VALUE_TYPE_PASS, expected_provenance.result PASS, receipt_claims.match true, cps_evidence_preconditions.all_checked_here_met true (for a titled output this includes deliverable_checked and deliverable_byte_identical_to_rerun).",
+  "2 Checker node: run from a clean shell independent of the producer, with --checker-node and --checker-node-sha256 from this record (checker_node; further binaries need their own entry, for example the Dot VM's node after its full self-test); never taken from the producer receipt, --node or PATH; checker_node.realpath, sha256 and sha256_after_check must match, and the same file must appear in writer004_check_node (v1 receipts) and rerun_node.",
+  "3 Tools: before the run the operator checks the sha256 of saved_qa.py, writer_portable.py, writer004_matrices.mjs and visual_qa.py against files_sha256; the saved-QA record must show the listed writer_portable.py and writer004_matrices.mjs hashes.",
+  "4 Writer directory and versions: pinned files as regular files in the writer directory; the checker --writer-dir holds the same writer004.mjs pin as the producer; openpyxl 3.1.5.",
+  "5 Receipt: only the compared fields count (mode, relaxations without route_v4_port.path, cross_check, expected_saved_values, matrices_sha256, sheets, writer, writer_files, status, admitted, deliverable, deliverable_xlsx); v2 relaxation classes and documented cells come from expected_provenance.rerun_relaxation_classes and rerun_documented_cells. A WRITER_RECEIPT.json with duplicate JSON keys is not evidence (v2.5 open note N1): the run harness rejects it before saved QA.",
+  "6 Mode v2 only for carriers whose convert receipt says export_mode_required v2 and policy_checks applied; reported as writer004 on the placeholder copy plus the documented cells; M/N facts are R48 policy checks. Saved QA establishes saved-cell fidelity to writer004 intended matrices (and, for the deliverable, to the main matrix) only: nothing about source semantics or Excel display.",
+  "7 Job title: --job-title is the harness's per-job project folder title; the operator checks deliverable.job_title against the per-job input record and records the check.",
+  "8 Visual QA: never re-save a workbook. Render the delivered <name>.xlsx and INTERNAL_QA_WORKBOOK.xlsx separately; each manifest's saved_xlsx.sha256 must equal the corresponding hash in the evidence-grade SAVED_QA.json (deliverable_xlsx.sha256 for the delivered workbook, xlsx.sha256 for the internal one). A separate reviewer checks every page of the delivered workbook against the README delivered-workbook checklist, and the internal workbook's reviewed set (every page of the main and composition sheets; review sheet pages 1, 2, the last and every page with a possibly_clipped_cells cell) against the 9-item internal checklist; VISUAL_REVIEW.json per run records page -> item -> pass/fail; any fail fails visual QA.",
+  "9 Delivery (O38; review N3r): deliver only <name>.xlsx. At delivery time, check that the file sent is a regular file whose sha256 equals deliverable_xlsx.sha256 in the run's evidence-grade SAVED_QA.json, and record the check. Never deliver INTERNAL_QA_WORKBOOK.xlsx, EXPECTED_SAVED_VALUES.json, the receipt or QA reports.",
+  "10 This record is the admission for the hashes listed; the README status text is superseded by it."
+ ],
+ "open_notes": {
+  "v25_N1": "duplicate JSON keys in WRITER_RECEIPT.json accepted by saved_qa (condition 5, harness check)",
+  "v25_N2": "zip entry raw name vs normalised name not rejected (caught by provenance; condition 8 hash match)",
+  "v25_N3": "saved_qa does not verify its own tool hashes (condition 3)",
+  "v25_N4": "node path compared by operator (condition 2)",
+  "N2": "the deliverable's default (Normal) font is openpyxl's Calibri 11, so widths are in that font's digit width; the owner approved previews with the same default",
+  "N3r": "a hard link to identical bytes outside the output directory passes saved QA (condition 9 closes it at delivery)",
+  "N5": "ten edits that change no cell value pass without provenance and fail with it (condition 1 requires provenance)",
+  "visual_wrapping_numbers": "possibly_cut_cells does not check number cells that wrap; only the internal workbook has them"
+ }
+}

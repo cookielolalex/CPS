@@ -24,6 +24,17 @@
 
 ---
 
+# Status addendum — 2026-11-05 (evening): delivered format, writer v2.7, Dot folder
+
+- **Owner decision O38.** The delivered workbook is one sheet in the creator's own 未填 format: 新細明體 12; grey bordered header; gridlines shown; only the header row frozen; no wrapping; her widths and row heights. The owner approved it on four previews. The review and composition sheets go into `INTERNAL_QA_WORKBOOK.xlsx`, which is never delivered.
+- **Writer v2.7 / saved_qa v6.1 / visual_qa v4.1 admitted** (`research/export/ADMISSION_WRITER_V27.json`; supersedes the v2.5 record for new runs). The review returned ADMIT_AFTER_LISTED_FIXES:
+  - W1: column widths are now read as LibreOffice reads them;
+  - D1: test titles are now invented.
+
+  The delta review returned ADMIT. Tests: 579/579 with visual tests, 559/559 on the public copy. New condition 9: at delivery, the file sent must match `deliverable_xlsx.sha256` in `SAVED_QA.json`.
+- **Dot folder uploaded.** `CPS_Dot_20261105` in Drive holds 45 files with their manifest. Release status is `SETUP_ONLY`. The owner has the folder link and the Dot's starting prompt. Next from the Dot: the phase-1 setup report (admit its VM node binary), then the creator survey hand-back.
+- **Phase-1 steps verified** from a clean checkout: 459/459 with the admitted v2.5 tools at commit `dc1638b`.
+
 # Status addendum — 2026-11-05 (late)
 
 - **Done since the last status:**
