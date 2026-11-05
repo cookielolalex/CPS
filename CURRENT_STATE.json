@@ -306,7 +306,7 @@
   "status": "BUILT_NOT_ADMITTED",
   "author_tests": "118/118",
   "needs": "independent review",
-  "status_2026_11_05": "v2.4 round-3 review ADMIT_AFTER_LISTED_FIXES (G1 namespace/tint tampers, G2 node binary pin, G3 receipt-claim authentication, G4 checklist); v2.5 hardening in progress; not admitted"
+  "status_2026_11_05": "ADMITTED v2.5 / saved_qa v4 under research/export/ADMISSION_WRITER_V25.json (round 4 ADMIT)"
  },
  "candidate_046f": {
   "path": "research/guideline046_006/package",
@@ -388,5 +388,6 @@
   "freeze": "research/evaluation/FREEZE_AGG_O31.json",
   "pool_canonical_sha256": "bb949367ca023a7c89217f17d08fdaf8315c35cba7db2957e24962c96851bcf8",
   "decision": "O31"
- }
+ },
+ "deployment_artifact_export": "research/export/ADMISSION_WRITER_V25.json"
 }
