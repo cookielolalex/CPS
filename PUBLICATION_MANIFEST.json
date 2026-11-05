@@ -1524,13 +1524,13 @@
     },
     {
       "path": "research/evaluation/aggregate_qualification.py",
-      "bytes": 6514,
-      "sha256": "59b3852c8685a070c8f70689ac67f55d3cbd8a842326b77dd1138740ecfb1991"
+      "bytes": 11902,
+      "sha256": "d48b81f341d12acfff1b87fc6bb978f46da10b6847534cc0d69799fd664f113a"
     },
     {
       "path": "research/evaluation/tests/test_aggregate_qualification.py",
-      "bytes": 5382,
-      "sha256": "241d5fd49a5c1c9668b3f34c6303f5c93cf798c63c496bfaa04c47f5b2fd8bc1"
+      "bytes": 13065,
+      "sha256": "c37dffcb1e312a174b6c03bdd61e18507cef83d75ded4cf62ffa190c3d5fadf2"
     }
   ]
 }
