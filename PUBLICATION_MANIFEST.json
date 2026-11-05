@@ -1521,6 +1521,16 @@
       "path": "research/evaluation/FREEZE_049.json",
       "bytes": 1371,
       "sha256": "cb18bfcabc41e4f180a6d299721b640b966e785a08577d622500a1f9cd7d0f4e"
+    },
+    {
+      "path": "research/evaluation/aggregate_qualification.py",
+      "bytes": 6514,
+      "sha256": "59b3852c8685a070c8f70689ac67f55d3cbd8a842326b77dd1138740ecfb1991"
+    },
+    {
+      "path": "research/evaluation/tests/test_aggregate_qualification.py",
+      "bytes": 5382,
+      "sha256": "241d5fd49a5c1c9668b3f34c6303f5c93cf798c63c496bfaa04c47f5b2fd8bc1"
     }
   ]
 }
