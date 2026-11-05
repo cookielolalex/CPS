@@ -25,7 +25,7 @@ Every adversarial fixture now scores what the reviewer's line-identity oracle al
 
 Owner decision O19 excludes C/D wording from the governing score. In v2, though, two rows pair only when their similarity is at least 0.5. Similarity is 0.7 × C+D wording, plus 0.15 × equal E, plus 0.15 × equal F.
 
-Suppose CPS and the creator wrote the same source line at the same position, agreeing on E, F, Q, I and J, but the creator's wording shares no characters with CPS's (for example a 2-character abbreviation against a 19-character description). The pair scores 0.30, so v2 leaves both rows unpaired. Each row then counts all its non-null scored positions as misses. C/D wording thus decides those positions, contrary to O19.
+Suppose CPS and the creator wrote the same source line at the same position, agreeing on E, F, Q, I and J, but the creator's wording shares no characters with CPS's (for example a 2-character abbreviation against a 19-character description). The pair scores 0.30, so v2 leaves both rows unpaired. Each row then counts all its non-null scored positions as misses. C/D wording thus decides those positions. The O19 record accepted this as an indirect effect of alignment, so narrowing it is a metric change (O23), not a correction of v2.
 
 A private diagnostic on the frozen 046f development outputs found 7 such pairs, all at matching positions with equal E and F. They are 4 in 1141002, 2 in 1131202 and 1 in 1140506. In most of them Q, I and J also agree.
 
