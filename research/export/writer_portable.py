@@ -29,7 +29,7 @@ Route
   adds flags, so the record only shows which binary ran; saved_qa.py --checker-node/--checker-node-sha256 pins the
   checker's node.
   Owner decisions O33-O34 (v2.6): with --job-title (the project folder title, a per-job input supplied by the harness, never
-  by the generator) the workbook is <name>.xlsx and the main sheet <name> (derive_deliverable); EXPECTED_SAVED_VALUES.json
+  by the generator) the workbook is <name>.xlsx and the main sheet <name> (deliverable_record); EXPECTED_SAVED_VALUES.json
   keeps writer004's sheet names, and the receipt's deliverable.sheet_mapping maps them to the workbook's. Without
   --job-title the names are the v2.5 ones (research-draft.xlsx, 未填研究草稿). G and H (單價, 複價) body cells are never
   shaded (O34): they have the body style of the other columns.
