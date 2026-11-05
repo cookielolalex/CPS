@@ -1,8 +1,8 @@
-# The17 output fields (candidate 046f)
+# The17 output fields (candidate 046g)
 
 Keep this order exactly. Auxiliary evidence/coverage records do not add primary columns. Source roles govern values; an empty cell needs an actual reason and is not automatically a correct extraction.
 
-| Field | Label | Assignment rule (046f: R47b–R58 govern; see "Creator practice") |
+| Field | Label | Assignment rule (046f: R47b–R58 govern; see "Creator practice"; 046g adds R59 for scoped packets) |
 |---|---|---|
 |A|盤體名稱|Only on an enclosure row (R56): the enclosure noun. Null on every other row.|
 |B|盤體規格|Only on an enclosure row (R56): `<w>W*<h>H*<d>D` from the mm dimensions stated in the bound source, else null.|
@@ -225,7 +225,45 @@ Invented examples:
 **R57 E, F, G, H.** E and F are copied verbatim from the line's own unit and quantity cells, even when they look implausible. F must be a number; a quantity written as text with a unit (2台) leaves F null with a reason. G and H stay null. C may be null on any row R52 makes C-null; the route accepts such rows as `research_draft`, not held (route v4.1 relaxation, kept in v4.2).
 
 **R58 Resources and citations.** The company glossary, brand table and company name are owner-reviewed private resources supplied with each packet as context facts (`context:glossary`, `context:brand_table`, `context:company_name`). A 材料清單 packet has no `context:brand_table` (O17; `harness/make_job_config.py` omits it), so a response that cites it fails `UNKNOWN_CONTEXT_REF`. A field derived through them cites the source cell it was derived from together with the context ref; L, M and N cite only their job-input context refs.
+## Scoped packets R59 (046g, declared before any 046g generation)
 
+R59 adds one mechanism for large 材料清單 workbooks. It changes no field-value rule; on a scoped packet it replaces the last sentence of R51 for blocks of priced or not-estimated parents (item 6). Where it and an earlier sentence of this package disagree (for example guideline §1 on missing sources or §2 on reading every sheet), R59 governs on a scoped packet.
+
+**R59 Scoped packets.** A packet whose inventory carries the context fact `context:scope` is a *scoped packet*. Before generation the source preparer decided which sheets the job needs, and the inventory holds the cells and views of those sheets only. On a scoped packet, do exactly this:
+1. **Read the fact first.** `context:scope` is JSON text (`cps.scope-fact.v1`). For every sheet of the workbook it gives `index`, `name`, `role` (`bill`, `analysis`, `summary`, `resource_statistics` or `other`), `visibility`, `rows`, `columns`, `content_cells`, `in_scope`, `reason` and `linked_analysis_blocks` (blocks linked to in-range bill lines). It also gives `bill_sheet_index`, `bill_header_row`, the R49 end row `end_row`, the rule versions (`R59`, `BILL1.v1`), the threshold count and the SHA-256 of the scope digest, of the full inventory and of the frozen scope decision. The inventory's `sheets` carry the same `in_scope` flags (route `R59_SCOPE_FACT_MISMATCH`).
+2. **Bill sheet and range.** The sheet `bill_sheet_index` is the R49 bill sheet and `end_row` is the R49 end row. Do not re-decide either. The quoted range runs from the first item line below `bill_header_row` to `end_row`, and R49–R58 apply inside it as on any packet. If the bill sheet's own cells seem to contradict the fact, keep the declared range, do not add or drop rows for it, and record the contradiction in `limitations`, naming the cells.
+3. **Rows after the end row.** R49 still applies inside the bill sheet. Every content cell on a row after `end_row` takes the census role `excluded_supply` with the reason "outside the quoted range (R49, R59)", whatever it holds: a negotiated price, a signature, later sections, priced lines. No item, group or link cites such a cell; route v4.3 rejects one that does (`R59_ROW_BELOW_END_ROW`). The end row itself is `financial_summary` (R11).
+4. **Census.** Every content cell of every in-scope sheet takes exactly one role, as on any packet (`UNCLASSIFIED_CONTENT_CELLS`).
+5. **Scoped-out sheets.** A sheet whose `in_scope` is false has no cells, views or census in the packet. It is not a missing, unreadable or incomplete source. It is no reason to hold under guideline §1, to give the response or an item the status `held` or `partial`, or to write a limitation that calls the source incomplete. No field, proof, raw selection, component link or review reason may cite, quote or reconstruct its content, and do not guess what it holds. Its cells do not exist in the inventory (`UNKNOWN_CELL_REF`).
+6. **Analysis sheets.** An analysis sheet is in scope only because R51 needs it, and its `reason` says which condition holds:
+   - (i) every in-range bill line has no price and no status. R51 applies: each block's components are rows, its parent line takes `section`, and the block's totals are not rows (A15, A36);
+   - (ii) an in-range line with no price and no status has a linked block on that sheet. R51 applies as written: a separate analysis sheet lies outside the quoted range, so that line is `excluded_supply` (reason per R45) and its block `analysis_unlinked` (A26, A37).
+
+   On a scoped packet a block whose parent line is priced or not estimated gives no `analysis_component` items and no links. Classify its cells `analysis_unlinked` with the reason "block of a priced or not-estimated parent; its components are not 未填 rows and are not written on a scoped packet (R51, R59)". A block with no parent demand item follows R46. When the fact records `linked_analysis_blocks` on an out-of-scope sheet, route v4.3 warns `R59_LINKED_ANALYSIS_OUT_OF_SCOPE`. Those blocks belong to priced or not-estimated parents, so they give no rows, and the parent lines follow R50 as usual.
+7. **Never evidence.** `context:scope` is not field evidence. Do not cite it in any proof. A field proven only by context, other than L, M and N, is still `CONTEXT_ONLY_PROOF_UNREPRESENTABLE`.
+8. **Unscoped packets.** Without `context:scope`, every sheet of the workbook is in scope, as in 046f.
+
+*Design decision (046g, 2026-11-05).* The basis is a source-only structure study of five large exposed tuning 材料清單 workbooks, counts only (cases 1131112, 1131207, 1140304, 1140607 and 1140808). Each has exactly one R49 bill sheet of 452–999 content cells. Up to 7,063 further content cells sit in unit-price analysis and resource-statistics sheets that yield no rows, and the census requirement of every in-scope sheet made these workbooks impossible for one reader to finish.
+- *Threshold.* The scope stage applies when the full inventory has more than 2,500 content cells that are literal or cached-formula cells with content. Below that, every sheet stays in scope and there is no `context:scope`, exactly as in 046f (case 1140304, 2,459 cells, stays unscoped).
+- *In scope.* The BILL1 bill sheet, and an analysis sheet only when R51 needs it: (i) every in-range bill line is unpriced with no status, or (ii) some unpriced, no-status in-range line has a linked block on that sheet. The study's option (iii), keeping an analysis sheet with any linked block, is not adopted. Components under priced or not-estimated parents are not 未填 rows and are not scored, so on scoped packets they are not written. For example, the 8 linked blocks of case 1140607 (1 priced and 7 not-estimated parents) stay scoped out, with the route warning.
+- *Out of scope.* Summary, resource-statistics and other sheets.
+- *Procedure (source preparation, frozen before any generation; `harness/README.md`).*
+  1. Build and pin the full inventory.
+  2. `harness/scope_tool.py` computes BILL1 and the R51 conditions on it and writes the scope digest.
+  3. A fresh-context scope reader sees only the digest and R47b and R49–R51, and returns each sheet's role and flag, the bill sheet and the end row.
+  4. `harness/scope_agree.py` requires agreement on the bill sheet, the end row and every flag. It freezes `SCOPE_DECISION.json`, or holds the case for the owner with no tie-break run.
+  5. `harness/make_scoped_inventory.py` projects the full inventory: it removes out-of-scope cells and views, renumbers the kept views, sets the flags and appends `context:scope`, keeping every other record byte-identical. It then verifies the projection record by record.
+
+  Zero or several BILL1 sheets hold the case.
+- *BILL1.v1.* Whitespace, including U+3000, is removed from cell text. A sheet is a candidate when:
+  - (a) exactly one row has header cells 項次, a name word (項目及說明, 名稱, 品名 or 材料名稱), 單位, 數量, 單價, and 複價 or 金額;
+  - (b) below that row, a cell in the 單價 or 複價 (or 金額) column reads exactly 合計 or 總計; the first such row is the end row;
+  - (c) a number above zero stands in those columns between the header row and the end row.
+
+  BILL1 found exactly the bill sheet and the study's end row in 5 of 5 study cases. Its known failure modes give zero or several candidates or a reader disagreement, and so hold the case: split or merged headers, vocabulary variants, several bill-like sheets, and unlabelled totals.
+- *Limits.* Route v4.3 enforces items 1 and 3 and gives the warning of item 6. It cannot see scoped-out cells, so a missed R51 sheet can be caught only by the scope stage and an audit that re-derives it from the frozen full inventory. Under R51 as written (A26), condition (ii) brings a sheet into scope that yields census cells but no rows; whether to keep (ii), or to treat a linked block on a separate analysis sheet as inside the range, is open for the owner.
+
+Invented examples: `SYNTHETIC_ALLOCATION_CASES.json` A35–A37.
 
 ## Commercial and quantity distinctions
 

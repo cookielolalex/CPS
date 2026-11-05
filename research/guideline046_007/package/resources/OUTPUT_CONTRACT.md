@@ -1,8 +1,8 @@
-# Output contract (candidate 046f, draft)
+# Output contract (candidate 046g, draft)
 
 Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semantic-source-refs.v2`) and to every rule in `SOURCE_REFERENCE_CONTRACT.md`. The response states your semantic decisions and points at exact inventory cells and context facts. The adapter later copies the source text and builds the writer carrier. It cannot fix or complete your response.
 
-046f reproduces the historical 未填 creator's majority practice (FIELD_ROLES R47b–R58, owner decisions O10–O20). Where R47b–R58 and an older sentence of this package disagree, R47b–R58 govern.
+046f reproduces the historical 未填 creator's majority practice (FIELD_ROLES R47b–R58, owner decisions O10–O20). Where R47b–R58 and an older sentence of this package disagree, R47b–R58 govern. 046g adds scoped packets for large 材料清單 workbooks (FIELD_ROLES R59; interface point 4a); on a packet without `context:scope` nothing changes.
 
 ## What you receive
 
@@ -13,10 +13,11 @@ Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semanti
   - company resources (R58): `context:company_name`, `context:glossary` (generic prefix words, category words, the generic enclosure word and device abbreviations) and, on a contract job only, `context:brand_table` (brand and model by device type and rating band). A 材料清單 packet has no brand table (O17): I and J then come only from its cells.
 
   The resources are owner-reviewed private company data, supplied with each packet and pinned by SHA-256. Use them only as R52, R55 and R56 say. The values in this package's examples are invented.
+  - on a scoped packet only (R59): `context:scope`, JSON text naming every sheet of the workbook with its role, dimensions, content-cell count, `in_scope` flag and reason, the bill sheet, its header row and the R49 end row. The inventory then holds only the in-scope sheets. Read it before the cells. It is not field evidence.
 
 ## How to build the response
 
-1. **Read everything.** Read the whole inventory and all views. Identify sheet roles, the detailed bill sheet that carries the sender's prices, its column header and column roles, every logical item and continuation, sections, totals, analysis blocks and every nonitem region.
+1. **Read everything.** Read the whole inventory and all views (on a scoped packet: every in-scope sheet; the scoped-out sheets are not supplied and are not missing, R59). Identify sheet roles, the detailed bill sheet that carries the sender's prices, its column header and column roles, every logical item and continuation, sections, totals, analysis blocks and every nonitem region.
 2. **Find the quoted range (R49).** It runs from the first item line under the column header down to the end row: the row whose unit-price or amount column holds 合計 or 總計. A 合計 written in the description column is a block total, not the end, and a total labelled for a block (小計, 甲站合計) does not end the range. Repeated site sections and goods/labour subsections inside the range are all in it. Summary sheets never yield rows. When every bill line has no price and no status, rows come from the analysis sheet (R51).
 3. **Decide the rows (R50, R51).** Inside the range, in source order, write one `demand` item for each:
    - priced line (its unit-price or amount cell holds a number above zero);
@@ -66,14 +67,15 @@ Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semanti
 
 Use IDs such as `R001…` for rows in source order and `C001…` for `analysis_component` items in analysis order. Do not form groups for contractual sections: no row except the enclosure row carries A or B (R56).
 
-## Interface points (route v4.2)
+## Interface points (route v4.3)
 
-Route v4.1 resolved two of the interface questions recorded for 046f and kept one mechanism; route v4.2 keeps them and adds the policy checks in point 4. Follow them; do not change a value to avoid a warning.
+Route v4.1 resolved two of the interface questions recorded for 046f and kept one mechanism; route v4.2 keeps them and adds the policy checks in point 4; route v4.3 (candidate 046g) keeps all of them and adds the scope checks in point 4a. Follow them; do not change a value to avoid a warning.
 
 1. **A null C may be `research_draft`** (FIELD_ROLES R57). Give C a specific null reason as for any null field. `check` warns `R57_NULL_C_RESEARCH_DRAFT`; the export then needs the portable writer's mode v2 (writer004 itself requires `held` for a null C).
 2. **A non-null A or B requires a group** whose `name` equals A and whose `specification` equals B (route `UNGROUPED_AB_MUST_BE_BLANK`, `A_MUST_EQUAL_GROUP_NAME`, `B_MUST_EQUAL_GROUP_SPECIFICATION`; writer004 `UNGROUPED_AB_MUST_BE_BLANK`). R56 keeps this as the mechanism: the enclosure row's A and B are carried by a one-row group (`relationship: physical_enclosure`) whose only member is that row. The route accepts a group with exactly one member.
 3. **Q does not require verified adoption** (R54, O16). With unverified or partial adoption, a non-null Q gives the warning `O16_Q_UNVERIFIED_ADOPTION`, not a violation.
 4. **Policy checks on a job packet** (route v4.2; R48, R56, R58). On an inventory that carries the job-input facts (every 046f packet), `check` rejects as `invalid`: a null L, M or N on any item (`R48_JOB_INPUT_REQUIRED`); an L, M or N whose refs are not exactly its own context ref (`R48_JOB_INPUT_REF`) or whose value differs from that fact (`R48_JOB_INPUT_VALUE_MISMATCH`); a non-null K, O or P (`R48_FIELD_MUST_BE_NULL`); a group whose relationship is not `physical_enclosure` (`R56_GROUP_RELATIONSHIP`) or that does not have exactly one member (`R56_GROUP_ONE_MEMBER_REQUIRED`). On every inventory, a J that cites `context:company_name` must equal it (`R56_J_COMPANY_NAME_MISMATCH`). The report field `policy_checks` says whether the job-packet checks were applied.
+4a. **Scoped packets** (route v4.3; R59). On an inventory that carries `context:scope`, `check` and `check-inventory` reject as `invalid` a fact that is malformed (`R59_SCOPE_FACT_INVALID`) or disagrees with the inventory's sheets, flags, content-cell counts, cells or views (`R59_SCOPE_FACT_MISMATCH`), and an item, group or link that cites a bill-sheet cell on a row below the fact's `end_row` (`R59_ROW_BELOW_END_ROW`). They warn `R59_LINKED_ANALYSIS_OUT_OF_SCOPE` when the fact records linked analysis blocks on an out-of-scope sheet. The report field `scope` reads `applied` on a scoped packet and `not_applied` otherwise; without the fact every check is that of v4.2.
 
 One policy question stays open for the owner (FIELD_ROLES R50, note for the owner): 5. the O10 boundary in `SYNTHETIC_ALLOCATION_CASES.json` A12. R50 makes the unpriced owner-supplied panel line `excluded_supply` when a line inside it is priced; the O10 record ("the panel group stays and its lines are rows") can be read as keeping it as a row. Under O11, R50 also supersedes O7/R45's inclusion of in-panel lines without a price. Follow R50; evaluators declare both readings before scoring. (R50 now states the census role of an O10 omission, `excluded_supply`, which closes the earlier question 4.)
 
@@ -88,8 +90,8 @@ python3 -I tools/cps046b_route.py check --inventory SOURCE_INVENTORY.json --resp
 - `invalid` violations are structural defects, such as an unknown or wrong-case reference, a missing proof, a wrong type, a mismatched unit or quantity, a missing role, a duplicate role, or a content cell that no item uses. Correct the response from the source, not by deleting meaning.
 - `field_must_be_null` violations mean the cited source cannot be carried for that field. Examples: a quantity written as text with a unit or with full-width digits, a date-typed or error cell, or a field other than L, M and N proven only by context (for example I or C citing only `context:brand_table` or `context:glossary`: cite the source cell too). Set that field null, or that raw selection empty, with a specific reason. The source cell stays in the census.
 - `unrepresentable_hold` violations mean a true answer cannot be carried by the admitted writer. Examples: a value that begins with `-`, `=`, `+` or `@`, or a held component link. Do not change a true value to make one disappear. Keep it, explain it in `limitations`, and return the response. The export is then held, and that outcome is recorded honestly.
-- `invalid` also covers the route v4.2 policy checks (interface point 4): correct L, M, N, K, O, P, the group or the J from the job inputs and the resources, never by inventing a value.
-- The warnings `O13_SELECTION_EVIDENCE_M_N` (M and N cite job inputs), `R57_NULL_C_RESEARCH_DRAFT` (a null C on a `research_draft` row) and `O16_Q_UNVERIFIED_ADOPTION` (Q under unverified adoption) are expected under R48, R57 and R54. The first two tell the orchestrator to export with the portable writer's mode v2. None is a violation.
+- `invalid` also covers the route v4.2 policy checks (interface point 4): correct L, M, N, K, O, P, the group or the J from the job inputs and the resources, never by inventing a value. It also covers the route v4.3 scope checks (interface point 4a): an `R59_ROW_BELOW_END_ROW` item is out of the quoted range, so classify its cells `excluded_supply` and drop the citation; an `R59_SCOPE_FACT_*` violation is a packet defect to report, not something the response can repair.
+- The warnings `O13_SELECTION_EVIDENCE_M_N` (M and N cite job inputs), `R57_NULL_C_RESEARCH_DRAFT` (a null C on a `research_draft` row) and `O16_Q_UNVERIFIED_ADOPTION` (Q under unverified adoption) are expected under R48, R57 and R54. The first two tell the orchestrator to export with the portable writer's mode v2. None is a violation. On a scoped packet `R59_LINKED_ANALYSIS_OUT_OF_SCOPE` is expected when the fact records linked blocks on a scoped-out sheet (R59 item 6); it needs no change to the response.
 - A passing check proves structure only. It is not semantic approval.
 
 ## Prohibited
@@ -103,4 +105,4 @@ python3 -I tools/cps046b_route.py check --inventory SOURCE_INVENTORY.json --resp
 
 ## After return (not the generator's job)
 
-The orchestrator freezes the response bytes, then runs `convert` to produce the carrier and census ledger. A carrier with M/N selection evidence or a null C on a `research_draft` row is not accepted by the unchanged writer004 gate; the portable writer's mode v2 (`research/export/README.md`) validates it with writer004 on a documented placeholder copy plus the sha256-pinned route v4.2 port. Evaluation happens in a separate role. Workbook export, saved-cell QA and visual QA need an admitted export runtime. Where none is available, they are recorded as unattempted.
+The orchestrator freezes the response bytes, then runs `convert` to produce the carrier and census ledger. A carrier with M/N selection evidence or a null C on a `research_draft` row is not accepted by the unchanged writer004 gate; the portable writer's mode v2 (`research/export/README.md`) validates it with writer004 on a documented placeholder copy plus the sha256-pinned route v4.2 port (route v4.3 keeps that port byte-identical, so it validates v4.3 carriers unchanged). Evaluation happens in a separate role. Workbook export, saved-cell QA and visual QA need an admitted export runtime. Where none is available, they are recorded as unattempted.

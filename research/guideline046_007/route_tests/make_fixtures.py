@@ -20,6 +20,11 @@ only, so the fixtures come in two kinds:
   - fixture_inventory_jobs.json: a 046f job packet (contract-like source, all six context facts); the
     job-input response follows R48/R56 (L, M, N from the job inputs on every item, K, O, P null, one
     one-member physical_enclosure group) and the v4.2 mutations test each new check.
+Route v4.3 (candidate 046g, FIELD_ROLES R59) adds scoped packets: fixture_inventory_scoped.json is an invented
+材料清單 job packet whose workbook has four sheets, of which only the bill sheet (index 2) is in scope; it carries
+context:scope (end row 7, one linked analysis block on the scoped-out analysis sheet). Variants: no linked block (no
+warning), end row 6 (the boundary: row 6 is cited and passes) and one v43 mutation per new check. The scope-stage tests
+(run_scope_stage_tests.py) import SCOPED_BILL, scoped_job_facts and scoped_response from this module.
 """
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -538,6 +543,283 @@ def mutations(base):
     return cases, raws
 
 
+# ---------------------------------------------------------------- route v4.3 (FIELD_ROLES R59): scoped packets, invented
+SCOPED_CASE = 'SCOPED01'
+SB = '示例材料清單'
+SCOPED_SHEETS = [   # index, name, role, rows, columns, content cells (out-of-scope sheets: invented; bill: computed), reason
+    (1, '示例總表', 'summary', 12, 4, 20, 'summary: never yields rows (R49)'),
+    (2, SB, 'bill', 10, 7, None, 'bill: the single BILL1 candidate; rows come from this sheet (R49)'),
+    (3, '示例單價分析', 'analysis', 400, 7, 2500,
+     'analysis: no in-range bill line with no price and no status links a block here; R51 not triggered; 1 linked block(s) belong to '
+     'priced or not-estimated parents, whose components are not rows and are not written on a scoped packet (R51, R59)'),
+    (4, '示例資源統計', 'resource_statistics', 120, 10, 600, 'resource statistics: source check only, never yields rows (guideline section 3)'),
+]
+SCOPED_BILL = {
+    (1, 'A'): (T, '示例淨水場控制盤更新 材料清單', False),
+    **{(2, c): (T, v, False) for c, v in zip('ABCDEFG', ['項次', '項目及說明', '單位', '數量', '單價', '複價', '備註'])},
+    (3, 'A'): (T, '1', False), (3, 'B'): (T, '產品，電磁接觸器，AC220V', False), (3, 'C'): (T, '只', False),
+    (3, 'D'): (N, 2.0, False), (3, 'E'): (N, 1500.0, False), (3, 'F'): (N, 3000.0, True),
+    (4, 'A'): (T, '2', False), (4, 'B'): (T, '產品，選擇開關，30mm', False), (4, 'C'): (T, '個', False),
+    (4, 'D'): (N, 3.0, False), (4, 'F'): (T, '不含估價', False),
+    (5, 'A'): (T, '3', False), (5, 'B'): (T, '溫度計', False), (5, 'C'): (T, '支', False), (5, 'D'): (N, 1.0, False),
+    (6, 'B'): (T, '運費', False), (6, 'C'): (T, '式', False), (6, 'D'): (N, 1.0, False), (6, 'E'): (N, 2000.0, False), (6, 'F'): (N, 2000.0, True),
+    (7, 'E'): (T, '合計', False), (7, 'F'): (N, 5000.0, True),
+    (8, 'A'): (T, '議價後總價', False), (8, 'F'): (N, 4800.0, False),
+    (9, 'A'): (T, '報價人：示例機電股份有限公司', False),
+    (10, 'A'): (T, '4', False), (10, 'B'): (T, '產品，無熔絲開關，3P，50AT', False), (10, 'C'): (T, '只', False),
+    (10, 'D'): (N, 1.0, False), (10, 'E'): (N, 900.0, False), (10, 'F'): (N, 900.0, True),
+}
+SCOPED_BILL_MERGES = ['A1:G1']
+
+
+def sheet_cells(si, name, data, rows, cols, merge_list, vws):
+    """Every position of one sheet, as build_inventory writes them."""
+    cov = {}
+    for m in merge_list:
+        a, b = m.split(':')
+        c0, r0 = ord(a[0]) - 64, int(a[1:])
+        c1, r1 = ord(b[0]) - 64, int(b[1:])
+        for r in range(r0, r1 + 1):
+            for c in range(c0, c1 + 1):
+                if (r, c) != (r0, c0):
+                    cov[(r, c)] = f'cell:S{si}!{letters(c0)}{r0}'
+    out = []
+    for r in range(1, rows + 1):
+        for c in range(1, cols + 1):
+            L = letters(c)
+            typ, val, frm = data.get((r, L), ('blank', None, False))
+            state, canonical, usable, reason = None, None, False, None
+            if (r, c) in cov:
+                state, reason = 'covered', 'covered merge position; use the merge anchor'
+            elif typ == 'blank':
+                state, reason = 'true_blank', 'empty cell has no raw text'
+            else:
+                state = 'cached_formula' if frm else 'literal'
+                canonical, usable = (val, True) if typ == T else (canon(val), True)
+            vv = []
+            for v in vws:
+                lo, hi = v['range'].split(':')
+                (cl, rl), (ch, rh) = [(ord(x[0]) - 64, int(x[1:])) for x in (lo, hi)]
+                if v['sheet'] == name and cl <= c <= ch and rl <= r <= rh:
+                    vv.append(v['id'])
+            out.append({'ref': f'cell:S{si}!{L}{r}', 'sheet_index': si, 'sheet': name, 'address': f'{L}{r}', 'row': r, 'col': c,
+                        'saved_type': typ, 'state': state, 'saved_value': val, 'native_literal': None, 'formula_record_present': frm,
+                        'formula': None, 'merge_anchor_ref': cov.get((r, c)), 'conflicts': [], 'canonical_raw': canonical,
+                        'usable_for_raw': usable, 'raw_limit_reason': reason, 'views': vv})
+    return out
+
+
+def scoped_job_facts(case_id):
+    """Job inputs and company resources of the invented 材料清單 job (no brand table, O17)."""
+    job_sha = hashlib.sha256(b'invented scoped per-job config').hexdigest()
+    return ([_fact('case_identity', 'cps.internal_case_id', case_id, 'Invented job input: internal case id (O13, R48).', 'invented per-job config', job_sha)]
+            + JOB_INPUTS(job_sha) + [f for f in RESOURCE_FACTS() if f['ref'] != 'context:brand_table'])
+
+
+def scope_payload(end_row=7, linked=1, bill_content=None, **over):
+    sheets = []
+    for idx, name, role, rows, cols, cc, reason in SCOPED_SHEETS:
+        sheets.append({'index': idx, 'name': name, 'role': role, 'visibility': 'visible', 'rows': rows, 'columns': cols,
+                       'content_cells': bill_content if role == 'bill' else cc, 'in_scope': role == 'bill',
+                       'reason': reason if (role != 'analysis' or linked) else 'analysis: no in-range bill line with no price and no status links a block here; R51 not triggered',
+                       'linked_analysis_blocks': linked if role == 'analysis' else 0})
+    h = lambda t: hashlib.sha256(t.encode('utf-8')).hexdigest()
+    d = {'schema': 'cps.scope-fact.v1', 'rule': 'R59', 'bill_rule': 'BILL1.v1',
+         'threshold': {'content_cells_literal_or_cached': 3159, 'limit': 2500},
+         'bill_sheet_index': 2, 'bill_header_row': 2, 'end_row': end_row, 'sheets': sheets,
+         'digest_sha256': h('invented scope digest'), 'full_inventory_sha256': h('invented full inventory'),
+         'decision_sha256': h('invented scope decision'), 'agreement': 'tool_and_reader_agreed'}
+    d.update(over)
+    return d
+
+
+def build_scoped_inventory(payload=None, fact_value=None, extra_views=(), cell_swap=False, **pkw):
+    vws = [{'id': 1, 'sheet': SB, 'range': 'A1:G10'}] + list(extra_views)
+    cells = sheet_cells(2, SB, SCOPED_BILL, 10, 7, SCOPED_BILL_MERGES, vws)
+    if cell_swap:       # an out-of-scope sheet's cell replaces a blank in-scope position: the census count still matches
+        g10 = next(i for i, c in enumerate(cells) if c['address'] == 'G10')
+        cells[g10] = dict(cells[g10], ref='cell:S1!A1', sheet_index=1, sheet='示例總表', address='A1', row=1, col=1, views=[])
+    content = sum(1 for c in cells if c['state'] in ('literal', 'cached_formula') and c['saved_value'] not in (None, ''))
+    payload = payload if payload is not None else scope_payload(bill_content=content, **pkw)
+    fake_sha = hashlib.sha256(b'invented scoped fixture workbook bytes').hexdigest()
+    sheets = [{'index': idx, 'name': name, 'visibility': 'visible', 'rows': rows, 'columns': cols,
+               'merges': SCOPED_BILL_MERGES if role == 'bill' else [],
+               'formula_records': sum(1 for v in SCOPED_BILL.values() if v[2]) if role == 'bill' else 0, 'in_scope': role == 'bill'}
+              for idx, name, role, rows, cols, _, _ in SCOPED_SHEETS]
+    value = fact_value if fact_value is not None else json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+    scope_fact = {'ref': 'context:scope', 'namespace': 'cps.source_prep.scope', 'value': value,
+                  'basis': 'Invented scope decision for route testing (FIELD_ROLES R59); not a real scope stage.',
+                  'authority_pins': [{'label': 'invented scope decision', 'sha256': payload['decision_sha256'] if isinstance(payload.get('decision_sha256'), str) else fake_sha}]}
+    inv = {'schema': 'cps.source-inventory.cells.v2', 'case_id': SCOPED_CASE, 'family_id': SCOPED_CASE,
+           'representation_profile': 'cached-cell-raw-scalar-text.v2',
+           'source': {'source_id': 'S', 'format': 'cached_xlsx', 'bytes': 2048, 'sha256': fake_sha, 'adoption_status': 'unverified',
+                      'adoption_basis': 'Invented scoped fixture; no real material list.',
+                      'reader': {'name': 'invented', 'version': '0', 'biff_format': None, 'formula_expressions_available': False},
+                      'carrier_source': {'kind': 'cached_xlsx', 'path': 'X:\\Fixtures\\invented\\fixture-material-list.xlsx',
+                                         'sha256': fake_sha, 'views': vws}},
+           'sheets': sheets,
+           'views': [dict(v, image={'file': f"view_{v['id']:02d}.png", 'bytes': 1, 'sha256': fake_sha}) for v in vws],
+           'external_links': [], 'cells': cells,
+           'context_facts': scoped_job_facts(SCOPED_CASE) + [scope_fact],
+           'limitations': ['Invented scoped fixture inventory for route v4.3 tests only (FIELD_ROLES R59).']}
+    return inv, serialize(inv).encode('utf-8')
+
+
+def scoped_response(inv_sha, case_id=SCOPED_CASE):
+    """Valid response on the scoped fixture: rows 3, 4 and 6 of the bill sheet (R49-R59); rows 8-10 are out of range."""
+    S = 'cell:S2!'
+    jin = dict(L=nn(['context:case_identity'], 'copied job input', 'internal case id supplied with the job (R48)'),
+               M=nn(['context:customer_name'], 'copied job input', 'customer full name supplied with the job (R48)'),
+               N=nn(['context:project_name'], 'copied job input', 'project short name supplied with the job (R48)'))
+    def nulls(**over):
+        p = {c: nul(f'{c} stays null on this row.') for c in COLS}
+        p['A'] = nul('Not the enclosure row: A is null (R56).')
+        p['B'] = nul('Not the enclosure row: B is null (R56).')
+        p['G'] = nul('Procurement unit price is blank at the 未填 stage.')
+        p['H'] = nul('Procurement extended price is blank at the 未填 stage.')
+        for c in 'KOP':
+            p[c] = nul(f'{c} stays null (FIELD_ROLES R48).')
+        p.update(jin)
+        p.update(over)
+        return p
+    def v(**kw):
+        x = [None] * 17
+        x[11], x[12], x[13] = case_id, CUSTOMER, PROJECT_NAME
+        for k, y in kw.items():
+            x[COLS.index(k)] = y
+        return x
+    items = [
+        item('R001', 'demand', None, 'research_draft', v(C='XM', D='AC220V', E='只', F=2, Q=1500),
+             nulls(C=nn([S + 'B3', 'context:glossary'], 'glossary abbreviation of the device 電磁接觸器', 'equipment line; glossary device (R52)'),
+                   D=nn([S + 'B3'], 'rest of the description after the glossary device', 'R52 glossary step'),
+                   E=nn([S + 'C3'], 'copied', 'unit cell'), F=nn([S + 'D3'], 'copied', 'quantity cell'),
+                   I=nul('No model stated in the line\'s own cells; a 材料清單 job takes I only from its cells (R55, O17).'),
+                   J=nul('No brand stated in the line\'s own cells; a 材料清單 job takes J only from its cells (R55, O17).'),
+                   Q=nn([S + 'E3'], 'copied unit price', 'priced line: Q is its unit price (R54)')),
+             raw(desc=[S + 'B3'], unit=[S + 'C3'], qty=[S + 'D3'], price=[S + 'E3'], amount=[S + 'F3'], reasons={'remarks': 'remarks cell is empty'}),
+             [S + 'A3']),
+        item('R002', 'demand', None, 'research_draft', v(C='XS', D='30mm', E='個', F=3, I='不含估價', J='不含估價'),
+             nulls(C=nn([S + 'B4', 'context:glossary'], 'glossary abbreviation of the device 選擇開關', 'equipment line; glossary device (R52)'),
+                   D=nn([S + 'B4'], 'rest of the description after the glossary device', 'R52 glossary step'),
+                   E=nn([S + 'C4'], 'copied', 'unit cell'), F=nn([S + 'D4'], 'copied', 'quantity cell'),
+                   I=nn([S + 'F4'], 'copied status text', 'not-estimated line: I = 不含估價 (R55)'),
+                   J=nn([S + 'F4'], 'copied status text', 'not-estimated line: J = 不含估價 (R55)'),
+                   Q=nul('Not-estimated line: Q is null (R54).')),
+             raw(desc=[S + 'B4'], unit=[S + 'C4'], qty=[S + 'D4'], amount=[S + 'F4'],
+                 reasons={'unit_price': 'unit-price cell is empty', 'remarks': 'remarks cell is empty'}),
+             [S + 'A4']),
+        item('R003', 'demand', None, 'research_draft', v(D='運費', E='式', F=1, Q=2000),
+             nulls(C=nul('Fee line: C is null (R52).'), D=nn([S + 'B6'], 'copied description', 'fee line: D is the description (R52)'),
+                   E=nn([S + 'C6'], 'copied', 'unit cell'), F=nn([S + 'D6'], 'copied', 'quantity cell'),
+                   I=nul('Fee line with no stated model (R55).'), J=nul('Fee line with no stated brand (R55).'),
+                   Q=nn([S + 'E6'], 'copied unit price', 'priced fee line: Q is its unit price (R54)')),
+             raw(desc=[S + 'B6'], unit=[S + 'C6'], qty=[S + 'D6'], price=[S + 'E6'], amount=[S + 'F6'], reasons={'remarks': 'remarks cell is empty'}),
+             [S + 'B6']),
+    ]
+    roles = [
+        {'role': 'header', 'refs': [S + 'A1'] + [S + c + '2' for c in 'ABCDEFG'], 'reason': 'title and column headers'},
+        {'role': 'item_identifier', 'refs': [S + 'A3', S + 'A4'], 'reason': 'item numbers'},
+        {'role': 'demand_content', 'refs': [S + x for x in ['B3', 'C3', 'D3', 'E3', 'F3', 'B4', 'C4', 'D4', 'F4', 'B6', 'C6', 'D6', 'E6', 'F6']],
+         'reason': 'item description, unit, quantity, price and amount cells'},
+        {'role': 'excluded_supply', 'refs': [S + x for x in ['A5', 'B5', 'C5', 'D5']],
+         'reason': 'no enclosure and no estimate: not in the quoted supply (R45); price cells empty'},
+        {'role': 'financial_summary', 'refs': [S + 'E7', S + 'F7'], 'reason': 'end row of the quoted range (R49)'},
+        {'role': 'excluded_supply', 'refs': [S + x for x in ['A8', 'F8', 'A9', 'A10', 'B10', 'C10', 'D10', 'E10', 'F10']],
+         'reason': 'outside the quoted range (R49, R59)'},
+    ]
+    return {'schema': 'cps.semantic-source-refs.v2', 'case_id': case_id, 'family_id': case_id, 'inventory_sha256': inv_sha,
+            'status': 'research_draft', 'groups': [], 'items': items, 'component_links': [], 'source_roles': roles,
+            'limitations': ['Invented scoped fixture response (FIELD_ROLES R59).']}
+
+
+def scoped_fixtures(enc, index):
+    """Route v4.3 (R59): scoped fixture inventories, valid responses and one mutation per new check."""
+    inv, raw_ = build_scoped_inventory()
+    (OUT / 'fixture_inventory_scoped.json').write_bytes(raw_)
+    base = scoped_response(hashlib.sha256(raw_).hexdigest())
+    (OUT / 'valid_response_scoped.json').write_bytes(enc(base))
+    for tag, kw in (('nolink', {'linked': 0}), ('end6', {'end_row': 6})):
+        _, vraw = build_scoped_inventory(**kw)
+        (OUT / f'fixture_inventory_scoped_{tag}.json').write_bytes(vraw)
+        (OUT / f'valid_response_scoped_{tag}.json').write_bytes(enc(scoped_response(hashlib.sha256(vraw).hexdigest())))
+    content = sum(1 for c in inv['cells'] if c['state'] in ('literal', 'cached_formula') and c['saved_value'] not in (None, ''))
+    S = 'cell:S2!'
+    def it(r, i):
+        return next(x for x in r['items'] if x['id'] == i)
+    def resp_mut(name, code, f):
+        r = copy.deepcopy(base)
+        f(r)
+        (OUT / f'mut_{name}.json').write_bytes(enc(r))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code, 'inventory': 'fixture_inventory_scoped.json'})
+    def add_row10(r):
+        cells = [S + x for x in ('A10', 'B10', 'C10', 'D10', 'E10', 'F10')]
+        for sr in r['source_roles']:
+            sr['refs'] = [x for x in sr['refs'] if x not in cells]
+        r['source_roles'].append({'role': 'item_identifier', 'refs': [S + 'A10'], 'reason': 'item number'})
+        r['source_roles'].append({'role': 'demand_content', 'refs': cells[1:], 'reason': 'item cells'})
+        x = copy.deepcopy(it(r, 'R001'))
+        x['id'] = 'R004'
+        x['values'][2], x['values'][3], x['values'][5], x['values'][16] = None, '產品，無熔絲開關，3P，50AT', 1, 900
+        x['proofs'].update(C=nul('no glossary device'), D=nn([S + 'B10'], 'copied', 'description'), E=nn([S + 'C10'], 'copied', 'unit cell'),
+                           F=nn([S + 'D10'], 'copied', 'quantity cell'), Q=nn([S + 'E10'], 'copied', 'unit price'))
+        x['raw_refs'] = raw(desc=[S + 'B10'], unit=[S + 'C10'], qty=[S + 'D10'], price=[S + 'E10'], amount=[S + 'F10'], reasons={'remarks': 'empty'})
+        x['anchor_refs'] = [S + 'A10']
+        r['items'].append(x)
+    resp_mut('v43_row_below_end_item', 'R59_ROW_BELOW_END_ROW', add_row10)
+    resp_mut('v43_row_below_end_raw_remarks', 'R59_ROW_BELOW_END_ROW',
+             lambda r: it(r, 'R001')['raw_refs'].update(remarks={'refs': [S + 'A9'], 'reason_if_empty': None}))
+    resp_mut('v43_row_below_end_proof', 'R59_ROW_BELOW_END_ROW', lambda r: it(r, 'R003')['proofs']['D'].update(refs=[S + 'B6', S + 'A8']))
+    resp_mut('v43_row_below_end_anchor', 'R59_ROW_BELOW_END_ROW', lambda r: it(r, 'R003').update(anchor_refs=[S + 'A8']))
+    def group_below(r):
+        r['groups'].append({'id': 'G1', 'name': None, 'specification': None, 'relationship': 'physical_enclosure', 'anchor_refs': [S + 'A10'],
+                            'name_refs': [], 'specification_refs': [], 'quantity_basis': 'one row', 'limitations': ['invented defect']})
+        it(r, 'R001')['group_id'] = 'G1'
+    resp_mut('v43_row_below_end_group', 'R59_ROW_BELOW_END_ROW', group_below)
+    def inv_mut(name, code, **kw):
+        _, vraw = build_scoped_inventory(**kw)
+        (OUT / f'inv_{name}.json').write_bytes(vraw)
+        r = copy.deepcopy(base)
+        r['inventory_sha256'] = hashlib.sha256(vraw).hexdigest()
+        (OUT / f'mut_{name}.json').write_bytes(enc(r))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code, 'inventory': f'inv_{name}.json'})
+    P = lambda **o: scope_payload(bill_content=content, **o)
+    def P_sheet(i, **o):
+        d = P()
+        d['sheets'][i].update(o)
+        return d
+    inv_mut('v43_row_below_end_boundary', 'R59_ROW_BELOW_END_ROW', end_row=5)
+    bad = 'R59_SCOPE_FACT_INVALID'
+    inv_mut('v43_fact_not_json', bad, payload=P(), fact_value='{"schema": "cps.scope-fact.v1",')
+    inv_mut('v43_fact_value_number', bad, payload=P(), fact_value=7)
+    inv_mut('v43_fact_wrong_schema', bad, payload=P(schema='cps.scope-fact.v0'))
+    inv_mut('v43_fact_wrong_bill_rule', bad, payload=P(bill_rule='BILL2'))
+    inv_mut('v43_fact_wrong_agreement', bad, payload=P(agreement='tool_only'))
+    d = P(); d.pop('digest_sha256')
+    inv_mut('v43_fact_missing_key', bad, payload=d)
+    inv_mut('v43_fact_extra_key', bad, payload=P(note='x'))
+    inv_mut('v43_fact_below_threshold', bad, payload=P(threshold={'content_cells_literal_or_cached': 2500, 'limit': 2500}))
+    inv_mut('v43_fact_bad_hash', bad, payload=P(decision_sha256='ABC'))
+    inv_mut('v43_fact_end_row_not_integer', bad, payload=P(end_row='7'))
+    inv_mut('v43_fact_sheet_count_text', bad, payload=P_sheet(1, content_cells='39'))
+    inv_mut('v43_fact_sheet_blank_reason', bad, payload=P_sheet(0, reason='\u3000'))
+    mm = 'R59_SCOPE_FACT_MISMATCH'
+    inv_mut('v43_fact_flag_disagrees', mm, payload=P_sheet(2, in_scope=True, reason='analysis: in scope'))
+    inv_mut('v43_fact_name_mismatch', mm, payload=P_sheet(0, name='另一總表'))
+    inv_mut('v43_fact_dimensions_mismatch', mm, payload=P_sheet(1, rows=11))
+    d = P(); d['sheets'] = d['sheets'][:3]
+    inv_mut('v43_fact_missing_sheet', mm, payload=d)
+    inv_mut('v43_fact_two_bills', mm, payload=P_sheet(2, role='bill'))
+    inv_mut('v43_fact_bill_index_wrong', mm, payload=P(bill_sheet_index=1))
+    inv_mut('v43_fact_bill_out_of_scope', mm, payload=P_sheet(1, in_scope=False))
+    inv_mut('v43_fact_in_scope_role_summary', mm, payload=P_sheet(1, role='summary'))
+    inv_mut('v43_fact_out_of_scope_role_bill_word', mm, payload=P_sheet(3, role='statistics'))
+    inv_mut('v43_fact_content_count_mismatch', mm, payload=P_sheet(1, content_cells=content - 1))
+    inv_mut('v43_fact_end_row_beyond_sheet', mm, payload=P(end_row=11))
+    inv_mut('v43_fact_end_row_not_after_header', mm, payload=P(end_row=2))
+    inv_mut('v43_out_of_scope_view_present', mm, extra_views=[{'id': 2, 'sheet': '示例總表', 'range': 'A1:D12'}])
+    inv_mut('v43_out_of_scope_cell_present', mm, cell_swap=True)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     inv, inv_raw = build_inventory('unverified')
@@ -677,6 +959,7 @@ def main():
     var('unicode_digit_quantity', 'NONNUMERIC_RAW_QUANTITY_FIELD_MUST_BE_NULL', {'overrides': {(6, 'D'): (T, '３', False)}}, lambda r: None)
     var('too_many_nonitems', 'WRITER_WOULD_REJECT_NONITEMS_REQUIRED', {'extra_sheet': True}, big_roles)
     var('long_header_census', 'WRITER_WOULD_REJECT_STRING_REQUIRED', {'overrides': {(1, 'A'): (T, '題' * 29990, False)}}, lambda r: None)
+    scoped_fixtures(enc, index)          # route v4.3 (R59)
     (OUT / 'MUTATIONS.json').write_text(json.dumps({'expected_canonical': EXPECT_CANON, 'mutations': index}, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps({'mutations': len(index)}))
 

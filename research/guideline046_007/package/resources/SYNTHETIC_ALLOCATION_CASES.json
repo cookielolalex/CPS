@@ -1,12 +1,12 @@
 {
  "schema": "cps.creator-practice-examples.v1",
- "candidate": "046f",
- "part": "2 of 2: sources, job inputs, quoted range, rows, components, Q, enclosure row, E/F, statuses (R47b-R51, R54, R56-R58); part 1 is SYNTHETIC_NAMING_CASES.json",
+ "candidate": "046g",
+ "part": "2 of 2: sources, job inputs, quoted range, rows, components, Q, enclosure row, E/F, statuses, scoped packets (R47b-R51, R54, R56-R59); part 1 is SYNTHETIC_NAMING_CASES.json",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e allocation examples (cps.allocation-examples.draft.v1, R1-R47)",
- "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.2)",
+ "rules": "FIELD_ROLES R47b-R59 (candidate 046g, route v4.3)",
  "resources": {
   "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
   "context:glossary": {
@@ -60,9 +60,10 @@
   "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, so the packet has no brand table (O17); the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
   "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
   "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
-  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2)."
+  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2).",
+  "Scoped packets (A35-A37): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet."
  ],
- "case_count": 34,
+ "case_count": 37,
  "cases": [
   {
    "id": "A01",
@@ -1037,6 +1038,270 @@
     }
    },
    "reason": "Inside means a numbered descendant (3 → 3.1) or the R33 heading scope. Line 4 is a flat-numbered sibling, not inside the panel, so the O10 omission does not reach it and it follows its own row test."
+  },
+  {
+   "id": "A35",
+   "rule": "R59, R49, R50",
+   "input": {
+    "context:scope": {
+     "bill_sheet_index": 2,
+     "bill_header_row": 2,
+     "end_row": 7,
+     "sheets": [
+      {
+       "index": 1,
+       "name": "示例總表",
+       "role": "summary",
+       "in_scope": false,
+       "content_cells": 20,
+       "reason": "summary: never yields rows (R49)",
+       "linked_analysis_blocks": 0
+      },
+      {
+       "index": 2,
+       "name": "示例材料清單",
+       "role": "bill",
+       "in_scope": true,
+       "content_cells": 39,
+       "reason": "bill: the single BILL1 candidate; rows come from this sheet (R49)",
+       "linked_analysis_blocks": 0
+      },
+      {
+       "index": 3,
+       "name": "示例單價分析",
+       "role": "analysis",
+       "in_scope": false,
+       "content_cells": 2500,
+       "reason": "analysis: no in-range bill line with no price and no status links a block here; R51 not triggered; 1 linked block(s) belong to priced or not-estimated parents, whose components are not rows and are not written on a scoped packet (R51, R59)",
+       "linked_analysis_blocks": 1
+      },
+      {
+       "index": 4,
+       "name": "示例資源統計",
+       "role": "resource_statistics",
+       "in_scope": false,
+       "content_cells": 600,
+       "reason": "resource statistics: source check only, never yields rows (guideline section 3)",
+       "linked_analysis_blocks": 0
+      }
+     ]
+    },
+    "packet_cells": "sheet 2 only",
+    "lines": [
+     {
+      "row": 3,
+      "item_no": "1",
+      "description": "產品，電磁接觸器，AC220V",
+      "unit": "只",
+      "quantity": 2,
+      "unit_price": 1500,
+      "amount": 3000
+     },
+     {
+      "row": 4,
+      "item_no": "2",
+      "description": "產品，選擇開關，30mm",
+      "unit": "個",
+      "quantity": 3,
+      "amount": "不含估價"
+     },
+     {
+      "row": 5,
+      "item_no": "3",
+      "description": "溫度計",
+      "unit": "支",
+      "quantity": 1
+     },
+     {
+      "row": 6,
+      "description": "運費",
+      "unit": "式",
+      "quantity": 1,
+      "unit_price": 2000,
+      "amount": 2000
+     },
+     {
+      "row": 7,
+      "unit_price": "合計",
+      "amount": 5000
+     },
+     {
+      "row": 8,
+      "item_no": "議價後總價",
+      "amount": 4800
+     },
+     {
+      "row": 9,
+      "item_no": "報價人：示例機電股份有限公司"
+     },
+     {
+      "row": 10,
+      "item_no": "4",
+      "description": "產品，無熔絲開關，3P，50AT",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 900,
+      "amount": 900
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     "row 3: C XMC, D AC220V, Q 1500",
+     "row 4: C XCS, D 30mm, I 不含估價, J 不含估價, Q null",
+     "row 6 (運費): C null, D 運費, Q 2000"
+    ],
+    "census": {
+     "row 5": "excluded_supply, reason per R45 (no price and no status)",
+     "row 7": "financial_summary (end row)",
+     "rows 8-10, every content cell": "excluded_supply, reason \"outside the quoted range (R49, R59)\""
+    },
+    "status": "research_draft, not held or partial",
+    "route": "check passes with scope: applied and the warning R59_LINKED_ANALYSIS_OUT_OF_SCOPE; an item citing a cell of rows 8-10 is rejected (R59_ROW_BELOW_END_ROW)"
+   },
+   "reason": "The fact names the bill sheet and the end row; the generator does not re-decide them. Sheets 1, 3 and 4 are scoped out: they are not missing sources, give no reason to hold, and no field may cite or reconstruct them. The linked block on sheet 3 belongs to the priced row 3, so its components are not rows and nothing is written for it. Row 10 is priced but lies after the end row, so it is out of range."
+  },
+  {
+   "id": "A36",
+   "rule": "R59 (in scope by R51 (i)), R51",
+   "input": {
+    "context:scope": {
+     "bill_sheet_index": 1,
+     "end_row": 9,
+     "sheets": [
+      {
+       "index": 1,
+       "name": "示例詳細表",
+       "role": "bill",
+       "in_scope": true
+      },
+      {
+       "index": 2,
+       "name": "示例單價分析",
+       "role": "analysis",
+       "in_scope": true,
+       "reason": "analysis: every in-range bill line has no price and no status, so rows come from the analysis blocks (R51)"
+      }
+     ]
+    },
+    "bill_lines": "rows 4-8 are item lines with no price and no status; row 3, the heading 一、控制盤 with no unit or quantity, carries a section amount 8000 in the amount column; row 9 holds 合計 in the unit-price column",
+    "analysis": [
+     {
+      "block": "工作項目：盤體組立配線 (links to bill row 4 by name)",
+      "components": [
+       {
+        "description": "組立工資",
+        "unit": "工",
+        "quantity": 2,
+        "unit_price": 1500,
+        "amount": 3000
+       },
+       {
+        "description": "配線材料",
+        "unit": "式",
+        "quantity": 1,
+        "unit_price": 2000,
+        "amount": 2000
+       }
+      ],
+      "total": {
+       "description": "合計",
+       "amount": 5000
+      }
+     },
+     {
+      "block": "工作項目：示例甲站設備 (no bill line shares its code or name)"
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "role": "demand",
+      "C": null,
+      "D": "組立工資",
+      "E": "工",
+      "F": 2,
+      "Q": 1500
+     },
+     {
+      "role": "demand",
+      "C": null,
+      "D": "配線材料",
+      "E": "式",
+      "F": 1,
+      "Q": 2000
+     }
+    ],
+    "census": {
+     "bill row 4 (parent)": "section, reason \"parent of analysis components listed as rows (R51)\"",
+     "block 合計 row": "financial_summary",
+     "block 示例甲站設備": "analysis_unlinked (R46)",
+     "other bill rows with no price and no status": "section when their blocks give the rows; excluded_supply (R45) when they have no block"
+    }
+   },
+   "reason": "Every in-range bill line has no price and no status, so R51 takes the rows from the analysis sheet, which the scope stage therefore kept in scope (R59 condition (i)). The section amount on a heading row is not an item line."
+  },
+  {
+   "id": "A37",
+   "rule": "R59 (in scope by R51 (ii)), R51 boundary, A26",
+   "input": {
+    "context:scope": {
+     "bill_sheet_index": 1,
+     "end_row": 20,
+     "sheets": [
+      {
+       "index": 1,
+       "name": "示例詳細表",
+       "role": "bill",
+       "in_scope": true
+      },
+      {
+       "index": 2,
+       "name": "示例單價分析",
+       "role": "analysis",
+       "in_scope": true,
+       "reason": "analysis: an in-range bill line with no price and no status has a linked block on this sheet (R51)"
+      }
+     ]
+    },
+    "bill_lines": [
+     {
+      "row": 6,
+      "item_no": "6",
+      "description": "盤體組立配線",
+      "unit": "式",
+      "quantity": 1
+     },
+     {
+      "row": 7,
+      "item_no": "7",
+      "description": "產品，電磁接觸器，AC220V",
+      "unit": "只",
+      "quantity": 2,
+      "unit_price": 1500,
+      "amount": 3000
+     }
+    ],
+    "other_bill_lines": "priced or not estimated",
+    "analysis": [
+     "工作項目：盤體組立配線 (links to row 6 by name)",
+     "工作項目：產品，電磁接觸器，AC220V (links to the priced row 7 by name)"
+    ]
+   },
+   "expected": {
+    "rows": [
+     "row 7: C XMC, D AC220V, Q 1500",
+     "the other priced and not-estimated lines"
+    ],
+    "census": {
+     "row 6": "excluded_supply, reason per R45 (no price and no status)",
+     "block 盤體組立配線": "analysis_unlinked (R46; the block lies outside the quoted range, A26)",
+     "block of row 7": "analysis_unlinked, reason \"block of a priced or not-estimated parent; its components are not 未填 rows and are not written on a scoped packet (R51, R59)\""
+    },
+    "components": "none: no analysis_component items or links on a scoped packet"
+   },
+   "reason": "R59 keeps the analysis sheet in scope under condition (ii), but R51 still applies as written: a separate analysis sheet lies outside the quoted range, so the no-price line is excluded_supply and its block analysis_unlinked (A26). The block of the priced row 7 gives no component items on a scoped packet. Whether condition (ii) should stay is open for the owner (FIELD_ROLES R59, Limits)."
   }
  ]
 }
