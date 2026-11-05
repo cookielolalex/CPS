@@ -112,3 +112,18 @@ The job inputs are built by a deterministic builder that reads only the case id,
 - **M** is the customer table's full name, taken from the nearest earlier case of that customer. It matched in 16 of 23, leave-one-case-out. Her form changed over time, from short names to full company names.
 - **Blank era.** In 14 of the 37 exposed cases, an unbroken run of case ids from 1130605 to 1140307, she left L, M and N blank. R48 (O13) always fills them, which is current practice. So every case in that era loses its 3 job-level positions. Six of the 30 pool cases fall in it. This is recorded as an expected loss, not adjusted for.
 - **Coverage.** Of the 53 jobs (15 non-reserved and 38 reserved), 23 get M from the table and 13 fall back to the folder short name. 17 reserved cases from 110–112 still need their folder titles from a Drive listing before their inputs can be built.
+
+## Qualification source preparation (2026-11-05)
+
+Source preparation was done in the source role only, using a pre-declared selection rule: the single project-folder file titled 材料清單 or 材料單, and otherwise the hash-verified registry contract. No target content was opened.
+
+| Jobs (53) | Count | Notes |
+|---|---:|---|
+| Material list bound | 34 | 14 non-reserved and 20 reserved; bytes match the Drive listing |
+| Contract bound | 1 | 1141006; sha256 matches the registry |
+| Quotation workbook bound by owner decision O28 | 1 | the one reserved pool case the rule could not bind |
+| Nonattempt by owner decision O29 | 17 | reserved cases from 110–112, outside the pool; no source available to this session |
+
+**Large workbooks** (more than 2,500 content cells): 12 among the bound jobs. They are all 8 non-reserved cases the screen had flagged, and 4 reserved cases, 2 of them in the pool. So 10 of the 30 pool pairs need the R59 scope stage.
+
+**Timing check (O17).** Every bound file's Drive modified time is within a second of its target's, because all of them come from one batch upload. The check tells us nothing about which document was prepared first.
