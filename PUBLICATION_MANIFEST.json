@@ -1509,8 +1509,8 @@
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O23_O25.md",
-      "bytes": 4160,
-      "sha256": "0873509797d6bebd3c8b30aa0e09bf0d68d9e2e8025a4db1c78049d7a908b98a"
+      "bytes": 5353,
+      "sha256": "b317e1767d914c49ab28f5445081b9f3e9e1c04f462129a809283d9c288f338f"
     },
     {
       "path": "research/export/tests/make_tamper_fixtures.py",

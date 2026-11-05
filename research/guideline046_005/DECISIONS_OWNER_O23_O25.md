@@ -34,3 +34,16 @@ The pool is exactly 30: 15 non-reserved and 15 reserved, with no margin. Year 11
 - Any pair that turns out ineligible leaves the bar unreachable from this pool, and that goes back to the owner. This includes a reserved target found to be old-template once opened after all outputs are frozen.
 - The pool is not refilled by choosing replacements after the answers are seen. The single pre-declared alternate for the one reserved duplicate-family pair is recorded privately before generation.
 
+
+## O27 (2026-11-05): company tables for qualification
+
+**Question.** The draft abbreviation glossary and brand/model table were built only from 40 exposed tuning cases and sent for review. Which entries should qualification use? The glossary had 18 recommended entries, 12 pending ones (which the creator uses less than half the time) and 14 not recommended. The brand table matters only for contract-only jobs.
+
+**Owner answer:** "Recommended entries only (Recommended)".
+
+**Effect.**
+- The glossary carries the 18 recommended abbreviations, plus their 4 spelling variants and the builder's 4 category words. The pending and not-recommended entries are left out; for those devices CPS keeps the Chinese name.
+- The brand table is used as drafted, with the O18 breaker fallback: the most common brand.
+- Both private tables were rebuilt with the dev-trial builder and no exclusion. The output is byte-identical to the drafts the owner reviewed. They are marked `OWNER_APPROVED_O27` and pinned by sha256 in each qualification admission.
+- No qualification or reserved case contributed to either table.
+- Any later change to a table (for example new category words) needs the owner's approval.
