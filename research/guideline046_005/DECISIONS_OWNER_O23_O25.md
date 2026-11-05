@@ -89,3 +89,16 @@ The owner reviewed sample CPS outputs and asked for these two changes.
 |---|---|---|
 | O33 | "the CPS sheet should be named project code and project name followed by 未填, not 未填研究草稿". Asked which form, the owner answered "decide from evidence". Asked whether the file should be named like the creator's, the owner answered "Yes, like hers (Recommended)". | **Evidence.** All 65 non-reserved 未填 file titles in the listing end in `(未填)`. Of 61 with a registry folder title, the folder title with the dash after the customer short name removed, plus `(未填)`, reproduces 36. The folder title as written, plus `(未填)`, reproduces 30. **Rule.** The deliverable name is the project folder title (case id + customer short name + project, as a per-job input like L/M/N under O13), with the first dash after the customer short name removed, followed by `(未填)`. The file is `<name>.xlsx`, with characters Windows forbids replaced by `-`. The main sheet is `<name>`, with the characters Excel forbids (`: \ / ? * [ ]`) replaced by `-` and the text cut to 31 characters while keeping `(未填)`. Writer v2.6. |
 | O34 | "why is the 單價 and 復價 column greyout? make sure its not greyed out." | G and H (單價, 複價) are no longer shaded. They look like the other body columns and stay blank, as in the creator's 未填. The visual-QA checklist item for G/H changes to match. Writer v2.6. |
+
+## O35 (2026-11-05): A/B scored once per panel; supersedes O32
+
+**Question.** An evaluation-role study of the three March–May 115 files found that a group-wide rule would still leave two of them below the 0.90 floor, with best possible scores of 0.84 and 0.67. The cause is that one wrong or unreachable panel name gets copied onto 70–90 rows and is counted on each. The evaluator already scores K–O once per case for the same reason: the creator writes them on every row in some years and on the first row in others. Scoring A/B once per distinct panel would remove the multiplication.
+
+**Owner answer:** "Score A/B per panel (Recommended)".
+
+**Effect.**
+- **Metric.** Evaluator v4 (`research/evaluation/compare_target050.py`, built on v3) scores A and B as panel-level positions: the distinct A values and the distinct B values of each case, compared once. A wrong or missing panel name or size still counts, but only once per panel. It no longer counts on every row that repeats it.
+- **CPS.** CPS stays enclosure-row only for every date (O30).
+- **O32 superseded.** The date-window rule is withdrawn before any package carried it.
+- **Before qualification.** v4 needs an independent review and a freeze. The O31 gate aggregator is re-pinned to v4.
+- **Earlier results.** All results recorded so far keep their v2 or v3 numbers. v3 numbers are reported beside v4 in qualification.

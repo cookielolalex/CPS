@@ -1509,8 +1509,8 @@
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O23_O25.md",
-      "bytes": 10817,
-      "sha256": "7d0aa1beae0b5a181713125ed6c60d2cd3a7e6e2405a673bcacf581c176e760a"
+      "bytes": 12208,
+      "sha256": "93f233c18a9c2b42e1c4eca6664850002f2c8f2a150ad6a1ef55c86df6980094"
     },
     {
       "path": "research/export/tests/make_tamper_fixtures.py",
@@ -1566,6 +1566,21 @@
       "path": "research/guideline046_005/STUDY_ENCLOSURE_REPLAY_20261105.md",
       "bytes": 11161,
       "sha256": "43ce6319f2c44b5ea97a10f262f3e863bbfe894301d6800977b0e5ab68c02ee1"
+    },
+    {
+      "path": "research/evaluation/compare_target050.py",
+      "bytes": 19135,
+      "sha256": "feccaf21753e167a768d1cbdaf1755fdd31ad8fbcea7f7aef2f309b03c22929c"
+    },
+    {
+      "path": "research/evaluation/tests/test_compare_target050.py",
+      "bytes": 5705,
+      "sha256": "42736d89de250ed7b2c6ca386ab457d93485afd7aa44c2f338d28cf8b5af9ea3"
+    },
+    {
+      "path": "research/evaluation/PROPOSAL_050.md",
+      "bytes": 3575,
+      "sha256": "63d7f0b8e672544b8acf143a892cdd5cef69750f009add46355ef6d6a130a555"
     }
   ]
 }
