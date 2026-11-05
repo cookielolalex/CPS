@@ -1209,13 +1209,13 @@
     },
     {
       "path": "research/export/README.md",
-      "bytes": 25631,
-      "sha256": "2f48558ba20bf1f7c92f95d46ed6306abd4ffc08d32c44ba032ae663a2726c2a"
+      "bytes": 43876,
+      "sha256": "a610de39e9329349c8f7817d713944bfbf9e27be77755acb3924bb8054ec255c"
     },
     {
       "path": "research/export/saved_qa.py",
-      "bytes": 23367,
-      "sha256": "4db50b4244c38a2fc9b1dd2ad7772f8d5a9db86b03fcd7f76e008f228e1fe89c"
+      "bytes": 47915,
+      "sha256": "dc45c0de1f73cda9658589f3c0e7603a15f31e4dc41f5a002eae38394427ab63"
     },
     {
       "path": "research/export/tests/make_export_fixtures.py",
@@ -1229,8 +1229,8 @@
     },
     {
       "path": "research/export/tests/run_export_tests.py",
-      "bytes": 40311,
-      "sha256": "f489f31843688698c5216a94da2bccb7f9c8de285ad540979828ac30017e524f"
+      "bytes": 64055,
+      "sha256": "143718da8540f096412b916522b4d97a84325547b8ade6cfcc194a0e941c7d9d"
     },
     {
       "path": "research/export/tests/stringify_fuzz.mjs",
@@ -1239,8 +1239,8 @@
     },
     {
       "path": "research/export/visual_qa.py",
-      "bytes": 16120,
-      "sha256": "ebfcb3527efa2146661bb1305d65c6f03d8d013a43aced3051ce30afa42bd59a"
+      "bytes": 22062,
+      "sha256": "7b1f8ec167dcbb9083af5d41f6b5376f568a5f0a94085905066cba758d8be143"
     },
     {
       "path": "research/export/writer004_matrices.mjs",
@@ -1249,8 +1249,8 @@
     },
     {
       "path": "research/export/writer_portable.py",
-      "bytes": 47783,
-      "sha256": "abdd9e61a730e02a1060140df0f2d3483d93a816c137d672714d01f2fb818459"
+      "bytes": 53707,
+      "sha256": "f1c955377a6bbdd809f5738dbd62dec56a0d27f7a782dca04a7118c461940e21"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O10_O12.md",
@@ -1506,6 +1506,16 @@
       "path": "research/evaluation/PROPOSAL_049.md",
       "bytes": 3434,
       "sha256": "80c2c9e241ce7dd8df428754a3652edff201f18ad865601b74715e72c34902b0"
+    },
+    {
+      "path": "research/guideline046_005/DECISIONS_OWNER_O23_O25.md",
+      "bytes": 2190,
+      "sha256": "e26d08260db09ddfc30daf3ff6770f344530bde8e4e502f917587db44baf09b5"
+    },
+    {
+      "path": "research/export/tests/make_tamper_fixtures.py",
+      "bytes": 13748,
+      "sha256": "3464bbfd2b4efcc10fafa6327b7e7f500c8ae4e558387ee004c8edc4859ab541"
     }
   ]
 }

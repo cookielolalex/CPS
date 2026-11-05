@@ -15,6 +15,12 @@ Route
   5. The .xlsx is written with openpyxl: same sheet names and order, cell values and value
      types (strings stay strings, numbers stay numbers, no formulas), and the writer004
      formatting that openpyxl can express. Bytes are reproducible (fixed zip/docProps times).
+  Node environment (v2.3, review S1; before step 1): every node process runs with every NODE_* variable removed from
+  its environment (NODE_OPTIONS, NODE_PATH, ...). Before any node run, @oai/artifact-tool is resolved the
+  way node resolves it from writer004.mjs (createRequire(writer004 URL).resolve, and the ESM resolver
+  from the writer directory, which must agree); the resolved file must be the pinned CPS validation stub
+  (ARTIFACT_TOOL_STUB_SHA256) with the documented package.json. The pinned writer files must be regular
+  files in the writer directory itself (no symlink to another directory). The resolved path is recorded.
 
 Mode v2 (candidate 046f carriers made by route v4.2, which keeps the route v4.1 relaxations unchanged;
 FIELD_ROLES R48, R52, R54, R57; O13, O16)
@@ -45,13 +51,13 @@ Usage
 Outputs in --out (created; must not exist): research-draft.xlsx, EXPECTED_SAVED_VALUES.json,
 WRITER_RECEIPT.json. A refusal creates nothing and prints a JSON refusal on stderr (exit 1).
 """
-import argparse, copy, datetime, hashlib, io, json, math, os, platform, re, subprocess, sys, tempfile, types, zipfile, zlib
+import argparse, copy, datetime, hashlib, io, json, math, os, platform, re, shutil, subprocess, sys, tempfile, types, zipfile, zlib
 from decimal import Decimal
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.2'
+VERSION = 'cps-export-writer-portable.v2.3'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -89,6 +95,20 @@ WRITER_PINS = {
     'validate_carrier_v4.mjs': {'984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013': 'archived original'},
     'receipt_bytes.mjs': {'b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c': 'archived original'},
 }
+# The CPS validation stub for writer004's static import (review S1). The specifier is resolved the way node
+# resolves it from writer004.mjs; the resolved file must have these bytes and its package.json this content.
+ARTIFACT_TOOL_SPECIFIER = '@oai/artifact-tool'
+ARTIFACT_TOOL_STUB_SHA256 = '67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4'
+ARTIFACT_TOOL_STUB_PACKAGE = {'name': '@oai/artifact-tool', 'version': '0.0.0-cps-validation-stub', 'type': 'module',
+                              'main': 'index.mjs', 'exports': './index.mjs'}
+# node -e (CommonJS): resolve the specifier from writer004.mjs, as the review asks (S1).
+RESOLVE_CJS = ("const {createRequire}=require('node:module');const {pathToFileURL}=require('node:url');"
+               "process.stdout.write(JSON.stringify({resolved:createRequire(pathToFileURL(process.argv[1]).href)"
+               ".resolve(process.argv[2])}));")
+# node --input-type=module -e, run with cwd = the writer directory: the ESM resolver (import conditions) from the
+# directory that holds writer004.mjs. Both must give the same file (no conditional exports, no divergence).
+RESOLVE_ESM = ("import {fileURLToPath} from 'node:url';"
+               "process.stdout.write(JSON.stringify({resolved:fileURLToPath(import.meta.resolve(process.argv[1]))}));")
 
 HEADERS = ['盤體名稱', '盤體規格', '材料名稱', '規格', '單位', '數量', '單價', '複價', '型號', '廠牌',
            '訂購廠商', '工程編號', '訂購客戶', '使用客戶', '需要日期', '需要數量', '合約價']
@@ -131,6 +151,8 @@ LIMITATIONS = [
     'Number-to-String text; strings equal to Excel error literals (#N/A, #REF!, ...) are forced to string type.',
     'docProps created/modified and zip member times are fixed to 1980-01-01T00:00:00 so the bytes are reproducible; '
     'the actual run time is in WRITER_RECEIPT.json.',
+    'Node environment: every node process ran with all NODE_* environment variables removed; @oai/artifact-tool resolved '
+    'from writer004.mjs to the pinned CPS validation stub (node_environment in this receipt).',
 ]
 
 
@@ -483,8 +505,16 @@ def save_workbook_bytes(wb):
 
 
 # ------------------------------------------------------------------ gate and cross-check
-def run(cmd, timeout=180):
-    p = subprocess.run(cmd, capture_output=True, timeout=timeout)
+def node_env():
+    """The environment for every node process: os.environ without any NODE_* variable (NODE_OPTIONS, NODE_PATH, ...).
+    Returns (env, removed variable names)."""
+    removed = sorted(k for k in os.environ if k.upper().startswith('NODE_'))
+    return {k: v for k, v in os.environ.items() if not k.upper().startswith('NODE_')}, removed
+
+
+def run(cmd, timeout=180, cwd=None):
+    """Run a node command with the sanitized environment (node_env)."""
+    p = subprocess.run(cmd, capture_output=True, timeout=timeout, env=node_env()[0], cwd=cwd)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -497,18 +527,62 @@ def tool_version(cmd):
 
 
 def check_writer_dir(writer_dir):
+    """Pinned writer files. Each must be a regular file of the writer directory itself: node resolves relative and bare
+    imports from a module's real path, so a symlink to another directory would load the imports from there."""
+    real_dir = Path(os.path.realpath(writer_dir))
     pins = {}
     for name, allowed in WRITER_PINS.items():
         p = writer_dir / name
         if not p.is_file():
             raise Refused('WRITER_FILE_MISSING', 'gate', name)
+        if p.is_symlink() or Path(os.path.realpath(p)) != real_dir / name:
+            raise Refused('WRITER_FILE_OUTSIDE_WRITER_DIR', 'gate', {'file': name, 'realpath': os.path.realpath(p)})
         h = sha256(p.read_bytes())
         if h not in allowed:
             raise Refused('WRITER_FILE_NOT_PINNED', 'gate', {'file': name, 'sha256': h})
         pins[name] = {'sha256': h, 'identity': allowed[h]}
-    stub = writer_dir.parent / 'node_modules' / '@oai' / 'artifact-tool' / 'index.mjs'
-    pins['@oai/artifact-tool/index.mjs (resolved beside the writer, if present)'] = sha256(stub.read_bytes()) if stub.is_file() else None
-    return pins
+    return pins, real_dir
+
+
+def check_node_environment(node, real_dir):
+    """Review S1: resolve @oai/artifact-tool the way node resolves it from writer004.mjs, with the sanitized environment,
+    and refuse unless it is the pinned CPS validation stub. Runs before any other node process."""
+    stage = 'gate:node_environment'
+    env, removed = node_env()
+    w = real_dir / 'writer004.mjs'
+    try:
+        code, out, err = run([node, '-e', RESOLVE_CJS, str(w), ARTIFACT_TOOL_SPECIFIER], 60)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise Refused('NODE_UNAVAILABLE', stage, f'{node}: {type(e).__name__}')
+    if code != 0:
+        raise Refused('ARTIFACT_TOOL_UNRESOLVED', stage, {'resolver': 'createRequire(writer004.mjs).resolve',
+                                                          'stderr': err.decode('utf-8', 'replace')[-400:]})
+    cjs = json.loads(out.decode('utf-8'))['resolved']
+    code, out, err = run([node, '--input-type=module', '-e', RESOLVE_ESM, ARTIFACT_TOOL_SPECIFIER], 60, cwd=str(real_dir))
+    if code != 0:
+        raise Refused('ARTIFACT_TOOL_UNRESOLVED', stage, {'resolver': 'import.meta.resolve from the writer directory',
+                                                          'stderr': err.decode('utf-8', 'replace')[-400:]})
+    esm = json.loads(out.decode('utf-8'))['resolved']
+    if os.path.realpath(cjs) != os.path.realpath(esm):
+        raise Refused('ARTIFACT_TOOL_RESOLUTION_DIVERGES', stage, {'require': cjs, 'import': esm})
+    stub = Path(cjs)
+    h = sha256(stub.read_bytes()) if stub.is_file() else None
+    if h != ARTIFACT_TOOL_STUB_SHA256:
+        raise Refused('ARTIFACT_TOOL_NOT_PINNED', stage, {'resolved': cjs, 'sha256': h, 'pinned': ARTIFACT_TOOL_STUB_SHA256})
+    pkg_path = stub.parent / 'package.json'
+    try:
+        pkg = json.loads(pkg_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        pkg = None
+    if pkg != ARTIFACT_TOOL_STUB_PACKAGE:
+        raise Refused('ARTIFACT_TOOL_PACKAGE_UNEXPECTED', stage, {'package_json': str(pkg_path), 'content': pkg})
+    return {'environment': 'os.environ with every NODE_* variable removed', 'removed_variables': removed,
+            'node': {'command': node, 'executable': shutil.which(node, path=env.get('PATH')), 'version': tool_version([node, '--version'])},
+            'artifact_tool': {'specifier': ARTIFACT_TOOL_SPECIFIER,
+                              'resolved_by': "createRequire(pathToFileURL(<writer dir>/writer004.mjs)).resolve('@oai/artifact-tool'); "
+                                             "equal to import.meta.resolve from the writer directory",
+                              'resolved_path': cjs, 'esm_resolved_path': esm, 'sha256': h, 'pinned_sha256': ARTIFACT_TOOL_STUB_SHA256,
+                              'package_json': str(pkg_path)}}
 
 
 def node_gate(node, writer_dir, carrier_path, carrier_sha, stage='gate:validate_carrier_v4'):
@@ -721,7 +795,8 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
     if len(raw) > INPUT_LIMIT:
         raise Refused('INPUT_SIZE_LIMIT', 'usage')
     carrier_sha = sha256(raw)
-    pins = check_writer_dir(writer_dir)
+    pins, writer_dir = check_writer_dir(writer_dir)       # from here on the writer directory's real path
+    node_environment = check_node_environment(node, writer_dir)
     scan = relaxation_scan(raw) if mode == 'v2' else None
     needs_copy = bool(scan and (scan['o13'] or scan['r57']))
     relax = {'applied': False, 'scanned': scan is not None}
@@ -811,6 +886,8 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
             'gate': gate_rec,
             'cross_check': cross,
             'writer_files': pins,
+            'writer_dir_realpath': str(writer_dir),
+            'node_environment': node_environment,
             'tool_versions': {'python': platform.python_version(), 'openpyxl': openpyxl.__version__, 'lxml': lxml_version,
                               'zlib': zlib.ZLIB_RUNTIME_VERSION, 'node': tool_version([node, '--version']),
                               'writer_portable.py_sha256': sha256(Path(__file__).read_bytes()),

@@ -13,11 +13,19 @@ Proves on invented carriers:
       copy plus the sha256-pinned route v4.2 port, and the saved values equal writer004 prepareMatrices on that copy
       except the documented cells (checked here by an independent content-based alignment); carriers
       without those (including Q under unverified adoption, O16) take the v1 route unchanged; v2
-      refusals come from writer004 or the route port as documented.
+      refusals come from writer004 or the route port as documented;
+  (f) node environment (review S1): the reviewer's planted @oai/artifact-tool module, NODE_OPTIONS --import, NODE_PATH,
+      conditional exports and symlinked writer files are each shown to change writer004's verdict when node runs them
+      directly, and are each refused (or neutralized) by the writer;
+  (g) saved_qa structure (review S2): the reviewer's 22 tampers, rebuilt from the reviewer's invented fidelity probe, plus
+      extra structural tampers, are all caught; no input crashes saved_qa;
+  (h) provenance of EXPECTED (review S3): with --carrier/--writer-dir, consistent EXPECTED+xlsx tampers (receipt stale,
+      updated or deleted) are caught in v1 and v2, and every untampered output passes;
+  (i) visual_qa helpers (review S4, N1): page mapping by the [[sheet name]] marker; possibly clipped cells.
 Usage: python3 -I -B run_export_tests.py --writer-dir /abs/archived/writer --work /abs/new-dir [--skip-visual]
 Prints a JSON summary with passed and failed lists; exit 0 only if nothing failed.
 """
-import argparse, copy, hashlib, importlib.util, json, math, random, shutil, struct, subprocess, sys, zipfile
+import argparse, copy, hashlib, importlib.util, json, math, os, random, shutil, struct, subprocess, sys, zipfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -33,6 +41,19 @@ ROUTE46F = ROUTE46F_DIR / 'package' / 'tools' / 'cps046b_route.py'
 ROUTE46F_FIXTURES = ROUTE46F_DIR / 'route_tests' / 'make_fixtures.py'
 PY = [sys.executable, '-I', '-B']
 results = []
+# test-side node processes run without NODE_* variables too, so their results do not depend on the caller's environment
+NODE_CLEAN_ENV = {k: v for k, v in os.environ.items() if not k.upper().startswith('NODE_')}
+# the reviewer's planted module (review S1 demo), verbatim
+PLANTED_MODULE = """// Reviewer probe: an unpinned module resolved before the stub. Patches a builtin used by validateCarrier.
+const orig = Array.prototype.includes;
+Array.prototype.includes = function (x, ...r) { if (x === 'partial') return true; return orig.call(this, x, ...r); };
+const unavailable = () => { throw new Error('EXPORT_RUNTIME_UNAVAILABLE'); };
+export const Workbook = { create: unavailable };
+export const SpreadsheetFile = { exportXlsx: unavailable };
+"""
+INCLUDES_PATCH = """const orig = Array.prototype.includes;
+Array.prototype.includes = function (x, ...r) { if (x === 'partial') return true; return orig.call(this, x, ...r); };
+"""
 
 
 def sha(b):
@@ -44,9 +65,25 @@ def record(name, ok, detail=None):
     return ok
 
 
-def run(cmd, timeout=900):
-    p = subprocess.run([str(x) for x in cmd], capture_output=True, timeout=timeout)
+def run(cmd, timeout=900, env=None, cwd=None):
+    if env is None and str(cmd[0]) == 'node':
+        env = NODE_CLEAN_ENV
+    p = subprocess.run([str(x) for x in cmd], capture_output=True, timeout=timeout, env=env, cwd=cwd)
     return p.returncode, p.stdout.decode('utf-8', 'replace'), p.stderr.decode('utf-8', 'replace')
+
+
+def refusal(err):
+    try:
+        return json.loads(err.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {}
+
+
+def qa_report(path):
+    try:
+        return json.loads(Path(path).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
 
 
 def load(path, name):
@@ -506,6 +543,246 @@ def main():
            and fr2 == ('ROUTE_V4_TOOL_VERSION', 'gate:route_v4_port') and not (work / 'fake_route2_out').exists()
            and not (work / 'fake_route3_out').exists(), [fr, fr2])
 
+    # ------------------------------------------------ (f) node environment (review S1)
+    sq = load(EXPORT / 'saved_qa.py', 'saved_qa_under_test')
+    record('f_saved_qa_pins_equal_writer', {k: set(v) for k, v in sq.WRITER_PINS.items()} == {k: set(v) for k, v in wp.WRITER_PINS.items()}
+           and sq.ARTIFACT_TOOL_STUB_SHA256 == wp.ARTIFACT_TOOL_STUB_SHA256 == '67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4'
+           and sq.ARTIFACT_TOOL_STUB_PACKAGE == wp.ARTIFACT_TOOL_STUB_PACKAGE and sq.RESOLVE_CJS == wp.RESOLVE_CJS and sq.RESOLVE_ESM == wp.RESOLVE_ESM)
+    code, out, err = run(['node', '-e', wp.RESOLVE_CJS, wd.resolve() / 'writer004.mjs', wp.ARTIFACT_TOOL_SPECIFIER])
+    stub_path = Path(json.loads(out)['resolved']) if code == 0 else None
+    removed_now = sorted(k for k in os.environ if k.upper().startswith('NODE_'))
+    for name in ('v01_base', 'v08_many_items'):
+        ne = json.loads((outs / name / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')).get('node_environment', {})
+        at = ne.get('artifact_tool', {})
+        record(f'f_receipt_node_environment_{name}', stub_path is not None and at.get('resolved_path') == str(stub_path)
+               and at.get('esm_resolved_path') == str(stub_path) and at.get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256
+               and ne.get('removed_variables') == removed_now, ne)
+    nev2 = json.loads((outs / 'v2_w09_relaxed_all' / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')).get('node_environment', {})
+    record('f_receipt_node_environment_v2', nev2.get('artifact_tool', {}).get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256, nev2)
+    base_obj = json.loads((ef / 'valid' / 'v01_base.json').read_text(encoding='utf-8'))
+    part = copy.deepcopy(base_obj)
+    part['items'][0]['status'] = 'partial'                  # writer004 refuses: REVIEW_STATUS_REQUIRED
+    partial = work / 's1_partial_status.json'
+    partial.write_text(json.dumps(part, ensure_ascii=False, indent=1), encoding='utf-8')
+    c2, o2, e2 = run(['node', wd / 'validate_carrier_v4.mjs', '--carrier', partial])
+    record('f_partial_status_refused_by_writer004', c2 == 1 and json.loads(e2).get('code') == 'REVIEW_STATUS_REQUIRED', e2[-200:])
+
+    def writer_files_to(d):
+        d.mkdir(parents=True)
+        for f in wp.WRITER_PINS:
+            shutil.copyfile(wd / f, d / f)
+
+    def stub_to(d):
+        d.mkdir(parents=True)
+        shutil.copyfile(stub_path, d / 'index.mjs')
+        shutil.copyfile(stub_path.parent / 'package.json', d / 'package.json')
+
+    def attack(tag, writer_dir, carrier, want, env=None, stage='gate:node_environment'):
+        """writer004 accepts the partial-status carrier when node runs the attack directly; the writer refuses."""
+        c3, o3, e3 = run(['node', writer_dir / 'validate_carrier_v4.mjs', '--carrier', partial], env=env)
+        record(f'f_{tag}_attack_effective_on_direct_node', c3 == 0 and json.loads(o3 or '{}').get('status') == 'WRITER_STRUCTURAL_VALIDATION_ONLY',
+               (o3 + e3)[-200:])
+        for cname, cpath in (('partial', partial), ('valid', ef / 'valid' / 'v01_base.json')):
+            od = work / f's1_{tag}_{cname}_out'
+            c4, o4, e4 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', cpath, '--out', od, '--writer-dir', writer_dir], env=env)
+            ref = refusal(e4)
+            record(f'f_{tag}_refused_{cname}', c4 == 1 and not od.exists() and ref.get('code') == want and ref.get('stage') == stage, ref)
+    # the reviewer's planted module under <writer-dir>/node_modules, resolved before the stub
+    pl = work / 's1_planted'
+    writer_files_to(pl / 'writer')
+    stub_to(pl / 'node_modules' / '@oai' / 'artifact-tool')
+    (pl / 'writer' / 'node_modules' / '@oai' / 'artifact-tool').mkdir(parents=True)
+    (pl / 'writer' / 'node_modules' / '@oai' / 'artifact-tool' / 'index.mjs').write_text(PLANTED_MODULE, encoding='utf-8')
+    shutil.copyfile(stub_path.parent / 'package.json', pl / 'writer' / 'node_modules' / '@oai' / 'artifact-tool' / 'package.json')
+    attack('planted_module', pl / 'writer', partial, 'ARTIFACT_TOOL_NOT_PINNED')
+    # conditional exports: require resolves the pinned stub, import loads another file
+    ce = work / 's1_conditional_exports'
+    writer_files_to(ce / 'writer')
+    pkgd = ce / 'node_modules' / '@oai' / 'artifact-tool'
+    stub_to(pkgd)
+    (pkgd / 'evil.mjs').write_text(PLANTED_MODULE, encoding='utf-8')
+    (pkgd / 'package.json').write_text(json.dumps(dict(wp.ARTIFACT_TOOL_STUB_PACKAGE, exports={'import': './evil.mjs', 'require': './index.mjs'})), encoding='utf-8')
+    attack('conditional_exports', ce / 'writer', partial, 'ARTIFACT_TOOL_RESOLUTION_DIVERGES')
+    # writer files symlinked to another directory whose node_modules holds the planted module
+    sl = work / 's1_symlinked_writer'
+    writer_files_to(sl / 'elsewhere')
+    (sl / 'elsewhere' / 'node_modules' / '@oai' / 'artifact-tool').mkdir(parents=True)
+    (sl / 'elsewhere' / 'node_modules' / '@oai' / 'artifact-tool' / 'index.mjs').write_text(PLANTED_MODULE, encoding='utf-8')
+    shutil.copyfile(stub_path.parent / 'package.json', sl / 'elsewhere' / 'node_modules' / '@oai' / 'artifact-tool' / 'package.json')
+    (sl / 'writer').mkdir()
+    for f in wp.WRITER_PINS:
+        (sl / 'writer' / f).symlink_to(sl / 'elsewhere' / f)
+    stub_to(sl / 'node_modules' / '@oai' / 'artifact-tool')
+    attack('symlinked_writer_files', sl / 'writer', partial, 'WRITER_FILE_OUTSIDE_WRITER_DIR', stage='gate')
+    # a package.json other than the documented one, with the pinned index.mjs
+    pj = work / 's1_package_json'
+    writer_files_to(pj / 'writer')
+    stub_to(pj / 'node_modules' / '@oai' / 'artifact-tool')
+    (pj / 'node_modules' / '@oai' / 'artifact-tool' / 'package.json').write_text(
+        json.dumps(dict(wp.ARTIFACT_TOOL_STUB_PACKAGE, version='9.9.9')), encoding='utf-8')
+    c4, o4, e4 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef / 'valid' / 'v01_base.json', '--out', work / 's1_pj_out', '--writer-dir', pj / 'writer'])
+    record('f_package_json_not_documented_refused', c4 == 1 and refusal(e4).get('code') == 'ARTIFACT_TOOL_PACKAGE_UNEXPECTED' and not (work / 's1_pj_out').exists(), e4[-300:])
+    # NODE_OPTIONS --import patch: effective on direct node, stripped by the writer
+    evil = work / 's1_node_options' / 'evil_import.mjs'
+    evil.parent.mkdir()
+    evil.write_text(INCLUDES_PATCH, encoding='utf-8')
+    env_opt = dict(os.environ, NODE_OPTIONS='--import=' + evil.as_uri())
+    c3, o3, e3 = run(['node', wd / 'validate_carrier_v4.mjs', '--carrier', partial], env=env_opt)
+    record('f_node_options_attack_effective_on_direct_node', c3 == 0, (o3 + e3)[-200:])
+    od = work / 's1_node_options_partial_out'
+    c4, o4, e4 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', partial, '--out', od, '--writer-dir', wd], env=env_opt)
+    record('f_node_options_stripped_partial_refused_by_writer004', c4 == 1 and refusal(e4).get('code') == 'REVIEW_STATUS_REQUIRED'
+           and refusal(e4).get('stage') == 'gate:validate_carrier_v4' and not od.exists(), e4[-300:])
+    # NODE_PATH: a stub reachable only through NODE_PATH is not used (node ESM ignores it; the writer removes it)
+    np_dir = work / 's1_node_path'
+    writer_files_to(np_dir / 'writer')
+    stub_to(np_dir / 'global' / '@oai' / 'artifact-tool')
+    env_np = dict(os.environ, NODE_PATH=str(np_dir / 'global'))
+    c5, o5, e5 = run(['node', '-e', wp.RESOLVE_CJS, np_dir / 'writer' / 'writer004.mjs', wp.ARTIFACT_TOOL_SPECIFIER])
+    c6, o6, e6 = run(['node', '-e', wp.RESOLVE_CJS, np_dir / 'writer' / 'writer004.mjs', wp.ARTIFACT_TOOL_SPECIFIER], env=env_np)
+    od = work / 's1_node_path_out'
+    c4, o4, e4 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef / 'valid' / 'v01_base.json', '--out', od, '--writer-dir', np_dir / 'writer'], env=env_np)
+    record('f_node_path_not_used', c5 != 0 and c6 == 0 and c4 == 1 and refusal(e4).get('code') == 'ARTIFACT_TOOL_UNRESOLVED' and not od.exists(),
+           {'clean_resolve_exit': c5, 'node_path_resolve_exit': c6, 'refusal': refusal(e4)})
+    # with NODE_OPTIONS and NODE_PATH set, a valid carrier gives the same bytes, and the receipt names the removed variables
+    env_both = dict(os.environ, NODE_OPTIONS='--import=' + evil.as_uri(), NODE_PATH=str(np_dir / 'global'))
+    od = work / 's1_env_valid_out'
+    c4, o4, e4 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef / 'valid' / 'v01_base.json', '--out', od, '--writer-dir', wd], env=env_both)
+    rc = json.loads((od / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')) if c4 == 0 else {}
+    record('f_node_variables_removed_same_bytes', c4 == 0 and (od / 'research-draft.xlsx').read_bytes() == (outs / 'v01_base' / 'research-draft.xlsx').read_bytes()
+           and (od / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (outs / 'v01_base' / 'EXPECTED_SAVED_VALUES.json').read_bytes()
+           and {'NODE_OPTIONS', 'NODE_PATH'} <= set(rc.get('node_environment', {}).get('removed_variables', [])), e4[-300:])
+
+    # ------------------------------------------------ (g) saved_qa structure: the reviewer's 22 tampers (review S2)
+    mt = load(HERE / 'make_tamper_fixtures.py', 'make_tamper_fixtures_under_test')
+    fid = work / 'tamper_base_fidelity.json'
+    code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'carrier', ef / 'valid' / 'v01_base.json', fid])
+    fid_out = work / 'tamper_base_output'
+    code2, out2, err2 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', fid, '--out', fid_out, '--writer-dir', wd])
+    record('g_fidelity_probe_written', code == 0 and code2 == 0, (err + err2)[-300:])
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', fid_out])
+    code2, out2, err2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', fid_out, '--report', work / 'tamper_base_prov.json', '--carrier', fid, '--writer-dir', wd])
+    q1, q2 = qa_report(fid_out / 'SAVED_QA.json'), qa_report(work / 'tamper_base_prov.json')
+    record('g_fidelity_probe_saved_qa_passes', code == 0 and code2 == 0 and q1.get('status') == q2.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
+           and q1['expected_provenance']['checked'] is False and q2['expected_provenance'].get('result') == 'PASS',
+           {'no_prov': q1.get('findings'), 'prov': q2.get('findings')})
+    td = work / 'tampers'
+    code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'tamper', fid_out, td])
+    tampers = json.loads((td / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
+    reviewer22 = [t for t in tampers if t['group'] == 'reviewer'] + [t for t in tampers if t['name'].endswith(('_T21', '_T22'))]
+    record('g_tamper_counts', code == 0 and len(reviewer22) == 22 and len([t for t in tampers if t['group'] == 'extra']) >= 9, err[-300:])
+    for t in tampers:
+        d = Path(t['dir'])
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+        q = qa_report(d / 'SAVED_QA.json')
+        fnd = q.get('findings', {})
+        crash = 'Traceback' in e1 or not q
+        if t['passes_without_provenance']:
+            ok = c1 == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and q['expected_provenance']['checked'] is False
+        else:
+            ok = c1 == 1 and q.get('status') == 'SAVED_QA_FAILED' and (fnd if t['finding'] == 'any' else t['finding'] in fnd)
+        record(f"g_saved_qa_catches_{t['name']}" if not t['passes_without_provenance'] else f"g_saved_qa_without_provenance_cannot_catch_{t['name']}",
+               ok and not crash, {'status': q.get('status'), 'findings': {k: v['count'] for k, v in fnd.items()}, 'stderr': e1[-300:]})
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd])
+        q = qa_report(d / 'SAVED_QA_PROVENANCE.json')
+        fnd = q.get('findings', {})
+        want = t.get('provenance_finding')
+        record(f"h_provenance_catches_{t['name']}" if want else f"h_with_provenance_still_fails_{t['name']}",
+               c2 == 1 and q.get('status') == 'SAVED_QA_FAILED' and (want is None or want in fnd)
+               and 'Traceback' not in e2, {'status': q.get('status'), 'findings': {k: v['count'] for k, v in fnd.items()}})
+
+    # ------------------------------------------------ (h) provenance of EXPECTED (review S3)
+    for x in valid:
+        od = outs / x['name']
+        rp = work / f"prov_{x['name']}.json"
+        code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', rp, '--carrier', x['file'], '--writer-dir', wd])
+        q = qa_report(rp)
+        pv = q.get('expected_provenance', {})
+        record(f"h_provenance_v1_pass_{x['name']}", code == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS'
+               and pv.get('expected_byte_identical') is True and pv.get('receipt_mode') == 'v1'
+               and pv.get('node_environment', {}).get('artifact_tool_sha256') == wp.ARTIFACT_TOOL_STUB_SHA256, {'findings': q.get('findings'), 'provenance': pv})
+    for x in valid2:
+        od = outs / ('v2_' + x['name'])
+        rp = work / f"prov_v2_{x['name']}.json"
+        code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', rp, '--carrier', x['file'], '--writer-dir', wd])
+        q = qa_report(rp)
+        pv = q.get('expected_provenance', {})
+        record(f"h_provenance_v2_pass_{x['name']}", code == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS'
+               and pv.get('expected_byte_identical') is True and pv.get('xlsx_byte_identical') is True and pv.get('receipt_mode') == 'v2',
+               {'findings': q.get('findings'), 'provenance': pv})
+    # consistent EXPECTED+xlsx tampers of a v2 output (full rerun), and a v2 view-only tamper with a consistent receipt
+    v2src, v2car = outs / 'v2_w09_relaxed_all', ef2 / 'valid' / 'w09_relaxed_all.json'
+    td2 = work / 'tampers_v2'
+    code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'tamper', v2src, td2, '--consistent-only'])
+    tampers2 = json.loads((td2 / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
+    zd = td2 / 'V2_zoom_view_receipt_updated'
+    zd.mkdir()
+    for f in ('EXPECTED_SAVED_VALUES.json', 'WRITER_RECEIPT.json'):
+        shutil.copyfile(v2src / f, zd / f)
+    mt.write_tampered(v2src / 'research-draft.xlsx', zd / 'research-draft.xlsx', {mt.S1: mt.sub1(r'<sheetView ', '<sheetView zoomScale="10" ')})
+    mt.update_receipt(zd)
+    tampers2.append({'name': 'V2_zoom_view_receipt_updated', 'dir': str(zd), 'passes_without_provenance': False, 'finding': 'worksheet_structure'})
+    record('h_v2_tamper_counts', len(tampers2) == 4, err[-300:])
+    for t in tampers2:
+        d = Path(t['dir'])
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+        q1 = qa_report(d / 'SAVED_QA.json')
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', v2car, '--writer-dir', wd])
+        q2 = qa_report(d / 'SAVED_QA_PROVENANCE.json')
+        no_prov_ok = (q1.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS') if t['passes_without_provenance'] else (
+            q1.get('status') == 'SAVED_QA_FAILED' and t['finding'] in q1.get('findings', {}))
+        record(f"h_provenance_v2_catches_{t['name']}", no_prov_ok and c2 == 1 and 'provenance' in q2.get('findings', {}),
+               {'no_prov': q1.get('status'), 'prov_findings': q2.get('findings', {}).get('provenance')})
+    # the carrier must be the receipt's carrier
+    rp = work / 'prov_wrong_carrier.json'
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp, '--carrier', ef / 'valid' / 'v03_numeric_edges.json', '--writer-dir', wd])
+    fnd = qa_report(rp).get('findings', {}).get('provenance', {}).get('first', [])
+    record('h_provenance_wrong_carrier', code == 1 and any('carrier sha256 differs' in f.get('check', '') for f in fnd), fnd[:3])
+    # a relaxed v2 output whose receipt claims mode v1: writer004 refuses the original carrier
+    md = work / 'prov_mode_claim'
+    shutil.copytree(v2src, md)
+    (md / 'SAVED_QA.json').unlink()
+    rr = json.loads((md / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+    rr['mode'] = 'v1'
+    (md / 'WRITER_RECEIPT.json').write_text(json.dumps(rr, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', md, '--carrier', v2car, '--writer-dir', wd])
+    q = qa_report(md / 'SAVED_QA.json')
+    record('h_provenance_receipt_mode_v1_on_relaxed_output', code == 1 and q.get('expected_provenance', {}).get('result') == 'WRITER004_REFUSED'
+           and q['findings']['provenance']['first'][0].get('code') in ('SELECTION_ONLY_ENGINEERING_ID', 'UNRESOLVED_ITEM_MUST_BE_HELD'),
+           q.get('expected_provenance'))
+    # the provenance rerun uses the pinned node environment: the planted writer directory is refused
+    rp = work / 'prov_planted.json'
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp, '--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', pl / 'writer'])
+    q = qa_report(rp)
+    record('h_provenance_refuses_planted_writer_dir', code == 1 and q.get('expected_provenance', {}).get('result') == 'NODE_ENVIRONMENT_REFUSED', q.get('expected_provenance'))
+    rp = work / 'prov_planted_v2.json'
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', v2src, '--report', rp, '--carrier', v2car, '--writer-dir', pl / 'writer'])
+    q = qa_report(rp)
+    record('h_provenance_v2_refuses_planted_writer_dir', code == 1 and q.get('expected_provenance', {}).get('result') == 'WRITER_RERUN_FAILED'
+           and 'ARTIFACT_TOOL_NOT_PINNED' in json.dumps(q.get('findings', {})), q.get('expected_provenance'))
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', work / 'prov_usage.json', '--carrier', ef / 'valid' / 'v01_base.json'])
+    record('h_provenance_usage_carrier_needs_writer_dir', code == 2 and not (work / 'prov_usage.json').exists(), err[-200:])
+
+    # ------------------------------------------------ (i) visual_qa helpers (review S4, N1), without LibreOffice
+    vq = load(EXPORT / 'visual_qa.py', 'visual_qa_under_test')
+    names4 = list(wp.SHEET_ORDER)
+    text = ('[[組成參考]]      Page 3 / 4\n未填研究草稿 盤體名稱\n組成連結\f'
+            '[[來源與審查]]   Page 2 / 4\n"sheet":"未填研究草稿"\f'
+            'no marker 未填研究草稿\f'
+            '[[other]] 組成連結\f')
+    record('i_map_pages_by_marker', vq.map_pages(text, names4) == {1: '組成參考', 2: '來源與審查', 3: None, 4: None, 5: None}
+           and vq.map_pages(text, names4, 2) == {1: '組成參考', 2: '來源與審查'}, vq.map_pages(text, names4))
+    xlsx_patch = vq.patch_sheet('<worksheet><sheetData/><pageMargins left="1"/></worksheet>')
+    record('i_header_marker_in_print_patch', '&amp;L[[&amp;A]]' in xlsx_patch and vq.HEADER_MARKER == '[[{}]]', xlsx_patch)
+    clip_long = vq.possibly_clipped_cells(outs / 'v05_long_text' / 'research-draft.xlsx')
+    flagged = {(f['sheet'], f['cell']) for f in clip_long['first']}
+    record('i_possibly_clipped_cells_long_text', {('未填研究草稿', 'C3'), ('未填研究草稿', 'D2')} <= flagged
+           and all(f['estimated_height_pt'] > 409 for f in clip_long['first']), sorted(flagged)[:10])
+    clip_base = vq.possibly_clipped_cells(outs / 'v01_base' / 'research-draft.xlsx')
+    record('i_possibly_clipped_cells_none_in_base', clip_base['count'] == 0 and clip_base['string_cells_checked'] > 100, clip_base['first'][:3])
+    record('i_estimated_lines', vq.estimated_lines('a' * 30, 10) == 3 and vq.estimated_lines('中' * 10, 10) == 2
+           and vq.estimated_lines('a\nb\r\nc', 10) == 3 and vq.estimated_lines('', 10) == 1)
+
     # ------------------------------------------------ (d) visual QA
     if not a.skip_visual:
         vis = work / 'visual'
@@ -526,6 +803,12 @@ def main():
             record('d_saved_xlsx_unchanged_and_sheetdata_identical', m1['saved_xlsx']['unchanged_after_render'] and m1['render_copy']['sheetData_identical_to_saved']
                    and m1['saved_xlsx']['sha256'] == sha((first / 'research-draft.xlsx').read_bytes()))
             record('d_every_page_mapped_to_a_sheet', m1['page_sheet_mapping'] and all(m1['page_sheet_mapping'].values()) and m1['complete_render'])
+            lim = ' '.join(m1.get('limitations', []))
+            record('d_manifest_states_render_limits', 'General format' in lim and 'row taller than one printed page is clipped' in lim
+                   and 'complete_render means that every PDF page was rendered' in lim and 'Never re-save' in lim
+                   and m1.get('possibly_clipped_cells', {}).get('count') == 0 and '[[sheet name]] marker' in (m1.get('page_sheet_mapping_basis') or '')
+                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v2',
+                   {'limitations': m1.get('limitations'), 'basis': m1.get('page_sheet_mapping_basis')})
         keep = ['未填研究草稿', '組成參考', '組成連結']
         code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v08_many_items' / 'research-draft.xlsx', '--dest', vis / 'v08_filtered',
                                    '--sheets', ','.join(keep), '--dpi', '100'])
@@ -539,15 +822,22 @@ def main():
             code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / f'v2_{name}' / 'research-draft.xlsx', '--dest', vis / f'v2_{name}'])
             mv = json.loads((vis / f'v2_{name}' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
             record(f'd_visual_qa_v2_output_{name}', code == 0 and {i['sheet'] for i in mv.get('images', [])} >= set(wp.SHEET_ORDER) and mv.get('complete_render'), err[-300:])
+        code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v05_long_text' / 'research-draft.xlsx', '--dest', vis / 'v05_long_text', '--dpi', '50'])
+        ml = json.loads((vis / 'v05_long_text' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
+        fl = {(f['sheet'], f['cell']) for f in ml.get('possibly_clipped_cells', {}).get('first', [])}
+        record('d_visual_qa_long_text_lists_possibly_clipped_cells', code == 0 and {('未填研究草稿', 'C3'), ('未填研究草稿', 'D2')} <= fl
+               and ml.get('complete_render') is True and all(ml['page_sheet_mapping'].values()), {'stderr': err[-300:], 'flagged': sorted(fl)[:8]})
         code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v04_text_edges' / 'research-draft.xlsx', '--dest', vis / 'v04_exact', '--mode', 'exact'])
         me = json.loads((vis / 'v04_exact' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
         record('d_visual_qa_exact_mode', code == 0 and me.get('pages', 0) >= 1 and me['render_copy']['identical_to_saved'], err[-300:])
 
     failed = [r for r in results if not r['pass']]
-    summary = {'suite': 'cps-export-portable-writer-tests.v1', 'tests': len(results), 'passed_count': len(results) - len(failed),
+    summary = {'suite': 'cps-export-portable-writer-tests.v2', 'tests': len(results), 'passed_count': len(results) - len(failed),
                'failed_count': len(failed), 'passed': [r['test'] for r in results if r['pass']], 'failed': failed,
                'fixtures_invented': True, 'valid_fixtures': len(valid), 'invalid_fixtures': len(invalid),
                'valid_fixtures_v2': len(valid2), 'invalid_fixtures_v2': len(invalid2),
+               'saved_qa_tampers': len(tampers), 'saved_qa_tampers_v2': len(tampers2),
+               'make_tamper_fixtures_sha256': sha((HERE / 'make_tamper_fixtures.py').read_bytes()),
                'writer_portable_sha256': sha((EXPORT / 'writer_portable.py').read_bytes()),
                'saved_qa_sha256': sha((EXPORT / 'saved_qa.py').read_bytes()), 'visual_qa_sha256': sha((EXPORT / 'visual_qa.py').read_bytes()),
                'writer004_matrices_sha256': sha((EXPORT / 'writer004_matrices.mjs').read_bytes()), 'visual_skipped': a.skip_visual,
