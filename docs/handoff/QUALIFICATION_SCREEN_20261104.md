@@ -61,3 +61,44 @@ Two of the 22 non-reserved early-113 targets use the old template. Some early-11
 
 1. **The large-workbook scope method is on the critical path.** It covers 10 of the 20 reachable non-reserved pairs. Under 046f, rows come only from the priced bill sheet (R49), so the method is a reviewed scope stage that selects the sheet, not chunked reading of every sheet. A source-only structure study on exposed tuning cases is running.
 2. **Any family-dependence finding creates a shortfall.** Even with the scope method, the bar of 20 non-reserved plus 10 reserved cannot then be met from 113–115. This would go to the owner as a question about the pool. It is not a reason to lower the bar.
+
+---
+
+## Family-independence review and the qualification pool (2026-11-05)
+
+An independent eligibility-role review read the candidates' source files, an extra 16 exposed material lists and listing metadata. Reserved cases were checked from listing titles only. Two kinds of evidence were weighed:
+- identity: customer plus project or site, ignoring phase, section and area suffixes;
+- containment: the share of priced-line descriptions in common. This was evidence, not a verdict, because standard designer specifications can reach 0.87–0.96 even across different projects.
+
+**Non-reserved (20 current-template candidates):**
+
+| Verdict | Cases |
+|---|---|
+| Independent (12, review verdict) | 1130405, 1130601, 1130708, 1131005, 1131007, 1140406, 1140603, 1141006, 1141008, 1141101, 1150203, 1150404 |
+| Independent, orchestrator's call on a REVIEW verdict (1) | 1130311. Its related case is a 112 rolling-validation case never used for tuning; its overlap with exposed cases is ≤0.16, and the customer is different. |
+| Kept for its same-series group (1) | 1131106. Only one case per group counts. 1150103 is dropped, which also resolves the group's link to a reserved case. |
+| Counted under owner decision O26, "Accept borderline cases" (1) | 1150202, whose overlap with an exposed case (0.646) comes from a shared designer specification library |
+| Same family as an exposed case (4) | 1140101, 1140608, 1150306, 1150506 |
+| Same group as a kept case (1) | 1150103 |
+
+Two pairs fall below the 0.6 containment criterion and have different identities, so both members are counted: 1130708/1150203 (0.566) and 1131007/1141008 (0.589).
+
+**Reserved, years 113–115, from listings only:**
+- 21 in scope;
+- 4 excluded as tied to exposed project series;
+- 1 excluded as in the same group as kept candidate 1131106;
+- 1 duplicate-family pair, of which one counts, with a pre-declared alternate recorded privately;
+- 1 weakly tied case counted under O26.
+
+That leaves **15**.
+
+**Pool: exactly 30.** It is 15 non-reserved and 15 reserved, with no margin (O25, O26):
+- 7 non-reserved are ordinary size: 1130708, 1131005, 1140406, 1141006, 1141101, 1150203, 1150404;
+- 8 need the large-workbook scope stage: 1130311, 1130405, 1130601, 1131007, 1131106, 1140603, 1141008, 1150202.
+
+Any pair found ineligible later, including a reserved target that turns out to be old-template when opened, leaves the bar unreachable from this pool and goes back to the owner. Under AGENTS.md, all 38 reserved outputs, not just these 15, must be generated and frozen before any reserved answer is opened.
+
+**Other decisions recorded on 2026-11-05:**
+- Evaluator v3 (`compare_target049`, gap fill) was approved after two reviews and frozen at `b600c046…`. It governs qualification (O23).
+- The 0.75 C/D target is reported only (O24).
+- The company tables are the owner-approved recommended entries (O27). Neither was built from any qualification or reserved case.

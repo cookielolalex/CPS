@@ -301,7 +301,8 @@
   "path": "research/export",
   "status": "BUILT_NOT_ADMITTED",
   "author_tests": "118/118",
-  "needs": "independent review"
+  "needs": "independent review",
+  "status_2026_11_05": "v2.3 second review ADMIT_AFTER_LISTED_FIXES (saved_qa F1/F2); v2.4 hardening in progress; not admitted"
  },
  "candidate_046f": {
   "path": "research/guideline046_006/package",
@@ -332,10 +333,49 @@
   "eligible_ordinary_size": 10,
   "large_needs_scope_method": 10,
   "ineligible_old_template": 2,
-  "family_independence": "not established; review running (10 flagged by project-series name overlap)",
+  "family_independence": "reviewed 2026-11-05: 15 non-reserved independent (incl. 1 borderline under O26); 15 reserved by listing (incl. 1 borderline)",
   "reserved_in_scope": 21,
   "reserved_template_check": "closed until all outputs frozen",
   "reachable_non_reserved": "20 only with the large-workbook scope method admitted and all 20 independent; 10 without it",
-  "eligibility_credit_so_far": 0
+  "eligibility_credit_so_far": 0,
+  "pool": {
+   "total": 30,
+   "non_reserved_ordinary": [
+    "1130708",
+    "1131005",
+    "1140406",
+    "1141006",
+    "1141101",
+    "1150203",
+    "1150404"
+   ],
+   "non_reserved_large_needs_scope": [
+    "1130311",
+    "1130405",
+    "1130601",
+    "1131007",
+    "1131106",
+    "1140603",
+    "1141008",
+    "1150202"
+   ],
+   "reserved_count": 15,
+   "margin": 0,
+   "reserved_ids": "private"
+  }
+ },
+ "owner_decisions_2026_11_05": {
+  "record": "research/guideline046_005/DECISIONS_OWNER_O23_O25.md",
+  "O23": "evaluator v3 governs qualification if review OK (approved; frozen)",
+  "O24": "C/D 0.75 reported only",
+  "O25": "shortfall filled from reserved",
+  "O26": "accept borderline cases (pool exactly 30)",
+  "O27": "company tables: recommended entries only"
+ },
+ "evaluator_v3": {
+  "path": "research/evaluation/compare_target049.py",
+  "sha256": "b600c04619c943ec78f577c4a681df3cc3d035638fab36f9be3f946eea5904c9",
+  "freeze": "research/evaluation/FREEZE_049.json",
+  "status": "FROZEN_GOVERNS_QUALIFICATION"
  }
 }

@@ -19,8 +19,8 @@
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 9762,
-      "sha256": "07900d0a4b97b5050043e3943d1beda0c92acffebd1047e16b060dd149696ff4"
+      "bytes": 10966,
+      "sha256": "6cf312b71859a193a1e014f1c4802b1fe4094966fd39f6670e5cfdc39ce72f19"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/handoff/CURRENT_STATUS.md",
-      "bytes": 10041,
-      "sha256": "2948f59e87019d4753b2bfce71c3d155d5d81c8d94f697b4ae6970a55ae0ce77"
+      "bytes": 11557,
+      "sha256": "d3515acb7380f2c7f3e9be249b6c481e7838490c4294958e1863f6bfffdb1f67"
     },
     {
       "path": "docs/handoff/DECISIONS.md",
@@ -1489,8 +1489,8 @@
     },
     {
       "path": "docs/handoff/QUALIFICATION_SCREEN_20261104.md",
-      "bytes": 5138,
-      "sha256": "fc2445df8e3064be62d21f683bfa63ac97251b8e1835b0b815e373108466006e"
+      "bytes": 8083,
+      "sha256": "fe25207540ab1438280646c1d0627ab8381e2c4ef59428c12bfb8c3b584028ed"
     },
     {
       "path": "research/evaluation/compare_target049.py",

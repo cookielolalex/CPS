@@ -1,3 +1,23 @@
+# Current status — 2026-11-05 (pool fixed at 30; evaluator v3 frozen; 046g in progress)
+
+**Not deployment-ready.**
+- **Qualification pool:** exactly 30 pairs, 15 non-reserved and 15 reserved, with no margin (O25, O26; [QUALIFICATION_SCREEN_20261104.md](QUALIFICATION_SCREEN_20261104.md)). 8 of the 15 non-reserved pairs need the large-workbook scope stage.
+- **Evaluator v3** (`research/evaluation/compare_target049.py`, gap fill) is frozen at `b600c046…`, after an adversarial review and a delta review. It governs qualification (O23). v2 numbers are reported beside it, and the 046f dev results stay v2-governed.
+- **C/D 0.75:** reported only (O24).
+- **Company tables:** owner-approved recommended entries (O27), private and pinned by hash.
+- **Portable writer:** v2.3 passed its second review except for two saved-QA findings, F1 and F2 (values that LibreOffice reads differently, and a receipt-mode downgrade). v2.4 hardening is in progress. Not admitted.
+- **Candidate 046g** (in progress):
+  - R59 scope stage for large workbooks: the BILL1 rule, a scope reader, an agreement check, the scoped inventory, and route v4.3;
+  - an enclosure A/B practice study;
+  - harness references moved to v3.
+- **Next:**
+  1. Admit the writer.
+  2. Review and freeze 046g.
+  3. Run a 046g dev trial on the five large exposed tuning cases plus a regression on the dev cases.
+  4. Qualification: 30 pool outputs plus all 38 reserved outputs, frozen before any reserved answer is opened. Saved and visual QA on each.
+
+---
+
 # Current status — 2026-11-04, later (046f trial done; qualification screen done)
 
 **Not deployment-ready.** The gate is 95% match with the creator's historical 未填 (O12, O19), on 30 independently eligible pairs including 10 reserved, drawn from 113–115 current-template targets only (O21, O22).
