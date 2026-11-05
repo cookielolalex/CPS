@@ -1561,6 +1561,11 @@
       "path": "research/export/ADMISSION_WRITER_V25.json",
       "bytes": 6451,
       "sha256": "84b3849d96e4ea08a8b8c097fb50e195bbdffe30e1f382135390282b59d96d68"
+    },
+    {
+      "path": "research/guideline046_005/STUDY_ENCLOSURE_REPLAY_20261105.md",
+      "bytes": 9776,
+      "sha256": "583d2bd68c3c9ecce581514f94d64324f6406492b04777c5ea88c415393f9efb"
     }
   ]
 }
