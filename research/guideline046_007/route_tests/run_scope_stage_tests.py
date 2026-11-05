@@ -5,7 +5,9 @@ content cells; the bill sheet is the one of make_fixtures.SCOPED_BILL), runs the
 (scope_tool.py, scope_agree.py with invented reader responses, make_scoped_inventory.py build and --verify) and checks:
 BILL1 and the R51 conditions, holds, the threshold, determinism, agreement and disagreement, the projection's
 byte-identity, verify on tampered outputs, view images, and that route v4.3 accepts the scoped packet together with the
-valid scoped response of make_fixtures (end to end). No project data is read.
+valid scoped response of make_fixtures (end to end), the agreement value of an admissible and of a stand-in decision
+(046g round 1, review item S13), and that route v4.3 rejects a packet built from a stand-in decision. No project data
+is read.
 Usage: python3 -I run_scope_stage_tests.py --work NEWDIR
 """
 import argparse, copy, hashlib, importlib.util, json, subprocess, sys
@@ -316,6 +318,36 @@ def main():
                and (work / f'agree_{tag}' / 'SCOPE_HOLD.json').exists() and not (work / f'agree_{tag}' / 'SCOPE_DECISION.json').exists(), o)
     code, o, e = agree('standin', reader_for(prop, dig, kind='engineering_stand_in'), 0)
     record('agree_stand_in_reader_not_admissible', code == 0 and o.get('admissible') is False)
+    # 046g round 1, S13: the payload says tool_and_reader_agreed only for an admissible decision; a stand-in decision
+    # says tool_and_stand_in_agreed, which route v4.3 rejects, so it can never become a generation packet
+    record('agree_admissible_decision_agreement_tool_and_reader', dec.get('admissible') is True
+           and sf.get('agreement') == 'tool_and_reader_agreed', sf.get('agreement'))
+    sdec_p = work / 'agree_standin' / 'SCOPE_DECISION.json'
+    sdec = json.loads(sdec_p.read_text(encoding='utf-8')) if sdec_p.exists() else {}
+    record('agree_stand_in_decision_agreement_tool_and_stand_in', sdec.get('admissible') is False
+           and sdec.get('scope_fact', {}).get('agreement') == 'tool_and_stand_in_agreed'
+           and {k: v for k, v in sdec.get('scope_fact', {}).items() if k != 'agreement'} == {k: v for k, v in sf.items() if k != 'agreement'},
+           sdec.get('scope_fact', {}).get('agreement'))
+    code, out, err = run(SCOPED, '--full', m['full'], '--decision', sdec_p, '--out-dir', work / 'standin_packet')
+    so = jout(out)
+    rci = so.get('route_check_inventory', {})
+    record('build_from_stand_in_decision_rejected_by_route', code == 0 and so.get('decision_admissible') is False
+           and rci.get('status') == 'REJECTED' and rci.get('violations') == ['R59_SCOPE_FACT_INVALID'], [so, err[-300:]])
+    sp_ = work / 'standin_packet' / 'SOURCE_INVENTORY.json'
+    if sp_.exists():
+        sfact = next(f_ for f_ in json.loads(sp_.read_text(encoding='utf-8'))['context_facts'] if f_['ref'] == 'context:scope')
+        record('stand_in_packet_basis_names_stand_in', 'not a fresh-context scope reader' in sfact['basis']
+               and 'a fresh-context scope reader decided' not in sfact['basis'])
+        rps = work / 'e2e_response_stand_in.json'
+        rps.write_text(json.dumps(F.scoped_response(sha(sp_.read_bytes())), ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+        code, out, _ = run(ROUTE, 'check', '--inventory', sp_, '--response', rps)
+        record('e2e_route_check_rejects_stand_in_packet', code == 1 and 'R59_SCOPE_FACT_INVALID' in {v['code'] for v in jout(out).get('violations', [])},
+               [v['code'] for v in jout(out).get('violations', [])][:5])
+    else:
+        record('stand_in_packet_basis_names_stand_in', False, 'no stand-in packet written')
+        record('e2e_route_check_rejects_stand_in_packet', False, 'no stand-in packet written')
+    main_fact = next(f_ for f_ in sd['context_facts'] if f_['ref'] == 'context:scope')
+    record('admissible_packet_basis_unchanged', 'a fresh-context scope reader decided from the scope digest alone; the two agreed' in main_fact['basis'])
     rd = reader_for(prop, dig)
     rd['sheets'][0]['role'] = 'other'
     code, o, e = agree('role_only', rd, 0)

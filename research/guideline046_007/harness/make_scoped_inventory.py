@@ -91,9 +91,12 @@ def strict(route, raw, what):
 def fact_record(decision, decision_sha, route):
     payload = dict(decision['scope_fact'], decision_sha256=decision_sha)
     payload = {k: payload[k] for k in route.SCOPE_FACT_KEYS}
+    reader = ('a fresh-context scope reader decided from the scope digest alone' if payload['agreement'] == route.SCOPE_AGREEMENT else
+              'a reader that is not a fresh-context scope reader (an engineering stand-in: not admissible, and route v4.3 rejects '
+              'this fact) decided from the scope digest alone')
     basis = ('Scope decision for this scoped packet (FIELD_ROLES R59, candidate 046g). The source preparer computed BILL1 and the '
-             'R51 conditions on the full inventory (harness/scope_tool.py); a fresh-context scope reader decided from the scope digest '
-             'alone; the two agreed on the bill sheet, the R49 end row and every in_scope flag (harness/scope_agree.py), and the '
+             'R51 conditions on the full inventory (harness/scope_tool.py); ' + reader + '; the two agreed on the bill sheet, the '
+             'R49 end row and every in_scope flag (harness/scope_agree.py), and the '
              'decision was frozen before generation. This inventory holds only the cells and views of the in-scope sheets. '
              'Scoped-out sheets are not missing or unreadable sources and are no reason to hold; no field, proof, raw selection, '
              'link or review reason may cite or reconstruct them. This fact is never field evidence.')

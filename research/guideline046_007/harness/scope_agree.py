@@ -17,7 +17,10 @@ differ between out-of-scope roles (for example other and resource_statistics); e
     nothing written. Exit 1.
 A decision is admissible for a generation admission only when the reader is a fresh-context scope reader
 (reader.kind fresh_context_scope_reader with a nonblank observed model); any other reader kind (for example an
-engineering stand-in) gives admissible false.
+engineering stand-in) gives admissible false. The context:scope payload records the agreement as
+tool_and_reader_agreed only for an admissible decision, and as tool_and_stand_in_agreed otherwise (046g round 1,
+review item S13); route v4.3 accepts only the first (R59_SCOPE_FACT_INVALID), so a stand-in decision can never become
+a generation packet.
 """
 import argparse, hashlib, importlib.util, json, sys
 from datetime import datetime, timezone
@@ -29,6 +32,7 @@ ROUTE = HERE.parent / 'package' / 'tools' / 'cps046b_route.py'
 READER_SCHEMA = 'cps.scope-reader-response.v1'
 DECISION_SCHEMA = 'cps.scope-decision.v1'
 READER_KIND = 'fresh_context_scope_reader'
+STAND_IN_AGREEMENT = 'tool_and_stand_in_agreed'      # never accepted by the route (S13)
 ROLES = ('bill', 'summary', 'analysis', 'resource_statistics', 'other')
 READER_KEYS = ('schema', 'case_id', 'digest_sha256', 'reader', 'bill_sheet_index', 'end_row', 'sheets', 'doubts')
 READER_SHEET_KEYS = ('index', 'role', 'in_scope', 'reason')
@@ -136,7 +140,7 @@ def decide(proposal_raw, digest_raw, reader_raw, route):
             'end_row': proposal['bill']['end_row'],
             'sheets': [{k: s[k] for k in route.SCOPE_SHEET_KEYS} for s in proposal['sheets']],
             'digest_sha256': digest_sha, 'full_inventory_sha256': proposal['full_inventory_sha256'],
-            'agreement': route.SCOPE_AGREEMENT}
+            'agreement': route.SCOPE_AGREEMENT if admissible else STAND_IN_AGREEMENT}
     return 'SCOPE_DECISION.json', dict({'schema': DECISION_SCHEMA, 'status': 'FROZEN_AGREED', 'admissible': admissible,
                                         'admissibility_note': ('fresh-context scope reader' if admissible else
                                                                'not admissible for a generation admission: the reader is not a fresh-context scope reader')},
