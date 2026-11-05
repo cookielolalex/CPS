@@ -12,19 +12,21 @@
 
 **Writer v2.6 / saved_qa v5 / visual_qa v3 (2026-11-05, owner decisions O33–O34; NOT ADMITTED).** The admitted state is still writer v2.5 / saved_qa v4 / visual_qa v2, under `ADMISSION_WRITER_V25.json` and its hashes. v2.6 applies two owner decisions recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`: O33 names the deliverable from the project folder title (`--job-title`, a per-job input the harness supplies, never the generator): the workbook becomes `<name>.xlsx` and its main sheet `<name>`. O34 removes the grey from G and H (單價, 複價). saved_qa v5 re-derives and checks the names, and checks `xl/workbook.xml` against a pinned template. visual_qa v3 records the main sheet and adds a comma-safe `--sheet`. See "Owner decisions O33–O34 (v2.6)". v2.6 is not admitted until an independent reviewer confirms it and records the admission outside this README.
 
+**Writer v2.7 / saved_qa v6 / visual_qa v4 (2026-11-05, owner decision O38; NOT ADMITTED).** The owner approved one-sheet previews in the creator's own 未填 format (O38). With `--job-title` the delivered workbook `<name>.xlsx` is now one sheet `<name>` in that format: 新細明體 12; grey `#C0C0C0` header with thin borders; gridlines shown; only the header row frozen; no wrapping; E F L M N Q centred, C left; her column widths and row heights. The v2.6 four-sheet workbook (main sheet `<name>`, `來源與審查`, `組成參考`, `組成連結`) is written beside it as `INTERNAL_QA_WORKBOOK.xlsx`, with the same bytes as v2.6. It serves saved QA and internal review and is never delivered. saved_qa v6 checks the delivered workbook as well: its own pinned package, its cells against the main sheet with three readers, its format and its rerun bytes. visual_qa v4 prints gridlines where the sheet shows them and lists no-wrap cells whose text may be cut. Untitled outputs are unchanged. See "Owner decision O38 (v2.7)". v2.7 includes v2.6, which was never admitted; both are admitted only after an independent reviewer confirms them and records the admission outside this README.
+
 This directory holds code and invented test fixtures only. Do not commit case carriers, outputs, renders or reports made from case data. Write those outside the repository.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `writer_portable.py` | Carrier → `research-draft.xlsx` (v2.6 with `--job-title`: `<name>.xlsx`), `EXPECTED_SAVED_VALUES.json` and `WRITER_RECEIPT.json` |
+| `writer_portable.py` | Carrier → `research-draft.xlsx`, `EXPECTED_SAVED_VALUES.json` and `WRITER_RECEIPT.json`. v2.7 with `--job-title`: the delivered one-sheet `<name>.xlsx` (O38) and the four-sheet `INTERNAL_QA_WORKBOOK.xlsx` instead of `research-draft.xlsx` |
 | `writer004_matrices.mjs` | Runtime cross-check. Runs the archived writer004 `prepareMatrices` in node and prints the `EXPECTED_SAVED_VALUES.json` text writer004 would save |
 | `saved_qa.py` | Reopens the saved workbook and compares every cell with `EXPECTED_SAVED_VALUES.json`, checks the package structure, and with `--carrier`/`--writer-dir` the provenance of `EXPECTED_SAVED_VALUES.json`; then writes `SAVED_QA.json` |
 | `visual_qa.py` | LibreOffice PDF → pdftoppm PNGs, then writes `VISUAL_QA_MANIFEST.json` (with the render's limits and the cells that may be clipped). A reviewer makes the visual judgement later |
 | `tests/run_export_tests.py` | Test suite (invented fixtures). Prints a JSON summary |
 | `tests/make_export_fixtures.py` | Builds invented carrier variants from the 046d route-test fixture carrier |
-| `tests/make_tamper_fixtures.py` | Rebuilds the reviewer's invented fidelity probe carrier from `v01_base`, and from its writer output the reviewer's 22 tampered outputs plus extra structural tampers (review S2, S3), the second review's tampers N01–N07, N10, N11, the third review's B01–B06 (G1), the O34 tampers O34a/O34b (v2.6) and, from a `--mode v2` output, the second review's receipt-mode downgrade (F2); from a relaxed v2 output and from the fidelity output, receipts with edited claims (third review G3, its p1); from a titled output, the naming tampers K01–K13 (v2.6, O33) |
+| `tests/make_tamper_fixtures.py` | Rebuilds the reviewer's invented fidelity probe carrier from `v01_base`, and from its writer output the reviewer's 22 tampered outputs plus extra structural tampers (review S2, S3), the second review's tampers N01–N07, N10, N11, the third review's B01–B06 (G1), the O34 tampers O34a/O34b (v2.6) and, from a `--mode v2` output, the second review's receipt-mode downgrade (F2); from a relaxed v2 output and from the fidelity output, receipts with edited claims (third review G3, its p1); from a titled output, the naming tampers K01–K13 (v2.6, O33) and the deliverable tampers L01–L16 (v2.7, O38) |
 | `tests/make_export_fixtures_v2.py` | Builds invented mode-v2 variants from six 046f route v4.2 carriers: job inputs (M/N selection evidence), plain, C-null research_draft, Q under unverified adoption, all three together, and the package example |
 | `tests/parity_matrices.mjs`, `tests/stringify_fuzz.mjs` | Test-only node probes, written separately from the runtime cross-check |
 
@@ -197,6 +199,41 @@ The writer no longer fills G and H (單價, 複價) body cells with `#F1F3F5`. T
 
 `styles.xml` loses one fill and one cell format, so its pin changes. In `sheet1.xml`, G and H body cells use the body style index `s="2"`, like column I. The B01/B02 tampers address the empty G2/H2 by `s="2"` now; their old `s="4"` no longer exists. The formatting check of saved_qa v5 requires no fill on every body cell, G and H included (property `fill.type.o34_price_column` for G/H). This deliberately departs from writer004 `formatSheet` (L11).
 
+## Owner decision O38 (v2.7): the delivered workbook in the creator's format
+
+The owner found the v2.6 samples hard to use: no cell lines (writer004 hides gridlines), columns A–C frozen (writer004 freezes rows 1 and columns A–C), and three review sheets the owner does not need. Four previews in the creator's own format were approved ("Looks good, approved"). The format was taken from her recent 未填 files (`research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O38).
+
+**Outputs with `--job-title`.**
+
+| File | What it is | Delivered |
+|---|---|---|
+| `<name>.xlsx` | One sheet `<name>`: the main-sheet values of `EXPECTED_SAVED_VALUES.json`, in the O38 format. Receipt `deliverable_xlsx` | Yes |
+| `INTERNAL_QA_WORKBOOK.xlsx` | The v2.6 four-sheet workbook, byte-identical to v2.6: main sheet `<name>` plus `來源與審查`, `組成參考`, `組成連結`, writer004 formatting with O34. Receipt `output_xlsx` | No: saved QA and internal review only |
+| `EXPECTED_SAVED_VALUES.json`, `WRITER_RECEIPT.json` | As before | No |
+
+Without `--job-title` nothing changes: `research-draft.xlsx` (four sheets), no deliverable, receipt `deliverable_xlsx` null.
+
+**The O38 format** (`build_deliverable_workbook`; `O38_RULE` in the receipt):
+- every cell A1:Q*n* uses 新細明體 12, not bold and with no colour set;
+- header row: solid fill `#C0C0C0`, thin black borders on all four sides, centred horizontally and vertically, 23.25 pt high;
+- body rows: vertically centred; E, F, L, M, N, Q centred; C left; the other columns general; 20.45 pt high; no fill, no border, number format General;
+- no cell wraps;
+- widths A–Q: 16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13, 12.3, 13, 21.4, 11, 24.1, 34.1, 10.3, 13, 8.1, the medians of seven of her files;
+- gridlines shown (no `showGridLines`); only row 1 frozen (pane at A2); no tab colour.
+
+The writer v2.7 deliverables of the four owner samples show zero cell, style, width and height differences from the approved previews.
+
+**Values.** The deliverable's cells are written by the same `_fill_values` as the internal workbook's main sheet, from the same matrix: strings stay strings, numbers stay numbers, no formulas. F, P and Q are no longer right-aligned: F and Q are centred and P is general, as in her files. Text that does not fit its column is not wrapped. In Excel it runs into an empty neighbour and is cut at a filled one, and a line feed inside a cell does not start a new line. `visual_qa.py` v4 lists such cells (`possibly_cut_cells`).
+
+**saved_qa v6** (findings about the deliverable carry `"workbook": "deliverable"`):
+- **names:** the deliverable must exist under the derived `<name>.xlsx`, the receipt's `deliverable_xlsx` must name that file, the derived sheet and the format `owner_O38_creator_format_v1`, and its sha256 must match the file (`integrity`). The four-sheet checks run on the derived `qa_workbook_file`, and `output_xlsx.file` must name it. Only these two `.xlsx` files may be in the directory;
+- **structure:** the deliverable's own 9 parts (`DELIVERABLE_PARTS`). 7 are pinned by sha256: the 4 shared with the internal workbook (`_rels/.rels`, both docProps, `theme1.xml`) and 3 of its own (`[Content_Types].xml` and `workbook.xml.rels` with one worksheet, the O38 `styles.xml` `59f01b15…b5f0`). `xl/workbook.xml` must equal its one-sheet template (`06baba0b…0b27`) with the escaped derived name. The worksheet, cell, number-text and font checks are the same as for the internal workbook, except that `sheetView` must not carry `showGridLines`, it must hold exactly the pane `ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"`, and every row must carry its height (23.25 for row 1, 20.45 for the others);
+- **values:** three readers against the main sheet of `EXPECTED_SAVED_VALUES.json`, exactly one sheet, the 17 headers, no formula, error cell, defined name or external relationship, and the three readers agree;
+- **format** (unless `--no-formatting`): every cell A1:Q*n* against the O38 format, plus widths, heights, the freeze, gridlines and no tab colour;
+- **provenance:** the rerun's deliverable must be byte-identical (`deliverable_xlsx_byte_identical`), and `deliverable_xlsx` is a compared receipt claim. `cps_evidence_preconditions` reports `deliverable_checked` and `deliverable_byte_identical_to_rerun`; for a titled output, `all_checked_here_met` requires both.
+
+**visual_qa v4.** In fit-width mode a sheet whose view shows gridlines also gets `<printOptions gridLines="1"/>`, so the render shows its cell lines as the screen does. The modification is recorded. The internal workbook's sheets hide gridlines and get none. `possibly_cut_cells` lists no-wrap string cells whose estimated width exceeds the column, or that hold a line feed, with whether their neighbours are filled. `possibly_clipped_cells` now considers only cells that wrap. fc-match is recorded for 新細明體 and PMingLiU too.
+
 ## What it reproduces
 
 - Sheet names and order: `未填研究草稿`, `來源與審查`, `組成參考`, `組成連結` (the writer004 `worksheets.add` order). v2.6 with `--job-title`: the main sheet is `<name>` (O33); the order is unchanged.
@@ -252,14 +289,15 @@ W=/abs/route/writer                      # writer004.mjs, validate_carrier_v4.mj
 python3 -I -B research/export/writer_portable.py --carrier /abs/carrier.json --out /abs/new-output --writer-dir "$W" \
     --job-title "<project folder title>"
 #   --mode v2             candidate 046f carriers (route v4.2 with the v4.1 relaxations: M/N job-input selection evidence, C-null research_draft); default v1
-#   --job-title           v2.6 (O33): the harness's per-job project folder title; the workbook is <name>.xlsx with main sheet <name>
-#                         (omit: research-draft.xlsx and 未填研究草稿, as in v2.5)
+#   --job-title           v2.6 (O33): the harness's per-job project folder title; v2.7 (O38): writes the delivered one-sheet
+#                         <name>.xlsx and the four-sheet INTERNAL_QA_WORKBOOK.xlsx (omit: research-draft.xlsx only, as in v2.5)
 N=/abs/system/node; NSHA=<sha256 of that node binary, from the admission record>
 python3 -I -B research/export/saved_qa.py --output-dir /abs/new-output --carrier /abs/carrier.json --writer-dir "$W" \
     --checker-node "$N" --checker-node-sha256 "$NSHA"                                            # writes SAVED_QA.json there
 #   --carrier/--writer-dir  required for CPS evidence: checks the provenance of EXPECTED_SAVED_VALUES.json (omit both: not checked)
 #   --checker-node/--checker-node-sha256  required for CPS evidence: the pinned node of every node call (--node: unpinned, not evidence)
-python3 -I -B research/export/visual_qa.py --xlsx "/abs/new-output/<name>.xlsx" --dest /abs/new-visual-dir
+python3 -I -B research/export/visual_qa.py --xlsx "/abs/new-output/<name>.xlsx" --dest /abs/new-visual-dir             # the deliverable
+python3 -I -B research/export/visual_qa.py --xlsx /abs/new-output/INTERNAL_QA_WORKBOOK.xlsx --dest /abs/new-visual-dir-qa  # internal
 #   --mode exact          render an unmodified byte copy (LibreOffice default pagination)
 #   --sheet "<name>" --sheet 組成參考 --sheet 組成連結   render PNGs only for these sheets (repeatable, exact names; v3)
 #   --sheets 未填研究草稿,組成參考,組成連結          the same, comma-separated (not for a name that holds a comma)
@@ -328,6 +366,19 @@ These are the conditions under which the reviewers' ADMIT_AFTER_LISTED_FIXES ver
   7. G and H (單價, 複價) are not shaded: same background as the other body columns (v2.6, O34; up to v2.5 they were grey #F1F3F5);
   8. the JSON text of the review sheet `來源與審查` (column E `原文／資料（JSON）`, and column F where it holds JSON) is readable;
   9. body text is dark (#172033) and legible.
+
+  From v2.7 this list applies to `INTERNAL_QA_WORKBOOK.xlsx` (and to untitled outputs).
+- **Delivered workbook checklist (v2.7, owner decision O38).** For every PNG of the delivered `<name>.xlsx`, the reviewer records:
+  1. the workbook has one sheet, `<name>`, and the header row shows the 17 headers (`盤體名稱` … `合約價`) in order, A to Q;
+  2. header cells are black text on grey `#C0C0C0`, centred, with thin cell borders;
+  3. cell lines (gridlines) show on every page;
+  4. no column is hidden or zero-width;
+  5. no tofu: no boxes or missing-glyph marks in place of characters;
+  6. E, F, L, M, N and Q are centred, and C is left-aligned;
+  7. G and H (單價, 複價) are not shaded;
+  8. each cell in the manifest's `possibly_cut_cells` is noted: whether its text shows in full on the page. Its value is checked through saved QA, not in the PNG;
+  9. body text is black and legible.
+- **Delivery (v2.7, O38).** Deliver `<name>.xlsx` only. `INTERNAL_QA_WORKBOOK.xlsx`, `EXPECTED_SAVED_VALUES.json`, `WRITER_RECEIPT.json` and the QA reports stay in the job's record. Both workbooks are covered by the same saved-QA run, and both must pass it before delivery.
 - **Environment pins.** These pins apply:
   - writer files by sha256 (`writer004.mjs` either pin, `validate_carrier_v4.mjs`, `receipt_bytes.mjs`), as regular files in the writer directory, with the checker's `--writer-dir` holding the same `writer004.mjs` pin as the producer's (`writer_files` is compared);
   - `@oai/artifact-tool` resolving from `writer004.mjs` to the CPS validation stub `67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4` with the documented `package.json`;
@@ -438,17 +489,24 @@ What the tests prove:
     |---|---|---|
     | K01 workbook main sheet renamed (`未填研究草稿`) | `deliverable_name`, `sheet_order`, `pinned_template` | + `provenance` |
     | K02 sheet and the receipt's `main_sheet`/mapping renamed, title kept | `deliverable_name`, `sheet_order`, `pinned_template` | + `provenance`, `receipt_claim_mismatch` |
-    | K03 receipt title changed only | only `deliverable_name` | + `provenance` |
-    | K04 title, receipt names and file changed to T2, sheet kept | `deliverable_name`, `sheet_order`, `pinned_template` | + `provenance` |
+    | K03 receipt title changed only | `deliverable_name`; v2.7 also `sheet_order`, `pinned_template` (the internal workbook keeps a constant name, so it is found and checked against T2's sheet name) | + `provenance` |
+    | K04 title, receipt names and file changed to T2, sheet kept (v2.7: the deliverable's file renamed) | `deliverable_name`, `sheet_order`, `pinned_template` | + `provenance` |
     | K05 `workbook.xml` `tabRatio` 600 → 601 | only `pinned_template` | + `provenance` |
     | K06 one CJK character of the name as `&#…;` | only `pinned_template` | + `provenance` |
     | K07 G/H grey again | only `pinned_part`, `formatting` | + `provenance` |
-    | K08 file renamed `research-draft.xlsx` | only `deliverable_name` | + `provenance` |
+    | K08 file renamed `research-draft.xlsx` (v2.7: the internal workbook) | only `deliverable_name` | + `provenance` |
     | K09 receipt `output_xlsx.file` edited | only `deliverable_name` | provenance `PASS`, saved QA fails |
     | K10 a second `.xlsx` in the directory | only `deliverable_name` | provenance `PASS`, saved QA fails |
     | K11 receipt `deliverable` removed | only `deliverable_name` | + `provenance`, `receipt_claim_mismatch` |
-    | K12 consistent re-titling to T2 (file, sheet, receipt) | passes | passes (the job title is the operator's check) |
+    | K12 consistent re-titling to T2 (file, sheet, receipt; v2.7: both workbooks' sheet names and the deliverable's file) | passes | passes (the job title is the operator's check) |
     | K13 receipt title without a case id | only `deliverable_name` | `JOB_TITLE_INVALID`, no rerun |
+- **(l) Writer v2.7, owner decision O38.**
+  - Writer and saved QA hold the same format constants, and the O38 rule text names them. The one-sheet template's sha256 is pinned.
+  - Every titled output (the five of (k), plus titled `v05_long_text` and `v08_many_items`) holds the deliverable with exactly the main-sheet values of `EXPECTED_SAVED_VALUES.json`, cell for cell, and the O38 format, checked here with openpyxl independently of saved QA. Its sheet view has no `showGridLines` and exactly the header-row pane.
+  - Titled `v05_long_text` and `v08_many_items` pass saved QA with the pinned checker node, with the deliverable byte-identical to the rerun and `all_checked_here_met`.
+  - **Deliverable tampers** from the titled fidelity output, with the receipt's deliverable hash updated except in L09: L01 a value; L02 gridlines hidden; L03 columns A–C frozen; L04 the four-sheet workbook delivered; L05 a dark-blue header fill; L06 the header given the body style; L07 the deliverable missing; L08 wrapping on; L09 a stale receipt hash; L10 the sheet renamed `未填`; L11 a 1-pt row; L12 a cell in R2; L13 a number stored as text; L14 the receipt's `deliverable_xlsx` dropped; L15 a consistent change of C2 in `EXPECTED_SAVED_VALUES.json`, the internal workbook and the deliverable; L16 column D hidden. Each fails without provenance with its listed findings, the deliverable's tagged `workbook: deliverable`. L15 passes without provenance, as T21 does. With provenance every one fails with `provenance`, and `all_checked_here_met` is false.
+  - Visual helpers: printed gridlines are added only to sheets that show them; `possibly_cut_cells` lists the 16,000-character cells of the titled `v05_long_text` deliverable and nothing in its internal workbook (whose cells wrap), and `possibly_clipped_cells` checks no deliverable cell.
+  - With visual tests, (d) also renders two deliverables: one sheet, printed gridlines, at least 1,000 `#C0C0C0` pixels and at most 50 `#29445D` pixels per page, and for `v05_long_text` at least two `possibly_cut_cells`. The L05 tamper is rendered as a control: at least 1,000 `#29445D` pixels.
 
 Latest run (2026-11-05, writer v2.6 engineer's run for owner decisions O33–O34, not a review). Each suite ran from a fresh work directory:
 
@@ -510,4 +568,5 @@ Earlier runs: 2026-11-04 with route v4.1, 222 of 222 with visual tests (writer v
 - v2.4 fixes (second review): confirm F1(a)/F2 by (h) (every tamper fails with `provenance`; D1–D3) and by re-running the second review's `s2_tampers.py` and `s3_attacks2.py`; F1(b) by the N, X10–X16 tampers of (g) and by (j); N-c by (f) and the second review's A3; N-a, N-b and N4 by "Conditions of use"; and that the writer outputs are byte-identical to the second review's runs.
 - v2.5 fixes (third review): confirm G2 by the wrapper tests of (f) and (h) and by re-running the third review's `p2/` wrapper, with saved QA unpinned (the wrapper is visible in `expected_provenance`) and pinned (`WRITER004_REFUSED`); G3 by the receipt-claim tests of (h) and its `p1/` receipt (`receipt_claim_mismatch`); G1 by B01–B06 in (g), by `g_pinned_parts_constant_in_every_output` and by re-running its `r3_bypasses.py` (B01–B06 fail without provenance); G4 and the admission conditions by "Conditions of use"; and that the writer outputs are byte-identical to the third review's runs. Record the checker's node path and sha256 in the admission record.
 - v2.6 (owner decisions O33–O34): confirm the name derivation against O33 and the invented examples, including the literal "first `-` among the 6 characters after the case id" (a dash directly after the case id is removed). Confirm that saved QA re-derives the names rather than trusting the receipt (K02, K04), the `workbook.xml` template and its escaping (K05, K06, the special-character title), the `--job-title` rerun, G/H without fill (O34a/O34b, K07, `d_visual_gh_not_grey`), checklist item 7, and the job-title condition of use (K12). Confirm that untitled outputs differ from v2.5 only in `styles.xml` and the G/H cells' `s` index.
+- v2.7 (owner decision O38): confirm the delivered workbook against the O38 rule and the approved previews (the owner's four samples: zero differences); that `INTERNAL_QA_WORKBOOK.xlsx` is byte-identical to the v2.6 titled workbook; the deliverable's pins, its one-sheet template and the per-kind structure rules (no `showGridLines`, exactly the header-row pane, row heights) by (l) and `g_pinned_parts_constant_in_every_output`; that saved QA compares the deliverable with the main sheet with three readers and that the rerun byte-compares it (L01–L16, L15 passing only without provenance); the K tampers on the v2.7 layout (K03 now also finds `sheet_order` and `pinned_template`, because the internal workbook keeps a constant name); visual_qa v4's printed gridlines (internal workbook: none) and `possibly_cut_cells`; the delivered-workbook checklist and the delivery condition.
 - Record the admission decision outside this README. Until then the route stays NOT ADMITTED.

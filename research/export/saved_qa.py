@@ -55,6 +55,17 @@ that varies with the sheet name, is checked against a pinned template with the X
 substituted, byte for byte (finding pinned_template); the other 7 constant parts keep their sha256 pins (styles.xml re-pinned
 for O34). The provenance rerun gets --job-title=<the receipt's title> when it has one, and its receipt's deliverable is a
 compared claim. Formatting: G and H (單價, 複價) body cells have no fill, like every body cell (O34).
+v6 (writer v2.7, owner decision O38): a titled output holds two workbooks. INTERNAL_QA_WORKBOOK.xlsx (the derived
+qa_workbook_file) is the four-sheet workbook: every check above runs on it unchanged, and the receipt's output_xlsx names it.
+<name>.xlsx (the derived xlsx_file) is the deliverable: one sheet <name> in the creator's format (receipt deliverable_xlsx).
+The deliverable is checked by check_deliverable: its own 9-part package (DELIVERABLE_PARTS; 7 parts pinned by sha256, 4 of them
+the same bytes as the internal workbook's, and xl/workbook.xml equal to its one-sheet template with the escaped derived name),
+the same worksheet, cell and font structure checks (sheetView without showGridLines, so gridlines show, and exactly the
+header-row pane; row heights 23.25 and 20.45 only), its cells against the main sheet of EXPECTED_SAVED_VALUES.json with the
+three readers (which must agree), no formula, error cell, defined name or external relationship, and (formatting) the O38
+format cell by cell. Its findings carry "workbook": "deliverable". The receipt's deliverable_xlsx is compared with the rerun's
+(receipt claims), its sha256 with the file, and the provenance rerun byte-compares the deliverable too. An untitled output
+has no deliverable (receipt deliverable_xlsx null) and is checked exactly as in v5.
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
@@ -69,7 +80,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v5'
+VERSION = 'cps-export-saved-qa.v6'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -157,6 +168,34 @@ PINNED_TEMPLATES = {
     'xl/workbook.xml': {'template_sha256': '3b831f50f102d38062f2c4abe30ef190f8a755daa20f48fe36363afd7b31f13a',
                         'token': MAIN_SHEET_TOKEN, 'substituted': 'the derived main sheet name, XML-attribute-escaped (xml_attribute_escape)'},
 }
+# v6 (writer v2.7, O38): the deliverable <name>.xlsx, one sheet. Its parts: the internal workbook's minus sheets 2-4. Pinned:
+# 4 parts with the internal workbook's bytes (_rels/.rels, both docProps, theme1.xml) and 3 of its own (one worksheet in
+# [Content_Types].xml and workbook.xml.rels; the O38 styles). xl/workbook.xml: the one-sheet template.
+DELIVERABLE_PARTS = tuple(p for p in EXPECTED_PARTS if p not in ('xl/worksheets/sheet2.xml', 'xl/worksheets/sheet3.xml',
+                                                                 'xl/worksheets/sheet4.xml'))
+DELIVERABLE_PINNED_PARTS = dict(PINNED_PARTS, **{
+    '[Content_Types].xml': 'ba5af858089dd3357b4e4408a86694ff0a62ec37f21ef57a3a09544dc0ab18c4',
+    'xl/_rels/workbook.xml.rels': '26ad8fcc38d41229833e624496df364492772697ad2e5d6696e1738f05ba225f',
+    'xl/styles.xml': '59f01b1510a60a56aaa6fb6654fb998aa80632d30369ae5e76c9a469784fb5f0'})
+DELIVERABLE_WORKBOOK_TEMPLATE = ('<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><workbookPr/>'
+                                 '<workbookProtection/><bookViews>'
+                                 '<workbookView visibility="visible" minimized="0" showHorizontalScroll="1" showVerticalScroll="1" showSheetTabs="1" tabRatio="600" firstSheet="0" activeTab="0" autoFilterDateGrouping="1"/>'
+                                 '</bookViews><sheets>'
+                                 '<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="@@CPS_MAIN_SHEET@@" sheetId="1" state="visible" r:id="rId1"/>'
+                                 '</sheets><definedNames/><calcPr calcId="124519" fullCalcOnLoad="0"/></workbook>')
+DELIVERABLE_PINNED_TEMPLATES = {
+    'xl/workbook.xml': {'template_sha256': '06baba0b2acbe1af0d2b8c215bd95d4ae588fa7072d8003476bbd447f2090b27',
+                        'token': MAIN_SHEET_TOKEN, 'substituted': 'the derived main sheet name, XML-attribute-escaped (xml_attribute_escape)'},
+}
+# v6 (O38): the deliverable format, checked cell by cell (check_deliverable_formatting); saved QA's own copy of the writer's rule.
+QA_WORKBOOK_NAME = 'INTERNAL_QA_WORKBOOK.xlsx'
+DELIVERY_FORMAT = 'owner_O38_creator_format_v1'
+DELIVERY = {'font': '新細明體', 'size': 12, 'header_fill': 'FFC0C0C0', 'border_style': 'thin', 'border_color': 'FF000000',
+            'centred': 'EFLMNQ', 'left': 'C', 'header_height': 23.25, 'row_height': 20.45, 'freeze': 'A2',
+            'widths': [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]}
+DELIVERY_ROW_HT = {'header': '23.25', 'body': '20.45'}       # the row ht attribute text openpyxl writes
+DELIVERY_PANE = {'ySplit': '1', 'topLeftCell': 'A2', 'activePane': 'bottomLeft', 'state': 'frozen'}
+DELIVERY_SHEET_VIEW_ATTRS = ('tabSelected', 'workbookViewId')  # no showGridLines: gridlines show
 
 
 def xml_attribute_escape(name):
@@ -166,17 +205,19 @@ def xml_attribute_escape(name):
     return name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
-def template_part(part, main_sheet):
-    t = PINNED_TEMPLATES[part]
-    if part != 'xl/workbook.xml' or sha256(WORKBOOK_TEMPLATE.encode('utf-8')) != t['template_sha256'] or WORKBOOK_TEMPLATE.count(t['token']) != 1:
+def template_part(part, main_sheet, kind='qa'):
+    """kind 'qa': the four-sheet workbook's template (v5); 'deliverable': the one-sheet deliverable's (v6, O38)."""
+    t = (PINNED_TEMPLATES if kind == 'qa' else DELIVERABLE_PINNED_TEMPLATES)[part]
+    text = WORKBOOK_TEMPLATE if kind == 'qa' else DELIVERABLE_WORKBOOK_TEMPLATE
+    if part != 'xl/workbook.xml' or sha256(text.encode('utf-8')) != t['template_sha256'] or text.count(t['token']) != 1:
         raise ValueError('pinned template integrity')
-    return WORKBOOK_TEMPLATE.replace(t['token'], xml_attribute_escape(main_sheet)).encode('utf-8')
+    return text.replace(t['token'], xml_attribute_escape(main_sheet)).encode('utf-8')
 
 
 # v5 (writer v2.6, owner decision O33): the deliverable name, re-derived here from the receipt's job title. This is saved
 # QA's own implementation of the writer's rule (writer_portable.deliverable_record); the tests check that both give the same
 # record, or refuse with the same reason, on every test title and on random titles.
-PROFILE = 'owner_O33_O34'
+PROFILE = 'owner_O33_O34_O38'
 XLSX_SUFFIX_NAME = '(未填)'
 TITLE_WS_RE = re.compile(r'[\s\ufeff]')                  # str.isspace() characters and U+FEFF
 TITLE_DASH_RE = re.compile(r'([0-9]{7}[^-]{0,5})-')      # the first '-' among the 6 characters after the 7-digit case id
@@ -185,7 +226,8 @@ OOXML_ESCAPE_RE = re.compile(r'_x[0-9A-Fa-f]{4}_')
 FILE_FORBIDDEN_RE = re.compile(r'[\\/:*?"<>|]')           # Windows
 SHEET_FORBIDDEN_RE = re.compile(r'[:\\/?*\[\]]')          # Excel
 DELIVERABLE_FIELDS = ('profile', 'job_title', 'o33_naming_applied', 'normalized_title', 'dash_removed_at', 'name', 'xlsx_file',
-                      'main_sheet', 'main_sheet_cut', 'sheet_mapping', 'o34_price_columns_unshaded')
+                      'main_sheet', 'main_sheet_cut', 'qa_workbook_file', 'deliverable_workbook', 'deliverable_format',
+                      'sheet_mapping', 'o34_price_columns_unshaded')
 
 
 class DeliverableNameError(Exception):
@@ -198,7 +240,9 @@ def derive_deliverable(title):
     """O33: the workbook file name, the main sheet name and the EXPECTED -> workbook sheet mapping from a job title (None: the
     v2.5 names). Raises DeliverableNameError(reason) where the writer refuses JOB_TITLE_INVALID with that reason."""
     d = {'profile': PROFILE, 'job_title': title, 'o33_naming_applied': title is not None, 'normalized_title': None,
-         'dash_removed_at': None, 'name': None, 'xlsx_file': XLSX_NAME, 'main_sheet': SHEETS[0], 'main_sheet_cut': False}
+         'dash_removed_at': None, 'name': None, 'xlsx_file': XLSX_NAME, 'main_sheet': SHEETS[0], 'main_sheet_cut': False,
+         'qa_workbook_file': XLSX_NAME if title is None else QA_WORKBOOK_NAME, 'deliverable_workbook': title is not None,
+         'deliverable_format': None if title is None else DELIVERY_FORMAT}
     if title is not None:
         if not isinstance(title, str):
             raise DeliverableNameError('NOT_A_STRING')
@@ -228,7 +272,7 @@ def derive_deliverable(title):
 # v4 (third review G3): the receipt fields compared with the rerun receipt. A v1 run of a carrier without O13/R57 takes the
 # same route as the v2 rerun and writes the same fields except mode and these relaxations.
 RECEIPT_CLAIM_FIELDS = ('mode', 'relaxations', 'cross_check', 'expected_saved_values', 'matrices_sha256', 'sheets', 'writer',
-                        'writer_files', 'status', 'admitted', 'deliverable')
+                        'writer_files', 'status', 'admitted', 'deliverable', 'deliverable_xlsx')
 V1_RELAXATIONS = {'applied': False, 'scanned': False}
 SHA256_RE = re.compile(r'[0-9a-f]{64}')
 EXCEL = {'max_rows': 1048576, 'max_columns': 16384, 'cell_text_utf16_units': 32767, 'line_feeds_per_cell': 253,
@@ -293,6 +337,18 @@ class Findings:
 
     def report(self):
         return {k: {'count': len(v), 'first': v[:LIST_CAP]} for k, v in self.items.items()}
+
+
+class TaggedFindings:
+    """v6: findings about the deliverable workbook carry "workbook": "deliverable" (same check names as the internal workbook's)."""
+    def __init__(self, F, tag):
+        self.F, self.tag = F, tag
+
+    def add(self, check, entry):
+        self.F.add(check, dict(entry, workbook=self.tag) if isinstance(entry, dict) else {'workbook': self.tag, 'entry': entry})
+
+    def count(self, check):
+        return self.F.count(check)
 
 
 # ------------------------------------------------------------------ readers
@@ -398,35 +454,42 @@ def read_raw(path, F):
 
 
 # ------------------------------------------------------------------ structure (review S2)
-def check_structure(path, F, main_sheet=SHEETS[0]):
+def check_structure(path, F, main_sheet=SHEETS[0], kind='qa'):
     """The workbook may hold only what the portable writer produces: no hidden content, no extra parts, no view or
     format element that can hide or alter what a cell shows. main_sheet: the derived main sheet name (v5, O33), substituted
-    into the pinned workbook.xml template. Returns a small summary."""
+    into the pinned workbook.xml template. kind 'qa': the four-sheet workbook; 'deliverable' (v6, O38): the one-sheet
+    deliverable (its parts, pins and template; sheetView without showGridLines and with exactly the header-row pane; its
+    row heights). Returns a small summary."""
+    deliv = kind == 'deliverable'
+    expected_parts = DELIVERABLE_PARTS if deliv else EXPECTED_PARTS
+    pinned_parts = DELIVERABLE_PINNED_PARTS if deliv else PINNED_PARTS
+    pinned_templates = DELIVERABLE_PINNED_TEMPLATES if deliv else PINNED_TEMPLATES
+
     def bad(check, **kw):
         F.add(check, kw)
     with zipfile.ZipFile(path) as z:
         names = z.namelist()
         if len(names) != len(set(names)):
             bad('zip_parts', problem='duplicate zip entry names', names=sorted(n for n in set(names) if names.count(n) > 1))
-        for n in sorted(set(names) - set(EXPECTED_PARTS)):
+        for n in sorted(set(names) - set(expected_parts)):
             bad('zip_parts', part=n, problem='part the writer does not produce')
-        for n in sorted(set(EXPECTED_PARTS) - set(names)):
+        for n in sorted(set(expected_parts) - set(names)):
             bad('zip_parts', part=n, problem='missing part')
         # v4 (third review G1): the byte-constant parts are pinned by sha256; every zip entry with a pinned name is read,
         # so a duplicate entry is checked too. This covers every styles.xml change (colour tint, fonts in another
         # namespace, ...) that openpyxl and LibreOffice read differently.
         for info in z.infolist():
-            if info.filename in PINNED_PARTS:
+            if info.filename in pinned_parts:
                 h = sha256(z.read(info))
-                if h != PINNED_PARTS[info.filename]:
-                    bad('pinned_part', part=info.filename, sha256=h, pinned=PINNED_PARTS[info.filename],
+                if h != pinned_parts[info.filename]:
+                    bad('pinned_part', part=info.filename, sha256=h, pinned=pinned_parts[info.filename],
                         problem='differs from the bytes every writer output has')
-        for n in sorted(set(PINNED_PARTS) - set(names)):
-            bad('pinned_part', part=n, problem='missing', pinned=PINNED_PARTS[n])
+        for n in sorted(set(pinned_parts) - set(names)):
+            bad('pinned_part', part=n, problem='missing', pinned=pinned_parts[n])
         # v5 (O33): the part that holds the main sheet's name equals its pinned template with the escaped derived name
         for info in z.infolist():
-            if info.filename in PINNED_TEMPLATES:
-                want = template_part(info.filename, main_sheet)
+            if info.filename in pinned_templates:
+                want = template_part(info.filename, main_sheet, kind)
                 got = z.read(info)
                 if got != want:
                     k = next((i for i in range(min(len(got), len(want))) if got[i] != want[i]), min(len(got), len(want)))
@@ -434,7 +497,7 @@ def check_structure(path, F, main_sheet=SHEETS[0]):
                         first_difference_at=k, actual=got[max(0, k - 40):k + 60].decode('utf-8', 'replace'),
                         expected=want[max(0, k - 40):k + 60].decode('utf-8', 'replace'),
                         problem='differs from the pinned template with the escaped derived main sheet name substituted')
-        for n in sorted(set(PINNED_TEMPLATES) - set(names)):
+        for n in sorted(set(pinned_templates) - set(names)):
             bad('pinned_template', part=n, problem='missing')
         roots = {}
         for n in sorted(set(names)):
@@ -465,7 +528,7 @@ def check_structure(path, F, main_sheet=SHEETS[0]):
             if sh.attrib.get('state') != 'visible':
                 bad('sheet_state', sheet=sh.attrib.get('name'), state=sh.attrib.get('state'), expected='visible')
     # worksheets
-    for n in EXPECTED_PARTS:
+    for n in expected_parts:
         root = roots.get(n)
         if root is None or not n.startswith('xl/worksheets/'):
             continue
@@ -492,9 +555,19 @@ def check_structure(path, F, main_sheet=SHEETS[0]):
                 if len(views) != 1 or tag_name(views[0]) != 'sheetView':
                     bad('worksheet_structure', part=n, problem='sheetViews must hold one sheetView', actual=[tag_name(x) for x in views])
                 for v in views:
-                    extra = sorted(k for k in v.attrib if k not in SHEET_VIEW_ATTRS)
-                    if extra or v.attrib.get('showGridLines') != '0':
-                        bad('worksheet_structure', part=n, problem='sheetView attributes', attributes=dict(v.attrib))
+                    if deliv:              # v6 (O38): gridlines shown (no showGridLines attribute), only the header row frozen
+                        extra = sorted(k for k in v.attrib if k not in DELIVERY_SHEET_VIEW_ATTRS)
+                        if extra:
+                            bad('worksheet_structure', part=n, problem='sheetView attributes (deliverable: gridlines shown, no '
+                                'showGridLines or other view attribute)', attributes=dict(v.attrib))
+                        panes = [x for x in v if tag_name(x) == 'pane']
+                        if len(panes) != 1 or dict(panes[0].attrib) != DELIVERY_PANE:
+                            bad('worksheet_structure', part=n, problem='pane (deliverable: exactly the header-row freeze)',
+                                actual=[dict(x.attrib) for x in panes], expected=DELIVERY_PANE)
+                    else:
+                        extra = sorted(k for k in v.attrib if k not in SHEET_VIEW_ATTRS)
+                        if extra or v.attrib.get('showGridLines') != '0':
+                            bad('worksheet_structure', part=n, problem='sheetView attributes', attributes=dict(v.attrib))
                     if any(tag_name(x) not in ('pane', 'selection') for x in v):
                         bad('worksheet_structure', part=n, problem='sheetView children', actual=[tag_name(x) for x in v])
             elif tag == 'sheetFormatPr':
@@ -505,7 +578,7 @@ def check_structure(path, F, main_sheet=SHEETS[0]):
                     if tag_name(col) != 'col' or any(k not in ('min', 'max', 'width', 'customWidth') for k in col.attrib):
                         bad('worksheet_structure', part=n, problem='col', attributes=dict(col.attrib))
             elif tag == 'sheetData':
-                check_sheet_data(n, el, bad)
+                check_sheet_data(n, el, bad, kind)
             elif tag == 'pageMargins':
                 if any(k not in ('left', 'right', 'top', 'bottom', 'header', 'footer') for k in el.attrib):
                     bad('worksheet_structure', part=n, problem='pageMargins attributes', attributes=dict(el.attrib))
@@ -524,9 +597,9 @@ def check_structure(path, F, main_sheet=SHEETS[0]):
                 allowed = FONT0_CHILDREN if k == 0 else FONT_CHILDREN
                 if tag_name(font) != 'font' or any(x not in allowed for x in kids) or len(kids) != len(set(kids)):
                     bad('font_structure', font=k, element=tag_name(font), children=kids, allowed=list(allowed))
-    return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS), 'pinned_parts': dict(PINNED_PARTS),
-            'pinned_templates': {k: dict(v, main_sheet=main_sheet, expected_sha256=sha256(template_part(k, main_sheet)))
-                                 for k, v in PINNED_TEMPLATES.items()}}
+    return {'kind': kind, 'parts': sorted(set(names)), 'expected_parts': list(expected_parts), 'pinned_parts': dict(pinned_parts),
+            'pinned_templates': {k: dict(v, main_sheet=main_sheet, expected_sha256=sha256(template_part(k, main_sheet, kind)))
+                                 for k, v in pinned_templates.items()}}
 
 
 def number_text_ok(text):
@@ -534,7 +607,7 @@ def number_text_ok(text):
     return isinstance(text, str) and text.isascii() and NUMBER_TEXT_RE.fullmatch(text) is not None
 
 
-def check_sheet_data(part, sheet_data, bad):
+def check_sheet_data(part, sheet_data, bad, kind='qa'):
     """Rows and cells of one worksheet's <sheetData> (review S2; v3 second review F1(b): value children, number text,
     duplicate and out-of-row references). Readers differ on these: Python readers take the first matching child and
     accept any text int()/float() accept; LibreOffice took the last <v>/<is>, an empty cell for a <v> beside <is>, and
@@ -543,8 +616,11 @@ def check_sheet_data(part, sheet_data, bad):
     seen_rows, seen_cells, last_row = set(), set(), 0
     for row in sheet_data:
         ra = row.attrib
-        if tag_name(row) != 'row' or any(k not in ('r', 'spans', 'ht', 'customHeight') for k in ra) \
-                or (('ht' in ra or 'customHeight' in ra) and (ra.get('r') != '1' or ra.get('ht') != '36')):
+        if kind == 'deliverable':          # v6 (O38): every row has its height, 23.25 for the header and 20.45 for the others
+            ht_ok = ra.get('ht') == DELIVERY_ROW_HT['header' if ra.get('r') == '1' else 'body'] and ra.get('customHeight') == '1'
+        else:
+            ht_ok = not ('ht' in ra or 'customHeight' in ra) or (ra.get('r') == '1' and ra.get('ht') == '36')
+        if tag_name(row) != 'row' or any(k not in ('r', 'spans', 'ht', 'customHeight') for k in ra) or not ht_ok:
             bad('worksheet_structure', part=n, problem='row attributes', row=ra.get('r'), attributes=dict(ra))
         rn = ra.get('r')
         rnum = int(rn) if rn is not None and ROW_NUMBER_RE.fullmatch(rn) else None
@@ -765,7 +841,8 @@ def pinned_node_environment(node, writer_dir):
     return real, {'artifact_tool_resolved_path': cjs, 'artifact_tool_sha256': h, 'kept_variables': kept, 'removed_variables': removed}
 
 
-def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256=None, deliverable='untitled'):
+def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256=None, deliverable='untitled',
+                     dbytes=None):
     """v3 (second review F1(a), F2): the writer rerun (--mode v2) always runs and both EXPECTED_SAVED_VALUES.json and the
     xlsx are byte-compared, whatever the receipt's mode says. A receipt that says v1 also gets the writer004
     prepareMatrices comparison (run first). v4 (third review G2, G3): one node binary for every node call (resolve_node;
@@ -777,7 +854,8 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
     CHECKER_NODE_REFUSED for a pinned binary changed during the check), or FAILED (also for a receipt_claim_mismatch).
     v5 (O33): deliverable is saved QA's own derivation from the receipt's job title (derive_deliverable; None when the title
     cannot be derived: then no rerun is made, JOB_TITLE_INVALID). The rerun gets --job-title=<that title> when there is one, and
-    its workbook is read under the derived file name."""
+    its workbook is read under the derived file name. v6 (O38): the four-sheet workbook is the derived qa_workbook_file, and a
+    titled rerun's deliverable <name>.xlsx is byte-compared with dbytes (the delivered deliverable)."""
     def bad(**kw):
         F.add('provenance', kw)
     if deliverable == 'untitled':
@@ -844,7 +922,8 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
                     bad(check='EXPECTED_SAVED_VALUES.json differs from writer004 prepareMatrices on the carrier')
     title = deliverable.get('job_title') if deliverable is not None else None
     rec['rerun_job_title'] = title
-    rec['rerun_xlsx_file'] = deliverable.get('xlsx_file') if deliverable is not None else None
+    rec['rerun_xlsx_file'] = deliverable.get('qa_workbook_file') if deliverable is not None else None
+    rec['rerun_deliverable_file'] = deliverable.get('xlsx_file') if deliverable is not None and deliverable.get('deliverable_workbook') else None
     with tempfile.TemporaryDirectory(prefix='cps_saved_qa_rerun_') as td:
         dest = Path(td) / 'rerun'
         rec['writer_portable.py_sha256'] = sha256(WRITER.read_bytes())
@@ -857,7 +936,7 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
                                 '--writer-dir', str(writer_dir), '--node', node, '--mode', 'v2']
                                + (['--job-title=' + title] if title is not None else []), capture_output=True, timeout=1800)
         if p is None:
-            e2 = x2 = r2 = None
+            e2 = x2 = r2 = d2 = None
         elif p.returncode != 0:
             err = p.stderr.decode('utf-8', 'replace')
             try:
@@ -867,10 +946,14 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
                 ref = None
             bad(check='writer rerun refused or failed', refusal=ref, stderr=err[-400:])
             codes.append('WRITER_RERUN_FAILED')
-            e2 = x2 = r2 = None
+            e2 = x2 = r2 = d2 = None
         else:
-            xp = dest / deliverable['xlsx_file']
+            xp = dest / deliverable['qa_workbook_file']
             e2, x2 = (dest / 'EXPECTED_SAVED_VALUES.json').read_bytes(), (xp.read_bytes() if xp.is_file() else None)
+            dp = dest / deliverable['xlsx_file'] if deliverable.get('deliverable_workbook') else None
+            d2 = dp.read_bytes() if dp is not None and dp.is_file() else None
+            if dp is not None and d2 is None:
+                bad(check='the writer rerun wrote no deliverable under the derived file name', file=deliverable['xlsx_file'])
             r2 = json.loads((dest / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
             if x2 is None:
                 bad(check='the writer rerun wrote no workbook under the derived file name', file=deliverable['xlsx_file'],
@@ -895,6 +978,11 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
             bad(check='EXPECTED_SAVED_VALUES.json differs from the writer rerun on the carrier')
         if x2 != xbytes:
             bad(check='the workbook differs from the writer rerun on the carrier', file=rec['rerun_xlsx_file'])
+        if rec['rerun_deliverable_file'] is not None:
+            rec['deliverable_xlsx_byte_identical'] = d2 is not None and d2 == dbytes
+            if not rec['deliverable_xlsx_byte_identical']:
+                bad(check='the deliverable workbook differs from the writer rerun on the carrier', file=rec['rerun_deliverable_file'],
+                    workbook='deliverable')
         if receipt is not None:
             rec['receipt_claims'] = compare_receipt_claims(receipt, r2, mode, F)
     if node_rec['pinned']:                       # the pinned file is unchanged after the last node call
@@ -1045,6 +1133,162 @@ def check_formatting(wb, expected_rows, F, mapping=None):
     return checked
 
 
+def check_deliverable_formatting(wb, nrows, F, sheet):
+    """v6 (O38): the deliverable's format cell by cell on A1:Q<nrows>, the widths, row heights, header-row freeze, gridlines
+    shown and no tab colour. F is the deliverable's TaggedFindings."""
+    checked = 0
+
+    def bad(cell, prop, want, got):
+        F.add('formatting', {'sheet': sheet, 'cell': cell, 'property': prop, 'expected': want, 'actual': got})
+
+    def rgb(color):
+        return None if color is None else getattr(color, 'rgb', None)
+    if sheet not in wb.sheetnames:
+        return 0
+    ws = wb[sheet]
+    side = (DELIVERY['border_style'], DELIVERY['border_color'])
+    for r in range(1, nrows + 1):
+        for c in range(1, 18):
+            cell = ws.cell(row=r, column=c)
+            a, x = cell.coordinate, col_letters(c)
+            checked += 1
+            head = r == 1
+            b = cell.border
+            sides = [(s_.style, rgb(s_.color)) for s_ in (b.left, b.right, b.top, b.bottom)]
+            props = [('font.name', DELIVERY['font'], cell.font.name), ('font.size', DELIVERY['size'], cell.font.sz),
+                     ('font.bold', False, bool(cell.font.b)), ('font.color', None, rgb(cell.font.color)),
+                     ('align.horizontal', 'center' if head or x in DELIVERY['centred'] else 'left' if x in DELIVERY['left'] else None,
+                      cell.alignment.horizontal),
+                     ('align.vertical', 'center', cell.alignment.vertical), ('align.wrap', False, bool(cell.alignment.wrap_text)),
+                     ('align.shrink', False, bool(cell.alignment.shrink_to_fit)), ('align.indent', 0, cell.alignment.indent),
+                     ('align.rotation', 0, cell.alignment.text_rotation),
+                     ('number_format', 'General', cell.number_format),
+                     ('fill.type', 'solid' if head else None, cell.fill.fill_type),
+                     ('border', [side] * 4 if head else [(None, None)] * 4, sides),
+                     ('protection.hidden', False, bool(cell.protection.hidden))] + list(font_extras(cell.font))
+            if head:
+                props.append(('fill.color', DELIVERY['header_fill'], rgb(cell.fill.fgColor)))
+            for prop, want, got in props:
+                if got != want:
+                    bad(a, prop, want, got)
+    for j, w in enumerate(DELIVERY['widths'], start=1):
+        got = ws.column_dimensions[col_letters(j)].width
+        if got is None or abs(got - w) > 1e-9:           # openpyxl writes 81.9 as 81.90000000000001
+            bad(col_letters(j), 'column_width', w, got)
+        if ws.column_dimensions[col_letters(j)].hidden:
+            bad(col_letters(j), 'column_hidden', False, True)
+    for r in range(1, nrows + 1):
+        want = DELIVERY['header_height'] if r == 1 else DELIVERY['row_height']
+        got = ws.row_dimensions[r].height
+        if got != want:
+            bad(f'row {r}', 'row_height', want, got)
+    extra = sorted(r for r, d in ws.row_dimensions.items() if r > nrows and d.height is not None)
+    if extra:
+        bad(None, 'rows_after_the_last_with_height', [], extra[:20])
+    if ws.freeze_panes != DELIVERY['freeze']:
+        bad(None, 'freeze_panes', DELIVERY['freeze'], ws.freeze_panes)
+    if ws.sheet_view.showGridLines is False:
+        bad(None, 'showGridLines', 'shown (attribute absent)', False)
+    if rgb(ws.sheet_properties.tabColor) is not None:
+        bad(None, 'tab_color', None, rgb(ws.sheet_properties.tabColor))
+    return checked
+
+
+def check_deliverable(path, exp_rows, main_sheet, F, formatting):
+    """v6 (O38): the deliverable workbook <name>.xlsx (one sheet main_sheet) against the main sheet of
+    EXPECTED_SAVED_VALUES.json. Findings go to F tagged "workbook": "deliverable". Returns the report section."""
+    T = TaggedFindings(F, 'deliverable')
+    sec = {'file': path.name, 'sheet': main_sheet, 'checked': False}
+    if not path.is_file():
+        return sec
+    xb = path.read_bytes()
+    sec.update(checked=True, sha256=sha256(xb), bytes=len(xb))
+    try:
+        sec['structure'] = check_structure(path, T, main_sheet, 'deliverable')
+    except Exception as e:                      # noqa: BLE001
+        T.add('reader_error', {'reader': 'structure', 'error': repr(e)[:300]})
+    main_rows = exp_rows.get(SHEETS[0]) if exp_rows else None
+    if main_rows is None:
+        return sec
+    readers, counts, raw, wb_f = {}, {}, None, None
+    for reader, fn in (('openpyxl_formulas', lambda: read_openpyxl(path, data_only=False)),
+                       ('openpyxl_data_only', lambda: read_openpyxl(path, data_only=True)),
+                       ('raw_ooxml', lambda: read_raw(path, T))):
+        try:
+            res = fn()
+        except Exception as e:                  # noqa: BLE001
+            T.add('reader_error', {'reader': reader, 'error': repr(e)[:300]})
+            continue
+        if reader == 'raw_ooxml':
+            raw = res
+            readers[reader] = (raw['order'], raw['sheets'])
+        else:
+            wb, order, sheets = res
+            if reader == 'openpyxl_formulas':
+                wb_f = (wb, sheets)
+            readers[reader] = (order, {k: v['cells'] for k, v in sheets.items()})
+    for reader, (order, cells_by_sheet) in readers.items():
+        if order != [main_sheet]:
+            T.add('sheet_order', {'reader': reader, 'actual': order, 'expected': [main_sheet],
+                                  'problem': 'the deliverable holds exactly one sheet, the derived main sheet name'})
+        for name, cells in cells_by_sheet.items():
+            if name != main_sheet:
+                compare_sheet(SHEETS[0], [], cells, reader, T, name)      # any populated cell of another sheet is unexpected
+        cells = cells_by_sheet.get(main_sheet, {})
+        counts[reader] = compare_sheet(SHEETS[0], main_rows, cells, reader, T, main_sheet)
+        row1 = [cells.get((1, c), (None, None))[0] for c in range(1, 18)]
+        if row1 != HEADERS:
+            T.add('header_row', {'reader': reader, 'check': 'deliverable row 1 A-Q equals the 17 headers'})
+        if reader == 'raw_ooxml':
+            for name in order:
+                check_sheet_name(name, T)
+    if wb_f is not None:
+        for name, sh in wb_f[1].items():
+            for (r, c), (v, dt) in sh['cells'].items():
+                if dt == 'f':
+                    T.add('formula', {'reader': 'openpyxl_formulas', 'sheet': name, 'cell': f'{col_letters(c)}{r}'})
+                if dt == 'e':
+                    T.add('error_cell_type', {'reader': 'openpyxl_formulas', 'sheet': name, 'cell': f'{col_letters(c)}{r}'})
+            check_limits(name, {k: v for k, v in sh['cells'].items()}, T)
+    if raw is not None:
+        for f in raw['formulas']:
+            T.add('formula', {'reader': 'raw_ooxml', **f})
+        for name, cells in raw['sheets'].items():
+            for (r, c), (_, typ) in cells.items():
+                if typ in ('str', 'e'):
+                    T.add('error_cell_type' if typ == 'e' else 'formula', {'reader': 'raw_ooxml', 'sheet': name, 'cell': f'{col_letters(c)}{r}', 'type': typ})
+        if raw['defined_names']:
+            T.add('defined_names', {'count': raw['defined_names']})
+        for e in raw['external_relationships']:
+            T.add('external_relationship', e)
+        for q in [q for q in raw['parts'] if re.search(r'(?:vbaProject|externalLink|connections\.xml|calcChain)', q)]:
+            T.add('unexpected_part', {'part': q})
+    if len(readers) == 3:
+        names = set()
+        for _, (order, cbs) in readers.items():
+            names |= set(cbs)
+        for name in sorted(names):
+            a = {k: v[0] for k, v in readers['openpyxl_formulas'][1].get(name, {}).items() if v[0] is not None}
+            b = {k: v[0] for k, v in readers['openpyxl_data_only'][1].get(name, {}).items() if v[0] is not None}
+            c_ = {k: v[0] for k, v in readers['raw_ooxml'][1].get(name, {}).items() if v[0] is not None}
+            for key in set(a) | set(b) | set(c_):
+                va, vb, vc = a.get(key), b.get(key), c_.get(key)
+                if not (va == vb == vc and kind(va) == kind(vb) == kind(vc)):
+                    T.add('reader_disagreement', {'sheet': name, 'cell': f'{col_letters(key[1])}{key[0]}',
+                                                  'openpyxl_formulas': va, 'openpyxl_data_only': vb, 'raw_ooxml': vc})
+    sec['readers'] = list(readers)
+    sec['counts_by_reader'] = counts
+    sec['sheet_order'] = raw['order'] if raw else None
+    sec['formatting_cells_checked'] = None
+    if formatting and wb_f is not None:
+        try:
+            sec['formatting_cells_checked'] = check_deliverable_formatting(wb_f[0], len(main_rows), T, main_sheet)
+        except Exception as e:                  # noqa: BLE001
+            T.add('reader_error', {'reader': 'formatting', 'error': repr(e)[:300]})
+    sec['compared_with'] = 'the main sheet of EXPECTED_SAVED_VALUES.json (' + SHEETS[0] + ')'
+    return sec
+
+
 # ------------------------------------------------------------------ main
 def load_expected(ebytes, F):
     """EXPECTED_SAVED_VALUES.json, shape-checked; None (with a finding) when it cannot be compared at all."""
@@ -1085,16 +1329,29 @@ def resolve_deliverable(out_dir, receipt, F):
             bad(check='WRITER_RECEIPT.json deliverable differs from the derivation from its job title', fields=mismatched,
                 detail={k: {'receipt': canonical(dl.get(k))[:300], 'derived': canonical(derived[k])[:300]} for k in mismatched})
     receipt_file = (receipt.get('output_xlsx') or {}).get('file') if isinstance(receipt, dict) else None
-    if receipt is not None and receipt_file != use['xlsx_file']:
-        bad(check='WRITER_RECEIPT.json output_xlsx.file differs from the derived file name', receipt=str(receipt_file)[:300],
-            derived=use['xlsx_file'])
-    xlsx = out_dir / use['xlsx_file']
+    if receipt is not None and receipt_file != use['qa_workbook_file']:
+        bad(check='WRITER_RECEIPT.json output_xlsx.file differs from the derived internal workbook file name', receipt=str(receipt_file)[:300],
+            derived=use['qa_workbook_file'])
+    xlsx = out_dir / use['qa_workbook_file']
     if not xlsx.is_file():
-        bad(check='no workbook under the derived file name', file=use['xlsx_file'])
-    others = sorted(q.name for q in out_dir.iterdir() if q.name.lower().endswith('.xlsx') and q.name != use['xlsx_file'])
+        bad(check='no workbook under the derived internal workbook file name', file=use['qa_workbook_file'])
+    # v6 (O38): a titled output also holds the deliverable <name>.xlsx, named in the receipt's deliverable_xlsx
+    allowed = {use['qa_workbook_file']} | ({use['xlsx_file']} if use['deliverable_workbook'] else set())
+    rdx = receipt.get('deliverable_xlsx') if isinstance(receipt, dict) else None
+    if use['deliverable_workbook']:
+        if not (out_dir / use['xlsx_file']).is_file():
+            bad(check='no deliverable workbook under the derived file name', file=use['xlsx_file'])
+        if receipt is not None and (not isinstance(rdx, dict) or rdx.get('file') != use['xlsx_file'] or rdx.get('sheet') != use['main_sheet']
+                                    or rdx.get('format') != DELIVERY_FORMAT):
+            bad(check='WRITER_RECEIPT.json deliverable_xlsx differs from the derived deliverable (file, sheet, format)',
+                receipt=canonical(rdx)[:300], derived={'file': use['xlsx_file'], 'sheet': use['main_sheet'], 'format': DELIVERY_FORMAT})
+    elif receipt is not None and rdx is not None:
+        bad(check='WRITER_RECEIPT.json names a deliverable workbook for an untitled output', receipt=canonical(rdx)[:300])
+    others = sorted(q.name for q in out_dir.iterdir() if q.name.lower().endswith('.xlsx') and q.name not in allowed)
     if others:
-        bad(check='another workbook in the output directory', files=others[:20], derived=use['xlsx_file'])
+        bad(check='another workbook in the output directory', files=others[:20], derived=sorted(allowed))
     section = {'job_title': title, 'derived_here': derived is not None, 'xlsx_file': use['xlsx_file'], 'main_sheet': use['main_sheet'],
+               'qa_workbook_file': use['qa_workbook_file'], 'deliverable_workbook': use['deliverable_workbook'],
                'sheet_mapping': use['sheet_mapping'], 'receipt_fields_equal_derivation': bool(derived is not None and isinstance(dl, dict)
                                                                                                 and not mismatched),
                'receipt_output_xlsx_file': receipt_file, 'derivation': (
@@ -1126,11 +1383,15 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
             receipt = None
     derived, use, deliverable = resolve_deliverable(out_dir, receipt, F)
     mapping = {m['expected_saved_values_sheet']: m['workbook_sheet'] for m in use['sheet_mapping']}
-    xlsx = out_dir / use['xlsx_file']
+    xlsx = out_dir / use['qa_workbook_file']                     # v6: the four-sheet workbook (INTERNAL_QA_WORKBOOK.xlsx if titled)
     xbytes = xlsx.read_bytes() if xlsx.is_file() else None
+    dpath = out_dir / use['xlsx_file'] if use['deliverable_workbook'] else None
+    dbytes = dpath.read_bytes() if dpath is not None and dpath.is_file() else None
     if receipt is not None:
         if xbytes is not None and (receipt.get('output_xlsx') or {}).get('sha256') != sha256(xbytes):
             F.add('integrity', {'check': 'xlsx sha256 differs from WRITER_RECEIPT.json'})
+        if dbytes is not None and (receipt.get('deliverable_xlsx') or {}).get('sha256') != sha256(dbytes):
+            F.add('integrity', {'check': 'deliverable xlsx sha256 differs from WRITER_RECEIPT.json deliverable_xlsx', 'workbook': 'deliverable'})
         if (receipt.get('expected_saved_values') or {}).get('sha256') != sha256(ebytes):
             F.add('integrity', {'check': 'EXPECTED_SAVED_VALUES.json sha256 differs from WRITER_RECEIPT.json'})
 
@@ -1145,7 +1406,7 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                                             'EXPECTED_SAVED_VALUES.json and the workbook (with or without WRITER_RECEIPT.json) is not detected.'}
     if carrier is not None:
         try:
-            provenance = check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256, derived)
+            provenance = check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256, derived, dbytes)
         except Exception as e:                  # noqa: BLE001
             F.add('provenance', {'check': 'provenance check failed', 'error': repr(e)[:300]})
             provenance = {'checked': True, 'result': 'ERROR'}
@@ -1244,6 +1505,16 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
             except Exception as e:              # noqa: BLE001
                 F.add('reader_error', {'reader': 'formatting', 'error': repr(e)[:300]})
 
+    deliverable_wb = {'checked': False, 'present': use['deliverable_workbook'],
+                      'note': 'untitled output: no deliverable workbook (writer v2.7 writes it only with --job-title, O38)'}
+    if use['deliverable_workbook'] and dpath is not None:
+        try:
+            deliverable_wb = check_deliverable(dpath, ({s['name']: s['values'] for s in exp_sheets} if exp_sheets is not None else None),
+                                               use['main_sheet'], F, formatting)
+        except Exception as e:                  # noqa: BLE001
+            F.add('reader_error', {'reader': 'deliverable', 'error': repr(e)[:300], 'workbook': 'deliverable'})
+        deliverable_wb['present'] = dbytes is not None
+
     error_text = []
     for name, cells in (raw['sheets'].items() if raw else []):
         for (r, c), (v, _) in sorted(cells.items()):
@@ -1265,7 +1536,9 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
     return {
         'schema': 'cps.export.saved-qa.v1', 'tool': VERSION, 'status': status,
         'xlsx': {'file': xlsx.name, 'sha256': sha256(xbytes) if xbytes is not None else None,
-                 'bytes': len(xbytes) if xbytes is not None else None},
+                 'bytes': len(xbytes) if xbytes is not None else None,
+                 'role': 'the four-sheet workbook (internal QA workbook when titled)'},
+        'deliverable_xlsx': deliverable_wb,
         'expected_saved_values': {'file': exp_path.name, 'sha256': sha256(ebytes)},
         'writer_receipt_present': receipt is not None,
         'deliverable': deliverable,
@@ -1284,6 +1557,8 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                                                                   'cell_value_children', 'number_text', 'duplicate_reference', 'font_structure',
                                                                   'pinned_part', 'element_namespace', 'pinned_template')),
                    'deliverable_name_failures': F.count('deliverable_name'),
+                   'deliverable_workbook_findings': sum(1 for v in F.items.values() for e in v if isinstance(e, dict) and e.get('workbook') == 'deliverable'),
+                   'deliverable_formatting_cells_checked': deliverable_wb.get('formatting_cells_checked'),
                    'provenance_failures': F.count('provenance'), 'receipt_claim_mismatches': F.count('receipt_claim_mismatch'),
                    'expected_provenance_checked': bool(provenance.get('checked')),
                    'formatting_failures': fmt_fail if formatting else None,
@@ -1297,12 +1572,12 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                   '--writer-dir also the provenance of EXPECTED and of the xlsx from the carrier (a writer rerun) and the receipt fields '
                   'saved QA compares. Not source semantics, not what @oai/artifact-tool would have saved (L2-L5), not Excel display, '
                   'not visual QA.'),
-        'cps_evidence_preconditions': evidence_preconditions(status, provenance, formatting, deliverable),
+        'cps_evidence_preconditions': evidence_preconditions(status, provenance, formatting, deliverable, deliverable_wb),
         'native_excel_validation': False, 'openpyxl': openpyxl.__version__,
     }
 
 
-def evidence_preconditions(status, provenance, formatting, deliverable=None):
+def evidence_preconditions(status, provenance, formatting, deliverable=None, deliverable_wb=None):
     """README "Conditions of use": what this report can show of them. The carrier check against the route convert receipt
     or the freeze record is the operator's, the job-title check against the harness's per-job input too (v5, O33), and
     visual QA is a separate reviewer's."""
@@ -1313,9 +1588,13 @@ def evidence_preconditions(status, provenance, formatting, deliverable=None):
            'formatting_checked': bool(formatting), 'pinned_checker_node': pinned,
            'checker_node': ({k: cn.get(k) for k in ('executable', 'realpath', 'sha256', 'pinned_sha256', 'version')} if cn else None),
            'job_title': (deliverable or {}).get('job_title'), 'xlsx_file': (deliverable or {}).get('xlsx_file'),
-           'main_sheet': (deliverable or {}).get('main_sheet')}
+           'main_sheet': (deliverable or {}).get('main_sheet'), 'qa_workbook_file': (deliverable or {}).get('qa_workbook_file'),
+           'deliverable_workbook': bool((deliverable or {}).get('deliverable_workbook')),
+           'deliverable_checked': bool((deliverable_wb or {}).get('checked')),
+           'deliverable_byte_identical_to_rerun': provenance.get('deliverable_xlsx_byte_identical')}
+    deliv_ok = not out['deliverable_workbook'] or (out['deliverable_checked'] and out['deliverable_byte_identical_to_rerun'] is True)
     out['all_checked_here_met'] = bool(status == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and out['provenance_result'] == 'PASS'
-                                       and out['formatting_checked'] and pinned)
+                                       and out['formatting_checked'] and pinned and deliv_ok)
     out['note'] = ('CPS evidence needs all of these (README "Conditions of use"): status PASS; provenance checked with result PASS; '
                    'formatting checked (a run with --no-formatting is not CPS evidence); the checker node pinned by --checker-node '
                    'and --checker-node-sha256 from the admission record (pinned_checker_node). all_checked_here_met says whether '

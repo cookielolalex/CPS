@@ -24,13 +24,22 @@
                      and the G/H shading (K01..K12; TITLE2 is a second invented job title); DEST/TAMPERS.json lists the findings
                      each must produce and whether provenance catches it (K12, a consistent re-titling, passes: the job title is
                      the operator's check).
+  deliverable SRC DEST
+                     Writer v2.7, owner decision O38: from a titled writer output SRC, tampers of the one-sheet deliverable <name>.xlsx
+                     (L01..L16: a value, gridlines hidden, columns frozen, the four-sheet workbook delivered, header fill, header
+                     style, missing, wrapping, a stale receipt hash, the sheet renamed, a row height, an extra cell, a number as
+                     text, the receipt's deliverable_xlsx dropped, a consistent change of all three files, a hidden column);
+                     DEST/TAMPERS.json lists the findings each must produce (deliverable findings carry workbook "deliverable").
   The tamper set also holds group o34 (writer v2.6): G/H shaded again, through styles.xml or through the header style.
+  v2.7 (O38): a titled output also holds the deliverable <name>.xlsx; the naming tampers copy it unchanged unless the tamper is
+  about it, and the internal four-sheet workbook INTERNAL_QA_WORKBOOK.xlsx (the receipt's output_xlsx.file) is the one edited.
   v2.6: B01/B02 address the empty G2/H2 cells by the body style s="2" (O34 removed the G/H style s="4").
 Usage: python3 -I -B make_tamper_fixtures.py carrier /abs/v01_base.json /abs/new.json
        python3 -I -B make_tamper_fixtures.py tamper /abs/writer-output /abs/new-dir
        python3 -I -B make_tamper_fixtures.py downgrade /abs/writer-output-mode-v2 /abs/new-dir
        python3 -I -B make_tamper_fixtures.py receipt /abs/writer-output /abs/new-dir
        python3 -I -B make_tamper_fixtures.py naming /abs/titled-writer-output /abs/new-dir "<second invented job title>"
+       python3 -I -B make_tamper_fixtures.py deliverable /abs/titled-writer-output /abs/new-dir
 """
 import copy, hashlib, importlib.util, json, re, shutil, sys, zipfile
 from pathlib import Path
@@ -336,6 +345,9 @@ def write_tampered(src_xlsx, dst_xlsx, edits):
 def update_receipt(d):
     r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
     r['output_xlsx']['sha256'] = sha((d / r['output_xlsx']['file']).read_bytes())
+    dx = r.get('deliverable_xlsx')
+    if isinstance(dx, dict) and (d / dx['file']).is_file():          # v2.7 (O38): the deliverable's hash too
+        dx['sha256'] = sha((d / dx['file']).read_bytes())
     r['expected_saved_values']['sha256'] = sha((d / 'EXPECTED_SAVED_VALUES.json').read_bytes())
     (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
@@ -451,7 +463,9 @@ def make_naming_tampers(src, dest, title2):
     base = json.loads((src / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
     title, xn = base['deliverable']['job_title'], base['output_xlsx']['file']
     d1, d2 = wp.deliverable_record(title), wp.deliverable_record(title2)
-    assert d1['xlsx_file'] == xn and d2['xlsx_file'] != xn and d2['main_sheet'] != d1['main_sheet'] and d1['main_sheet'].isascii() is False
+    dn = base['deliverable_xlsx']['file']                       # v2.7 (O38): the deliverable, copied unless the tamper is about it
+    assert d1['qa_workbook_file'] == xn == wp.QA_WORKBOOK_NAME and d1['xlsx_file'] == dn and d2['xlsx_file'] != dn
+    assert d2['main_sheet'] != d1['main_sheet'] and d1['main_sheet'].isascii() is False
     esc1, esc2 = (wp_escape(x['main_sheet']) for x in (d1, d2))
     first_non_ascii = next(ch for ch in d1['main_sheet'] if ord(ch) > 127)
 
@@ -460,15 +474,18 @@ def make_naming_tampers(src, dest, title2):
 
     def retitle(r, d):
         r['deliverable'].update({k: d[k] for k in d})
-        r['output_xlsx']['file'] = d['xlsx_file']
+        r['output_xlsx']['file'] = d['qa_workbook_file']
+        r['deliverable_xlsx'].update(file=d['xlsx_file'], sheet=d['main_sheet'])
     table = {
         # name: (workbook edits, receipt edit, new xlsx file name or None, findings, only, provenance)
         'K01_wrong_sheet_name': ({WB: name_attr('未填研究草稿')}, None, None, ['deliverable_name', 'sheet_order', 'pinned_template'], False, 'provenance'),
         'K02_sheet_and_receipt_renamed_title_kept': ({WB: name_attr(esc2)}, lambda r: (r['deliverable'].__setitem__('main_sheet', d2['main_sheet']),
                                                                                r['deliverable']['sheet_mapping'][0].__setitem__('workbook_sheet', d2['main_sheet'])),
                                                      None, ['deliverable_name', 'sheet_order', 'pinned_template'], False, 'provenance'),
-        'K03_receipt_title_changed_only': ({}, lambda r: r['deliverable'].__setitem__('job_title', title2), None, ['deliverable_name'], True, 'provenance'),
-        'K04_retitled_file_renamed_sheet_kept': ({}, lambda r: retitle(r, d2), d2['xlsx_file'], ['deliverable_name', 'sheet_order', 'pinned_template'],
+        # v2.7: the internal workbook keeps its constant name, so it is found and checked against the second title's sheet name
+        'K03_receipt_title_changed_only': ({}, lambda r: r['deliverable'].__setitem__('job_title', title2), None,
+                                           ['deliverable_name', 'sheet_order', 'pinned_template'], False, 'provenance'),
+        'K04_retitled_file_renamed_sheet_kept': ({}, lambda r: retitle(r, d2), None, ['deliverable_name', 'sheet_order', 'pinned_template'],
                                                  False, 'provenance'),
         'K05_workbook_xml_extra_change': ({WB: sub1(r'tabRatio="600"', 'tabRatio="601"')}, None, None, ['pinned_template'], True, 'provenance'),
         'K06_sheet_name_escaped_differently': ({WB: name_attr(esc1.replace(first_non_ascii, '&#%d;' % ord(first_non_ascii), 1))}, None, None,
@@ -478,7 +495,7 @@ def make_naming_tampers(src, dest, title2):
         'K09_receipt_output_file_edited': ({}, lambda r: r['output_xlsx'].__setitem__('file', DEFAULT_XLSX), None, ['deliverable_name'], True, 'fails'),
         'K10_second_workbook_in_dir': ({}, None, None, ['deliverable_name'], True, 'fails'),
         'K11_receipt_deliverable_dropped': ({}, lambda r: r.pop('deliverable'), None, ['deliverable_name'], True, 'provenance'),
-        'K12_consistent_retitle': ({WB: name_attr(esc2)}, lambda r: retitle(r, d2), d2['xlsx_file'], [], True, 'passes'),
+        'K12_consistent_retitle': ({WB: name_attr(esc2)}, lambda r: retitle(r, d2), None, [], True, 'passes'),
         'K13_receipt_title_without_case_id': ({}, lambda r: r['deliverable'].__setitem__('job_title', '甲公司-乙案'), None, ['deliverable_name'], True,
                                               'provenance'),
     }
@@ -497,14 +514,120 @@ def make_naming_tampers(src, dest, title2):
             shutil.copyfile(src / xn, d / out_name)
         if name.startswith('K10_'):
             shutil.copyfile(src / xn, d / 'copy of the deliverable.xlsx')
+        # v2.7: the deliverable; K04 and K12 retitle it (file renamed; K12 also renames its sheet, consistently)
+        dn_out = d2['xlsx_file'] if name[:3] in ('K04', 'K12') else dn
+        if name.startswith('K12_'):
+            write_tampered(src / dn, d / dn_out, {WB: name_attr(esc2)})
+        else:
+            shutil.copyfile(src / dn, d / dn_out)
         if redit is not None:
             redit(r)
         if 'output_xlsx' in r and r['output_xlsx']['file'] == out_name:
             r['output_xlsx']['sha256'] = sha((d / out_name).read_bytes())          # consistent receipt hash
+        if isinstance(r.get('deliverable_xlsx'), dict) and r['deliverable_xlsx']['file'] == dn_out:
+            r['deliverable_xlsx']['sha256'] = sha((d / dn_out).read_bytes())
         (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         index.append({'name': name, 'dir': str(d), 'group': 'naming', 'findings': findings, 'only': only, 'provenance': prov,
                       'provenance_result': 'JOB_TITLE_INVALID' if name.startswith('K13_') else results[prov],
                       'xlsx_file': out_name, 'job_title': title, 'job_title2': title2})
+    (dest / 'TAMPERS.json').write_text(json.dumps({'invented': True, 'source_output': str(src), 'tampers': index},
+                                                  ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    return index
+
+
+# ---------------------------------------------------------------- writer v2.7, owner decision O38: deliverable tampers
+def _first_inline(x, cell):
+    m = re.search(r'(<c r="%s" [^>]*><is><t[^>]*>)([^<]*)(</t></is></c>)' % cell, x)
+    assert m, cell
+    return m
+
+
+def deliverable_value_changed(x):
+    m = _first_inline(x, 'C2')
+    return x[:m.start(2)] + m.group(2) + ' tampered' + x[m.end(2):]
+
+
+def deliverable_number_as_text(x):
+    m = re.search(r'<c r="(F[2-9][0-9]*)" s="([0-9]+)" t="n"><v>([0-9]+)</v></c>', x)
+    assert m
+    return x[:m.start()] + f'<c r="{m.group(1)}" s="{m.group(2)}" t="inlineStr"><is><t>{m.group(3)}</t></is></c>' + x[m.end():]
+
+
+def deliverable_extra_cell(x):
+    k = x.index('</row>', x.index('<row r="2"'))
+    return x[:k] + '<c r="R2" t="inlineStr"><is><t>extra</t></is></c>' + x[k:]
+
+
+def deliverable_header_body_style(x):
+    y, n = re.subn(r'(<c r="[A-Q]1" s=")1(")', r'\g<1>2\g<2>', x)
+    assert n == 17
+    return y
+
+
+DELIVERABLE_TAMPERS = {
+    # name: (deliverable edits, findings (all tagged workbook "deliverable" unless listed in untagged), untagged findings,
+    #        passes without provenance)
+    'L01_value_changed': ({S1: deliverable_value_changed}, ['value_type_mismatch'], [], False),
+    'L02_gridlines_hidden': ({S1: sub1(r'<sheetView workbookViewId="0">', '<sheetView showGridLines="0" workbookViewId="0">')},
+                             ['worksheet_structure', 'formatting'], [], False),
+    'L03_columns_frozen': ({S1: sub1(r'<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>',
+                                     '<pane xSplit="3" ySplit="1" topLeftCell="D2" activePane="bottomRight" state="frozen"/>')},
+                           ['worksheet_structure', 'formatting'], [], False),
+    'L04_four_sheet_workbook_delivered': ({'=': None}, ['zip_parts', 'pinned_part', 'pinned_template', 'sheet_order'], [], False),
+    'L05_header_fill_dark_blue': ({ST: sub1(r'FFC0C0C0', 'FF29445D')}, ['pinned_part', 'formatting'], [], False),
+    'L06_header_cells_body_style': ({S1: deliverable_header_body_style}, ['formatting'], [], False),
+    'L07_deliverable_missing': ({'-': None}, [], ['deliverable_name'], False),
+    'L08_wrap_on': ({ST: sub1(r'<alignment horizontal="left" vertical="center"/>', '<alignment horizontal="left" vertical="center" wrapText="1"/>')},
+                    ['pinned_part', 'formatting'], [], False),
+    'L09_receipt_hash_stale': ({S1: deliverable_value_changed}, ['value_type_mismatch', 'integrity'], [], False),
+    'L10_sheet_renamed': ({WB: sub1(r'name="[^"]*"', 'name="未填"')}, ['pinned_template', 'sheet_order'], [], False),
+    'L11_row_height_changed': ({S1: sub1(r'<row r="3" ht="20.45" customHeight="1"', '<row r="3" ht="1" customHeight="1"')},
+                               ['worksheet_structure', 'formatting'], [], False),
+    'L12_extra_cell_R2': ({S1: deliverable_extra_cell}, ['unexpected_populated_cell'], [], False),
+    'L13_number_as_text': ({S1: deliverable_number_as_text}, ['value_type_mismatch'], [], False),
+    'L14_receipt_deliverable_xlsx_dropped': ({}, ['integrity'], ['deliverable_name'], False),
+    'L15_consistent_change_all_three': ({}, [], [], True),
+    'L16_hidden_column': ({S1: sub1(r'<col width="81.90000000000001" customWidth="1" min="4" max="4"/>',
+                                    '<col width="81.90000000000001" customWidth="1" hidden="1" min="4" max="4"/>')},
+                          ['hidden_attribute', 'worksheet_structure', 'formatting'], [], False),
+}
+
+
+def make_deliverable_tampers(src, dest):
+    """From a titled writer output SRC (v2.7): each tamper copies the output, edits the deliverable and updates the receipt's
+    deliverable_xlsx.sha256 (except L09), so only the deliverable checks can see it. L15 changes main-sheet C2 consistently in
+    EXPECTED_SAVED_VALUES.json, the internal workbook and the deliverable, with the receipt hashes updated: it passes without
+    provenance (as T21) and fails with it."""
+    base = json.loads((src / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+    xn, dn = base['output_xlsx']['file'], base['deliverable_xlsx']['file']
+    dest.mkdir(parents=True, exist_ok=False)
+    index = []
+    for name, (edits, tagged, untagged, passes) in DELIVERABLE_TAMPERS.items():
+        d = dest / name
+        d.mkdir()
+        for f in ('EXPECTED_SAVED_VALUES.json', 'WRITER_RECEIPT.json', xn):
+            (d / f).write_bytes((src / f).read_bytes())
+        if '-' in edits:
+            pass
+        elif '=' in edits:
+            assert base['deliverable_xlsx']['sheet'] == base['deliverable']['main_sheet']
+            (d / dn).write_bytes((src / xn).read_bytes())          # the four-sheet workbook under the deliverable's name
+        elif name.startswith('L15_'):
+            consistent_change(src, d)                               # EXPECTED and the internal workbook
+            write_tampered(src / dn, d / dn, {S1: sub1(r'(<c r="C2" [^>]*><is><t[^>]*>)[^<]*(</t></is></c>)',
+                                                      lambda m: m.group(1) + ''.join(c if ord(c) < 128 else '&#%d;' % ord(c) for c in (
+                                                          json.loads((d / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8'))
+                                                          ['sheets'][0]['values'][1][2])) + m.group(2))})
+        else:
+            write_tampered(src / dn, d / dn, edits)
+        if name.startswith('L14_'):
+            r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+            r['deliverable_xlsx'] = None
+            (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        elif not name.startswith('L09_'):
+            update_receipt(d)
+        index.append({'name': name, 'dir': str(d), 'group': 'deliverable', 'deliverable_findings': tagged, 'other_findings': untagged,
+                      'passes_without_provenance': passes, 'provenance_finding': 'provenance', 'deliverable_file': dn})
     (dest / 'TAMPERS.json').write_text(json.dumps({'invented': True, 'source_output': str(src), 'tampers': index},
                                                   ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     return index
@@ -528,5 +651,7 @@ if __name__ == '__main__':
         print(json.dumps({'tampers': len(make_receipt_tampers(Path(sys.argv[2]), Path(sys.argv[3])))}))
     elif len(sys.argv) == 5 and sys.argv[1] == 'naming':
         print(json.dumps({'tampers': len(make_naming_tampers(Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4]))}))
+    elif len(sys.argv) == 4 and sys.argv[1] == 'deliverable':
+        print(json.dumps({'tampers': len(make_deliverable_tampers(Path(sys.argv[2]), Path(sys.argv[3])))}))
     else:
         sys.exit(__doc__)

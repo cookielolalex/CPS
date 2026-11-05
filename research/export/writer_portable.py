@@ -33,6 +33,12 @@ Route
   keeps writer004's sheet names, and the receipt's deliverable.sheet_mapping maps them to the workbook's. Without
   --job-title the names are the v2.5 ones (research-draft.xlsx, 未填研究草稿). G and H (單價, 複價) body cells are never
   shaded (O34): they have the body style of the other columns.
+  Owner decision O38 (v2.7, owner approval 2026-11-05 of the previews): with --job-title the delivered workbook <name>.xlsx is
+  ONE sheet <name> in the creator's own 未填 format (build_deliverable_workbook: the main-sheet values of EXPECTED_SAVED_VALUES.json,
+  新細明體 12, header row grey #C0C0C0 with thin black borders, gridlines shown, only the header row frozen, no wrapping, E F L M N
+  Q centred, C left, her column widths and row heights). The four-sheet workbook of v2.6 (main sheet <name>, 來源與審查, 組成參考,
+  組成連結; same bytes as v2.6) is written as INTERNAL_QA_WORKBOOK.xlsx for saved QA and internal review and is never delivered.
+  Without --job-title nothing changes (research-draft.xlsx only).
 
 Mode v2 (candidate 046f carriers made by route v4.2, which keeps the route v4.1 relaxations unchanged;
 FIELD_ROLES R48, R52, R54, R57; O13, O16)
@@ -60,8 +66,9 @@ FIELD_ROLES R48, R52, R54, R57; O13, O16)
 Usage
   python3 -I -B writer_portable.py --carrier /abs/carrier.json --out /abs/new-dir \
       --writer-dir /abs/dir-with-writer004.mjs [--node node] [--mode v1|v2] [--job-title "<project folder title>"]
-Outputs in --out (created; must not exist): research-draft.xlsx (with --job-title: <name>.xlsx), EXPECTED_SAVED_VALUES.json,
-WRITER_RECEIPT.json. A refusal creates nothing and prints a JSON refusal on stderr (exit 1).
+Outputs in --out (created; must not exist): research-draft.xlsx, EXPECTED_SAVED_VALUES.json, WRITER_RECEIPT.json; with
+--job-title (v2.7, O38): <name>.xlsx (the deliverable, one sheet), INTERNAL_QA_WORKBOOK.xlsx (four sheets, internal),
+EXPECTED_SAVED_VALUES.json, WRITER_RECEIPT.json. A refusal creates nothing and prints a JSON refusal on stderr (exit 1).
 """
 import argparse, copy, datetime, hashlib, io, json, math, os, platform, re, shutil, subprocess, sys, tempfile, types, unicodedata, zipfile, zlib
 from decimal import Decimal
@@ -69,7 +76,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.6'
+VERSION = 'cps-export-writer-portable.v2.7'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -148,8 +155,24 @@ XML_ILLEGAL_RE = re.compile('[\u0000-\u0008\u000b\u000c\u000e-\u001f\ud800-\udff
 
 # Owner decisions O33-O34 (writer v2.6). O33: the deliverable name from the project folder title (--job-title, a per-job input
 # supplied by the harness). saved_qa.py re-derives it with its own implementation of the same rule (the tests check equality).
-PROFILE = 'owner_O33_O34'
+PROFILE = 'owner_O33_O34_O38'
 JOB_TITLE_SUFFIX = '(未填)'
+# Owner decision O38 (writer v2.7): the delivered workbook in the creator's format (from her recent 未填 files: header fill,
+# font, alignment, row heights, header-row freeze; column widths = the medians of seven of her files, as in the approved previews).
+QA_WORKBOOK_NAME = 'INTERNAL_QA_WORKBOOK.xlsx'  # with --job-title: the four-sheet workbook (internal, never delivered)
+DELIVERY_FORMAT = 'owner_O38_creator_format_v1'
+DELIVERY_FONT, DELIVERY_FONT_SIZE = '新細明體', 12
+DELIVERY_HEADER_FILL, DELIVERY_BORDER_COLOR = 'C0C0C0', '000000'
+DELIVERY_WIDTHS = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
+DELIVERY_CENTRED, DELIVERY_LEFT = 'EFLMNQ', 'C'
+DELIVERY_HEADER_HEIGHT, DELIVERY_ROW_HEIGHT = 23.25, 20.45
+O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one sheet <name>: the main-sheet values of '
+            'EXPECTED_SAVED_VALUES.json (A1:Q<n>, the same values and types as the internal workbook\'s main sheet), font 新細明體 12 '
+            'on every cell; header row: solid fill #C0C0C0, thin black borders on all four sides, centred horizontally and vertically, '
+            'height 23.25; body rows: vertically centred, E F L M N Q centred, C left, the other columns general, height 20.45, no fill, '
+            'no border, number format General; no cell wraps; widths A..Q 16.1 23.1 21.3 81.9 6.9 8.3 12.9 13 12.3 13 21.4 11 24.1 34.1 '
+            '10.3 13 8.1; gridlines shown; only row 1 frozen (pane at A2); no tab colour. The four-sheet workbook (v2.6 bytes) is '
+            'INTERNAL_QA_WORKBOOK.xlsx. Without --job-title no deliverable is written (v2.6 outputs).')
 CASE_ID_RE = re.compile(r'[0-9]{7}')           # the leading 7-digit case id (ASCII digits after NFKC)
 CASE_ID_DIGITS, DASH_WINDOW = 7, 6              # the first '-' among the first 6 characters after the case id
 WINDOWS_FORBIDDEN = '\\/:*?"<>|'              # replaced by '-' in the file name
@@ -177,7 +200,9 @@ def deliverable_record(title=None):
     def refuse(reason, **kw):
         raise Refused('JOB_TITLE_INVALID', 'usage', dict(reason=reason, **kw))
     rec = {'profile': PROFILE, 'job_title': title, 'o33_naming_applied': title is not None, 'normalized_title': None,
-           'dash_removed_at': None, 'name': None, 'xlsx_file': XLSX_NAME, 'main_sheet': SHEET_MAIN, 'main_sheet_cut': False}
+           'dash_removed_at': None, 'name': None, 'xlsx_file': XLSX_NAME, 'main_sheet': SHEET_MAIN, 'main_sheet_cut': False,
+           'qa_workbook_file': XLSX_NAME if title is None else QA_WORKBOOK_NAME,
+           'deliverable_workbook': title is not None, 'deliverable_format': None if title is None else DELIVERY_FORMAT}
     if title is not None:
         if not isinstance(title, str):
             refuse('NOT_A_STRING')
@@ -208,6 +233,46 @@ def deliverable_record(title=None):
                             for n in SHEET_ORDER]
     rec['o34_price_columns_unshaded'] = True
     return rec
+
+
+def build_deliverable_workbook(m, main_sheet):
+    """O38 (v2.7): the delivered workbook, one sheet in the creator's format (O38_RULE). Values: the main matrix, written by
+    _fill_values exactly as in the internal workbook (strings stay strings, numbers stay numbers, no formulas)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    rows = m['main']
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet(main_sheet)
+    _fill_values(ws, rows)
+    font = Font(name=DELIVERY_FONT, size=DELIVERY_FONT_SIZE)
+    side = Side(style='thin', color='FF' + DELIVERY_BORDER_COLOR)
+    border = Border(left=side, right=side, top=side, bottom=side)
+    fill = PatternFill(fill_type='solid', fgColor='FF' + DELIVERY_HEADER_FILL)
+    head_align = Alignment(horizontal='center', vertical='center')
+    letters = [get_column_letter(j) for j in range(1, 18)]
+    body_align = [Alignment(horizontal='center' if x in DELIVERY_CENTRED else 'left' if x in DELIVERY_LEFT else None,
+                            vertical='center') for x in letters]
+    for j in range(1, 18):
+        cell = ws.cell(row=1, column=j)
+        cell.font, cell.fill, cell.border, cell.alignment = font, fill, border, head_align
+    for r in range(2, len(rows) + 1):
+        for j in range(1, 18):
+            cell = ws.cell(row=r, column=j)
+            cell.font, cell.alignment = font, body_align[j - 1]
+    for x, w in zip(letters, DELIVERY_WIDTHS):
+        ws.column_dimensions[x].width = w
+    ws.row_dimensions[1].height = DELIVERY_HEADER_HEIGHT
+    for r in range(2, len(rows) + 1):
+        ws.row_dimensions[r].height = DELIVERY_ROW_HEIGHT
+    ws.freeze_panes = 'A2'                         # the header row only; gridlines keep openpyxl's default (shown)
+    wb.active = 0
+    wb.calculation.fullCalcOnLoad = False
+    wb.properties.creator = 'CPS writer_portable (openpyxl)'
+    wb.properties.created = FIXED_TIME
+    wb.properties.modified = FIXED_TIME
+    return wb
 
 LIMITATIONS = [
     'NOT ADMITTED: research export route; requires an independent review before CPS may use it.',
@@ -240,7 +305,13 @@ LIMITATIONS = [
     'Owner decision O34 (v2.6): G and H (單價, 複價) body cells of the main sheet are not shaded; writer004 formatSheet filled '
     'them #F1F3F5. This formatting deviates from writer004 on purpose; cell values and types are unchanged.',
 ]
-NAMING_LIMITATION = ('Owner decision O33 (v2.6): the workbook is <name>.xlsx and its main sheet <name> (deliverable in this receipt). '
+DELIVERABLE_LIMITATION = ('Owner decision O38 (v2.7): the delivered workbook <name>.xlsx is one sheet in the creator\'s format, not '
+                          'writer004\'s: the main-sheet values only (the review and composition sheets are in INTERNAL_QA_WORKBOOK.xlsx, '
+                          'which is never delivered), her font, fill, borders, alignment, widths and row heights, gridlines shown, '
+                          'only the header row frozen, no wrapping. Text wider than its column is cut at the next filled cell, and a '
+                          'line feed inside a cell is not shown as a new line: visual_qa.py lists such cells (possibly_cut_cells).')
+NAMING_LIMITATION = ('Owner decision O33 (v2.6): the main sheet is <name> (deliverable in this receipt); v2.7 (O38): the delivered '
+                     'one-sheet workbook is <name>.xlsx and the four-sheet workbook INTERNAL_QA_WORKBOOK.xlsx. '
                      'EXPECTED_SAVED_VALUES.json keeps writer004\'s sheet name 未填研究草稿 for the main sheet '
                      '(deliverable.sheet_mapping maps it), and the review sheet\'s JSON text (項目 rows, "sheet") names 未填研究草稿 '
                      'as writer004\'s matrices do.')
@@ -973,10 +1044,14 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
     if problems:
         raise Refused('PORTABLE_UNREPRESENTABLE', 'writability', {'count': len(problems), 'first': problems[:20]})
     xlsx = save_workbook_bytes(build_workbook(m, len(carrier['items']), deliverable['main_sheet']))
+    dxlsx = save_workbook_bytes(build_deliverable_workbook(m, deliverable['main_sheet'])) if deliverable['deliverable_workbook'] else None
 
     out_dir.mkdir(parents=False, exist_ok=False)
     try:
-        with open(out_dir / deliverable['xlsx_file'], 'xb') as f:
+        if dxlsx is not None:                     # O38 (v2.7): the deliverable, then the internal four-sheet workbook
+            with open(out_dir / deliverable['xlsx_file'], 'xb') as f:
+                f.write(dxlsx)
+        with open(out_dir / deliverable['qa_workbook_file'], 'xb') as f:
             f.write(xlsx)
         with open(out_dir / 'EXPECTED_SAVED_VALUES.json', 'xb') as f:
             f.write(expected)
@@ -989,10 +1064,14 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         receipt = {
             'schema': 'cps.export.writer-receipt.v1', 'status': 'PORTABLE_ASSEMBLED_NOT_ADMITTED', 'writer': VERSION,
             'mode': mode, 'relaxations': relax,
-            'deliverable': dict(deliverable, rules={'o33': O33_RULE, 'o34': O34_RULE}),
+            'deliverable': dict(deliverable, rules={'o33': O33_RULE, 'o34': O34_RULE, 'o38': O38_RULE}),
             'admitted': False, 'required_review': 'Independent review of the portable writer before any CPS use.',
             'input_carrier': {'path': str(carrier_path), 'sha256': carrier_sha, 'bytes': len(raw)},
-            'output_xlsx': {'file': deliverable['xlsx_file'], 'sha256': sha256(xlsx), 'bytes': len(xlsx)},
+            'output_xlsx': {'file': deliverable['qa_workbook_file'], 'sha256': sha256(xlsx), 'bytes': len(xlsx),
+                            'role': 'the four-sheet workbook: saved QA and internal review' + ('; never delivered (O38)' if dxlsx else '')},
+            'deliverable_xlsx': None if dxlsx is None else {
+                'file': deliverable['xlsx_file'], 'sha256': sha256(dxlsx), 'bytes': len(dxlsx), 'sheet': deliverable['main_sheet'],
+                'format': DELIVERY_FORMAT, 'role': 'the delivered 未填 workbook (O38): one sheet, the main-sheet values'},
             'expected_saved_values': {'file': 'EXPECTED_SAVED_VALUES.json', 'sha256': sha256(expected),
                                       'identical_to_writer004_prepareMatrices_output': not relax['applied'],
                                       **({'identical_to_writer004_prepareMatrices_on_placeholder_copy_except_documented_cells': True}
@@ -1012,7 +1091,8 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
                               'writer004_matrices.mjs_sha256': sha256(NODE_MATRICES.read_bytes())},
             'formulas_written': False, 'arithmetic': False, 'semantic_source_validation': False, 'native_excel_validation': False,
             'limitations': LIMITATIONS + ([RELAXATION_LIMITATION] if relax['applied'] else [])
-                           + ([NAMING_LIMITATION] if deliverable['o33_naming_applied'] else []), 'started': started,
+                           + ([NAMING_LIMITATION] if deliverable['o33_naming_applied'] else [])
+                           + ([DELIVERABLE_LIMITATION] if dxlsx is not None else []), 'started': started,
             'ended': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         with open(out_dir / 'WRITER_RECEIPT.json', 'x', encoding='utf-8') as f:
@@ -1023,6 +1103,8 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         raise
     return {'status': receipt['status'], 'mode': mode, 'relaxations_applied': relax['applied'], 'out': str(out_dir),
             'xlsx_file': deliverable['xlsx_file'], 'main_sheet': deliverable['main_sheet'], 'xlsx_sha256': receipt['output_xlsx']['sha256'],
+            'qa_workbook_file': deliverable['qa_workbook_file'],
+            'deliverable_xlsx_sha256': None if dxlsx is None else receipt['deliverable_xlsx']['sha256'],
             'expected_sha256': receipt['expected_saved_values']['sha256'], 'sheets': receipt['sheets']}
 
 
@@ -1035,8 +1117,9 @@ def main(argv=None):
     ap.add_argument('--mode', default='v1', choices=('v1', 'v2'),
                     help='v2: candidate 046f carriers (route v4.2, with the v4.1 relaxations: M/N selection evidence, C-null research_draft); '
                          'v1: unchanged writer004 gate')
-    ap.add_argument('--job-title', help='O33 (v2.6): the project folder title, a per-job input supplied by the harness (never by the '
-                                        'generator); names the workbook <name>.xlsx and the main sheet <name>')
+    ap.add_argument('--job-title', help='O33 (v2.6), O38 (v2.7): the project folder title, a per-job input supplied by the harness '
+                                        '(never by the generator); writes the one-sheet deliverable <name>.xlsx (sheet <name>) and the '
+                                        'four-sheet INTERNAL_QA_WORKBOOK.xlsx')
     a = ap.parse_args(argv)
     try:
         res = build(Path(a.carrier), Path(a.out), Path(a.writer_dir), a.node, a.mode, job_title=a.job_title)

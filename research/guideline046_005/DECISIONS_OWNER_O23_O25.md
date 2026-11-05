@@ -115,3 +115,25 @@ The owner reviewed sample CPS outputs and asked for these two changes.
 The route, inventory builders, job-config and scope tools are pure Python. View rendering, the export writer and saved QA need Node (the writer admission pins one node binary), and visual QA needs LibreOffice. The runbook therefore starts with an environment check. When the Dot's sandbox lacks those tools, the Dot runs generation and the route checks, and a tools environment (for example a Claude Code session on this repository) runs packet building, export and QA.
 
 The interview materials hold historical 未填 rows. They are kept apart from the runtime folder, and a generation run must never open them.
+
+## O38 (2026-11-05): the delivered workbook in the creator's own format
+
+**Owner instruction**, on the v2.6 re-exports: "1.未填 inside the excel title should be in brackets like this (未填) 2. Where are the cells? Lines of the excel cells are gone 3. Why is the Column C fixed and D plus latter columns has side scroll. Just keep regular the excel format. 4. Remove three of the sheets, in outputs they are no necessary Fix these issues and show me the excel sheets before upload".
+
+**Diagnosis.**
+- (1) The file and sheet names already ended in `(未填)`, with the half-width brackets the creator uses. The one name affected is the 31-character sheet-name cut: Excel's limit forces the cut on long names, and the cut keeps `(未填)`. No other place was found, and the owner was asked to point to one if it exists.
+- (2) The writer turned gridlines off (writer004 `formatSheet`).
+- (3) The writer froze row 1 and columns A–C (writer004 `freezeRows(1)` and `freezeColumns(3)`). The creator's files freeze the header row only.
+- (4) The workbook held three review sheets besides the 未填 sheet.
+
+**Previews.** Four one-sheet previews were built from the four v2.6 samples in the creator's format, taken from her recent 未填 files: 新細明體 12; grey `#C0C0C0` header with thin borders; gridlines shown; only the header row frozen; no wrapping; E, F, L, M, N, Q centred and C left; header row 23.25 pt and body rows 20.45 pt; column widths the medians of seven of her files. Page images were rendered from them.
+
+**Owner answer:** "Looks good, approved".
+
+**Effect (writer v2.7, saved_qa v6, visual_qa v4).**
+- With a job title, the delivered workbook `<name>.xlsx` is one sheet `<name>` in exactly the approved format. Its values are the main sheet of `EXPECTED_SAVED_VALUES.json`, as before.
+- The v2.6 four-sheet workbook is kept as `INTERNAL_QA_WORKBOOK.xlsx`, with the same bytes, for saved QA and internal review. It is never delivered.
+- Saved QA checks the delivered workbook too: its package, its three readers against the main sheet, its format and its rerun bytes.
+- Visual QA renders the delivered workbook with printed gridlines. It lists no-wrap cells whose text may not show in full (`possibly_cut_cells`).
+- Her second sheet, 原材料清單, is not added. Whether CPS should add it is survey question DOT-09.
+- The writer v2.7 deliverables of the four samples have zero cell, style, width and height differences from the approved previews.
