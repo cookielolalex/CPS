@@ -1209,13 +1209,13 @@
     },
     {
       "path": "research/export/README.md",
-      "bytes": 59100,
-      "sha256": "2b4511cee3a1faf2dd27b051ba1bc0459f8765f4b783377b7bd464bdf53992c8"
+      "bytes": 81087,
+      "sha256": "799428e68fbd98144bf7f2ee7e74911365189ae92f81d3bc4907f6475cd063a7"
     },
     {
       "path": "research/export/saved_qa.py",
-      "bytes": 56267,
-      "sha256": "e0411af15d3201abfc96784b3083310b67bd263e201cef73d37cb1942a35a7a9"
+      "bytes": 73881,
+      "sha256": "2469e812b50aef16ec66df21a73cd2c360063b77a038a948be701b45375be406"
     },
     {
       "path": "research/export/tests/make_export_fixtures.py",
@@ -1229,8 +1229,8 @@
     },
     {
       "path": "research/export/tests/run_export_tests.py",
-      "bytes": 77225,
-      "sha256": "04d81ecae997f584f2b6d52ea1caee0ac6a8185234109c73e5021d415ac8aa8c"
+      "bytes": 96789,
+      "sha256": "416dd5bad57157ef0c2ad6865a607d499c9e0df3b68f110869c94c1c4908f497"
     },
     {
       "path": "research/export/tests/stringify_fuzz.mjs",
@@ -1249,8 +1249,8 @@
     },
     {
       "path": "research/export/writer_portable.py",
-      "bytes": 54687,
-      "sha256": "d49e78438914dbd56fde34a5529346923528655f532379aa998572e88643bf38"
+      "bytes": 56960,
+      "sha256": "fe60010c758b6951af6522d8412a313af70428f5c73bf0300919f774aaceebeb"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O10_O12.md",
@@ -1514,8 +1514,8 @@
     },
     {
       "path": "research/export/tests/make_tamper_fixtures.py",
-      "bytes": 19486,
-      "sha256": "82eac194898ca21f41499e8caee87201a30f3ed0b3e38c716e18140650490d71"
+      "bytes": 29666,
+      "sha256": "e32d782a00898bab8e44ac2913fe6cf524dc10a0b7f101a4cd8d2c281273570a"
     },
     {
       "path": "research/evaluation/FREEZE_049.json",
