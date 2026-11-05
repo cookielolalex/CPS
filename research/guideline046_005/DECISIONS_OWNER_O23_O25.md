@@ -47,3 +47,10 @@ The pool is exactly 30: 15 non-reserved and 15 reserved, with no margin. Year 11
 - Both private tables were rebuilt with the dev-trial builder and no exclusion. The output is byte-identical to the drafts the owner reviewed. They are marked `OWNER_APPROVED_O27` and pinned by sha256 in each qualification admission.
 - No qualification or reserved case contributed to either table.
 - Any later change to a table (for example new category words) needs the owner's approval.
+
+## O28–O29 (2026-11-05): two source gaps found during qualification source preparation
+
+| ID | Question | Owner answer | Effect |
+|---|---|---|---|
+| O28 | One reserved case in the pool has no 材料清單 and no contract in its project folder. The only material-titled file is a quotation workbook (its title contains 報價單 and 承製價材料), which the pre-declared selection rule excludes; it has not been opened. Is it the job's company material list? | "Yes, use it" | For this one case, that workbook is bound as the material-list source (O17). The selection rule is unchanged for every other job. The pool stays at 30. |
+| O29 | The 17 reserved cases from years 110–112 are outside the pool (O22). Their project folders are not in the connected Drive, and the registry has no contract for them. How should they be handled? | "Freeze as nonattempts (Recommended)" | Each is recorded as a frozen nonattempt, "source not available to this session", together with the other qualification outputs and before any reserved answer is opened. They are not scored and remain held out. |
