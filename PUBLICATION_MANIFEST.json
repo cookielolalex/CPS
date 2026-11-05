@@ -1531,6 +1531,16 @@
       "path": "research/evaluation/tests/test_aggregate_qualification.py",
       "bytes": 13065,
       "sha256": "c37dffcb1e312a174b6c03bdd61e18507cef83d75ded4cf62ffa190c3d5fadf2"
+    },
+    {
+      "path": "research/guideline046_005/STUDY_ENCLOSURE_20261105.md",
+      "bytes": 14113,
+      "sha256": "54a6cb892718e8967e42766b969391024378d37ce8f69e58bd7a264613cefd86"
+    },
+    {
+      "path": "research/guideline046_005/STUDY_LARGE_MATLIST_STRUCTURE_20261105.md",
+      "bytes": 18721,
+      "sha256": "2beddf9dcaaa66baee0e5552d85838bef87296e0212d45b98e20aafe7e71a168"
     }
   ]
 }
