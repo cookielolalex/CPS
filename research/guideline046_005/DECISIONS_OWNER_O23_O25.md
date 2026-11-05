@@ -62,3 +62,21 @@ The pool is exactly 30: 15 non-reserved and 15 reserved, with no margin. Year 11
 | O30 | Which rows carry A and B (盤體名稱/盤體規格)? The evidence: all 12 exposed year-114 files write A/B on the enclosure row only. Of the 5 exposed year-115 files, 3 (March–May) write each panel's A/B on every row of that panel's group, and 2 (January and June, June being the latest) write it on the enclosure rows only. Neither the customer nor the source layout predicts which. | "Enclosure row only (Recommended)" | A/B stay on the enclosure row only (R56). Year-115 targets that fill the whole group will score low on A/B; that is accepted. 046g revises how R56 names A and builds B, following the enclosure-practice study: the panel name from its section heading, tags kept, B only from W/H/D in the line's own description. |
 | O31 | How does the 95% bar apply across the 30 qualification pairs? It had been read as every case ≥ 0.95. The creator is inconsistent on some conventions, so one atypical file could block deployment. | "Pooled ≥ 0.95, floor 0.90" | For each reader, matched/counted pooled over the 30 pairs must be at least 0.95 under evaluator v3, and no single case may be below 0.90. This replaces the per-case reading in AGENTS.md. Everything else in the bar is unchanged: 30 independent pairs with at least 10 reserved, 0 unresolved critical errors, two-reader repeatability, and saved and visual QA. It is fixed before any qualification output is scored. The aggregation is a separate script, reviewed and frozen before qualification. |
 
+
+## O32 (2026-11-05): a date window for group-wide A/B
+
+**Question.** Across 22 exposed current-template targets, A/B appears on the enclosure row only in:
+- all 15 year-114 files;
+- both January-115 files;
+- the June-115 file.
+
+All 3 files from March–May 115 put each panel's A/B on every row of its group. No exposed February file exists. Since June the creator is back to enclosure-only, so this changes only how historical qualification scores, not new jobs. 9 of the 30 pool cases are from year 115: 3 from February and 6 from March–May.
+
+**Owner answer:** "Window Mar–May 115 (Recommended)".
+
+**Effect.**
+- For a job whose case id falls in 115-03 to 115-05, R56 writes each panel's A/B on every row of that panel's group. Every other job, including February 115, keeps A/B on the enclosure row only (O30).
+- The window is read from the case id, which is a job input (L, R48).
+- The exact group-membership rule is derived from the three window files in an evaluation-role study, then reviewed. Like every R56 change, it goes into a candidate before generation.
+
+**Exposure note.** Rolling-validation case 1150107 was read for this decision (its A/B columns and row count only). From here on it counts as tuning-informed.
