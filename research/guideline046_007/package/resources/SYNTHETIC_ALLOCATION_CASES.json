@@ -6,7 +6,7 @@
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e allocation examples (cps.allocation-examples.draft.v1, R1-R47)",
- "rules": "FIELD_ROLES R47b-R59 (candidate 046g, route v4.3)",
+ "rules": "FIELD_ROLES R47b-R59 (candidate 046g, route v4.3; R56 revised under O30)",
  "resources": {
   "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
   "context:glossary": {
@@ -61,9 +61,10 @@
   "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
   "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
   "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2).",
-  "Scoped packets (A35-A37): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet."
+  "Scoped packets (A35-A37): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet.",
+  "Enclosure rows (R56; A18, A19, A21, A31-A33, A38-A46): unless a case gives a section heading or analysis-block title, the line is not under one that names a panel, so A comes from the line. Each enclosure row is carried by its own one-row physical_enclosure group whose name and specification equal A and B; no other row carries A or B (O30)."
  ],
- "case_count": 37,
+ "case_count": 46,
  "cases": [
   {
    "id": "A01",
@@ -567,9 +568,10 @@
   },
   {
    "id": "A18",
-   "rule": "R56, R58",
+   "rule": "R56, R58 (A from the line, tag kept)",
    "input": {
-    "description": "產品，箱體，控制盤，W600×H800×D300，SUS304，髮絲面",
+    "heading": "壹、機電工程",
+    "description": "產品，箱體，甲-1 控制盤，W600×H800×D300，SUS304，髮絲面",
     "unit": "面",
     "quantity": 1,
     "unit_price": 25000,
@@ -577,7 +579,7 @@
    },
    "expected": {
     "row": true,
-    "A": "控制盤",
+    "A": "甲-1 控制盤",
     "B": "600W*800H*300D",
     "C": "箱體",
     "D": "SUS304，髮絲面",
@@ -588,6 +590,9 @@
     "Q": 25000,
     "group": "one-row physical_enclosure group whose name and specification equal A and B; the row is its only member",
     "cites": {
+     "A": [
+      "description cell"
+     ],
      "C": [
       "description cell",
       "context:glossary"
@@ -598,11 +603,11 @@
      ]
     }
    },
-   "reason": "A priced line supplying an enclosure is one row. A is the enclosure noun from the line, B is built from the stated dimensions, C is the glossary's generic enclosure word, D is what remains after the prefix, the category word, the enclosure noun and the dimensions (SUS304 and 髮絲面 are not rating tokens, so the comma stays), I is null. The brand cell is empty, so J is the company name."
+   "reason": "The heading 機電工程 names work, not a panel (it contains no enclosure word), so A is the line's own enclosure noun phrase: the prefix 產品 and the category segment 箱體 are dropped, and the first segment naming a box, 甲-1 控制盤, is cut after its enclosure word. The tag 甲-1 is kept (046f dropped it). B is built from the W/H/D-labelled dimensions in the description. C is the glossary's generic enclosure word. D is what remains after the prefix, the category segment, the text A took from the line and the dimensions, each with its delimiter (SUS304 and 髮絲面 are not rating tokens, so the comma stays). I is null. The brand cell is empty, so J is the company name."
   },
   {
    "id": "A19",
-   "rule": "R56 boundaries",
+   "rule": "R56 boundaries (A from a panel heading; devices of the panel)",
    "input": {
     "heading": "三、電錶箱",
     "lines": [
@@ -633,7 +638,12 @@
       "D": "烤漆",
       "I": null,
       "J": "示例機電股份有限公司",
-      "Q": 1800
+      "Q": 1800,
+      "cites": {
+       "A": [
+        "heading cell"
+       ]
+      }
      },
      {
       "A": null,
@@ -645,7 +655,7 @@
      }
     ]
    },
-   "reason": "The enclosure line names only a generic box, so A comes from its section heading; no dimensions are stated, so B is null. No other row carries A or B, and no groups are formed for the section. 電度表 is a single segment the glossary does not list, so it goes to D (R52)."
+   "reason": "The heading 三、電錶箱 names a panel: without its item label 三、 its panel name 電錶箱 contains the enclosure word 箱. Line 1 is the first enclosure row in its scope, so A is that panel name, cited from the heading cell. No dimensions are stated, so B is null with a reason. D drops the prefix and the category segment 箱體 (A took nothing from the line). Line 2 is a device listed with the panel: A and B stay on the enclosure row only (O30), and no group is formed for the section. 電度表 is a single segment the glossary does not list, so it goes to D (R52)."
   },
   {
    "id": "A20",
@@ -674,7 +684,8 @@
    "id": "A21",
    "rule": "R56, R47b",
    "input": {
-    "description": "產品，箱體，控制盤，W600×H800×D300，SUS304，髮絲面",
+    "heading": "壹、機電工程",
+    "description": "產品，箱體，甲-1 控制盤，W600×H800×D300，SUS304，髮絲面",
     "unit": "面",
     "quantity": 1,
     "unit_price": 25000,
@@ -683,7 +694,7 @@
    },
    "expected": {
     "row": true,
-    "A": "控制盤",
+    "A": "甲-1 控制盤",
     "B": "600W*800H*300D",
     "C": "箱體",
     "D": "SUS304，髮絲面",
@@ -695,7 +706,7 @@
      ]
     }
    },
-   "reason": "When the material list states the enclosure's brand column, J is that value, not the company name."
+   "reason": "As A18, but the material list states the enclosure's brand column: J is that value, not the company name."
   },
   {
    "id": "A22",
@@ -945,7 +956,7 @@
     "Q": 120,
     "status": "research_draft"
    },
-   "reason": "An enclosure is a 盤, 箱 or 櫃 housing devices; 接線盒, 拉線箱 and 既設盤 are not. This is an ordinary material row: no group, A and B null, C null, and no company name in J."
+   "reason": "An enclosure is a 盤, 箱 or 櫃 housing devices; junction and pull boxes (接線盒, 接線箱, 拉線箱) are not. This is an ordinary material row: no group, A and B null, C null, and no company name in J."
   },
   {
    "id": "A32",
@@ -977,7 +988,7 @@
      ]
     }
    },
-   "reason": "B reads dimensions labelled W/H/D or 寬/高/深 in mm (here 寬, 高, 深 with mm) and is null without mm dimensions. The brand cell is empty, so J is the company name, exactly as the resource states it."
+   "reason": "With no panel heading, A is the line's own noun 控制箱. B reads dimensions labelled 寬/高/深 in the description and drops the unit mm; the dimensions leave D with their labels and unit. The brand cell is empty, so J is the company name, exactly as the resource states it."
   },
   {
    "id": "A33",
@@ -1072,7 +1083,7 @@
        "role": "analysis",
        "in_scope": false,
        "content_cells": 2500,
-       "reason": "analysis: no in-range bill line with no price and no status links a block here; R51 not triggered; 1 linked block(s) belong to priced or not-estimated parents, whose components are not rows and are not written on a scoped packet (R51, R59)",
+       "reason": "analysis: not every in-range bill line has no price and no status, so R51 takes no rows from this sheet; a separate analysis sheet lies outside the quoted range (R49, R51, A26); 1 linked block(s): 1 of priced or not-estimated parents (not 未填 rows, not written on a scoped packet), 0 of parents with no price and no status (those lines are excluded_supply); none gives rows (R51, R59)",
        "linked_analysis_blocks": 1
       },
       {
@@ -1244,7 +1255,7 @@
   },
   {
    "id": "A37",
-   "rule": "R59 (in scope by R51 (ii)), R51 boundary, A26",
+   "rule": "R59 (analysis sheet scoped out), R51 boundary, A26",
    "input": {
     "context:scope": {
      "bill_sheet_index": 1,
@@ -1260,11 +1271,13 @@
        "index": 2,
        "name": "示例單價分析",
        "role": "analysis",
-       "in_scope": true,
-       "reason": "analysis: an in-range bill line with no price and no status has a linked block on this sheet (R51)"
+       "in_scope": false,
+       "reason": "analysis: not every in-range bill line has no price and no status, so R51 takes no rows from this sheet; a separate analysis sheet lies outside the quoted range (R49, R51, A26); 2 linked block(s): 1 of priced or not-estimated parents (not 未填 rows, not written on a scoped packet), 1 of parents with no price and no status (those lines are excluded_supply); none gives rows (R51, R59)",
+       "linked_analysis_blocks": 2
       }
      ]
     },
+    "packet_cells": "sheet 1 only",
     "bill_lines": [
      {
       "row": 6,
@@ -1284,7 +1297,7 @@
      }
     ],
     "other_bill_lines": "priced or not estimated",
-    "analysis": [
+    "full_workbook_analysis_sheet": [
      "工作項目：盤體組立配線 (links to row 6 by name)",
      "工作項目：產品，電磁接觸器，AC220V (links to the priced row 7 by name)"
     ]
@@ -1295,13 +1308,425 @@
      "the other priced and not-estimated lines"
     ],
     "census": {
-     "row 6": "excluded_supply, reason per R45 (no price and no status)",
-     "block 盤體組立配線": "analysis_unlinked (R46; the block lies outside the quoted range, A26)",
-     "block of row 7": "analysis_unlinked, reason \"block of a priced or not-estimated parent; its components are not 未填 rows and are not written on a scoped packet (R51, R59)\""
+     "row 6": "excluded_supply, reason per R45 (no price and no status)"
     },
-    "components": "none: no analysis_component items or links on a scoped packet"
+    "components": "none: the analysis sheet is not in the packet, so there are no analysis_component items, links or analysis_unlinked cells for it",
+    "route": "check passes with scope: applied and the warning R59_LINKED_ANALYSIS_OUT_OF_SCOPE"
    },
-   "reason": "R59 keeps the analysis sheet in scope under condition (ii), but R51 still applies as written: a separate analysis sheet lies outside the quoted range, so the no-price line is excluded_supply and its block analysis_unlinked (A26). The block of the priced row 7 gives no component items on a scoped packet. Whether condition (ii) should stay is open for the owner (FIELD_ROLES R59, Limits)."
+   "reason": "Not every in-range bill line is unpriced with no status, so the analysis sheet is scoped out (R59 item 6). Row 6 has no price and no status, and its block lies on that separate sheet, outside the quoted range, so the line is excluded_supply exactly as on an unscoped packet (A26). The block of the priced row 7 gives no rows either. The first draft of R59 kept this sheet in scope under its condition (ii); that added the sheet's cells to the census but no rows, and 046g dropped the condition (FIELD_ROLES R59, design decision)."
+  },
+  {
+   "id": "A38",
+   "rule": "R56 (A from a panel heading; a device of the panel)",
+   "input": {
+    "heading": "[2] 甲-1 PANEL",
+    "lines": [
+     {
+      "item_no": "1",
+      "description": "產品，箱體，W:800，H:2000，D:600，SUS304",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 60000,
+      "amount": 60000
+     },
+     {
+      "item_no": "2",
+      "description": "產品，電磁接觸器，AC220V",
+      "unit": "只",
+      "quantity": 2,
+      "unit_price": 1500,
+      "amount": 3000
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "A": "甲-1 PANEL",
+      "B": "800W*2000H*600D",
+      "C": "箱體",
+      "D": "SUS304",
+      "I": null,
+      "J": "示例機電股份有限公司",
+      "Q": 60000,
+      "cites": {
+       "A": [
+        "heading cell"
+       ],
+       "B": [
+        "description cell"
+       ]
+      },
+      "group": "one-row physical_enclosure group whose name and specification equal A and B; the row is its only member; its name_refs cite the heading cell"
+     },
+     {
+      "A": null,
+      "B": null,
+      "C": "XMC",
+      "D": "AC220V",
+      "Q": 1500,
+      "group": "none"
+     }
+    ]
+   },
+   "reason": "Without its item label the heading's panel name 甲-1 PANEL contains the enclosure word PANEL, so the heading names a panel. Line 1 is the first enclosure row in its scope, so A is the panel name, cited from the heading cell. B comes from the W/H/D-labelled dimensions in the line's own description. D drops the prefix, the category segment 箱體 and the dimensions; A took nothing from the line. Line 2 is a device of the same panel: A and B stay on the enclosure row only (O30)."
+  },
+  {
+   "id": "A39",
+   "rule": "R56 (A from a panel heading with a category segment; a second enclosure in the same scope)",
+   "input": {
+    "heading": "[1] 低壓配電盤，乙 PANEL (丙站)",
+    "lines": [
+     {
+      "item_no": "1",
+      "description": "產品，箱體，低壓配電盤，(W)800(H)2000(D)600，烤漆",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 85000,
+      "amount": 85000
+     },
+     {
+      "item_no": "2",
+      "description": "產品，箱體，雙層式電表箱 SUS304，W:400，H:600，D:200",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 9000,
+      "amount": 9000
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "A": "乙 PANEL (丙站)",
+      "B": "800W*2000H*600D",
+      "C": "箱體",
+      "D": "低壓配電盤，烤漆",
+      "J": "示例機電股份有限公司",
+      "Q": 85000,
+      "cites": {
+       "A": [
+        "heading cell"
+       ]
+      }
+     },
+     {
+      "A": "雙層式電表箱",
+      "B": "400W*600H*200D",
+      "C": "箱體",
+      "D": "SUS304",
+      "J": "示例機電股份有限公司",
+      "Q": 9000,
+      "cites": {
+       "A": [
+        "description cell"
+       ]
+      }
+     }
+    ],
+    "groups": "two one-row physical_enclosure groups, one per enclosure row"
+   },
+   "reason": "The panel name drops the item label [1] and the leading category segment 低壓配電盤 (a panel type followed by a segment with an enclosure word) and keeps the site in brackets. Line 1 is the first enclosure row in the heading's scope, so A is the panel name; A did not come from the line, so the line's own noun 低壓配電盤 stays in D. Line 2 is a later enclosure row in the same scope, so A is its own noun phrase: the first segment naming a box is cut after 箱 and keeps the qualifier 雙層式 (never reduced to 電表箱). Each enclosure has its own row, group, A and B."
+  },
+  {
+   "id": "A40",
+   "rule": "R56 (A from a panel heading with a trailing 設備; no thickness in B)",
+   "input": {
+    "heading": "<3> 丁2盤設備",
+    "lines": [
+     {
+      "item_no": "1",
+      "description": "產品，箱體，控制盤，W700×H1800×D500，2.0t",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 42000,
+      "amount": 42000
+     }
+    ]
+   },
+   "expected": {
+    "row": true,
+    "A": "丁2盤",
+    "B": "700W*1800H*500D",
+    "C": "箱體",
+    "D": "控制盤，2.0t",
+    "Q": 42000
+   },
+   "reason": "The panel name drops the item label <3> and the trailing 設備; 丁2盤 contains 盤. The line is the first enclosure row under the heading, so A = 丁2盤 and the line's noun 控制盤 stays in D. B has no unit and no thickness: 2.0t stays in D, and the comma before it stays because 控制盤 is not rating-like (R53)."
+  },
+  {
+   "id": "A41",
+   "rule": "R56 with R51 (A from an analysis-block title)",
+   "input": {
+    "bill_lines": "every in-range bill line has no price and no status (R51); bill row 5, 低壓配電盤，一般屋外型，戊 PNL | 面 | 1, links to the block below by name",
+    "analysis_block": {
+     "title": "工作項目：低壓配電盤，一般屋外型，戊 PNL",
+     "components": [
+      {
+       "description": "箱體，W900×H2100×D600，SUS304",
+       "unit": "式",
+       "quantity": 1,
+       "unit_price": 60000,
+       "amount": 60000
+      },
+      {
+       "description": "無熔絲開關，3P，100AT",
+       "unit": "只",
+       "quantity": 2,
+       "unit_price": 3500,
+       "amount": 7000
+      },
+      {
+       "description": "組立配線工資",
+       "unit": "式",
+       "quantity": 1,
+       "unit_price": 8000,
+       "amount": 8000
+      }
+     ],
+     "total": {
+      "description": "合計",
+      "amount": 75000
+     }
+    }
+   },
+   "expected": {
+    "rows": [
+     {
+      "role": "demand",
+      "A": "戊 PNL",
+      "B": "900W*2100H*600D",
+      "C": "箱體",
+      "D": "SUS304",
+      "E": "式",
+      "F": 1,
+      "Q": 60000,
+      "cites": {
+       "A": [
+        "block title cell"
+       ]
+      },
+      "group": "one-row physical_enclosure group whose name and specification equal A and B; the row is its only member"
+     },
+     {
+      "role": "demand",
+      "A": null,
+      "B": null,
+      "C": "XNB",
+      "D": "3P 100AT",
+      "E": "只",
+      "F": 2,
+      "Q": 3500
+     },
+     {
+      "role": "demand",
+      "A": null,
+      "B": null,
+      "C": null,
+      "D": "組立配線工資",
+      "E": "式",
+      "F": 1,
+      "Q": 8000,
+      "status": "research_draft"
+     }
+    ],
+    "census": {
+     "bill row 5 (parent)": "section, reason \"parent of analysis components listed as rows (R51)\"",
+     "block 合計 row": "financial_summary"
+    }
+   },
+   "reason": "The components are the rows (R51). The block title's last segment 戊 PNL contains the enclosure word PNL, so the title names a panel and 戊 PNL is its panel name. The first enclosure row among the block's component rows takes A = 戊 PNL, cited from the title cell; its D drops the category segment 箱體 and the dimensions. The breaker and the labour line belong to the same panel but carry no A or B (O30)."
+  },
+  {
+   "id": "A42",
+   "rule": "R56 (A from the line: a hyphen-joined category word)",
+   "input": {
+    "heading": "<2-1> 甲站機電工程",
+    "description": "低壓配電盤-丁盤，W:700，H:2000，D:500",
+    "unit": "面",
+    "quantity": 1,
+    "unit_price": 52000,
+    "amount": 52000
+   },
+   "expected": {
+    "row": true,
+    "A": "丁盤",
+    "B": "700W*2000H*500D",
+    "C": "箱體",
+    "D": null,
+    "Q": 52000
+   },
+   "reason": "The work heading contains no enclosure word, so it names no panel and A comes from the line. 低壓配電盤 ends in an enclosure word and is joined by a hyphen to the box's own name, so it is dropped with the hyphen; A is 丁盤, tag kept. Once the dropped word, the text A took and the dimensions are removed, nothing remains, so D is null with a reason."
+  },
+  {
+   "id": "A43",
+   "rule": "R56 (A from the line: a later bare panel tag)",
+   "input": {
+    "description": "分電箱，鋼板，己 PNL",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 6500,
+    "amount": 6500
+   },
+   "expected": {
+    "row": true,
+    "A": "己 PNL分電箱",
+    "B": null,
+    "C": "箱體",
+    "D": "鋼板",
+    "Q": 6500,
+    "group": "one-row physical_enclosure group whose name equals A, with specification null and no specification_refs"
+   },
+   "reason": "The first segment naming a box is 分電箱. 己 PNL is a bare panel tag in a later segment, not a second box, so it goes directly before the noun. The line states no W/H/D dimensions, so B is null with a reason. D drops the text A took (分電箱 and 己 PNL, each with a delimiter)."
+  },
+  {
+   "id": "A44",
+   "rule": "R56 (A from the line: two boxes; a test box is an enclosure)",
+   "input": {
+    "description": "甲端子箱(含銅排)，乙測試箱(含配件)，-W300×H300×D150mm",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 4800,
+    "amount": 9600
+   },
+   "expected": {
+    "row": true,
+    "A": "乙測試箱",
+    "B": "300W*300H*150D",
+    "C": "箱體",
+    "D": "甲端子箱(含銅排)，(含配件)",
+    "Q": 4800
+   },
+   "reason": "A test box is an enclosure. The line names two boxes, so A is the last, cut after its enclosure word; the inclusion clause (含配件) is not a type parenthesis, so it stays in D with the first box. B drops the unit mm; the dimensions leave D with their dash, labels, unit and the delimiter before them."
+  },
+  {
+   "id": "A45",
+   "rule": "R56 (A from the line: brackets)",
+   "input": {
+    "lines": [
+     {
+      "description": "控制箱(屋外型)，SUS304，寬500×高700×深250mm",
+      "unit": "面",
+      "quantity": 1,
+      "unit_price": 15000,
+      "amount": 15000
+     },
+     {
+      "description": "液位儀表箱(SUS304)，W:400，H:500，D:200",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 7000,
+      "amount": 7000
+     },
+     {
+      "description": "(庚型電表箱，30A以上)",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 3000,
+      "amount": 3000
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "A": "控制箱(屋外型)",
+      "B": "500W*700H*250D",
+      "C": "箱體",
+      "D": "SUS304"
+     },
+     {
+      "A": "液位儀表箱",
+      "B": "400W*500H*200D",
+      "C": "箱體",
+      "D": "(SUS304)"
+     },
+     {
+      "A": "庚型電表箱",
+      "B": null,
+      "C": "箱體",
+      "D": "(30A以上)"
+     }
+    ]
+   },
+   "reason": "A type parenthesis directly after the enclosure word stays in A. A material parenthesis does not; it is not a dimension, so it stays in D verbatim. The cut leaves the opening bracket of (庚型電表箱 unpaired at the start of A, so A drops it; in D the bracket stays and closes after 30A以上. The third line states no dimensions, so B is null with a reason."
+  },
+  {
+   "id": "A46",
+   "rule": "R56 (which lines are enclosure rows; B only from the description)",
+   "input": {
+    "lines": [
+     {
+      "description": "產品，箱體，隔離箱",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 3200,
+      "amount": 3200,
+      "remarks": "W300×H400×D200"
+     },
+     {
+      "description": "拉線箱，鍍鋅，W200×H200×D100",
+      "unit": "只",
+      "quantity": 3,
+      "unit_price": 600,
+      "amount": 1800
+     },
+     {
+      "description": "既設盤改修",
+      "unit": "式",
+      "quantity": 1,
+      "unit_price": 5000,
+      "amount": 5000
+     },
+     {
+      "description": "盤門，SUS304",
+      "unit": "只",
+      "quantity": 1,
+      "unit_price": 2000,
+      "amount": 2000
+     }
+    ]
+   },
+   "expected": {
+    "rows": [
+     {
+      "A": "隔離箱",
+      "B": null,
+      "C": "箱體",
+      "D": null,
+      "J": "示例機電股份有限公司",
+      "group": "one-row physical_enclosure group, specification null"
+     },
+     {
+      "A": null,
+      "B": null,
+      "C": null,
+      "D": "拉線箱，鍍鋅，W200×H200×D100",
+      "J": null,
+      "group": "none",
+      "status": "research_draft"
+     },
+     {
+      "A": null,
+      "B": null,
+      "C": null,
+      "D": "既設盤改修",
+      "J": null,
+      "group": "none",
+      "status": "research_draft"
+     },
+     {
+      "A": null,
+      "B": null,
+      "C": null,
+      "D": "盤門，SUS304",
+      "J": null,
+      "group": "none",
+      "status": "research_draft"
+     }
+    ]
+   },
+   "reason": "An isolation box is an enclosure. Its dimensions are only in the remark cell, so B is null with a reason, and the remark never enters D (R52), which is null once the prefix, the category segment and the noun are removed. A pull box, work on an existing panel and an enclosure part (a door) are not enclosures: they are ordinary rows under R52, with no group, A and B null and no company name in J."
   }
  ]
 }

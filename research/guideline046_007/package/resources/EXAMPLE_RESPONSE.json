@@ -2,12 +2,12 @@
  "schema": "cps.semantic-source-refs.v2",
  "case_id": "EXAMPLE046F",
  "family_id": "EXAMPLE046F",
- "inventory_sha256": "8645ac9ea63fb8b293c0f0ce9194354512d4abd5416310fc6a50bceca31d96b1",
+ "inventory_sha256": "1a51f3a7453dcda567bcc412a942704cd092fbfe6a3975767b0dde34f1e0f3fb",
  "status": "research_draft",
  "groups": [
   {
    "id": "G1",
-   "name": "控制盤",
+   "name": "甲-1 控制盤",
    "specification": "600W*800H*300D",
    "relationship": "physical_enclosure",
    "anchor_refs": [
@@ -32,7 +32,7 @@
    "group_id": "G1",
    "status": "research_draft",
    "values": [
-    "控制盤",
+    "甲-1 控制盤",
     "600W*800H*300D",
     "箱體",
     "SUS304，髮絲面",
@@ -55,15 +55,15 @@
      "refs": [
       "cell:S1!B4"
      ],
-     "transformation": "enclosure noun 控制盤 taken from the line",
-     "role_basis": "priced line supplying an enclosure itself (R56)"
+     "transformation": "the line's own enclosure noun phrase: prefix 產品 and category segment 箱體 dropped; first segment naming a box, 甲-1 控制盤, cut after its enclosure word 盤; the tag 甲-1 is kept",
+     "role_basis": "enclosure row; its section heading 機電工程 (B3) names work, not a panel, so A comes from the line (R56, O30)"
     },
     "B": {
      "refs": [
       "cell:S1!B4"
      ],
      "transformation": "dimensions W600×H800×D300 written as <w>W*<h>H*<d>D",
-     "role_basis": "dimensions stated in the source line, mm (R56)"
+     "role_basis": "W/H/D-labelled mm dimensions in the line's own description cell (R56)"
     },
     "C": {
      "refs": [
@@ -77,7 +77,7 @@
      "refs": [
       "cell:S1!B4"
      ],
-     "transformation": "description minus the prefix 產品, the category word 箱體, the enclosure noun 控制盤 and the dimensions; SUS304 and 髮絲面 are not rating tokens, so the comma stays (R53)",
+     "transformation": "description minus the prefix 產品, the category segment 箱體, the text A took from the line (甲-1 控制盤) and the dimensions, each with its delimiter; SUS304 and 髮絲面 are not rating tokens, so the comma stays (R53)",
      "role_basis": "remaining material and finish text of the enclosure row (R56)"
     },
     "E": {
@@ -1866,7 +1866,7 @@
   }
  ],
  "limitations": [
-  "Invented example for candidate 046f (R47b-R58, route v4.2). No real material list, contract, customer, company or resource; the glossary is an invented placeholder.",
+  "Invented example for candidate 046f (R47b-R58, route v4.2), revised for 046g (R56 under O30: A keeps the line's tag). No real material list, contract, customer, company or resource; the glossary is an invented placeholder.",
   "Source: the company material list (材料清單), the bound job source (R47b, O17). The contract is not packed for the generator, and the packet has no brand table: I and J come only from the material list's cells (R55, O17), so R002, R006 and R009 leave them null.",
   "Quoted range: rows 4-19 of 材料清單, ending at row 20 (合計 in the unit-price column E20). The 合計 in B16 is a block total in the description column (R49).",
   "Totals observed, not repaired (R10): the block total F16 = 104800 equals the amounts of rows 4-13; the end total F20 = 108200 adds F18 and F19.",

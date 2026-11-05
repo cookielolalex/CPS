@@ -188,11 +188,12 @@ def main():
            and b.get('end_row') == 7 and b.get('end_cell') == 'E7' and b.get('price_columns') == ['E', 'F'] and b.get('first_item_row') == 3, b)
     r51 = p.get('r51', {})
     record('tool_r51_lines_and_states', r51.get('in_range_lines') == 4 and r51.get('by_state') == {'priced': 2, 'not_estimated': 1, 'other_price_text': 0,
-           'unpriced_no_status': 1} and r51.get('condition_i_all_unpriced_no_status') is False and r51.get('option_iii_adopted') is False, r51)
+           'unpriced_no_status': 1} and r51.get('condition_i_all_unpriced_no_status') is False and r51.get('option_iii_adopted') is False
+           and r51.get('condition_ii_adopted') is False, r51)
     an = r51.get('analysis_sheets', {}).get('3', {})
     record('tool_analysis_blocks_and_links', an.get('blocks') == 130 and an.get('components') == 390 and an.get('linked_blocks') == 1
            and an.get('links_by') == {'code': 0, 'name': 1, 'outline_path': 0} and an.get('linked_blocks_by_parent_state', {}).get('priced') == 1
-           and an.get('condition_ii') is False, an)
+           and an.get('linked_blocks_of_unpriced_lines') == 0 and 'condition_ii' not in an, an)
     roles = {s['index']: (s['role'], s['in_scope'], s['linked_analysis_blocks']) for s in p.get('sheets', [])}
     record('tool_roles_and_flags', roles == {1: ('summary', False, 0), 2: ('bill', True, 0), 3: ('analysis', False, 1), 4: ('resource_statistics', False, 0)}
            and [(f['sheet_index'], f['code']) for f in p.get('flags', [])] == [(1, 'OUT_OF_SCOPE_NONZERO_PRICES'), (3, 'LINKED_BLOCKS_OUT_OF_SCOPE'),
@@ -345,15 +346,29 @@ def main():
     code, _, err = run(AGREE, '--proposal', small['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', '--digest', dig, '--reader', work / 'reader_end_row.json',
                        '--out-dir', work / 'agree_small')
     record('agree_refuses_not_applied', code == 1 and jout(err).get('code') == 'PROPOSAL_NOT_PROPOSED')
-    # R51 (ii): a block linked to the unpriced, no-status line brings the analysis sheet in scope
+    # former R51 condition (ii), dropped in 046g pass 2: a block linked to the unpriced, no-status line leaves the analysis sheet
+    # out of scope (a separate analysis sheet lies outside the quoted range, A26); the line stays excluded_supply
     c2 = pipeline(work, 'r51_ii', build_full(analysis_kw={'first_name': '溫度計'})[1])
     cp = c2.get('proposal', {})
-    record('tool_r51_condition_ii_analysis_in_scope', cp.get('status') == 'PROPOSED' and [s['index'] for s in cp['sheets'] if s['in_scope']] == [2, 3]
-           and cp['r51']['analysis_sheets']['3']['condition_ii'] is True and cp['sheets'][2]['reason'].startswith('analysis: an in-range bill line with no price')
-           and cp['sheets'][2]['linked_analysis_blocks'] == 0, cp.get('sheets'))
+    an2 = cp.get('r51', {}).get('analysis_sheets', {}).get('3', {})
+    lf = [f for f in cp.get('flags', []) if f['code'] == 'LINKED_BLOCKS_OUT_OF_SCOPE']
+    record('tool_unpriced_line_linked_block_stays_out_of_scope', cp.get('status') == 'PROPOSED' and [s['index'] for s in cp['sheets'] if s['in_scope']] == [2]
+           and an2.get('linked_blocks') == 1 and an2.get('linked_blocks_of_unpriced_lines') == 1 and cp['sheets'][2]['linked_analysis_blocks'] == 1
+           and cp['sheets'][2]['reason'].startswith('analysis: not every in-range bill line has no price and no status')
+           and '0 of priced or not-estimated parents' in cp['sheets'][2]['reason'] and '1 of parents with no price and no status' in cp['sheets'][2]['reason']
+           and len(lf) == 1 and lf[0]['detail'] == {'blocks': 1, 'of_priced_or_not_estimated_parents': 0, 'of_parents_with_no_price_and_no_status': 1},
+           [cp.get('sheets'), lf])
     bo2 = c2.get('build_out', {})
-    record('build_r51_ii_scoped_has_analysis_cells', c2.get('build_code') == 0 and bo2.get('verify') == 'PASS' and bo2['route_check_inventory']['status'] == 'PASS'
-           and bo2['route_check_inventory']['warnings'] == [] and bo2['stats']['content_cells_scoped'] > 2500, bo2.get('stats'))
+    record('build_unpriced_linked_block_scoped_without_analysis_cells', c2.get('build_code') == 0 and bo2.get('verify') == 'PASS'
+           and bo2['route_check_inventory']['status'] == 'PASS' and bo2['route_check_inventory']['warnings'] == ['R59_LINKED_ANALYSIS_OUT_OF_SCOPE']
+           and bo2['stats']['content_cells_scoped'] == 39, bo2.get('stats'))
+    # the same response as on the main packet (bill row 5 excluded_supply, no components) passes on this packet
+    rp2 = work / 'e2e_response_unpriced_link.json'
+    rp2.write_text(json.dumps(F.scoped_response(sha(c2['scoped'].read_bytes())), ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    code, out, _ = run(ROUTE, 'check', '--inventory', c2['scoped'], '--response', rp2)
+    o2 = jout(out)
+    record('e2e_unpriced_linked_block_line_excluded_supply_passes', code == 0 and o2.get('status') == 'PASS' and o2.get('scope') == 'applied'
+           and [w['code'] for w in o2.get('warnings', [])][0] == 'R59_LINKED_ANALYSIS_OUT_OF_SCOPE', o2.get('violations', [])[:5])
     # R51 (i): every in-range line unpriced with no status (a priced heading row satisfies BILL1 (c))
     ub = {k: v for k, v in F.SCOPED_BILL.items() if not (k[0] in (3, 6) and k[1] in 'EF') and k != (4, 'F')}
     ub[(3, 'C')] = ub[(3, 'D')] = None

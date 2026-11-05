@@ -25,11 +25,17 @@ Proves on invented carriers:
   (j) second review (round 2): the round-2 tampers N01-N07, N10, N11 and the receipt-mode downgrade fail saved QA
       (provenance always reruns the writer and compares the xlsx); number text: every form the writer writes (JavaScript
       String(v): 1e-7, 5e-324, -0 written as 0, ...) matches the saved_qa pattern, and other texts do not; the node
-      environment is an allowlist (OPENSSL_CONF, the reviewer's A3, LD_*, NODE_* removed).
+      environment is an allowlist (OPENSSL_CONF, the reviewer's A3, LD_*, NODE_* removed);
+  third review (round 3): G1 the reviewer's B01-B06 fail saved QA without provenance (pinned parts, worksheet element
+      namespace), and the pinned parts are byte-constant in every writer output of the run; G2 the reviewer's p2 node
+      wrapper: the writer records the wrapper's realpath and sha256, an unpinned saved QA shows it, and saved QA with
+      --checker-node/--checker-node-sha256 refuses the wrapper's output (WRITER004_REFUSED) and never runs PATH's node;
+      G3 the reviewer's p1 receipt edits, each compared receipt field edited on its own, fail with receipt_claim_mismatch
+      naming the fields. Provenance runs use the pinned checker node (the node found in PATH, by realpath and sha256).
 Usage: python3 -I -B run_export_tests.py --writer-dir /abs/archived/writer --work /abs/new-dir [--skip-visual]
 Prints a JSON summary with passed and failed lists; exit 0 only if nothing failed.
 """
-import argparse, copy, hashlib, importlib.util, json, math, os, random, re, shutil, struct, subprocess, sys, zipfile
+import argparse, copy, hashlib, importlib.util, json, math, os, random, re, shlex, shutil, struct, subprocess, sys, zipfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -222,6 +228,15 @@ def main():
     work.mkdir(parents=True, exist_ok=False)
     wp = load(EXPORT / 'writer_portable.py', 'writer_portable_under_test')
     route = load(ROUTE, 'cps046b_route_reference')
+    # third review G2: the checker node of every provenance run is pinned by realpath and sha256 (here: the node PATH finds)
+    node_found = shutil.which('node', path=NODE_CLEAN_ENV.get('PATH'))
+    node_real = os.path.realpath(node_found) if node_found else None
+    node_sha = sha(Path(node_real).read_bytes()) if node_real else None
+    checker = ['--checker-node', node_real, '--checker-node-sha256', node_sha]
+    c0, o0, e0 = run([node_real, '--version'], env=NODE_CLEAN_ENV) if node_real else (1, '', '')
+    node_version = o0.strip()
+    record('checker_node_resolved', node_real is not None and os.path.isabs(node_real) and c0 == 0 and node_version.startswith('v22.'),
+           {'node': node_real, 'version': node_version})
 
     # ------------------------------------------------ pins and constants
     for f, allowed in wp.WRITER_PINS.items():
@@ -572,9 +587,12 @@ def main():
         record(f'f_receipt_node_environment_{name}', stub_path is not None and at.get('resolved_path') == str(stub_path)
                and at.get('esm_resolved_path') == str(stub_path) and at.get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256
                and ne.get('removed_variables') == removed_now and ne.get('kept_variables') == kept_now
-               and set(kept_now) <= {'PATH', 'HOME', 'TMPDIR', 'LANG'} | {k for k in kept_now if k.startswith('LC_')}, ne)
+               and set(kept_now) <= {'PATH', 'HOME', 'TMPDIR', 'LANG'} | {k for k in kept_now if k.startswith('LC_')}
+               and ne.get('node', {}).get('realpath') == node_real and ne.get('node', {}).get('sha256') == node_sha
+               and ne.get('node', {}).get('executable') == node_found and ne.get('node', {}).get('version') == node_version, ne)
     nev2 = json.loads((outs / 'v2_w09_relaxed_all' / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')).get('node_environment', {})
-    record('f_receipt_node_environment_v2', nev2.get('artifact_tool', {}).get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256, nev2)
+    record('f_receipt_node_environment_v2', nev2.get('artifact_tool', {}).get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256
+           and nev2.get('node', {}).get('realpath') == node_real and nev2.get('node', {}).get('sha256') == node_sha, nev2)
     base_obj = json.loads((ef / 'valid' / 'v01_base.json').read_text(encoding='utf-8'))
     part = copy.deepcopy(base_obj)
     part['items'][0]['status'] = 'partial'                  # writer004 refuses: REVIEW_STATUS_REQUIRED
@@ -712,7 +730,8 @@ def main():
     tampers = json.loads((td / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
     reviewer22 = [t for t in tampers if t['group'] == 'reviewer'] + [t for t in tampers if t['name'].endswith(('_T21', '_T22'))]
     record('g_tamper_counts', code == 0 and len(reviewer22) == 22 and len([t for t in tampers if t['group'] == 'extra']) >= 16
-           and sorted(t['name'][:3] for t in tampers if t['group'] == 'review2') == ['N01', 'N02', 'N03', 'N04', 'N05', 'N06', 'N07', 'N10', 'N11'], err[-300:])
+           and sorted(t['name'][:3] for t in tampers if t['group'] == 'review2') == ['N01', 'N02', 'N03', 'N04', 'N05', 'N06', 'N07', 'N10', 'N11']
+           and sorted(t['name'][:3] for t in tampers if t['group'] == 'review3') == ['B01', 'B02', 'B03', 'B04', 'B05', 'B06'], err[-300:])
     for t in tampers:
         d = Path(t['dir'])
         c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
@@ -725,7 +744,7 @@ def main():
             ok = c1 == 1 and q.get('status') == 'SAVED_QA_FAILED' and (fnd if t['finding'] == 'any' else t['finding'] in fnd)
         record(f"g_saved_qa_catches_{t['name']}" if not t['passes_without_provenance'] else f"g_saved_qa_without_provenance_cannot_catch_{t['name']}",
                ok and not crash, {'status': q.get('status'), 'findings': {k: v['count'] for k, v in fnd.items()}, 'stderr': e1[-300:]})
-        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd])
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd] + checker)
         q = qa_report(d / 'SAVED_QA_PROVENANCE.json')
         fnd = q.get('findings', {})
         pv = q.get('expected_provenance', {})
@@ -736,25 +755,44 @@ def main():
                                            'xlsx_byte_identical': pv.get('xlsx_byte_identical')})
 
     # ------------------------------------------------ (h) provenance of EXPECTED (review S3)
+    def pinned_node_ok(q, writer004_check):
+        """third review G2: every node call of the check ran the pinned checker node (realpath and sha256 recorded for the
+        writer004 check and for the rerun), and the report says so."""
+        pv, pre = q.get('expected_provenance', {}), q.get('cps_evidence_preconditions', {})
+        cn, rn, wn = pv.get('checker_node') or {}, pv.get('rerun_node') or {}, pv.get('writer004_check_node')
+        return (cn.get('pinned') is True and cn.get('sha256_verified') is True and cn.get('realpath') == node_real
+                and cn.get('sha256') == cn.get('sha256_after_check') == node_sha and rn.get('realpath') == node_real
+                and rn.get('sha256') == node_sha and (wn == {'realpath': node_real, 'sha256': node_sha, 'pinned': True} if writer004_check else wn is None)
+                and pre.get('pinned_checker_node') is True and pre.get('all_checked_here_met') is True
+                and pre.get('checker_node', {}).get('sha256') == node_sha)
     for x in valid:
         od = outs / x['name']
         rp = work / f"prov_{x['name']}.json"
-        code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', rp, '--carrier', x['file'], '--writer-dir', wd])
+        code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', rp, '--carrier', x['file'], '--writer-dir', wd] + checker)
         q = qa_report(rp)
         pv = q.get('expected_provenance', {})
         record(f"h_provenance_v1_pass_{x['name']}", code == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS'
                and pv.get('expected_byte_identical') is True and pv.get('xlsx_byte_identical') is True and pv.get('receipt_mode') == 'v1'
                and pv.get('writer004_expected_byte_identical') is True and pv.get('rerun_mode') == 'v2'
-               and pv.get('node_environment', {}).get('artifact_tool_sha256') == wp.ARTIFACT_TOOL_STUB_SHA256, {'findings': q.get('findings'), 'provenance': pv})
+               and pv.get('node_environment', {}).get('artifact_tool_sha256') == wp.ARTIFACT_TOOL_STUB_SHA256
+               and pinned_node_ok(q, writer004_check=True) and pv.get('receipt_claims', {}).get('match') is True
+               and pv['receipt_claims'].get('compared_fields') == list(sq.RECEIPT_CLAIM_FIELDS), {'findings': q.get('findings'), 'provenance': pv})
     for x in valid2:
         od = outs / ('v2_' + x['name'])
         rp = work / f"prov_v2_{x['name']}.json"
-        code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', rp, '--carrier', x['file'], '--writer-dir', wd])
+        code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', rp, '--carrier', x['file'], '--writer-dir', wd] + checker)
         q = qa_report(rp)
         pv = q.get('expected_provenance', {})
+        rx = json.loads((od / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))['relaxations']
+        classes_from_rerun = pv.get('rerun_relaxation_classes') == {k: {kk: vv for kk, vv in v.items() if kk != 'neutralization'}
+                                                                    for k, v in rx.get('classes', {}).items()}
+        cells_from_rerun = pv.get('rerun_documented_cells') == rx.get('saved_matrices_differ_from_placeholder_copy_only_in')
         record(f"h_provenance_v2_pass_{x['name']}", code == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS'
                and pv.get('expected_byte_identical') is True and pv.get('xlsx_byte_identical') is True and pv.get('receipt_mode') == 'v2'
-               and 'writer004_expected_byte_identical' not in pv, {'findings': q.get('findings'), 'provenance': pv})
+               and 'writer004_expected_byte_identical' not in pv and pinned_node_ok(q, writer004_check=False)
+               and pv.get('receipt_claims', {}).get('match') is True and classes_from_rerun and cells_from_rerun
+               and (pv.get('rerun_documented_cells') is not None) == (x['relaxed_expected'] is True),
+               {'findings': q.get('findings'), 'provenance': pv})
     # consistent EXPECTED+xlsx tampers of a v2 output (full rerun), and a v2 view-only tamper with a consistent receipt
     v2src, v2car = outs / 'v2_w09_relaxed_all', ef2 / 'valid' / 'w09_relaxed_all.json'
     td2 = work / 'tampers_v2'
@@ -790,11 +828,12 @@ def main():
     rr = json.loads((md / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
     rr['mode'] = 'v1'
     (md / 'WRITER_RECEIPT.json').write_text(json.dumps(rr, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', md, '--carrier', v2car, '--writer-dir', wd])
+    code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', md, '--carrier', v2car, '--writer-dir', wd] + checker)
     q = qa_report(md / 'SAVED_QA.json')
     record('h_provenance_receipt_mode_v1_on_relaxed_output', code == 1 and q.get('expected_provenance', {}).get('result') == 'WRITER004_REFUSED'
            and q['findings']['provenance']['first'][0].get('code') in ('SELECTION_ONLY_ENGINEERING_ID', 'UNRESOLVED_ITEM_MUST_BE_HELD')
-           and q['expected_provenance'].get('xlsx_byte_identical') is True and q['expected_provenance'].get('rerun_relaxations_applied') is True,
+           and q['expected_provenance'].get('xlsx_byte_identical') is True and q['expected_provenance'].get('rerun_relaxations_applied') is True
+           and q['findings'].get('receipt_claim_mismatch', {}).get('first', [{}])[0].get('fields') == ['mode'],
            q.get('expected_provenance'))
     # the provenance rerun uses the pinned node environment: the planted writer directory is refused
     rp = work / 'prov_planted.json'
@@ -828,18 +867,197 @@ def main():
             no_prov_ok = c1 == 0 and q1.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
         else:
             no_prov_ok = c1 == 1 and t['finding'] in q1.get('findings', {})
-        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd])
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd] + checker)
         q2 = qa_report(d / 'SAVED_QA_PROVENANCE.json')
         pv, fnd = q2.get('expected_provenance', {}), q2.get('findings', {})
+        claim_fields = [f for e in fnd.get('receipt_claim_mismatch', {}).get('first', []) for f in e.get('fields', [])]
         ok = (no_prov_ok and c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED' and 'provenance' in fnd and pv.get('result') == 'FAILED'
               and pv.get('receipt_mode') == t['receipt_mode'] and pv.get('xlsx_byte_identical') is False and pv.get('expected_byte_identical') is True
-              and (t['finding'] is None and set(fnd) == {'provenance'} or t['finding'] in fnd)
+              and claim_fields == t['receipt_claim_fields']          # v4 (third review G3): a v1 claim on a v2 receipt
+              and (t['finding'] is None and set(fnd) == {'provenance'} | ({'receipt_claim_mismatch'} if t['receipt_claim_fields'] else set())
+                   or t['finding'] in fnd)
               and (t['receipt_mode'] != 'v1' or pv.get('writer004_expected_byte_identical') is True)
               and 'Traceback' not in e1 + e2)
-        record(f"h_provenance_catches_downgrade_{t['name']}", ok, {'no_prov': [q1.get('status'), list(q1.get('findings', {}))],
+        record(f"h_provenance_catches_downgrade_{t['name']}", ok, {'no_prov': [q1.get('status'), list(q1.get('findings', {}))], 'claim_fields': claim_fields,
                                                                   'prov': [q2.get('status'), {k: v['count'] for k, v in fnd.items()}],
                                                                   'provenance': {k: pv.get(k) for k in ('receipt_mode', 'result', 'xlsx_byte_identical',
                                                                                                          'expected_byte_identical', 'writer004_expected_byte_identical')}})
+
+    # ------------------------------------------------ third review G3: receipt claims (its p1/)
+    # Receipt claims edited, xlsx and EXPECTED unchanged: without provenance they pass (the receipt claims are not checked);
+    # with --carrier/--writer-dir each edit of a compared field is a receipt_claim_mismatch naming exactly that field.
+    n_receipt_tampers = 0
+    for src_dir, car, tag, n_want in ((v2src, v2car, 'relaxed', 16), (fid_out, fid, 'plain', 5)):
+        trd = work / f'tampers_receipt_{tag}'
+        code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'receipt', src_dir, trd])
+        tr = json.loads((trd / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
+        n_receipt_tampers += len(tr)
+        record(f'h_receipt_tamper_counts_{tag}', code == 0 and len(tr) == n_want, err[-300:])
+        base_rx = json.loads((src_dir / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))['relaxations']
+        for t in tr:
+            d = Path(t['dir'])
+            c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+            q1 = qa_report(d / 'SAVED_QA.json')
+            c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', car,
+                                   '--writer-dir', wd] + checker)
+            q2 = qa_report(d / 'SAVED_QA_PROVENANCE.json')
+            pv, fnd = q2.get('expected_provenance', {}), q2.get('findings', {})
+            got = [f for e in fnd.get('receipt_claim_mismatch', {}).get('first', []) for f in e.get('fields', [])]
+            common = (c1 == 0 and q1.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('xlsx_byte_identical') is True
+                      and pv.get('expected_byte_identical') is True and 'Traceback' not in e1 + e2)
+            if t['receipt_claim_fields']:
+                want_result = 'WRITER004_REFUSED' if t['name'].startswith('P2_') else 'FAILED'
+                ok = (common and c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED' and got == t['receipt_claim_fields'] and pv.get('result') == want_result
+                      and pv.get('receipt_claims', {}).get('match') is False and pv['receipt_claims'].get('mismatched_fields') == got
+                      and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False)
+                name = f"h_receipt_claim_edit_fails_{t['name']}"
+            else:          # not a compared field: shown, not evidence
+                ok = (common and c2 == 0 and q2.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and got == [] and pv.get('result') == 'PASS'
+                      and pv.get('receipt_claims', {}).get('match') is True)
+                name = f"h_receipt_uncompared_field_edit_passes_{t['name']}"
+            if t['name'].startswith(('P1_', 'P1g_')):
+                ok = ok and (pv.get('receipt_node') or {}).get('executable') == '/invented/node'       # the claim is visible
+            if t['name'].startswith('P1_'):           # the relaxation classes and documented cells come from the rerun
+                r57 = (pv.get('rerun_relaxation_classes') or {}).get('r57_null_c_research_draft', {})
+                ok = (ok and r57.get('items') == base_rx['classes']['r57_null_c_research_draft']['items'] and r57.get('items')
+                      and pv.get('rerun_documented_cells') == base_rx['saved_matrices_differ_from_placeholder_copy_only_in']
+                      and len(pv['rerun_documented_cells']['cells']) > 0)
+            record(name, ok, {'no_prov': q1.get('status'), 'prov': q2.get('status'), 'result': pv.get('result'), 'fields': got,
+                              'want': t['receipt_claim_fields'], 'stderr': (e1 + e2)[-300:]})
+    # the v1 claim mapping: a v1 run and a v2 run of a carrier without O13/R57 write the same compared fields except mode and
+    # relaxations, and the v1 relaxations are exactly V1_RELAXATIONS
+    pairs = [(fid_out, fid_v2)] + [(d, outs / ('v2_' + d.name[3:])) for d in sorted(outs.iterdir()) if d.name.startswith('v1_') and (d / 'WRITER_RECEIPT.json').is_file()]
+    mapping = {}
+    for a1, a2 in pairs:
+        r1 = json.loads((a1 / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+        r2 = json.loads((a2 / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+        k1, k2 = sq.receipt_claims(r1), sq.receipt_claims(r2)
+        mapping[a1.name] = (r1['mode'] == 'v1' and r2['mode'] == 'v2' and r1['relaxations'] == sq.V1_RELAXATIONS and r2['relaxations']['applied'] is False
+                            and r2['relaxations']['scanned'] is True
+                            and [k for k in sq.RECEIPT_CLAIM_FIELDS if sq.canonical(k1[k]) != sq.canonical(k2[k])] == ['mode', 'relaxations'])
+    record('h_v1_receipt_claims_equal_v2_except_mode_and_relaxations', len(mapping) >= 3 and all(mapping.values()), mapping)
+    # cps_evidence_preconditions in the four combinations, and with a pinned checker node
+    combos = {}
+    for tag, extra in (('no_provenance', []), ('provenance_unpinned', ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd]),
+                       ('provenance_pinned_no_formatting', ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd, '--no-formatting'] + checker),
+                       ('provenance_pinned', ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd] + checker)):
+        rp = work / f'pre_{tag}.json'
+        c, o, e = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp] + extra)
+        q = qa_report(rp)
+        pre = q.get('cps_evidence_preconditions', {})
+        combos[tag] = [c, q.get('status'), pre.get('provenance_checked'), pre.get('formatting_checked'), pre.get('pinned_checker_node'),
+                       pre.get('all_checked_here_met')]
+    ps = 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
+    record('h_evidence_preconditions_combinations', combos == {'no_provenance': [0, ps, False, True, False, False],
+                                                               'provenance_unpinned': [0, ps, True, True, False, False],
+                                                               'provenance_pinned_no_formatting': [0, ps, True, False, True, False],
+                                                               'provenance_pinned': [0, ps, True, True, True, True]}, combos)
+
+    # ------------------------------------------------ third review G2: the node binary (its p2/ wrapper)
+    # The reviewer's wrapper: a shell script that runs the real node with --import of the Array.prototype.includes patch
+    # (here it also appends a line to a log, so the tests can see whether it ran).
+    g2 = work / 'g2_node_wrapper'
+    evilbin = g2 / 'evilbin'
+    evilbin.mkdir(parents=True)
+    (evilbin / 'patch.mjs').write_text(INCLUDES_PATCH, encoding='utf-8')
+    marker = g2 / 'wrapper_ran.log'
+    wnode = evilbin / 'node'
+    wnode.write_text('#!/bin/sh\n' + f'echo ran >> {shlex.quote(str(marker))}\n'
+                     + f'exec {shlex.quote(node_real)} --import={shlex.quote((evilbin / "patch.mjs").as_uri())} "$@"\n', encoding='utf-8')
+    wnode.chmod(0o755)
+    wsha, wreal = sha(wnode.read_bytes()), os.path.realpath(wnode)
+
+    def wrapper_runs():
+        return len(marker.read_text(encoding='utf-8').splitlines()) if marker.is_file() else 0
+    env_path = dict(os.environ, PATH=str(evilbin) + os.pathsep + os.environ.get('PATH', ''))
+    od0 = g2 / 'out_system_node'
+    c, o, e = run(PY + [EXPORT / 'writer_portable.py', '--carrier', partial, '--out', od0, '--writer-dir', wd])
+    record('f_g2_control_system_node_refuses_partial', c == 1 and refusal(e).get('code') == 'REVIEW_STATUS_REQUIRED' and not od0.exists(), e[-300:])
+    outs_w = {}
+    for tag, extra, env in (('flag', ['--node', wnode], None), ('path', [], env_path)):
+        od = g2 / f'out_{tag}'
+        before = wrapper_runs()
+        c, o, e = run(PY + [EXPORT / 'writer_portable.py', '--carrier', partial, '--out', od, '--writer-dir', wd] + extra, env=env)
+        ne = json.loads((od / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))['node_environment']['node'] if c == 0 else {}
+        outs_w[tag] = od
+        record(f'f_g2_wrapper_{tag}_writer_accepts_partial_identity_recorded', c == 0 and wrapper_runs() > before
+               and ne.get('executable') == str(wnode) and ne.get('realpath') == wreal and ne.get('sha256') == wsha and wsha != node_sha
+               and ne.get('version') == node_version, {'stderr': e[-300:], 'node': ne})
+    for tag in ('flag', 'path'):
+        rp = g2 / f'qa_unpinned_{tag}.json'
+        extra, env = (['--node', wnode], None) if tag == 'flag' else ([], env_path)
+        c, o, e = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs_w[tag], '--report', rp, '--carrier', partial, '--writer-dir', wd] + extra, env=env)
+        q = qa_report(rp)
+        pv, pre = q.get('expected_provenance', {}), q.get('cps_evidence_preconditions', {})
+        cn = pv.get('checker_node') or {}
+        record(f'h_g2_wrapper_{tag}_unpinned_saved_qa_passes_and_shows_the_wrapper', c == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
+               and pv.get('result') == 'PASS' and cn.get('pinned') is False and cn.get('realpath') == wreal and cn.get('sha256') == wsha
+               and (pv.get('writer004_check_node') or {}).get('sha256') == wsha and (pv.get('rerun_node') or {}).get('sha256') == wsha
+               and (pv.get('receipt_node') or {}).get('sha256') == wsha and pre.get('pinned_checker_node') is False
+               and pre.get('all_checked_here_met') is False and (pre.get('checker_node') or {}).get('sha256') == wsha,
+               {'stderr': e[-300:], 'provenance': {k: pv.get(k) for k in ('result', 'checker_node', 'rerun_node', 'writer004_check_node')}})
+    for tag in ('flag', 'path'):            # pinned checker node, with the wrapper first on PATH
+        rp = g2 / f'qa_pinned_{tag}.json'
+        before = wrapper_runs()
+        c, o, e = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs_w[tag], '--report', rp, '--carrier', partial, '--writer-dir', wd] + checker, env=env_path)
+        q = qa_report(rp)
+        pv, pre = q.get('expected_provenance', {}), q.get('cps_evidence_preconditions', {})
+        fp = q.get('findings', {}).get('provenance', {}).get('first', [])
+        record(f'h_g2_wrapper_{tag}_output_fails_with_pinned_checker_node', c == 1 and q.get('status') == 'SAVED_QA_FAILED'
+               and pv.get('result') == 'WRITER004_REFUSED' and any(f.get('code') == 'REVIEW_STATUS_REQUIRED' for f in fp)
+               and any((f.get('refusal') or {}).get('code') == 'REVIEW_STATUS_REQUIRED' for f in fp) and wrapper_runs() == before
+               and pre.get('pinned_checker_node') is True and (pv.get('checker_node') or {}).get('sha256') == node_sha
+               and (pv.get('receipt_node') or {}).get('sha256') == wsha and pv.get('receipt_node_matches_checker_node') is False,
+               {'stderr': e[-300:], 'result': pv.get('result'), 'wrapper_ran': wrapper_runs() - before, 'findings': fp[:3]})
+    rp = g2 / 'qa_pinned_valid_path.json'
+    before = wrapper_runs()
+    c, o, e = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp, '--carrier', ef / 'valid' / 'v01_base.json',
+                        '--writer-dir', wd] + checker, env=env_path)
+    q = qa_report(rp)
+    record('h_g2_pinned_checker_node_ignores_path', c == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pinned_node_ok(q, writer004_check=True)
+           and wrapper_runs() == before, {'stderr': e[-300:], 'wrapper_ran': wrapper_runs() - before})
+    rp = g2 / 'qa_checker_node_sha256_mismatch.json'
+    before = wrapper_runs()
+    c, o, e = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp, '--carrier', ef / 'valid' / 'v01_base.json',
+                        '--writer-dir', wd, '--checker-node', wnode, '--checker-node-sha256', node_sha])
+    q = qa_report(rp)
+    pv = q.get('expected_provenance', {})
+    record('h_g2_checker_node_sha256_mismatch_refused_before_any_node_call', c == 1 and q.get('status') == 'SAVED_QA_FAILED'
+           and pv.get('result') == 'CHECKER_NODE_REFUSED' and wrapper_runs() == before and 'rerun_writer' not in pv
+           and (pv.get('checker_node') or {}).get('sha256') == wsha and (pv.get('checker_node') or {}).get('sha256_verified') is False
+           and q.get('cps_evidence_preconditions', {}).get('pinned_checker_node') is False, pv)
+    usage = {'relative_path': ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd, '--checker-node', 'node', '--checker-node-sha256', node_sha],
+             'path_without_sha256': ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd, '--checker-node', node_real],
+             'sha256_without_path': ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd, '--checker-node-sha256', node_sha],
+             'malformed_sha256': ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd, '--checker-node', node_real, '--checker-node-sha256', 'xyz'],
+             'with_node': ['--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd, '--node', node_real] + checker,
+             'without_carrier': checker}
+    res = {}
+    for tag, extra in usage.items():
+        rp = g2 / f'usage_{tag}.json'
+        c, o, e = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp] + extra)
+        res[tag] = [c, rp.exists()]
+    record('h_g2_checker_node_usage_errors', len(res) == 6 and all(v == [2, False] for v in res.values()), res)
+
+    # ------------------------------------------------ third review G1: the pinned parts are byte-constant in every writer output
+    pinned_dirs = sorted({d for d in outs.iterdir() if (d / 'WRITER_RECEIPT.json').is_file()}
+                         | {work / n for n in ('repeat_v01', 'repeat_v2_w01_job_inputs', 'repeat_v2_w09_relaxed_all', 's1_env_valid_out', 's1_openssl_valid_out')}
+                         | {fid_out, fid_v2} | set(outs_w.values()))
+    differ, n_pinned = [], 0
+    for d in pinned_dirs:
+        if not (d / 'WRITER_RECEIPT.json').is_file():
+            differ.append([d.name, 'missing'])
+            continue
+        rc = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+        if rc['output_xlsx']['sha256'] != sha((d / 'research-draft.xlsx').read_bytes()):
+            differ.append([d.name, 'not the writer output'])
+            continue
+        n_pinned += 1
+        with zipfile.ZipFile(d / 'research-draft.xlsx') as z:
+            differ += [[d.name, part] for part, h in sq.PINNED_PARTS.items() if sha(z.read(part)) != h]
+    record('g_pinned_parts_constant_in_every_output', n_pinned >= 30 and not differ and len(sq.PINNED_PARTS) == 8
+           and set(sq.PINNED_PARTS) == set(sq.EXPECTED_PARTS) - {f'xl/worksheets/sheet{k}.xml' for k in (1, 2, 3, 4)},
+           {'outputs': n_pinned, 'differ': differ[:10]})
 
     # ------------------------------------------------ (j) number text (second review F1(b))
     # Every form the writer writes is JavaScript String(v) (writer_portable js_number); saved_qa's pattern accepts each one.
@@ -965,11 +1183,13 @@ def main():
         record('d_visual_qa_exact_mode', code == 0 and me.get('pages', 0) >= 1 and me['render_copy']['identical_to_saved'], err[-300:])
 
     failed = [r for r in results if not r['pass']]
-    summary = {'suite': 'cps-export-portable-writer-tests.v3', 'tests': len(results), 'passed_count': len(results) - len(failed),
+    summary = {'suite': 'cps-export-portable-writer-tests.v4', 'tests': len(results), 'passed_count': len(results) - len(failed),
                'failed_count': len(failed), 'passed': [r['test'] for r in results if r['pass']], 'failed': failed,
                'fixtures_invented': True, 'valid_fixtures': len(valid), 'invalid_fixtures': len(invalid),
                'valid_fixtures_v2': len(valid2), 'invalid_fixtures_v2': len(invalid2),
                'saved_qa_tampers': len(tampers), 'saved_qa_tampers_v2': len(tampers2), 'saved_qa_tampers_downgrade': len(tamd),
+               'receipt_claim_tampers': n_receipt_tampers, 'pinned_part_outputs_checked': n_pinned,
+               'checker_node': {'realpath': node_real, 'sha256': node_sha, 'version': node_version},
                'make_tamper_fixtures_sha256': sha((HERE / 'make_tamper_fixtures.py').read_bytes()),
                'writer_portable_sha256': sha((EXPORT / 'writer_portable.py').read_bytes()),
                'saved_qa_sha256': sha((EXPORT / 'saved_qa.py').read_bytes()), 'visual_qa_sha256': sha((EXPORT / 'visual_qa.py').read_bytes()),

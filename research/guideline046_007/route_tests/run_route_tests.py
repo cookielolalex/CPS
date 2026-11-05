@@ -13,8 +13,9 @@ The reviewer's eight probes are applied to the package example as negative tests
 (a 材料清單 packet has no context:brand_table) is checked on the example and on make_job_config.
 Route v4.3 (candidate 046g, FIELD_ROLES R59): on a scoped packet (an inventory with context:scope) the fact must
 agree with the inventory (R59_SCOPE_FACT_INVALID, R59_SCOPE_FACT_MISMATCH), no item, group or link may cite a bill-sheet
-row below the end row (R59_ROW_BELOW_END_ROW), a linked analysis block on an out-of-scope sheet gives the warning
-R59_LINKED_ANALYSIS_OUT_OF_SCOPE, and reports carry scope: applied|not_applied. Without the fact, v4.3 is compared with
+row below the end row (R59_ROW_BELOW_END_ROW), no reference list may cite context:scope (R59_SCOPE_FACT_CITED, 046g pass 2),
+a linked analysis block on an out-of-scope sheet gives the warning R59_LINKED_ANALYSIS_OUT_OF_SCOPE, and reports carry
+scope: applied|not_applied. Without the fact, v4.3 is compared with
 the frozen v4.2 file (research/guideline046_006, sha256 pinned below) on every fixture and mutation: violations,
 warnings, exit codes, carriers and census ledgers must be identical apart from the version string and the scope field;
 the writer-port section of the two files must be byte-identical.
@@ -856,12 +857,26 @@ def main():
     record('v43_d_convert_receipt_scope_not_applied', json.loads((work / 'valid_out' / 'ADAPTER_RECEIPT.json').read_text(encoding='utf-8')).get('scope') == 'not_applied'
            and json.loads((work / 'jobs_out' / 'ADAPTER_RECEIPT.json').read_text(encoding='utf-8')).get('scope') == 'not_applied')
     v43_mut = [mu for mu in idx if mu['name'].startswith('v43_')]
-    record('v43_mutations_cover_each_new_check', {mu['expected_code'] for mu in v43_mut} == {'R59_SCOPE_FACT_INVALID', 'R59_SCOPE_FACT_MISMATCH', 'R59_ROW_BELOW_END_ROW'}
-           and len(v43_mut) >= 30, len(v43_mut))
-    # (a) on check-inventory too: every fact mutation rejects the inventory itself
+    record('v43_mutations_cover_each_new_check', {mu['expected_code'] for mu in v43_mut} == {'R59_SCOPE_FACT_INVALID', 'R59_SCOPE_FACT_MISMATCH', 'R59_ROW_BELOW_END_ROW',
+                                                                                         'R59_SCOPE_FACT_CITED'}
+           and len(v43_mut) >= 39, len(v43_mut))
+    # (e) R59_SCOPE_FACT_CITED is reported beside the codes such a reference already had; the valid scoped responses cite no context:scope
+    def mut_codes(name):
+        mu = next(x for x in idx if x['name'] == name)
+        return {v['code'] for v in json.loads(route('check', '--inventory', str(fx / mu['inventory']), '--response', str(fx / mu['file']))[1])['violations']}
+    beside = {'v43_scope_cited_proof_context_only': 'CONTEXT_ONLY_PROOF_UNREPRESENTABLE', 'v43_scope_cited_job_input': 'R48_JOB_INPUT_REF',
+              'v43_scope_cited_null_proof': 'NULL_PROOF_REQUIRED', 'v43_scope_cited_raw_description': 'UNKNOWN_CELL_REF',
+              'v43_scope_cited_raw_remarks': 'UNKNOWN_CELL_REF', 'v43_scope_cited_anchor': 'UNKNOWN_CELL_REF', 'v43_scope_cited_group': 'UNKNOWN_CELL_REF',
+              'v43_scope_cited_component_link': 'LINK_COMPONENT_UNKNOWN'}
+    miss = {n: sorted(mut_codes(n)) for n, c in beside.items() if not {'R59_SCOPE_FACT_CITED', c} <= mut_codes(n)}
+    only = mut_codes('v43_scope_cited_proof_with_cell')
+    record('v43_e_scope_cited_beside_existing_codes', not miss and 'R59_SCOPE_FACT_CITED' in only and 'UNKNOWN_CONTEXT_REF' not in only, [miss, sorted(only)])
+    noscope = {n: sorted(mut_codes(n)) for n in ('noscope_scope_ref_in_proof', 'noscope_scope_ref_in_raw')}
+    record('v43_e_no_fact_keeps_v42_codes', noscope == {'noscope_scope_ref_in_proof': ['UNKNOWN_CONTEXT_REF'], 'noscope_scope_ref_in_raw': ['UNKNOWN_CELL_REF']}, noscope)
+    # (a) on check-inventory too: every fact mutation rejects the inventory itself (R59_SCOPE_FACT_CITED is a response defect)
     bad_inv = []
     for mu in v43_mut:
-        if mu['expected_code'].startswith('R59_SCOPE_FACT'):
+        if mu['expected_code'] in ('R59_SCOPE_FACT_INVALID', 'R59_SCOPE_FACT_MISMATCH'):
             code, out, _ = route('check-inventory', '--inventory', str(fx / mu['inventory']))
             if code != 1 or mu['expected_code'] not in {v['code'] for v in json.loads(out)['violations']}:
                 bad_inv.append(mu['name'])

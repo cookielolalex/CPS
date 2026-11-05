@@ -23,6 +23,11 @@ Route
   from the writer directory, which must agree); the resolved file must be the pinned CPS validation stub
   (ARTIFACT_TOOL_STUB_SHA256) with the documented package.json. The pinned writer files must be regular
   files in the writer directory itself (no symlink to another directory). The resolved path is recorded.
+  Node binary (v2.5, third review G2): the node executable is resolved once (a path as given, a bare name in the
+  allowlisted PATH), its realpath and sha256 are recorded in the receipt (node_environment.node), and every node
+  process of the run executes that realpath. Recorded, not enforced: the writer cannot tell node from a wrapper that
+  adds flags, so the record only shows which binary ran; saved_qa.py --checker-node/--checker-node-sha256 pins the
+  checker's node.
 
 Mode v2 (candidate 046f carriers made by route v4.2, which keeps the route v4.1 relaxations unchanged;
 FIELD_ROLES R48, R52, R54, R57; O13, O16)
@@ -59,7 +64,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.4'
+VERSION = 'cps-export-writer-portable.v2.5'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -161,6 +166,9 @@ LIMITATIONS = [
     'Node environment: every node process ran with an allowlisted environment (PATH, HOME, TMPDIR, LANG and LC_* only; no NODE_*, '
     'OPENSSL_CONF, LD_PRELOAD, LD_LIBRARY_PATH or other variable); @oai/artifact-tool resolved from writer004.mjs to the pinned '
     'CPS validation stub (node_environment in this receipt, with the kept and removed variable names).',
+    'Node binary: node_environment.node records the realpath and sha256 of the executable every node process of this run '
+    'executed. The writer records it and does not enforce it (a wrapper script that adds node flags is recorded as itself); '
+    'saved_qa.py with --checker-node and --checker-node-sha256 pins the checker\'s node.',
 ]
 
 
@@ -557,11 +565,31 @@ def check_writer_dir(writer_dir):
     return pins, real_dir
 
 
+def resolve_node(node, env):
+    """v2.5 (third review G2): the node executable of this run. A name without a directory is searched in the allowlisted
+    PATH, as subprocess would; a path is used as given. Returns its record: the executable found, its realpath and the
+    sha256 of the realpath's bytes. Every node process of the run then executes that realpath, so the record names the
+    file that ran. Recorded, not enforced (a wrapper script is recorded as itself)."""
+    stage = 'gate:node_environment'
+    found = shutil.which(node, path=env.get('PATH'))
+    if found is None:
+        raise Refused('NODE_UNAVAILABLE', stage, f'{node}: not found or not executable')
+    real = os.path.realpath(found)
+    try:
+        h = sha256(Path(real).read_bytes())
+    except OSError as e:
+        raise Refused('NODE_UNAVAILABLE', stage, f'{node}: {type(e).__name__}')
+    return {'command': node, 'executable': found, 'realpath': real, 'sha256': h}
+
+
 def check_node_environment(node, real_dir):
     """Review S1: resolve @oai/artifact-tool the way node resolves it from writer004.mjs, with the allowlisted environment,
-    and refuse unless it is the pinned CPS validation stub. Runs before any other node process."""
+    and refuse unless it is the pinned CPS validation stub. Runs before any other node process. v2.5: node is first
+    resolved to one executable (resolve_node); the record's node.realpath is what every later node process runs."""
     stage = 'gate:node_environment'
     env, kept, removed = node_env()
+    node_rec = resolve_node(node, env)
+    node = node_rec['realpath']
     w = real_dir / 'writer004.mjs'
     try:
         code, out, err = run([node, '-e', RESOLVE_CJS, str(w), ARTIFACT_TOOL_SPECIFIER], 60)
@@ -590,7 +618,9 @@ def check_node_environment(node, real_dir):
     if pkg != ARTIFACT_TOOL_STUB_PACKAGE:
         raise Refused('ARTIFACT_TOOL_PACKAGE_UNEXPECTED', stage, {'package_json': str(pkg_path), 'content': pkg})
     return {'environment': NODE_ENV_DESCRIPTION, 'kept_variables': kept, 'removed_variables': removed,
-            'node': {'command': node, 'executable': shutil.which(node, path=env.get('PATH')), 'version': tool_version([node, '--version'])},
+            'node': dict(node_rec, version=tool_version([node, '--version']),
+                         identity='recorded, not enforced: the realpath and sha256 of the file every node process of this run '
+                                  'executed (saved_qa.py --checker-node/--checker-node-sha256 pins the checker\'s node)'),
             'artifact_tool': {'specifier': ARTIFACT_TOOL_SPECIFIER,
                               'resolved_by': "createRequire(pathToFileURL(<writer dir>/writer004.mjs)).resolve('@oai/artifact-tool'); "
                                              "equal to import.meta.resolve from the writer directory",
@@ -810,6 +840,7 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
     carrier_sha = sha256(raw)
     pins, writer_dir = check_writer_dir(writer_dir)       # from here on the writer directory's real path
     node_environment = check_node_environment(node, writer_dir)
+    node = node_environment['node']['realpath']          # v2.5: every later node process runs the recorded file
     scan = relaxation_scan(raw) if mode == 'v2' else None
     needs_copy = bool(scan and (scan['o13'] or scan['r57']))
     relax = {'applied': False, 'scanned': scan is not None}

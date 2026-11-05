@@ -6,15 +6,22 @@
                      formula-like and an error-literal nonitem text, a lone surrogate inside JSON review text.
   tamper SRC DEST    From a writer output SRC (made from that carrier), the reviewer's 22 tampered outputs T01..T22
                      plus extra structural tampers X01..X16, the second review's N01..N07, N10, N11 (review round 2,
-                     s2_tampers.py) and the consistent EXPECTED+xlsx variants C1..C3, each in its own directory, and
-                     DEST/TAMPERS.json with the finding each one must produce.
+                     s2_tampers.py), the third review's B01..B06 (round 3, r3_bypasses.py, verbatim edits) and the
+                     consistent EXPECTED+xlsx variants C1..C3, each in its own directory, and DEST/TAMPERS.json with the
+                     finding each one must produce.
   downgrade SRC DEST From a --mode v2 writer output SRC of a carrier without O13/R57 (same bytes as v1), the second
                      review's receipt-mode downgrade (F2, s3_attacks2.py): D1 the N01 tamper with the receipt mode kept
                      v2, D2 the same with the receipt mode edited to v1, D3 a change no structural check sees (pane
                      ySplit, the second review's N12) with the receipt mode edited to v1; DEST/TAMPERS.json as above.
+  receipt SRC DEST   From a writer output SRC, copies whose WRITER_RECEIPT.json claims are edited and whose xlsx and
+                     EXPECTED_SAVED_VALUES.json are unchanged (third review G3, its p1/): for a relaxed v2 output the
+                     reviewer's falsified receipt (its eight edits together) and each edit on its own, plus edits of the
+                     other compared fields; for an output without relaxations, mode and relaxation edits.
+                     DEST/TAMPERS.json lists the receipt fields saved QA must name (receipt_claim_mismatch).
 Usage: python3 -I -B make_tamper_fixtures.py carrier /abs/v01_base.json /abs/new.json
        python3 -I -B make_tamper_fixtures.py tamper /abs/writer-output /abs/new-dir
        python3 -I -B make_tamper_fixtures.py downgrade /abs/writer-output-mode-v2 /abs/new-dir
+       python3 -I -B make_tamper_fixtures.py receipt /abs/writer-output /abs/new-dir
 """
 import copy, hashlib, json, re, sys, zipfile
 from pathlib import Path
@@ -161,11 +168,95 @@ EXTRA_TAMPERS.update({
     'X15_number_text_uppercase_exponent': ({S1: sub1(r'<v>1e-7</v>', '<v>1E-7</v>')}, 'number_text'),
     'X16_font_second_color': ({ST: sub1(BODY_FONT, '<font><name val="Arial"/><color rgb="FF172033"/><color rgb="FFFFFFFF"/>')}, 'font_structure'),
 })
-# Receipt-mode downgrade (second review F2): name -> (edits, receipt mode to write, finding without provenance or None)
+# Third review (round 3, G1): tampers that saved QA v3 passed without provenance while LibreOffice reads them differently
+# (r3_bypasses.py, verbatim edits): Strict-namespace value children and cells (LibreOffice maps the Strict namespace to the
+# transitional one), a colour tint on the body font or the header fill (openpyxl's rgb ignores tint), and foreign-namespace
+# fonts that shift openpyxl's font indices but not LibreOffice's.
+STRICT = 'http://purl.oclc.org/ooxml/spreadsheetml/main'       # ISO 29500 Strict SpreadsheetML namespace
+FOREIGN = 'urn:invented:cps-review3'                            # an unknown namespace
+R3_FONT0 = '<font><name val="Calibri"/><family val="2"/><color theme="1"/><sz val="11"/><scheme val="minor"/></font>'
+R3_BODY_FONT = '<font><name val="Arial"/><color rgb="FF172033"/><sz val="11"/></font>'
+R3_HEAD_FONT = '<font><name val="Arial"/><b val="1"/><color rgb="FFFFFFFF"/><sz val="11"/></font>'
+REVIEW3_TAMPERS = {
+    'B01_strict_ns_v_in_empty_G2': ({S1: sub1(re.escape('<c r="G2" s="4" t="n"></c>'),
+                                              f'<c r="G2" s="4" t="n"><v xmlns="{STRICT}">999</v></c>')}, 'element_namespace'),
+    'B02_strict_ns_is_in_empty_H2': ({S1: sub1(re.escape('<c r="H2" s="4" t="n"></c>'),
+                                               f'<c r="H2" s="4" t="inlineStr"><is xmlns="{STRICT}"><t>EVIL</t></is></c>')}, 'element_namespace'),
+    'B03_strict_ns_cell_beyond_Q2': ({S1: sub1(re.escape('<c r="Q2" s="3" t="n"></c></row>'),
+                                               f'<c r="Q2" s="3" t="n"></c><c xmlns="{STRICT}" r="R2" t="inlineStr"><is><t>EVIL</t></is></c></row>')},
+                                     'element_namespace'),
+    'B04_body_font_color_tint': ({ST: sub1(re.escape('<color rgb="FF172033"/>'), '<color rgb="FF172033" tint="0.95"/>')}, 'pinned_part'),
+    'B05_header_fill_tint': ({ST: sub1(re.escape('<fgColor rgb="FF29445D"/>'), '<fgColor rgb="FF29445D" tint="0.95"/>')}, 'pinned_part'),
+    'B06_foreign_ns_fonts_shift_index': ({ST: sub1(re.escape('<fonts count="3">' + R3_FONT0 + R3_BODY_FONT),
+                                                   '<fonts count="3">' + R3_FONT0
+                                                   + R3_BODY_FONT.replace('<font>', f'<x:font xmlns:x="{FOREIGN}">').replace('</font>', '</x:font>')
+                                                   + R3_HEAD_FONT.replace('<font>', f'<x:font xmlns:x="{FOREIGN}">').replace('</font>', '</x:font>')
+                                                   + R3_BODY_FONT.replace('FF172033', 'FFFFFFFF'))}, 'pinned_part'),
+}
+# Receipt-mode downgrade (second review F2): name -> (edits, receipt mode to write, finding without provenance or None,
+# receipt fields saved QA v4 names in receipt_claim_mismatch: a v1 claim on a v2 receipt keeps the v2 relaxations record)
 DOWNGRADE_TAMPERS = {
-    'D1_v2_output_second_v_mode_kept': ({S1: REVIEW2_TAMPERS['N01_second_v_in_number_cell'][0][S1]}, 'v2', 'cell_value_children'),
-    'D2_v2_output_second_v_mode_downgraded_to_v1': ({S1: REVIEW2_TAMPERS['N01_second_v_in_number_cell'][0][S1]}, 'v1', 'cell_value_children'),
-    'D3_v2_output_pane_ysplit_mode_downgraded_to_v1': ({S1: sub1(r'ySplit="1" topLeftCell="D2"', 'ySplit="60" topLeftCell="D2"')}, 'v1', None),
+    'D1_v2_output_second_v_mode_kept': ({S1: REVIEW2_TAMPERS['N01_second_v_in_number_cell'][0][S1]}, 'v2', 'cell_value_children', []),
+    'D2_v2_output_second_v_mode_downgraded_to_v1': ({S1: REVIEW2_TAMPERS['N01_second_v_in_number_cell'][0][S1]}, 'v1', 'cell_value_children',
+                                                    ['relaxations']),
+    'D3_v2_output_pane_ysplit_mode_downgraded_to_v1': ({S1: sub1(r'ySplit="1" topLeftCell="D2"', 'ySplit="60" topLeftCell="D2"')}, 'v1', None,
+                                                       ['relaxations']),
+}
+
+
+# Third review G3 (its p1/): receipt claims edited, xlsx and EXPECTED unchanged. name -> (edit of the receipt dict, fields
+# saved QA must name in receipt_claim_mismatch; [] = not a compared field, the claim passes and is shown only)
+def _reviewer_falsified(r):
+    """The third reviewer's p1 receipt, its eight edits together."""
+    r['node_environment']['node']['executable'] = '/invented/node'
+    r['cross_check']['saved_values_differ_only_in'] = 0
+    r['status'] = 'INVENTED_ADMITTED'
+    r['expected_saved_values']['identical_to_writer004_prepareMatrices_output'] = True
+    r['admitted'] = True
+    del r['relaxations']['classes']['r57_null_c_research_draft']
+    r['relaxations']['saved_matrices_differ_from_placeholder_copy_only_in']['cells'] = []
+    r['writer_files']['writer004.mjs']['identity'] = 'invented identity'
+
+
+OTHER_WRITER004 = {'85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7': ('70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7',
+                                                                                        'public copy (helper path redacted)'),
+                   '70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7': ('85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7',
+                                                                                        'archived original')}
+
+
+def _other_writer004(r):
+    """Claim the other pinned writer004.mjs (both pins are allowed; the rerun's writer directory holds one of them)."""
+    h, ident = OTHER_WRITER004[r['writer_files']['writer004.mjs']['sha256']]
+    r['writer_files']['writer004.mjs'] = {'sha256': h, 'identity': ident}
+
+
+RECEIPT_TAMPERS_RELAXED = {
+    'P1_reviewer_falsified_receipt': (_reviewer_falsified, ['relaxations', 'cross_check', 'expected_saved_values', 'writer_files', 'status', 'admitted']),
+    'P1a_r57_class_removed': ((lambda r: r['relaxations']['classes'].pop('r57_null_c_research_draft')), ['relaxations']),
+    'P1b_documented_cells_emptied': ((lambda r: (r['relaxations']['saved_matrices_differ_from_placeholder_copy_only_in'].__setitem__('cells', []),
+                                                      r['cross_check'].__setitem__('saved_values_differ_only_in', 0))), ['relaxations', 'cross_check']),
+    'P1c_identical_to_writer004_claimed': ((lambda r: r['expected_saved_values'].__setitem__('identical_to_writer004_prepareMatrices_output', True)),
+                                           ['expected_saved_values']),
+    'P1d_writer_files_identity_changed': ((lambda r: r['writer_files']['writer004.mjs'].__setitem__('identity', 'invented identity')), ['writer_files']),
+    'P1e_admitted_true': ((lambda r: r.__setitem__('admitted', True)), ['admitted']),
+    'P1f_status_changed': ((lambda r: r.__setitem__('status', 'INVENTED_ADMITTED')), ['status']),
+    'P1g_node_executable_changed_not_compared': ((lambda r: r['node_environment']['node'].__setitem__('executable', '/invented/node')), []),
+    'P2_mode_edited_to_v1': ((lambda r: r.__setitem__('mode', 'v1')), ['mode']),
+    'P3_writer_version_changed': ((lambda r: r.__setitem__('writer', 'cps-export-writer-portable.v0-invented')), ['writer']),
+    'P4_matrices_sha256_changed': ((lambda r: r['matrices_sha256'].__setitem__(next(iter(r['matrices_sha256'])), '0' * 64)), ['matrices_sha256']),
+    'P5_sheets_rows_changed': ((lambda r: r['sheets'][0].__setitem__('rows', r['sheets'][0]['rows'] + 1)), ['sheets']),
+    'P6_admitted_zero_not_false': ((lambda r: r.__setitem__('admitted', 0)), ['admitted']),
+    'P7_other_pinned_writer004_claimed': (_other_writer004, ['writer_files']),
+    'P8_o16_items_emptied': ((lambda r: r['relaxations']['classes']['o16_q_unverified_adoption'].__setitem__('items', [])), ['relaxations']),
+    'P9_route_port_path_changed_not_compared': ((lambda r: r['relaxations']['route_v4_port'].__setitem__('path', '/elsewhere/cps046b_route.py')), []),
+}
+RECEIPT_TAMPERS_PLAIN = {
+    'Q1_cross_check_result_changed': ((lambda r: r['cross_check'].__setitem__('result', 'BYTE_IDENTICAL_ON_PLACEHOLDER_COPY')), ['cross_check']),
+    'Q2_mode_edited_to_v2': ((lambda r: r.__setitem__('mode', 'v2')), ['relaxations']),
+    'Q3_relaxations_claimed_applied': ((lambda r: r['relaxations'].__setitem__('applied', True)), ['relaxations']),
+    'Q4_expected_saved_values_claim_dropped': ((lambda r: r['expected_saved_values'].pop('identical_to_writer004_prepareMatrices_output')),
+                                               ['expected_saved_values']),
+    'Q5_status_field_removed': ((lambda r: r.pop('status')), ['status']),
 }
 
 
@@ -214,7 +305,8 @@ def consistent_change(src, d):
 def make_tampers(src, dest, consistent_only=False):
     dest.mkdir(parents=True, exist_ok=False)
     index = []
-    groups = [] if consistent_only else [('reviewer', REVIEWER_TAMPERS), ('extra', EXTRA_TAMPERS), ('review2', REVIEW2_TAMPERS)]
+    groups = [] if consistent_only else [('reviewer', REVIEWER_TAMPERS), ('extra', EXTRA_TAMPERS), ('review2', REVIEW2_TAMPERS),
+                                         ('review3', REVIEW3_TAMPERS)]
     for group, table in groups:
         for name, (edits, finding) in table.items():
             d = dest / name
@@ -249,7 +341,7 @@ def make_downgrade(src, dest):
     assert rc['mode'] == 'v2' and rc['relaxations']['applied'] is False, 'needs a mode v2 output without O13/R57 relaxations'
     dest.mkdir(parents=True, exist_ok=False)
     index = []
-    for name, (edits, mode, finding) in DOWNGRADE_TAMPERS.items():
+    for name, (edits, mode, finding, claim_fields) in DOWNGRADE_TAMPERS.items():
         d = dest / name
         d.mkdir()
         for f in ('EXPECTED_SAVED_VALUES.json', 'WRITER_RECEIPT.json'):
@@ -260,7 +352,34 @@ def make_downgrade(src, dest):
         r['mode'] = mode
         (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         index.append({'name': name, 'dir': str(d), 'group': 'downgrade', 'receipt_mode': mode, 'finding': finding,
-                      'passes_without_provenance': finding is None, 'provenance_finding': 'provenance'})
+                      'passes_without_provenance': finding is None, 'provenance_finding': 'provenance',
+                      'receipt_claim_fields': claim_fields})
+    (dest / 'TAMPERS.json').write_text(json.dumps({'invented': True, 'source_output': str(src), 'tampers': index},
+                                                  ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    return index
+
+
+def make_receipt_tampers(src, dest):
+    """Third review G3: receipt claims edited, the xlsx and EXPECTED_SAVED_VALUES.json copied unchanged (so the integrity
+    hashes still match). A relaxed v2 output gets RECEIPT_TAMPERS_RELAXED, any other output RECEIPT_TAMPERS_PLAIN."""
+    base = json.loads((src / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+    relaxed = base['relaxations'].get('applied') is True
+    table = RECEIPT_TAMPERS_RELAXED if relaxed else RECEIPT_TAMPERS_PLAIN
+    if relaxed:
+        assert 'r57_null_c_research_draft' in base['relaxations']['classes'] and base['relaxations']['classes']['r57_null_c_research_draft']['items']
+    dest.mkdir(parents=True, exist_ok=False)
+    index = []
+    for name, (edit, fields) in table.items():
+        d = dest / name
+        d.mkdir()
+        for f in ('EXPECTED_SAVED_VALUES.json', 'research-draft.xlsx'):
+            (d / f).write_bytes((src / f).read_bytes())
+        r = copy.deepcopy(base)
+        edit(r)
+        assert json.dumps(r, sort_keys=True) != json.dumps(base, sort_keys=True), name      # 0 == False in Python, not in JSON
+        (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        index.append({'name': name, 'dir': str(d), 'group': 'receipt', 'receipt_claim_fields': fields, 'finding': None,
+                      'passes_without_provenance': True, 'source_relaxed': relaxed})
     (dest / 'TAMPERS.json').write_text(json.dumps({'invented': True, 'source_output': str(src), 'tampers': index},
                                                   ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     return index
@@ -275,5 +394,7 @@ if __name__ == '__main__':
         print(json.dumps({'tampers': len(idx)}))
     elif len(sys.argv) == 4 and sys.argv[1] == 'downgrade':
         print(json.dumps({'tampers': len(make_downgrade(Path(sys.argv[2]), Path(sys.argv[3])))}))
+    elif len(sys.argv) == 4 and sys.argv[1] == 'receipt':
+        print(json.dumps({'tampers': len(make_receipt_tampers(Path(sys.argv[2]), Path(sys.argv[3])))}))
     else:
         sys.exit(__doc__)

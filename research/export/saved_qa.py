@@ -30,20 +30,36 @@ gives the v1 bytes for a carrier without O13/R57). When the receipt says mode v1
 reruns writer004 prepareMatrices on the carrier (pinned writer files, pinned @oai/artifact-tool stub, the same
 allowlisted node environment as the writer) and its text must be byte-identical to EXPECTED_SAVED_VALUES.json.
 Without these options provenance is not checked (reported as such).
+
+v4 (third review): G1 the 8 parts that are byte-constant in every writer output (styles.xml, workbook.xml, theme1.xml,
+[Content_Types].xml, both rels, both docProps) are pinned by sha256 (finding pinned_part), and every element of every
+worksheet must be in the transitional SpreadsheetML main namespace, by exact tag (finding element_namespace; the
+structure checks compare exact tags, so a Strict-namespace or foreign element never matches an allowed name).
+G2 the node binary: with --checker-node /abs/node and --checker-node-sha256 HEX, the binary's sha256 is verified before
+any node call and every node call (the writer004 check, and the writer rerun, which gets it by absolute path) runs it;
+the value is never taken from the receipt or from PATH. expected_provenance records the realpath and sha256 of the node
+of the writer004 check and of the rerun (from the rerun receipt, checked against the checker node), and the receipt's
+own node claim (information only). Without --checker-node (--node, default node from PATH) the run is not CPS evidence.
+G3 receipt claims: the delivered receipt's deterministic fields (mode, relaxations without the route port path,
+cross_check, expected_saved_values, matrices_sha256, sheets, writer, writer_files, status, admitted) must equal the
+rerun receipt's (for a receipt that says v1: mode v1 and relaxations {"applied": false, "scanned": false}, which a v1
+run of a carrier without O13/R57 writes; finding receipt_claim_mismatch, naming the fields); expected_provenance records
+the rerun's relaxation classes and documented cells. Other receipt fields are the producer's claim, not evidence.
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
   python3 -I -B saved_qa.py --output-dir /abs/writer-output [--report /abs/SAVED_QA.json] [--no-formatting]
-      [--carrier /abs/carrier.json --writer-dir /abs/writer-dir [--node node]]
+      [--carrier /abs/carrier.json --writer-dir /abs/writer-dir
+       [--checker-node /abs/node --checker-node-sha256 HEX | --node node]]
 Default report: <output-dir>/SAVED_QA.json (created; must not exist). Exit 0 only on PASS.
 """
-import argparse, hashlib, json, math, os, re, subprocess, sys, tempfile, zipfile
+import argparse, copy, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile, zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v3'
+VERSION = 'cps-export-saved-qa.v4'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -98,6 +114,26 @@ WIDTHS = {'未填研究草稿': [18, 30, 38, 48, 9, 12, 12, 12, 20, 18, 22, 18, 
 NS = {'m': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
       'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'}
 REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships'
+MAIN_PREFIX = '{%s}' % NS['m']
+# v4 (third review G1): the parts that are byte-constant in every writer output (openpyxl 3.1.5; docProps/core.xml holds
+# the writer's fixed 1980-01-01T00:00:00Z created/modified, docProps/app.xml the openpyxl version). Verified on every
+# output of the test suite (test g_pinned_parts_constant_in_every_output) and of the third review's runs.
+PINNED_PARTS = {
+    '[Content_Types].xml': 'd734b6624e76225b3efeebddad13bc1a2323d1cf0eaa639dee513d2249a6d5ef',
+    '_rels/.rels': 'c545941ba36c15fcdce4ae4568c663f3ced1a2226ad5082d3fd66b178bfac11a',
+    'docProps/app.xml': '209fca6b00afe72a5029754b94be5953d8f16d96f67130325566b9366ad4ccc5',
+    'docProps/core.xml': 'c5757c5cc9ccb0c26118443a2f1e1c6ced3dc5c409fc0738cae5ef69aa8548b1',
+    'xl/workbook.xml': 'cb9bc2217b38cc95ee8c68f2e4c40a2282a048b7cfe9f69b27bba3615bd2f3ce',
+    'xl/_rels/workbook.xml.rels': 'ab22e25bdbbd461cf03d0d9e971a0c4558219dbc10d9e46a68c419dee94b2a81',
+    'xl/styles.xml': 'a2c5f5524d5de7318734fbec8f38475a0591452d5dd5c45fc7711d0762b8edc0',
+    'xl/theme/theme1.xml': 'd15e8ebf78ef7b9720839d7ae8fdc81a7df5bc24706d8e137df61a5683c358d9',
+}
+# v4 (third review G3): the receipt fields compared with the rerun receipt. A v1 run of a carrier without O13/R57 takes the
+# same route as the v2 rerun and writes the same fields except mode and these relaxations.
+RECEIPT_CLAIM_FIELDS = ('mode', 'relaxations', 'cross_check', 'expected_saved_values', 'matrices_sha256', 'sheets', 'writer',
+                        'writer_files', 'status', 'admitted')
+V1_RELAXATIONS = {'applied': False, 'scanned': False}
+SHA256_RE = re.compile(r'[0-9a-f]{64}')
 EXCEL = {'max_rows': 1048576, 'max_columns': 16384, 'cell_text_utf16_units': 32767, 'line_feeds_per_cell': 253,
          'max_abs_number': 9.99999999999999e307, 'sheet_name_chars': 31, 'column_width': 255, 'row_height_points': 409}
 ERROR_LITERALS = ('#REF!', '#DIV/0!', '#VALUE!', '#NAME?', '#N/A', '#NUM!', '#NULL!', '#SPILL!', '#CALC!')
@@ -192,6 +228,16 @@ def local(tag):
     return tag.rsplit('}', 1)[-1]
 
 
+def tag_name(el):
+    """v4 (third review G1): an element's name for the structure checks. The local name only when the element is in the
+    transitional SpreadsheetML main namespace; otherwise the full tag ('{ns}name', or '{}name' without a namespace), which
+    no allowed name equals. (local() is kept for attribute names in the deny check for hidden/zeroHeight.)"""
+    t = el.tag if isinstance(el.tag, str) else repr(el.tag)
+    if t.startswith(MAIN_PREFIX):
+        return t[len(MAIN_PREFIX):]
+    return t if t.startswith('{') else '{}' + t
+
+
 def read_raw(path, F):
     """Independent OOXML reader (shared strings, inline strings, numbers, booleans, errors, formulas).
     A cell type outside CELL_TYPES (for example t="d") or unparsable number text is a finding, never a crash;
@@ -268,6 +314,17 @@ def check_structure(path, F):
             bad('zip_parts', part=n, problem='part the writer does not produce')
         for n in sorted(set(EXPECTED_PARTS) - set(names)):
             bad('zip_parts', part=n, problem='missing part')
+        # v4 (third review G1): the byte-constant parts are pinned by sha256; every zip entry with a pinned name is read,
+        # so a duplicate entry is checked too. This covers every styles.xml change (colour tint, fonts in another
+        # namespace, ...) that openpyxl and LibreOffice read differently.
+        for info in z.infolist():
+            if info.filename in PINNED_PARTS:
+                h = sha256(z.read(info))
+                if h != PINNED_PARTS[info.filename]:
+                    bad('pinned_part', part=info.filename, sha256=h, pinned=PINNED_PARTS[info.filename],
+                        problem='differs from the bytes every writer output has')
+        for n in sorted(set(PINNED_PARTS) - set(names)):
+            bad('pinned_part', part=n, problem='missing', pinned=PINNED_PARTS[n])
         roots = {}
         for n in sorted(set(names)):
             if not (n.endswith('.xml') or n.endswith('.rels')):
@@ -284,7 +341,7 @@ def check_structure(path, F):
     # workbook: children, window visibility, sheet states
     wb = roots.get('xl/workbook.xml')
     if wb is not None:
-        kids = [local(e.tag) for e in wb]
+        kids = [tag_name(e) for e in wb]
         if any(k not in WORKBOOK_CHILDREN for k in kids) or kids != [k for k in WORKBOOK_CHILDREN if k in kids]:
             bad('workbook_structure', problem='workbook child elements', actual=kids)
         prot = wb.find('m:workbookProtection', NS)
@@ -301,32 +358,40 @@ def check_structure(path, F):
         root = roots.get(n)
         if root is None or not n.startswith('xl/worksheets/'):
             continue
-        kids = [local(e.tag) for e in root]
+        # v4 (third review G1): every element in the transitional main namespace, by exact tag (LibreOffice maps the Strict
+        # namespace to the transitional one; openpyxl and the raw reader read only the transitional <v>/<is>)
+        for el in root.iter():
+            if not (isinstance(el.tag, str) and el.tag.startswith(MAIN_PREFIX)):
+                bad('element_namespace', part=n, element=str(el.tag)[:160],
+                    problem='worksheet element not in the transitional SpreadsheetML main namespace')
+        if root.tag != MAIN_PREFIX + 'worksheet':
+            bad('worksheet_structure', part=n, problem='root element', actual=str(root.tag)[:160])
+        kids = [tag_name(e) for e in root]
         order = [k for k in WORKSHEET_CHILDREN if k in kids]
         if any(k not in WORKSHEET_CHILDREN for k in kids) or kids != order or 'sheetData' not in kids:
             bad('worksheet_structure', part=n, problem='worksheet child elements',
                 unexpected=[k for k in kids if k not in WORKSHEET_CHILDREN], actual=kids[:20])
         for el in root:
-            tag = local(el.tag)
+            tag = tag_name(el)
             if tag == 'sheetPr':
-                if el.attrib or any(local(x.tag) not in ('tabColor', 'outlinePr', 'pageSetUpPr') for x in el):
-                    bad('worksheet_structure', part=n, problem='sheetPr', attributes=dict(el.attrib), children=[local(x.tag) for x in el])
+                if el.attrib or any(tag_name(x) not in ('tabColor', 'outlinePr', 'pageSetUpPr') for x in el):
+                    bad('worksheet_structure', part=n, problem='sheetPr', attributes=dict(el.attrib), children=[tag_name(x) for x in el])
             elif tag == 'sheetViews':
                 views = list(el)
-                if len(views) != 1 or local(views[0].tag) != 'sheetView':
-                    bad('worksheet_structure', part=n, problem='sheetViews must hold one sheetView', actual=[local(x.tag) for x in views])
+                if len(views) != 1 or tag_name(views[0]) != 'sheetView':
+                    bad('worksheet_structure', part=n, problem='sheetViews must hold one sheetView', actual=[tag_name(x) for x in views])
                 for v in views:
                     extra = sorted(k for k in v.attrib if k not in SHEET_VIEW_ATTRS)
                     if extra or v.attrib.get('showGridLines') != '0':
                         bad('worksheet_structure', part=n, problem='sheetView attributes', attributes=dict(v.attrib))
-                    if any(local(x.tag) not in ('pane', 'selection') for x in v):
-                        bad('worksheet_structure', part=n, problem='sheetView children', actual=[local(x.tag) for x in v])
+                    if any(tag_name(x) not in ('pane', 'selection') for x in v):
+                        bad('worksheet_structure', part=n, problem='sheetView children', actual=[tag_name(x) for x in v])
             elif tag == 'sheetFormatPr':
                 if dict(el.attrib) != SHEET_FORMAT_ATTRS:
                     bad('worksheet_structure', part=n, problem='sheetFormatPr attributes', attributes=dict(el.attrib), expected=SHEET_FORMAT_ATTRS)
             elif tag == 'cols':
                 for col in el:
-                    if local(col.tag) != 'col' or any(k not in ('min', 'max', 'width', 'customWidth') for k in col.attrib):
+                    if tag_name(col) != 'col' or any(k not in ('min', 'max', 'width', 'customWidth') for k in col.attrib):
                         bad('worksheet_structure', part=n, problem='col', attributes=dict(col.attrib))
             elif tag == 'sheetData':
                 check_sheet_data(n, el, bad)
@@ -338,17 +403,17 @@ def check_structure(path, F):
     if st is not None:
         for k, xf in enumerate(st.iterfind('m:cellXfs/m:xf', NS)):
             for x in xf:
-                if local(x.tag) != 'alignment' or any(a not in ('horizontal', 'vertical', 'wrapText') for a in x.attrib):
-                    bad('styles_structure', xf=k, element=local(x.tag), attributes=dict(x.attrib))
+                if tag_name(x) != 'alignment' or any(a not in ('horizontal', 'vertical', 'wrapText') for a in x.attrib):
+                    bad('styles_structure', xf=k, element=tag_name(x), attributes=dict(x.attrib))
         # fonts (v3, second review F1(b)): the writer's children only, each at most once (no strike, italic,
         # underline, vertAlign, outline, shadow, ...)
         for fonts in st.iterfind('m:fonts', NS):
             for k, font in enumerate(fonts):
-                kids = [local(x.tag) for x in font]
+                kids = [tag_name(x) for x in font]
                 allowed = FONT0_CHILDREN if k == 0 else FONT_CHILDREN
-                if local(font.tag) != 'font' or any(x not in allowed for x in kids) or len(kids) != len(set(kids)):
-                    bad('font_structure', font=k, element=local(font.tag), children=kids, allowed=list(allowed))
-    return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS)}
+                if tag_name(font) != 'font' or any(x not in allowed for x in kids) or len(kids) != len(set(kids)):
+                    bad('font_structure', font=k, element=tag_name(font), children=kids, allowed=list(allowed))
+    return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS), 'pinned_parts': dict(PINNED_PARTS)}
 
 
 def number_text_ok(text):
@@ -365,7 +430,7 @@ def check_sheet_data(part, sheet_data, bad):
     seen_rows, seen_cells, last_row = set(), set(), 0
     for row in sheet_data:
         ra = row.attrib
-        if local(row.tag) != 'row' or any(k not in ('r', 'spans', 'ht', 'customHeight') for k in ra) \
+        if tag_name(row) != 'row' or any(k not in ('r', 'spans', 'ht', 'customHeight') for k in ra) \
                 or (('ht' in ra or 'customHeight' in ra) and (ra.get('r') != '1' or ra.get('ht') != '36')):
             bad('worksheet_structure', part=n, problem='row attributes', row=ra.get('r'), attributes=dict(ra))
         rn = ra.get('r')
@@ -382,7 +447,7 @@ def check_sheet_data(part, sheet_data, bad):
         last_col = 0
         for c in row:
             where = c.attrib.get('r')
-            if local(c.tag) != 'c' or any(k not in ('r', 's', 't') for k in c.attrib):
+            if tag_name(c) != 'c' or any(k not in ('r', 's', 't') for k in c.attrib):
                 bad('worksheet_structure', part=n, problem='cell attributes', cell=where, attributes=dict(c.attrib))
             m = CELL_REF_RE.fullmatch(where) if where is not None else None
             if m is None:
@@ -398,7 +463,7 @@ def check_sheet_data(part, sheet_data, bad):
                 seen_cells.add(where)
                 last_col = max(last_col, cc)
             typ = c.attrib.get('t', 'n')
-            kids = [local(x.tag) for x in c]
+            kids = [tag_name(x) for x in c]
             values = [k for k in kids if k in ('v', 'is')]
             problems = []
             if len(values) > 1:
@@ -412,28 +477,28 @@ def check_sheet_data(part, sheet_data, bad):
             if problems:
                 bad('cell_value_children', part=n, cell=where, type=typ, children=kids, problem='; '.join(problems))
             for x in c:
-                xt = local(x.tag)
+                xt = tag_name(x)
                 if xt not in ('v', 'is', 'f'):
                     bad('worksheet_structure', part=n, problem='cell child', cell=where, child=xt)
                 if xt == 'v':
                     if x.attrib or len(x):
                         bad('cell_value_children', part=n, cell=where, problem='<v> with attributes or child elements',
-                            attributes=dict(x.attrib), children=[local(y.tag) for y in x])
+                            attributes=dict(x.attrib), children=[tag_name(y) for y in x])
                     text = x.text or ''
                     if typ == 'n' and not number_text_ok(text):
                         bad('number_text', part=n, cell=where, text=text[:100],
                             problem='number text is not ASCII JavaScript Number::toString text')
                 if xt == 'is':
                     ts = list(x)
-                    if len(ts) != 1 or local(ts[0].tag) != 't':
+                    if len(ts) != 1 or tag_name(ts[0]) != 't':
                         bad('worksheet_structure', part=n, problem='inline string must be one plain <t> (no rich-text runs)',
-                            cell=where, actual=[local(t.tag) for t in ts])
+                            cell=where, actual=[tag_name(t) for t in ts])
                     for t in ts:
                         if any(k != XML_SPACE for k in t.attrib):
                             bad('worksheet_structure', part=n, problem='<t> attributes', cell=where, attributes=dict(t.attrib))
                         if len(t):
                             bad('cell_value_children', part=n, cell=where, problem='<t> with child elements',
-                                children=[local(y.tag) for y in t])
+                                children=[tag_name(y) for y in t])
                         text = t.text or ''
                         if text != text.strip(' \t\r\n') and t.attrib.get(XML_SPACE) != 'preserve':
                             bad('whitespace_not_preserved', part=n, cell=where,
@@ -459,7 +524,102 @@ def run_node(cmd, timeout=600, cwd=None):
 
 
 class ProvenanceRefused(Exception):
-    pass
+    """info: the finding; code: the expected_provenance result code; record: a partial record (checker node)."""
+    def __init__(self, info, code='NODE_ENVIRONMENT_REFUSED', record=None):
+        super().__init__(info)
+        self.info, self.code, self.record = info, code, record
+
+
+def resolve_node(node, pinned_sha256=None):
+    """v4 (third review G2): the one node binary of every node call of this saved-QA run (the writer004 check and the writer
+    rerun, which gets its realpath as --node). Pinned (--checker-node, --checker-node-sha256): the absolute path given,
+    its realpath read and its sha256 compared with the pin before any node call; neither PATH nor the receipt is read.
+    Unpinned (--node, default 'node'): a bare name is searched in the allowlisted PATH, as the writer does; such a run
+    is not CPS evidence, and its record shows which binary ran. Raises ProvenanceRefused (CHECKER_NODE_REFUSED,
+    NODE_UNAVAILABLE)."""
+    pinned = pinned_sha256 is not None
+    rec = {'pinned': pinned, 'command': node}
+    refuse = 'CHECKER_NODE_REFUSED' if pinned else 'NODE_UNAVAILABLE'
+    if pinned:
+        rec['source'] = '--checker-node: the absolute path given (neither PATH nor the receipt is read)'
+        rec['pinned_sha256'] = pinned_sha256
+        found = node if os.path.isabs(node) else None
+        if found is None:
+            raise ProvenanceRefused({'check': 'checker node is not an absolute path', 'node': node}, refuse, rec)
+    else:
+        rec['source'] = '--node (unpinned: a name without a directory is searched in the allowlisted PATH); not CPS evidence'
+        found = shutil.which(node, path=node_env()[0].get('PATH'))
+        if found is None:
+            raise ProvenanceRefused({'check': 'node not found or not executable', 'node': node}, refuse, rec)
+    rec['executable'] = found
+    real = os.path.realpath(found)
+    rec['realpath'] = real
+    try:
+        h = sha256(Path(real).read_bytes()) if os.path.isfile(real) else None
+    except OSError:
+        h = None
+    rec['sha256'] = h
+    if h is None:
+        raise ProvenanceRefused({'check': 'node binary is not a readable file', 'realpath': real}, refuse, rec)
+    if pinned:
+        rec['sha256_verified'] = h == pinned_sha256
+        if h != pinned_sha256:
+            raise ProvenanceRefused({'check': 'checker node sha256 differs from --checker-node-sha256 (no node call was made)',
+                                     'realpath': real, 'sha256': h, 'pinned_sha256': pinned_sha256}, refuse, rec)
+    code, out, err = run_node([real, '--version'], 60)
+    rec['version'] = out.decode('utf-8', 'replace').strip()[:80] if code == 0 else None
+    return rec
+
+
+def receipt_node_claim(receipt):
+    """The producer receipt's node record (node_environment.node): shown, never used and never compared (not evidence)."""
+    node = (receipt.get('node_environment') or {}).get('node') if isinstance(receipt, dict) else None
+    if not isinstance(node, dict):
+        return None
+    return {k: (str(node.get(k))[:300] if node.get(k) is not None else None) for k in ('command', 'executable', 'realpath', 'sha256', 'version')}
+
+
+def canonical(v):
+    return json.dumps(v, ensure_ascii=True, sort_keys=True, separators=(',', ':'))
+
+
+def receipt_claims(r):
+    """v4 (third review G3): the deterministic receipt fields, as [present, value]. The route port's path (a location on
+    the machine that ran the writer) is left out of relaxations; its sha256, version and result stay in."""
+    out = {}
+    for k in RECEIPT_CLAIM_FIELDS:
+        v = copy.deepcopy(r.get(k))
+        if k == 'relaxations' and isinstance(v, dict) and isinstance(v.get('route_v4_port'), dict):
+            v['route_v4_port'].pop('path', None)
+        out[k] = [k in r, v]
+    return out
+
+
+def compare_receipt_claims(receipt, rerun, receipt_mode, F):
+    """v4 (third review G3): the delivered receipt's RECEIPT_CLAIM_FIELDS must equal the rerun receipt's (canonical JSON, so
+    false is not 0 and 1 is not 1.0). The rerun is always --mode v2; for a receipt that says v1 the expected mode is v1 and
+    the expected relaxations {"applied": false, "scanned": false}, which is what a v1 run writes for a carrier without
+    O13/R57 (the v1 route is the v2 route without O13/R57; every other compared field is the same). A rerun that applied
+    relaxations keeps mode v2, so a v1 claim on a relaxed output mismatches."""
+    got, want = receipt_claims(receipt), receipt_claims(rerun)
+    v1 = receipt_mode == 'v1' and (rerun.get('relaxations') or {}).get('applied') is False
+    if v1:
+        want['mode'], want['relaxations'] = [True, 'v1'], [True, dict(V1_RELAXATIONS)]
+    mismatched = [k for k in RECEIPT_CLAIM_FIELDS if canonical(got[k]) != canonical(want[k])]
+    if mismatched:
+        F.add('receipt_claim_mismatch', {
+            'fields': mismatched,
+            'problem': 'WRITER_RECEIPT.json claims differ from the writer rerun receipt',
+            'detail': {k: {'receipt': canonical(got[k])[:300], 'rerun': canonical(want[k])[:300],
+                           'receipt_sha256': sha256(canonical(got[k]).encode('ascii')),
+                           'rerun_sha256': sha256(canonical(want[k]).encode('ascii'))} for k in mismatched}})
+    return {'compared_fields': list(RECEIPT_CLAIM_FIELDS), 'match': not mismatched, 'mismatched_fields': mismatched,
+            'expected_from': 'the writer rerun receipt (--mode v2)' + (
+                '; receipt mode v1: mode "v1" and relaxations {"applied": false, "scanned": false}, as a v1 run of this carrier '
+                'writes' if v1 else ''),
+            'relaxations_compared_without': ['route_v4_port.path'],
+            'not_compared': 'every other receipt field (paths, times, node_environment, tool_versions, gate, limitations) is '
+                            "the producer's claim and is not evidence"}
 
 
 def pinned_node_environment(node, writer_dir):
@@ -492,11 +652,16 @@ def pinned_node_environment(node, writer_dir):
     return real, {'artifact_tool_resolved_path': cjs, 'artifact_tool_sha256': h, 'kept_variables': kept, 'removed_variables': removed}
 
 
-def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F):
+def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256=None):
     """v3 (second review F1(a), F2): the writer rerun (--mode v2) always runs and both EXPECTED_SAVED_VALUES.json and the
-    xlsx are byte-compared, whatever the receipt's mode says (the receipt is not authenticated). A receipt that says v1
-    also gets the writer004 prepareMatrices comparison (run first). The result is PASS, or the first refusal code
-    (NODE_ENVIRONMENT_REFUSED, WRITER004_REFUSED, WRITER_RERUN_FAILED, UNKNOWN_MODE), or FAILED."""
+    xlsx are byte-compared, whatever the receipt's mode says. A receipt that says v1 also gets the writer004
+    prepareMatrices comparison (run first). v4 (third review G2, G3): one node binary for every node call (resolve_node;
+    pinned with checker_node_sha256), its realpath and sha256 recorded for the writer004 check and for the rerun (the rerun
+    receipt's node must be the same file); the receipt's deterministic claims compared with the rerun receipt
+    (compare_receipt_claims); the rerun's relaxation classes and documented cells recorded. The result is PASS;
+    CHECKER_NODE_REFUSED or NODE_UNAVAILABLE when the node binary is refused (then no node call and no rerun is made);
+    otherwise the first refusal code (UNKNOWN_MODE, NODE_ENVIRONMENT_REFUSED, WRITER004_REFUSED, WRITER_RERUN_FAILED,
+    CHECKER_NODE_REFUSED for a pinned binary changed during the check), or FAILED (also for a receipt_claim_mismatch)."""
     def bad(**kw):
         F.add('provenance', kw)
     codes = []
@@ -521,14 +686,29 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F):
                      'carrier without O13/R57)' + ('; receipt mode v1: also writer004_matrices.mjs (writer004 prepareMatrices on the '
                                                    'carrier) byte-compared with EXPECTED_SAVED_VALUES.json' if mode == 'v1' else ''))
     rec['writer004_check'] = 'run (receipt mode v1)' if mode == 'v1' else 'not run (receipt mode is not v1)'
+    rec['receipt_node'] = receipt_node_claim(receipt)
+    rec['receipt_node_note'] = "the producer receipt's node_environment.node: shown for the record, not used, not compared, not evidence"
+    try:
+        node_rec = resolve_node(node, checker_node_sha256)
+    except ProvenanceRefused as e:
+        rec['checker_node'] = e.record
+        bad(**e.info)
+        rec['result'] = e.code
+        return rec
+    rec['checker_node'] = node_rec
+    node = node_rec['realpath']                  # every node call below, and the rerun's --node
+    if rec['receipt_node'] is not None:
+        rec['receipt_node_matches_checker_node'] = (rec['receipt_node'].get('realpath') == node_rec['realpath']
+                                                    and rec['receipt_node'].get('sha256') == node_rec['sha256'])
     if mode == 'v1':
         try:
             real, env_rec = pinned_node_environment(node, writer_dir)
         except ProvenanceRefused as e:
-            bad(**e.args[0])
-            codes.append('NODE_ENVIRONMENT_REFUSED')
+            bad(**e.info)
+            codes.append(e.code)
         else:
             rec['node_environment'] = env_rec
+            rec['writer004_check_node'] = {'realpath': node, 'sha256': node_rec['sha256'], 'pinned': node_rec['pinned']}
             code, out, err = run_node([node, str(NODE_MATRICES), '--writer', str(real / 'writer004.mjs'), '--carrier', str(carrier)])
             rec['writer004_matrices.mjs_sha256'] = sha256(NODE_MATRICES.read_bytes())
             if code != 0:
@@ -564,14 +744,36 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F):
     if r2 is not None:
         rec['rerun_writer'] = r2.get('writer')
         rec['rerun_mode'] = r2.get('mode')
-        rec['rerun_relaxations_applied'] = (r2.get('relaxations') or {}).get('applied')
+        rel = r2.get('relaxations') or {}
+        rec['rerun_relaxations_applied'] = rel.get('applied')
+        # v4 (third review G3): the relaxation classes and documented cells come from the rerun, not from the receipt
+        rec['rerun_relaxation_classes'] = {k: {kk: vv for kk, vv in v.items() if kk != 'neutralization'}
+                                           for k, v in (rel.get('classes') or {}).items() if isinstance(v, dict)}
+        rec['rerun_documented_cells'] = rel.get('saved_matrices_differ_from_placeholder_copy_only_in')
         rec['rerun_node_environment'] = r2.get('node_environment')
+        rn = (r2.get('node_environment') or {}).get('node') or {}
+        rec['rerun_node'] = {k: rn.get(k) for k in ('command', 'executable', 'realpath', 'sha256', 'version')}
+        if rn.get('realpath') != node or rn.get('sha256') != node_rec['sha256']:
+            bad(check='the writer rerun receipt names another node binary than the checker node',
+                rerun_node={'realpath': rn.get('realpath'), 'sha256': rn.get('sha256')}, checker_node={'realpath': node, 'sha256': node_rec['sha256']})
         rec['expected_byte_identical'], rec['xlsx_byte_identical'] = e2 == ebytes, x2 == xbytes
         if e2 != ebytes:
             bad(check='EXPECTED_SAVED_VALUES.json differs from the writer rerun on the carrier')
         if x2 != xbytes:
             bad(check='research-draft.xlsx differs from the writer rerun on the carrier')
-    rec['result'] = 'PASS' if not F.count('provenance') else (codes[0] if codes else 'FAILED')
+        if receipt is not None:
+            rec['receipt_claims'] = compare_receipt_claims(receipt, r2, mode, F)
+    if node_rec['pinned']:                       # the pinned file is unchanged after the last node call
+        try:
+            after = sha256(Path(node).read_bytes())
+        except OSError:
+            after = None
+        rec['checker_node']['sha256_after_check'] = after
+        if after != node_rec['sha256']:
+            bad(check='checker node changed during the check', sha256_before=node_rec['sha256'], sha256_after=after)
+            codes.append('CHECKER_NODE_REFUSED')
+    failed = F.count('provenance') or F.count('receipt_claim_mismatch')
+    rec['result'] = 'PASS' if not failed else (codes[0] if codes else 'FAILED')
     return rec
 
 
@@ -720,7 +922,8 @@ def load_expected(ebytes, F):
         return None
 
 
-def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node'):
+def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node', checker_node_sha256=None):
+    """checker_node_sha256 given: node is the --checker-node absolute path, pinned by that sha256 (third review G2)."""
     xlsx = out_dir / XLSX_NAME
     exp_path = out_dir / 'EXPECTED_SAVED_VALUES.json'
     xbytes, ebytes = xlsx.read_bytes(), exp_path.read_bytes()
@@ -754,7 +957,7 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
                                             'EXPECTED_SAVED_VALUES.json and the workbook (with or without WRITER_RECEIPT.json) is not detected.'}
     if carrier is not None:
         try:
-            provenance = check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F)
+            provenance = check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256)
         except Exception as e:                  # noqa: BLE001
             F.add('provenance', {'check': 'provenance check failed', 'error': repr(e)[:300]})
             provenance = {'checked': True, 'result': 'ERROR'}
@@ -860,7 +1063,7 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
                     'expected_shape', 'integrity', 'reader_error', 'unknown_cell_type', 'unparsable_number',
                     'zip_parts', 'xml_structure', 'hidden_attribute', 'sheet_state', 'workbook_structure', 'worksheet_structure',
                     'whitespace_not_preserved', 'styles_structure', 'cell_value_children', 'number_text', 'duplicate_reference',
-                    'font_structure', 'provenance')
+                    'font_structure', 'pinned_part', 'element_namespace', 'provenance', 'receipt_claim_mismatch')
     unclassified = sorted(k for k in F.items if k not in value_checks and k != 'formatting')
     value_fail = sum(F.count(k) for k in value_checks) + sum(F.count(k) for k in unclassified)
     fmt_fail = F.count('formatting')
@@ -883,8 +1086,10 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
                    'structure_failures': sum(F.count(k) for k in ('zip_parts', 'xml_structure', 'hidden_attribute', 'sheet_state',
                                                                   'workbook_structure', 'worksheet_structure', 'whitespace_not_preserved',
                                                                   'styles_structure', 'unknown_cell_type', 'unparsable_number',
-                                                                  'cell_value_children', 'number_text', 'duplicate_reference', 'font_structure')),
-                   'provenance_failures': F.count('provenance'), 'expected_provenance_checked': bool(provenance.get('checked')),
+                                                                  'cell_value_children', 'number_text', 'duplicate_reference', 'font_structure',
+                                                                  'pinned_part', 'element_namespace')),
+                   'provenance_failures': F.count('provenance'), 'receipt_claim_mismatches': F.count('receipt_claim_mismatch'),
+                   'expected_provenance_checked': bool(provenance.get('checked')),
                    'formatting_failures': fmt_fail if formatting else None,
                    'formatting_cells_checked': fmt_checked, 'value_check_failures': value_fail},
         'header_checks': header_checks,
@@ -893,14 +1098,31 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
                                      'note': 'informational, like writer004 ERROR_SCAN: carried text may legitimately contain error text'},
         'findings': F.report(),
         'scope': ('Saved-workbook fidelity to the writer matrix (EXPECTED_SAVED_VALUES.json) and package structure; with --carrier and '
-                  '--writer-dir also the provenance of EXPECTED from the carrier. Not source semantics, not visual QA.'),
-        'cps_evidence_preconditions': {
-            'provenance_checked': bool(provenance.get('checked')), 'formatting_checked': bool(formatting),
-            'note': ('CPS evidence needs both (README "Conditions of use"): --carrier must be the frozen route carrier, its sha256 '
-                     '(expected_provenance.carrier_sha256) checked against the route convert receipt or the freeze record, and a run '
-                     'with --no-formatting is not CPS evidence.')},
+                  '--writer-dir also the provenance of EXPECTED and of the xlsx from the carrier (a writer rerun) and the receipt fields '
+                  'saved QA compares. Not source semantics, not what @oai/artifact-tool would have saved (L2-L5), not Excel display, '
+                  'not visual QA.'),
+        'cps_evidence_preconditions': evidence_preconditions(status, provenance, formatting),
         'native_excel_validation': False, 'openpyxl': openpyxl.__version__,
     }
+
+
+def evidence_preconditions(status, provenance, formatting):
+    """README "Conditions of use": what this report can show of them. The carrier check against the route convert receipt
+    or the freeze record is the operator's, and visual QA is a separate reviewer's."""
+    cn = provenance.get('checker_node') or {}
+    pinned = bool(provenance.get('checked') and cn.get('pinned') and cn.get('sha256_verified')
+                  and cn.get('sha256_after_check') == cn.get('sha256'))
+    out = {'provenance_checked': bool(provenance.get('checked')), 'provenance_result': provenance.get('result'),
+           'formatting_checked': bool(formatting), 'pinned_checker_node': pinned,
+           'checker_node': ({k: cn.get(k) for k in ('executable', 'realpath', 'sha256', 'pinned_sha256', 'version')} if cn else None)}
+    out['all_checked_here_met'] = bool(status == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and out['provenance_result'] == 'PASS'
+                                       and out['formatting_checked'] and pinned)
+    out['note'] = ('CPS evidence needs all of these (README "Conditions of use"): status PASS; provenance checked with result PASS; '
+                   'formatting checked (a run with --no-formatting is not CPS evidence); the checker node pinned by --checker-node '
+                   'and --checker-node-sha256 from the admission record (pinned_checker_node). all_checked_here_met says whether '
+                   'they hold. Not checked here: that --carrier is the frozen route carrier (expected_provenance.carrier_sha256 '
+                   'against the route convert receipt or the freeze record), and the visual QA.')
+    return out
 
 
 def dump(obj):
@@ -918,23 +1140,40 @@ def main(argv=None):
     ap.add_argument('--no-formatting', action='store_true')
     ap.add_argument('--carrier', help='the input carrier: check the provenance of EXPECTED_SAVED_VALUES.json (needs --writer-dir)')
     ap.add_argument('--writer-dir', help='the archived writer directory (needs --carrier)')
-    ap.add_argument('--node', default='node')
+    ap.add_argument('--checker-node', help='required for CPS evidence: absolute path of the checker\'s node binary (with '
+                                           '--checker-node-sha256); every node call of the provenance check runs it')
+    ap.add_argument('--checker-node-sha256', help='the sha256 of the checker node binary, from the admission record')
+    ap.add_argument('--node', help='unpinned node for the provenance check (default: node from PATH); not CPS evidence')
     a = ap.parse_args(argv)
     if bool(a.carrier) != bool(a.writer_dir):
         ap.error('--carrier and --writer-dir go together')
+    if bool(a.checker_node) != bool(a.checker_node_sha256):
+        ap.error('--checker-node and --checker-node-sha256 go together')
+    if a.checker_node and a.node:
+        ap.error('--checker-node and --node exclude each other')
+    if a.checker_node and not a.carrier:
+        ap.error('--checker-node pins the node of the provenance check: it needs --carrier and --writer-dir')
+    if a.checker_node and not os.path.isabs(a.checker_node):
+        ap.error('--checker-node must be an absolute path')
+    pin = a.checker_node_sha256.lower() if a.checker_node_sha256 else None
+    if pin is not None and not SHA256_RE.fullmatch(pin):
+        ap.error('--checker-node-sha256 must be 64 hexadecimal digits')
     out_dir = Path(a.output_dir).resolve(strict=True)
     carrier = Path(a.carrier).resolve(strict=True) if a.carrier else None
     writer_dir = Path(a.writer_dir).absolute() if a.writer_dir else None
     report_path = Path(a.report) if a.report else out_dir / 'SAVED_QA.json'
     before = sha256((out_dir / XLSX_NAME).read_bytes())
     try:
-        rep = run_qa(out_dir, formatting=not a.no_formatting, carrier=carrier, writer_dir=writer_dir, node=a.node)
+        rep = run_qa(out_dir, formatting=not a.no_formatting, carrier=carrier, writer_dir=writer_dir,
+                     node=a.checker_node or a.node or 'node', checker_node_sha256=pin)
     except Exception as e:                      # noqa: BLE001 - never crash without a report
         rep = {'schema': 'cps.export.saved-qa.v1', 'tool': VERSION, 'status': 'SAVED_QA_FAILED',
                'findings': {'qa_error': {'count': 1, 'first': [repr(e)[:1000]]}}, 'totals': {'value_check_failures': 1}}
     if sha256((out_dir / XLSX_NAME).read_bytes()) != before:
         rep['status'] = 'SAVED_QA_FAILED'
         rep.setdefault('findings', {})['workbook_changed_during_qa'] = {'count': 1}
+        if isinstance(rep.get('cps_evidence_preconditions'), dict):
+            rep['cps_evidence_preconditions']['all_checked_here_met'] = False
     with open(report_path, 'xb') as f:
         f.write(dump(rep))
     print(json.dumps({'status': rep['status'], 'report': str(report_path), **rep['totals']}, ensure_ascii=False))

@@ -10,14 +10,14 @@
     "path": "tools/cps046b_route.py",
     "version": "cps046g-route.v4.3"
   },
-  "utf8_bytes": 441929,
+  "utf8_bytes": 472553,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 18478,
-      "sha256": "7e1182efe34af3c97169801198d8bee850d1129753746ce2dd7fbd8c6bc1ab3b"
+      "bytes": 21503,
+      "sha256": "51cc8b442f26811ee63e6ffe6027c158ba9821601b1bc8985adf7c879046e021"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -26,18 +26,18 @@
     },
     {
       "path": "resources/EXAMPLE_INVENTORY.json",
-      "bytes": 79119,
-      "sha256": "8645ac9ea63fb8b293c0f0ce9194354512d4abd5416310fc6a50bceca31d96b1"
+      "bytes": 79256,
+      "sha256": "1a51f3a7453dcda567bcc412a942704cd092fbfe6a3975767b0dde34f1e0f3fb"
     },
     {
       "path": "resources/EXAMPLE_RESPONSE.json",
-      "bytes": 42353,
-      "sha256": "c21f0d78526f2ec30234e32770397c2f4a4d9025f365ba944ed9efb1fe52df97"
+      "bytes": 42704,
+      "sha256": "3407d6461b544dbaf1b9697ba06ae0ab458947ab3d4d8758db9e9ee3bf2da98c"
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 60980,
-      "sha256": "f3a139f0b04ef48a4bf716c15a0eb9e0f67dd355577554d52345bf7da7e2792a"
+      "bytes": 69404,
+      "sha256": "a3b1e2130f61e5bb9e7c755827212634e21f3c988c200e57672f0eb50c860069"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -51,13 +51,13 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 19900,
-      "sha256": "d46a5bfd0764e876bda6b40b9a5cfab3cff0f09470bd519a27d657d8de8a6442"
+      "bytes": 20730,
+      "sha256": "a1942a83dbd14e670240b7e6a5a4c54eb5b0c7cb2537a29247e8f4d29936f04b"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
-      "bytes": 10219,
-      "sha256": "9f3ef9f6081405ac76085ecaf830ce5013a731f64526fefd33b5decb6ea92274"
+      "bytes": 10933,
+      "sha256": "ec13f31e5406604d6feaaab5600182be6878d0c1fbaaf0db3d44cd2e21b4d34e"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
@@ -76,13 +76,13 @@
     },
     {
       "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 25211,
-      "sha256": "02b5ade579cd3732fb944b693c0b96f2f3d23c69a717c0180ceb48abb81797b0"
+      "bytes": 26026,
+      "sha256": "479ba0b750c199b2676b22356f453d37dbb01bdca0862cf7c1be276d8d93a660"
     },
     {
       "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 38582,
-      "sha256": "c7902b7e8874b9c16e3b94e7a462d462d0cc1bfaf46b25ab2aa57af40c845531"
+      "bytes": 53131,
+      "sha256": "c3193169598658032e95ddd5b865163e71a28230e0328dd07ace4453b08500f1"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
@@ -91,8 +91,8 @@
     },
     {
       "path": "tools/cps046b_route.py",
-      "bytes": 84054,
-      "sha256": "bd1568a43ef730e15449945cf5cdee48ce733236a8f9b592d1a3a75c131cfd49"
+      "bytes": 85833,
+      "sha256": "ba8414a063e475aa8a28d348e768361c287ba25739061282b787de55baf1441e"
     }
   ]
 }

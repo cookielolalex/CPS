@@ -45,8 +45,14 @@ harness/make_scoped_inventory.py writes from a frozen SCOPE_DECISION.json:
   (b) no item, group or component link may cite a cell of the bill sheet on a row below end_row
       (R59_ROW_BELOW_END_ROW, invalid; the end row itself is not checked here);
   (c) a warning R59_LINKED_ANALYSIS_OUT_OF_SCOPE when the fact records linked analysis blocks on an
-      out-of-scope sheet (their parents are priced or not estimated, so R51 makes no rows of them);
-  (d) check, convert and check-inventory report scope: applied (fact present) or not_applied.
+      out-of-scope sheet (an analysis sheet is in scope only when every in-range bill line has no price and no
+      status; otherwise a separate analysis sheet lies outside the quoted range, so R51 makes no rows of its blocks);
+  (d) check, convert and check-inventory report scope: applied (fact present) or not_applied;
+  (e) no reference list of the response may cite context:scope: an item's proofs (any of the 17 fields), raw
+      selections and anchors, a group's anchor, name and specification refs, and a component link's refs and basis
+      cells (R59_SCOPE_FACT_CITED, invalid; R59 item 7: the fact is never evidence). The existing codes for such a
+      reference (UNKNOWN_CELL_REF where only cells are allowed, CONTEXT_ONLY_PROOF_UNREPRESENTABLE, R48_JOB_INPUT_REF)
+      are still reported beside it.
   Without context:scope every violation, warning, exit status, carrier and census ledger is that of v4.2;
   the outputs differ only in the version string (the reports' route field and the carrier's
   metadata.adapter) and the added report field scope: not_applied. The route tests compare v4.3 with
@@ -812,9 +818,11 @@ def scope_fact(inv, rep):
               if not s['in_scope'] and s['linked_analysis_blocks']]
     if linked:
         rep.warn('R59_LINKED_ANALYSIS_OUT_OF_SCOPE', where, {'sheets': linked,
-                 'note': 'the scope fact records analysis blocks linked to in-range bill lines on an out-of-scope sheet. Their parent lines '
-                         'are priced or not estimated, so R51 makes no rows of them and, on a scoped packet, no analysis_component items '
-                         'are written (FIELD_ROLES R59). The parent lines follow R50 as usual.'})
+                 'note': 'the scope fact records analysis blocks linked to in-range bill lines on an out-of-scope sheet. An analysis '
+                         'sheet is in scope only when every in-range bill line has no price and no status; otherwise a separate '
+                         'analysis sheet lies outside the quoted range (R51, A26), so its blocks give no rows and, on a scoped packet, '
+                         'no analysis_component items are written (FIELD_ROLES R59). A priced or not-estimated parent line follows '
+                         'R50 as usual; a parent line with no price and no status is excluded_supply (reason per R45).'})
     return d
 
 
@@ -946,6 +954,12 @@ def _check(inv, resp_raw, rep):
     policy = policy_state(inv) == 'applied'       # v4.2 R48/R56 policy checks
     check_job_facts(inv, rep)
     scope = scope_fact(inv, rep)                  # v4.3 R59 checks (a), (c); None without context:scope
+    scope_present = SCOPE_REF in inv.context      # v4.3 R59 check (e), also when the fact itself is defective
+
+    def no_scope_ref(v, where):
+        if scope_present and isinstance(v, list) and SCOPE_REF in v:
+            rep.bad('R59_SCOPE_FACT_CITED', where, {'ref': SCOPE_REF,
+                    'action': 'context:scope is never evidence (FIELD_ROLES R59 item 7): remove it from this reference list'})
     for k in ('groups', 'items', 'component_links', 'source_roles', 'limitations'):
         if not isinstance(r[k], list):
             rep.bad('ARRAY_REQUIRED', k)
@@ -982,6 +996,8 @@ def _check(inv, resp_raw, rep):
                 writer_text(g[k], f'{w}.{k}', rep, allow_blank=True, check_formula=False)
         if g['relationship'] not in GROUP_RELATIONS:
             rep.bad('GROUP_RELATIONSHIP', w + '.relationship', list(GROUP_RELATIONS))
+        for k in ('anchor_refs', 'name_refs', 'specification_refs'):
+            no_scope_ref(g[k], f'{w}.{k}')
         anchors = ref_list(g['anchor_refs'], w + '.anchor_refs', rep, inv, min_items=1)
         names = ref_list(g['name_refs'], w + '.name_refs', rep, inv)
         specs = ref_list(g['specification_refs'], w + '.specification_refs', rep, inv)
@@ -1053,6 +1069,7 @@ def _check(inv, resp_raw, rep):
         # (NULL_PROOF_REQUIRED below); v4 rejected this with NULL_C_REQUIRES_HELD.
         if vals[2] is None and it['status'] == 'research_draft':
             r57.append(iid)
+        no_scope_ref(it['anchor_refs'], w + '.anchor_refs')
         anchors = ref_list(it['anchor_refs'], w + '.anchor_refs', rep, inv, min_items=1)
         for x in anchors:
             use(x, f'{iid}.anchor')
@@ -1069,6 +1086,7 @@ def _check(inv, resp_raw, rep):
                 sel = rawsel[k]
                 if not exact_keys(sel, ('refs', 'reason_if_empty'), sw, rep):
                     continue
+                no_scope_ref(sel['refs'], sw + '.refs')
                 refs = ref_list(sel['refs'], sw + '.refs', rep, inv)
                 raw_cells[k] = refs
                 if k in SINGLE_RAW and len(sel['refs']) > 1:
@@ -1112,6 +1130,8 @@ def _check(inv, resp_raw, rep):
             continue
         for j, col in enumerate(COLS):
             v, p, vw, pw = vals[j], proofs[col], f'{w}.values.{col}', f'{w}.proofs.{col}'
+            if isinstance(p, dict):
+                no_scope_ref(p.get('refs'), pw + '.refs')
             if v is None:
                 if not (isinstance(p, dict) and set(p) == {'reason'}):
                     rep.bad('NULL_PROOF_REQUIRED', pw)
@@ -1229,6 +1249,9 @@ def _check(inv, resp_raw, rep):
         if not exact_keys(lk, ('component_id', 'parent_id', 'status', 'basis_quantity', 'basis_raw_ref',
                                'basis_unit_ref', 'refs', 'reason'), w, rep):
             continue
+        no_scope_ref(lk['refs'], w + '.refs')
+        for k in ('basis_raw_ref', 'basis_unit_ref'):
+            no_scope_ref([lk[k]], f'{w}.{k}')
         cid = lk['component_id']
         if not isinstance(cid, str) or cid not in component_ids:
             rep.bad('LINK_COMPONENT_UNKNOWN', w)

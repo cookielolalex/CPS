@@ -23,7 +23,9 @@ only, so the fixtures come in two kinds:
 Route v4.3 (candidate 046g, FIELD_ROLES R59) adds scoped packets: fixture_inventory_scoped.json is an invented
 材料清單 job packet whose workbook has four sheets, of which only the bill sheet (index 2) is in scope; it carries
 context:scope (end row 7, one linked analysis block on the scoped-out analysis sheet). Variants: no linked block (no
-warning), end row 6 (the boundary: row 6 is cited and passes) and one v43 mutation per new check. The scope-stage tests
+warning), end row 6 (the boundary: row 6 is cited and passes) and one v43 mutation per new check; 046g pass 2 adds the
+R59_SCOPE_FACT_CITED mutations (context:scope cited in a proof, raw selection, anchor or group) and two controls on the
+job packet without the fact (noscope_*), which keep their v4.2 codes. The scope-stage tests
 (run_scope_stage_tests.py) import SCOPED_BILL, scoped_job_facts and scoped_response from this module.
 """
 import copy, hashlib, json, sys
@@ -546,12 +548,15 @@ def mutations(base):
 # ---------------------------------------------------------------- route v4.3 (FIELD_ROLES R59): scoped packets, invented
 SCOPED_CASE = 'SCOPED01'
 SB = '示例材料清單'
+# the reasons are those scope_tool.py (v2) writes; the analysis sheet's ends with its one linked block, of a priced parent
+SCOPED_ANALYSIS_OUT = ('analysis: not every in-range bill line has no price and no status, so R51 takes no rows from this sheet; '
+                       'a separate analysis sheet lies outside the quoted range (R49, R51, A26)')
 SCOPED_SHEETS = [   # index, name, role, rows, columns, content cells (out-of-scope sheets: invented; bill: computed), reason
     (1, '示例總表', 'summary', 12, 4, 20, 'summary: never yields rows (R49)'),
     (2, SB, 'bill', 10, 7, None, 'bill: the single BILL1 candidate; rows come from this sheet (R49)'),
     (3, '示例單價分析', 'analysis', 400, 7, 2500,
-     'analysis: no in-range bill line with no price and no status links a block here; R51 not triggered; 1 linked block(s) belong to '
-     'priced or not-estimated parents, whose components are not rows and are not written on a scoped packet (R51, R59)'),
+     SCOPED_ANALYSIS_OUT + '; 1 linked block(s): 1 of priced or not-estimated parents (not 未填 rows, not written on a scoped packet), '
+     '0 of parents with no price and no status (those lines are excluded_supply); none gives rows (R51, R59)'),
     (4, '示例資源統計', 'resource_statistics', 120, 10, 600, 'resource statistics: source check only, never yields rows (guideline section 3)'),
 ]
 SCOPED_BILL = {
@@ -621,7 +626,7 @@ def scope_payload(end_row=7, linked=1, bill_content=None, **over):
     for idx, name, role, rows, cols, cc, reason in SCOPED_SHEETS:
         sheets.append({'index': idx, 'name': name, 'role': role, 'visibility': 'visible', 'rows': rows, 'columns': cols,
                        'content_cells': bill_content if role == 'bill' else cc, 'in_scope': role == 'bill',
-                       'reason': reason if (role != 'analysis' or linked) else 'analysis: no in-range bill line with no price and no status links a block here; R51 not triggered',
+                       'reason': reason if (role != 'analysis' or linked) else SCOPED_ANALYSIS_OUT,
                        'linked_analysis_blocks': linked if role == 'analysis' else 0})
     h = lambda t: hashlib.sha256(t.encode('utf-8')).hexdigest()
     d = {'schema': 'cps.scope-fact.v1', 'rule': 'R59', 'bill_rule': 'BILL1.v1',
@@ -775,6 +780,26 @@ def scoped_fixtures(enc, index):
                             'name_refs': [], 'specification_refs': [], 'quantity_basis': 'one row', 'limitations': ['invented defect']})
         it(r, 'R001')['group_id'] = 'G1'
     resp_mut('v43_row_below_end_group', 'R59_ROW_BELOW_END_ROW', group_below)
+    # (e) 046g pass 2: context:scope is never evidence; every reference list that cites it is rejected (R59 item 7)
+    cited = 'R59_SCOPE_FACT_CITED'
+    resp_mut('v43_scope_cited_proof_with_cell', cited, lambda r: it(r, 'R001')['proofs']['D'].update(refs=[S + 'B3', 'context:scope']))
+    resp_mut('v43_scope_cited_proof_context_only', cited, lambda r: it(r, 'R002')['proofs'].update(
+        D=nn(['context:scope'], 'copied from the scope fact', 'invented defect')))
+    resp_mut('v43_scope_cited_job_input', cited, lambda r: it(r, 'R003')['proofs']['L'].update(refs=['context:case_identity', 'context:scope']))
+    resp_mut('v43_scope_cited_null_proof', cited, lambda r: it(r, 'R001')['proofs'].update(I={'reason': 'x', 'refs': ['context:scope']}))
+    resp_mut('v43_scope_cited_raw_description', cited,
+             lambda r: it(r, 'R001')['raw_refs'].update(description={'refs': [S + 'B3', 'context:scope'], 'reason_if_empty': None}))
+    resp_mut('v43_scope_cited_raw_remarks', cited,
+             lambda r: it(r, 'R002')['raw_refs'].update(remarks={'refs': ['context:scope'], 'reason_if_empty': None}))
+    resp_mut('v43_scope_cited_anchor', cited, lambda r: it(r, 'R003').update(anchor_refs=[S + 'B6', 'context:scope']))
+    def group_scope(r):
+        r['groups'].append({'id': 'G1', 'name': '示例', 'specification': None, 'relationship': 'physical_enclosure', 'anchor_refs': [S + 'A3'],
+                            'name_refs': ['context:scope'], 'specification_refs': [], 'quantity_basis': 'one row', 'limitations': []})
+        it(r, 'R001')['group_id'] = 'G1'
+    resp_mut('v43_scope_cited_group', cited, group_scope)
+    resp_mut('v43_scope_cited_component_link', cited, lambda r: r['component_links'].append(
+        {'component_id': 'C999', 'parent_id': 'R001', 'status': 'supported', 'basis_quantity': 1, 'basis_raw_ref': 'context:scope',
+         'basis_unit_ref': S + 'C3', 'refs': ['context:scope'], 'reason': 'invented defect'}))
     def inv_mut(name, code, **kw):
         _, vraw = build_scoped_inventory(**kw)
         (OUT / f'inv_{name}.json').write_bytes(vraw)
@@ -931,6 +956,10 @@ def main():
     jm('v42_J_company_name_mismatch', 'R56_J_COMPANY_NAME_MISMATCH',
        set_field('R004', 'J', '別的公司', nn([S + 'B8', 'context:company_name'], 'company name', 'enclosure row')))
     jm('v42_job_fact_missing', 'R48_JOB_INPUT_FACT_MISSING', lambda rr: None, inventory='inv_v42_no_case_identity.json')
+    # 046g pass 2 controls: without the fact, a citation of context:scope keeps its v4.2 codes (compared with v4.2 byte for byte)
+    jm('noscope_scope_ref_in_proof', 'UNKNOWN_CONTEXT_REF', lambda rr: ji(rr, 'R002')['proofs']['C']['refs'].append('context:scope'))
+    jm('noscope_scope_ref_in_raw', 'UNKNOWN_CELL_REF',
+       lambda rr: ji(rr, 'R002')['raw_refs'].update(remarks={'refs': ['cell:S1!G6', 'context:scope'], 'reason_if_empty': None}))
     def legacy_j_mismatch(r):          # the J/company-name check (v4.2) applies on every inventory
         rr = copy.deepcopy(r)
         set_field('R004', 'J', '別的公司', nn([S + 'B8', 'context:company_name'], 'company name', 'enclosure row'))(rr)

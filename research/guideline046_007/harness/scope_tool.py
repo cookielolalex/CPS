@@ -46,14 +46,18 @@ R51 conditions, computed on the full inventory (the route cannot see scoped-out 
   also without a leading M, from the line's non-name text cells), when its name equals the line's normalised text, or
   when its reference is an outline path (1.2.3) equal to the line's item number. A name-prefix match (both 8+
   characters) is reported as a flag only.
-  (i)  every in-range line is unpriced with no status: every analysis sheet is in scope;
-  (ii) some unpriced, no-status in-range line has a linked block on an analysis sheet: that sheet is in scope.
-  The study's option (iii) (any linked block) is not adopted: components under priced or not-estimated parents are not
-  未填 rows and are not scored, so on scoped packets they are not written (R59). Such blocks are counted per sheet as
-  linked_analysis_blocks, which the route warns about (R59_LINKED_ANALYSIS_OUT_OF_SCOPE).
+  An analysis sheet is in scope only when (i) every in-range line is unpriced with no status: R51 then takes the rows
+  from the analysis blocks, and every analysis sheet is in scope. Otherwise every analysis sheet is out of scope. The
+  first draft's condition (ii) (some unpriced, no-status in-range line has a linked block on the sheet) is dropped
+  (046g pass 2): under R51 a block on a separate analysis sheet lies outside the quoted range (SYNTHETIC_ALLOCATION_CASES A26), so
+  that line is excluded_supply and (ii) added census cells but never rows. The study's option (iii) (any linked block)
+  is not adopted either: components under priced or not-estimated parents are not 未填 rows and are not scored, so on
+  scoped packets they are not written (R59). Linked blocks on an out-of-scope sheet, whatever their parent's state, are
+  counted per sheet as linked_analysis_blocks, which the route warns about (R59_LINKED_ANALYSIS_OUT_OF_SCOPE); the
+  sheet's reason and the LINKED_BLOCKS_OUT_OF_SCOPE flag split them by parent state.
 Roles: bill (the BILL1 sheet), resource_statistics (a row with 工項代碼, 人工, 機具 and 材料), analysis (above), summary
 (a row with 項次, a name word, an amount word and no 單價), other. Summary, resource-statistics and other sheets are out
-of scope; an analysis sheet is in scope only under (i) or (ii).
+of scope; an analysis sheet is in scope only under (i).
 """
 import argparse, hashlib, importlib.util, json, re, sys
 from pathlib import Path
@@ -63,7 +67,7 @@ HERE = Path(__file__).resolve().parent
 PKG = HERE.parent / 'package'
 ROUTE = PKG / 'tools' / 'cps046b_route.py'
 FIELD_ROLES = PKG / 'resources' / 'FIELD_ROLES.md'
-TOOL_VERSION = 'cps046g-scope-tool.v1'
+TOOL_VERSION = 'cps046g-scope-tool.v2'      # v2 (046g pass 2): R51 condition (ii) dropped
 PROPOSAL_SCHEMA = 'cps.scope-proposal.v1'
 DIGEST_SCHEMA = 'cps.scope-digest.v1'
 NAME_WORDS = ('項目及說明', '名稱', '品名', '材料名稱')
@@ -86,8 +90,8 @@ DIGEST_COLS = 10
 REASONS = {
     'bill': 'bill: the single BILL1 candidate; rows come from this sheet (R49)',
     'analysis_i': 'analysis: every in-range bill line has no price and no status, so rows come from the analysis blocks (R51)',
-    'analysis_ii': 'analysis: an in-range bill line with no price and no status has a linked block on this sheet (R51)',
-    'analysis_out': 'analysis: no in-range bill line with no price and no status links a block here; R51 not triggered',
+    'analysis_out': ('analysis: not every in-range bill line has no price and no status, so R51 takes no rows from this sheet; '
+                     'a separate analysis sheet lies outside the quoted range (R49, R51, A26)'),
     'summary': 'summary: never yields rows (R49)',
     'resource_statistics': 'resource statistics: source check only, never yields rows (guideline section 3)',
     'other': 'other: neither the bill sheet nor an analysis sheet that R51 needs; never yields rows (R49)',
@@ -525,7 +529,7 @@ def propose(inv_raw, route):
         info = {'blocks': len(real), 'empty_frames': len(bks) - len(real), 'components': sum(x['components'] for x in real),
                 'links_by': {'code': 0, 'name': 0, 'outline_path': 0}, 'linked_blocks': 0,
                 'linked_blocks_by_parent_state': {k: 0 for k in ('priced', 'not_estimated', 'other_price_text', 'unpriced_no_status')},
-                'name_prefix_only_blocks': 0, 'condition_ii': False}
+                'name_prefix_only_blocks': 0, 'linked_blocks_of_unpriced_lines': 0}
         prefix_unpriced = 0
         for bk in real:
             found, prefix = links(bk, lines)
@@ -536,7 +540,7 @@ def propose(inv_raw, route):
                 for m in sorted({x for _, by in found for x in by}):
                     info['links_by'][m] += 1
                 if any(ln['state'] in unpriced for ln, _ in found):
-                    info['condition_ii'] = True
+                    info['linked_blocks_of_unpriced_lines'] += 1
             elif prefix:
                 info['name_prefix_only_blocks'] += 1
                 if any(ln['state'] in unpriced for ln in prefix):
@@ -556,13 +560,13 @@ def propose(inv_raw, route):
             in_scope, reason = True, REASONS['bill']
         elif role == 'analysis' and cond_i:
             in_scope, reason = True, REASONS['analysis_i']
-        elif role == 'analysis' and info['condition_ii']:
-            in_scope, reason = True, REASONS['analysis_ii']
         elif role == 'analysis':
             in_scope, reason = False, REASONS['analysis_out']
             if info['linked_blocks']:
-                reason += (f"; {info['linked_blocks']} linked block(s) belong to priced or not-estimated parents, whose components "
-                           'are not rows and are not written on a scoped packet (R51, R59)')
+                nu = info['linked_blocks_of_unpriced_lines']
+                reason += (f"; {info['linked_blocks']} linked block(s): {info['linked_blocks'] - nu} of priced or not-estimated parents "
+                           f"(not 未填 rows, not written on a scoped packet), {nu} of parents with no price and no status "
+                           '(those lines are excluded_supply); none gives rows (R51, R59)')
         else:
             in_scope, reason = False, REASONS[role]
         linked = info['linked_blocks'] if (info and not in_scope) else 0
@@ -587,7 +591,9 @@ def propose(inv_raw, route):
             if st:
                 flag(sh.index, 'OUT_OF_SCOPE_NOT_ESTIMATED_TEXT', cells=st)
             if linked:
-                flag(sh.index, 'LINKED_BLOCKS_OUT_OF_SCOPE', blocks=linked)
+                nu = info['linked_blocks_of_unpriced_lines']
+                flag(sh.index, 'LINKED_BLOCKS_OUT_OF_SCOPE', blocks=linked, of_priced_or_not_estimated_parents=linked - nu,
+                     of_parents_with_no_price_and_no_status=nu)
     b = b1[bill.index] if bill is not None else None
     proposal = {
         'schema': PROPOSAL_SCHEMA, 'tool': {'name': 'scope_tool.py', 'version': TOOL_VERSION},
@@ -603,7 +609,7 @@ def propose(inv_raw, route):
                  'end_row': b['end_row'] if b else None, 'end_cell': b['end_cell'] if b else None, 'first_item_row': first},
         'r51': {'in_range_lines': len(lines), 'by_state': {k: states.get(k, 0) for k in ('priced', 'not_estimated', 'other_price_text', 'unpriced_no_status')},
                 'condition_i_all_unpriced_no_status': cond_i,
-                'analysis_sheets': {str(i): x for i, x in analysis_info.items()}, 'option_iii_adopted': False},
+                'analysis_sheets': {str(i): x for i, x in analysis_info.items()}, 'condition_ii_adopted': False, 'option_iii_adopted': False},
         'sheets': out_sheets, 'flags': flags,
         'in_scope_content_cells': sum(s['content_cells'] for s in out_sheets if s['in_scope']) if applies else sum(s['content_cells'] for s in out_sheets),
     }
@@ -628,7 +634,8 @@ def propose(inv_raw, route):
         if sh.index in analysis_info:
             x = analysis_info[sh.index]
             rc['analysis_blocks'] = {k: x[k] for k in ('blocks', 'empty_frames', 'components', 'linked_blocks', 'links_by',
-                                                       'linked_blocks_by_parent_state', 'name_prefix_only_blocks')}
+                                                       'linked_blocks_by_parent_state', 'linked_blocks_of_unpriced_lines',
+                                                       'name_prefix_only_blocks')}
         dsheets.append(digest_sheet(sh, rc))
     digest = {'schema': DIGEST_SCHEMA, 'case_id': inv.case_id, 'full_inventory_sha256': inv.sha256,
               'tool': {'name': 'scope_tool.py', 'version': TOOL_VERSION},
