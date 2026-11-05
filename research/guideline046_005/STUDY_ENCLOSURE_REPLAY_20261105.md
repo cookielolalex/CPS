@@ -73,6 +73,19 @@ Reading choices the review text leaves open (each was also run as a variant, tab
   - 5 lines whose head is a category word missing from the glossary draft (lightning, grounding or level-meter families).
   - A reader applying B1 literally could leave the 3 lines out of the enclosure rows. R56's "houses devices" definition keeps them, but the text does not say so.
 
+## Confirmation under D1–D3 (delta review final wording)
+
+Same boundaries, same 65 rows. D1 (final tag definition), D2 (a category segment that names a box is the box segment unless a later segment names a box) and D3 (體 after 箱/盤 belongs to the box noun when text stands before it and 體 ends the segment or a non-Han character follows; a segment that is only 箱體/盤體 names none) replace the earlier reading choices and the replay-only 箱體 suggestion.
+
+| | A, all 65 | A, heading-derived (28) | A, line-derived (37) | B, all 65 |
+|---|---:|---:|---:|---:|
+| Revised rule, round-1 primary reading | 45/65 | 26/28 | 19/37 | 28/65 |
+| **Final wording D1–D3** | **47/65** | **26/28** | **21/37** | **28/65** |
+
+- **The cited 47/65 is confirmed.** Rows whose A or B value, outcome or A source differs from the 47/65 run: 0. The heading-derived set is the same 28 rows. The two rows lost in round 1 match again (D3), and no other row moves.
+- Invented checks: the 52 round-1 checks pass 52/52 under D1–D3. The reviewer's D1–D3 examples pass 57/57: tags and non-tags, S3 with IP/rating/dimension tokens, the D2 category-only line, and the D3 箱體/盤體 cases.
+- The two residual cases the reviewer named behave as stated but have no instance in these sources: a letter before 型 is a tag, and an unlisted device acronym in a later segment is read as a bare tag.
+
 ## Limits
 
 - This is a fit on the same cases the rule was written from, not a prediction. Denominators are the 65 rows of 15 cases. The 17 target-only and 5 old-template cases are not covered.
