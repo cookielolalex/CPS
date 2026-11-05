@@ -45,6 +45,16 @@ cross_check, expected_saved_values, matrices_sha256, sheets, writer, writer_file
 rerun receipt's (for a receipt that says v1: mode v1 and relaxations {"applied": false, "scanned": false}, which a v1
 run of a carrier without O13/R57 writes; finding receipt_claim_mismatch, naming the fields); expected_provenance records
 the rerun's relaxation classes and documented cells. Other receipt fields are the producer's claim, not evidence.
+v5 (writer v2.6, owner decisions O33-O34): the workbook file and main-sheet names are re-derived here from the receipt's
+deliverable.job_title (derive_deliverable, this module's own implementation of the writer's rule; without a job title the
+v2.5 names research-draft.xlsx and 未填研究草稿), never taken from the receipt: the workbook read is <output-dir>/<derived file>,
+its sheets must be the derived names in order, the receipt's deliverable fields and output_xlsx.file must equal the
+derivation, and no other .xlsx may be in the output directory (finding deliverable_name). EXPECTED_SAVED_VALUES.json keeps
+writer004's sheet names; each is compared with the workbook sheet the derived mapping names. xl/workbook.xml, the only part
+that varies with the sheet name, is checked against a pinned template with the XML-attribute-escaped derived sheet name
+substituted, byte for byte (finding pinned_template); the other 7 constant parts keep their sha256 pins (styles.xml re-pinned
+for O34). The provenance rerun gets --job-title=<the receipt's title> when it has one, and its receipt's deliverable is a
+compared claim. Formatting: G and H (單價, 複價) body cells have no fill, like every body cell (O34).
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
@@ -53,13 +63,13 @@ Usage
        [--checker-node /abs/node --checker-node-sha256 HEX | --node node]]
 Default report: <output-dir>/SAVED_QA.json (created; must not exist). Exit 0 only on PASS.
 """
-import argparse, copy, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile, zipfile
+import argparse, copy, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile, unicodedata, zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v4'
+VERSION = 'cps-export-saved-qa.v5'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -118,20 +128,107 @@ MAIN_PREFIX = '{%s}' % NS['m']
 # v4 (third review G1): the parts that are byte-constant in every writer output (openpyxl 3.1.5; docProps/core.xml holds
 # the writer's fixed 1980-01-01T00:00:00Z created/modified, docProps/app.xml the openpyxl version). Verified on every
 # output of the test suite (test g_pinned_parts_constant_in_every_output) and of the third review's runs.
+# v5 (writer v2.6): styles.xml re-pinned (O34: no G/H fill, so one fill and one cell format fewer); xl/workbook.xml holds the
+# main sheet's name (O33) and moved to PINNED_TEMPLATES. docProps/app.xml holds no sheet name (openpyxl 3.1.5 writes no
+# TitlesOfParts), so it keeps its v4 byte pin, the same bytes in titled and untitled outputs.
 PINNED_PARTS = {
     '[Content_Types].xml': 'd734b6624e76225b3efeebddad13bc1a2323d1cf0eaa639dee513d2249a6d5ef',
     '_rels/.rels': 'c545941ba36c15fcdce4ae4568c663f3ced1a2226ad5082d3fd66b178bfac11a',
     'docProps/app.xml': '209fca6b00afe72a5029754b94be5953d8f16d96f67130325566b9366ad4ccc5',
     'docProps/core.xml': 'c5757c5cc9ccb0c26118443a2f1e1c6ced3dc5c409fc0738cae5ef69aa8548b1',
-    'xl/workbook.xml': 'cb9bc2217b38cc95ee8c68f2e4c40a2282a048b7cfe9f69b27bba3615bd2f3ce',
     'xl/_rels/workbook.xml.rels': 'ab22e25bdbbd461cf03d0d9e971a0c4558219dbc10d9e46a68c419dee94b2a81',
-    'xl/styles.xml': 'a2c5f5524d5de7318734fbec8f38475a0591452d5dd5c45fc7711d0762b8edc0',
+    'xl/styles.xml': '1a5ff017aafeada8347ec417982f3decacce97bdab69cf504d588a61e863ea9c',
     'xl/theme/theme1.xml': 'd15e8ebf78ef7b9720839d7ae8fdc81a7df5bc24706d8e137df61a5683c358d9',
 }
+# v5 (O33): xl/workbook.xml must equal this template with MAIN_SHEET_TOKEN replaced by xml_attribute_escape(<derived main
+# sheet>), byte for byte. The template is the v4-pinned workbook.xml (cb9bc221...f3ce) with name="未填研究草稿" replaced by
+# the token; the template's own sha256 is pinned (the tests check both).
+MAIN_SHEET_TOKEN = '@@CPS_MAIN_SHEET@@'
+WORKBOOK_TEMPLATE = ('<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><workbookPr/>'
+                     '<workbookProtection/><bookViews>'
+                     '<workbookView visibility="visible" minimized="0" showHorizontalScroll="1" showVerticalScroll="1" showSheetTabs="1" tabRatio="600" firstSheet="0" activeTab="0" autoFilterDateGrouping="1"/>'
+                     '</bookViews><sheets>'
+                     '<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="@@CPS_MAIN_SHEET@@" sheetId="1" state="visible" r:id="rId1"/>'
+                     '<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="來源與審查" sheetId="2" state="visible" r:id="rId2"/>'
+                     '<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="組成參考" sheetId="3" state="visible" r:id="rId3"/>'
+                     '<sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="組成連結" sheetId="4" state="visible" r:id="rId4"/>'
+                     '</sheets><definedNames/><calcPr calcId="124519" fullCalcOnLoad="0"/></workbook>')
+PINNED_TEMPLATES = {
+    'xl/workbook.xml': {'template_sha256': '3b831f50f102d38062f2c4abe30ef190f8a755daa20f48fe36363afd7b31f13a',
+                        'token': MAIN_SHEET_TOKEN, 'substituted': 'the derived main sheet name, XML-attribute-escaped (xml_attribute_escape)'},
+}
+
+
+def xml_attribute_escape(name):
+    """How lxml (openpyxl 3.1.5 serialises workbook.xml with lxml, UTF-8) writes a sheet name in the double-quoted name attribute:
+    & < > " as &amp; &lt; &gt; &quot;; the apostrophe and every other character unchanged, as UTF-8. A derived name holds no
+    whitespace, control, surrogate or U+FFFE/U+FFFF character, so no character reference (&#9; &#10; &#13;) occurs."""
+    return name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+
+def template_part(part, main_sheet):
+    t = PINNED_TEMPLATES[part]
+    if part != 'xl/workbook.xml' or sha256(WORKBOOK_TEMPLATE.encode('utf-8')) != t['template_sha256'] or WORKBOOK_TEMPLATE.count(t['token']) != 1:
+        raise ValueError('pinned template integrity')
+    return WORKBOOK_TEMPLATE.replace(t['token'], xml_attribute_escape(main_sheet)).encode('utf-8')
+
+
+# v5 (writer v2.6, owner decision O33): the deliverable name, re-derived here from the receipt's job title. This is saved
+# QA's own implementation of the writer's rule (writer_portable.deliverable_record); the tests check that both give the same
+# record, or refuse with the same reason, on every test title and on random titles.
+PROFILE = 'owner_O33_O34'
+XLSX_SUFFIX_NAME = '(未填)'
+TITLE_WS_RE = re.compile(r'[\s\ufeff]')                  # str.isspace() characters and U+FEFF
+TITLE_DASH_RE = re.compile(r'([0-9]{7}[^-]{0,5})-')      # the first '-' among the 6 characters after the 7-digit case id
+TITLE_BAD_RE = re.compile('[\u0000-\u001f\u007f-\u009f\ud800-\udfff\ufffe\uffff]')   # Cc, Cs, U+FFFE, U+FFFF
+OOXML_ESCAPE_RE = re.compile(r'_x[0-9A-Fa-f]{4}_')
+FILE_FORBIDDEN_RE = re.compile(r'[\\/:*?"<>|]')           # Windows
+SHEET_FORBIDDEN_RE = re.compile(r'[:\\/?*\[\]]')          # Excel
+DELIVERABLE_FIELDS = ('profile', 'job_title', 'o33_naming_applied', 'normalized_title', 'dash_removed_at', 'name', 'xlsx_file',
+                      'main_sheet', 'main_sheet_cut', 'sheet_mapping', 'o34_price_columns_unshaded')
+
+
+class DeliverableNameError(Exception):
+    def __init__(self, reason, **detail):
+        super().__init__(reason)
+        self.reason, self.detail = reason, detail
+
+
+def derive_deliverable(title):
+    """O33: the workbook file name, the main sheet name and the EXPECTED -> workbook sheet mapping from a job title (None: the
+    v2.5 names). Raises DeliverableNameError(reason) where the writer refuses JOB_TITLE_INVALID with that reason."""
+    d = {'profile': PROFILE, 'job_title': title, 'o33_naming_applied': title is not None, 'normalized_title': None,
+         'dash_removed_at': None, 'name': None, 'xlsx_file': XLSX_NAME, 'main_sheet': SHEETS[0], 'main_sheet_cut': False}
+    if title is not None:
+        if not isinstance(title, str):
+            raise DeliverableNameError('NOT_A_STRING')
+        norm = TITLE_WS_RE.sub('', unicodedata.normalize('NFKC', title))
+        if not re.match(r'[0-9]{7}', norm):
+            raise DeliverableNameError('CASE_ID_REQUIRED', normalized_title=norm[:100])
+        if TITLE_BAD_RE.search(norm):
+            raise DeliverableNameError('UNREPRESENTABLE_CHARACTER', code_points=['U+%04X' % ord(c) for c in TITLE_BAD_RE.findall(norm)[:10]])
+        m = TITLE_DASH_RE.match(norm)
+        base = m.group(1) + norm[m.end():] if m else norm
+        name = base + XLSX_SUFFIX_NAME
+        xlsx_file = FILE_FORBIDDEN_RE.sub('-', name) + '.xlsx'
+        sheet_text = SHEET_FORBIDDEN_RE.sub('-', base)
+        keep = min(len(sheet_text), EXCEL['sheet_name_chars'])      # a code point is at least one UTF-16 unit
+        while utf16_len(sheet_text[:keep]) > EXCEL['sheet_name_chars'] - utf16_len(XLSX_SUFFIX_NAME):
+            keep -= 1
+        sheet = sheet_text[:keep] + XLSX_SUFFIX_NAME
+        if OOXML_ESCAPE_RE.search(sheet):
+            raise DeliverableNameError('LITERAL_OOXML_ESCAPE_SEQUENCE', main_sheet=sheet)
+        if len(xlsx_file.encode('utf-8')) > 255:
+            raise DeliverableNameError('FILE_NAME_TOO_LONG', utf8_bytes=len(xlsx_file.encode('utf-8')), limit=255)
+        d.update(normalized_title=norm, dash_removed_at=m.end() - 1 if m else None, name=name, xlsx_file=xlsx_file,
+                 main_sheet=sheet, main_sheet_cut=keep < len(sheet_text))
+    d['sheet_mapping'] = [{'expected_saved_values_sheet': n, 'workbook_sheet': d['main_sheet'] if n == SHEETS[0] else n} for n in SHEETS]
+    d['o34_price_columns_unshaded'] = True
+    return d
 # v4 (third review G3): the receipt fields compared with the rerun receipt. A v1 run of a carrier without O13/R57 takes the
 # same route as the v2 rerun and writes the same fields except mode and these relaxations.
 RECEIPT_CLAIM_FIELDS = ('mode', 'relaxations', 'cross_check', 'expected_saved_values', 'matrices_sha256', 'sheets', 'writer',
-                        'writer_files', 'status', 'admitted')
+                        'writer_files', 'status', 'admitted', 'deliverable')
 V1_RELAXATIONS = {'applied': False, 'scanned': False}
 SHA256_RE = re.compile(r'[0-9a-f]{64}')
 EXCEL = {'max_rows': 1048576, 'max_columns': 16384, 'cell_text_utf16_units': 32767, 'line_feeds_per_cell': 253,
@@ -301,9 +398,10 @@ def read_raw(path, F):
 
 
 # ------------------------------------------------------------------ structure (review S2)
-def check_structure(path, F):
+def check_structure(path, F, main_sheet=SHEETS[0]):
     """The workbook may hold only what the portable writer produces: no hidden content, no extra parts, no view or
-    format element that can hide or alter what a cell shows. Returns a small summary."""
+    format element that can hide or alter what a cell shows. main_sheet: the derived main sheet name (v5, O33), substituted
+    into the pinned workbook.xml template. Returns a small summary."""
     def bad(check, **kw):
         F.add(check, kw)
     with zipfile.ZipFile(path) as z:
@@ -325,6 +423,19 @@ def check_structure(path, F):
                         problem='differs from the bytes every writer output has')
         for n in sorted(set(PINNED_PARTS) - set(names)):
             bad('pinned_part', part=n, problem='missing', pinned=PINNED_PARTS[n])
+        # v5 (O33): the part that holds the main sheet's name equals its pinned template with the escaped derived name
+        for info in z.infolist():
+            if info.filename in PINNED_TEMPLATES:
+                want = template_part(info.filename, main_sheet)
+                got = z.read(info)
+                if got != want:
+                    k = next((i for i in range(min(len(got), len(want))) if got[i] != want[i]), min(len(got), len(want)))
+                    bad('pinned_template', part=info.filename, sha256=sha256(got), expected_sha256=sha256(want), main_sheet=main_sheet,
+                        first_difference_at=k, actual=got[max(0, k - 40):k + 60].decode('utf-8', 'replace'),
+                        expected=want[max(0, k - 40):k + 60].decode('utf-8', 'replace'),
+                        problem='differs from the pinned template with the escaped derived main sheet name substituted')
+        for n in sorted(set(PINNED_TEMPLATES) - set(names)):
+            bad('pinned_template', part=n, problem='missing')
         roots = {}
         for n in sorted(set(names)):
             if not (n.endswith('.xml') or n.endswith('.rels')):
@@ -413,7 +524,9 @@ def check_structure(path, F):
                 allowed = FONT0_CHILDREN if k == 0 else FONT_CHILDREN
                 if tag_name(font) != 'font' or any(x not in allowed for x in kids) or len(kids) != len(set(kids)):
                     bad('font_structure', font=k, element=tag_name(font), children=kids, allowed=list(allowed))
-    return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS), 'pinned_parts': dict(PINNED_PARTS)}
+    return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS), 'pinned_parts': dict(PINNED_PARTS),
+            'pinned_templates': {k: dict(v, main_sheet=main_sheet, expected_sha256=sha256(template_part(k, main_sheet)))
+                                 for k, v in PINNED_TEMPLATES.items()}}
 
 
 def number_text_ok(text):
@@ -652,7 +765,7 @@ def pinned_node_environment(node, writer_dir):
     return real, {'artifact_tool_resolved_path': cjs, 'artifact_tool_sha256': h, 'kept_variables': kept, 'removed_variables': removed}
 
 
-def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256=None):
+def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256=None, deliverable='untitled'):
     """v3 (second review F1(a), F2): the writer rerun (--mode v2) always runs and both EXPECTED_SAVED_VALUES.json and the
     xlsx are byte-compared, whatever the receipt's mode says. A receipt that says v1 also gets the writer004
     prepareMatrices comparison (run first). v4 (third review G2, G3): one node binary for every node call (resolve_node;
@@ -661,9 +774,14 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
     (compare_receipt_claims); the rerun's relaxation classes and documented cells recorded. The result is PASS;
     CHECKER_NODE_REFUSED or NODE_UNAVAILABLE when the node binary is refused (then no node call and no rerun is made);
     otherwise the first refusal code (UNKNOWN_MODE, NODE_ENVIRONMENT_REFUSED, WRITER004_REFUSED, WRITER_RERUN_FAILED,
-    CHECKER_NODE_REFUSED for a pinned binary changed during the check), or FAILED (also for a receipt_claim_mismatch)."""
+    CHECKER_NODE_REFUSED for a pinned binary changed during the check), or FAILED (also for a receipt_claim_mismatch).
+    v5 (O33): deliverable is saved QA's own derivation from the receipt's job title (derive_deliverable; None when the title
+    cannot be derived: then no rerun is made, JOB_TITLE_INVALID). The rerun gets --job-title=<that title> when there is one, and
+    its workbook is read under the derived file name."""
     def bad(**kw):
         F.add('provenance', kw)
+    if deliverable == 'untitled':
+        deliverable = derive_deliverable(None)
     codes = []
     rec = {'checked': True, 'carrier': str(carrier), 'writer_dir': str(writer_dir)}
     raw = carrier.read_bytes()
@@ -681,7 +799,8 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
             bad(check='unknown receipt mode', mode=mode)
             codes.append('UNKNOWN_MODE')
     rec['receipt_mode'] = mode
-    rec['method'] = ('writer_portable.py --mode v2 rerun into a temporary directory, whatever the receipt mode says; '
+    rec['method'] = ('writer_portable.py --mode v2 rerun into a temporary directory, whatever the receipt mode says, with '
+                     '--job-title=<the receipt\'s job title> when it has one (v5, O33; its file and sheet names re-derived here); '
                      'EXPECTED_SAVED_VALUES.json and the xlsx byte-compared (builds are reproducible; v2 gives the v1 bytes for a '
                      'carrier without O13/R57)' + ('; receipt mode v1: also writer004_matrices.mjs (writer004 prepareMatrices on the '
                                                    'carrier) byte-compared with EXPECTED_SAVED_VALUES.json' if mode == 'v1' else ''))
@@ -723,12 +842,23 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
                 rec['writer004_expected_byte_identical'] = out == ebytes
                 if out != ebytes:
                     bad(check='EXPECTED_SAVED_VALUES.json differs from writer004 prepareMatrices on the carrier')
+    title = deliverable.get('job_title') if deliverable is not None else None
+    rec['rerun_job_title'] = title
+    rec['rerun_xlsx_file'] = deliverable.get('xlsx_file') if deliverable is not None else None
     with tempfile.TemporaryDirectory(prefix='cps_saved_qa_rerun_') as td:
         dest = Path(td) / 'rerun'
-        p = subprocess.run([sys.executable, '-I', '-B', str(WRITER), '--carrier', str(carrier), '--out', str(dest),
-                            '--writer-dir', str(writer_dir), '--node', node, '--mode', 'v2'], capture_output=True, timeout=1800)
         rec['writer_portable.py_sha256'] = sha256(WRITER.read_bytes())
-        if p.returncode != 0:
+        if deliverable is None:
+            p = None
+            bad(check='writer rerun not made: the job title in WRITER_RECEIPT.json cannot be derived (finding deliverable_name)')
+            codes.append('JOB_TITLE_INVALID')
+        else:
+            p = subprocess.run([sys.executable, '-I', '-B', str(WRITER), '--carrier', str(carrier), '--out', str(dest),
+                                '--writer-dir', str(writer_dir), '--node', node, '--mode', 'v2']
+                               + (['--job-title=' + title] if title is not None else []), capture_output=True, timeout=1800)
+        if p is None:
+            e2 = x2 = r2 = None
+        elif p.returncode != 0:
             err = p.stderr.decode('utf-8', 'replace')
             try:
                 ref = json.loads(err.strip().splitlines()[-1])
@@ -739,8 +869,12 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
             codes.append('WRITER_RERUN_FAILED')
             e2 = x2 = r2 = None
         else:
-            e2, x2 = (dest / 'EXPECTED_SAVED_VALUES.json').read_bytes(), (dest / XLSX_NAME).read_bytes()
+            xp = dest / deliverable['xlsx_file']
+            e2, x2 = (dest / 'EXPECTED_SAVED_VALUES.json').read_bytes(), (xp.read_bytes() if xp.is_file() else None)
             r2 = json.loads((dest / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+            if x2 is None:
+                bad(check='the writer rerun wrote no workbook under the derived file name', file=deliverable['xlsx_file'],
+                    rerun_files=sorted(q.name for q in dest.iterdir()))
     if r2 is not None:
         rec['rerun_writer'] = r2.get('writer')
         rec['rerun_mode'] = r2.get('mode')
@@ -756,11 +890,11 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, chec
         if rn.get('realpath') != node or rn.get('sha256') != node_rec['sha256']:
             bad(check='the writer rerun receipt names another node binary than the checker node',
                 rerun_node={'realpath': rn.get('realpath'), 'sha256': rn.get('sha256')}, checker_node={'realpath': node, 'sha256': node_rec['sha256']})
-        rec['expected_byte_identical'], rec['xlsx_byte_identical'] = e2 == ebytes, x2 == xbytes
+        rec['expected_byte_identical'], rec['xlsx_byte_identical'] = e2 == ebytes, x2 is not None and x2 == xbytes
         if e2 != ebytes:
             bad(check='EXPECTED_SAVED_VALUES.json differs from the writer rerun on the carrier')
         if x2 != xbytes:
-            bad(check='research-draft.xlsx differs from the writer rerun on the carrier')
+            bad(check='the workbook differs from the writer rerun on the carrier', file=rec['rerun_xlsx_file'])
         if receipt is not None:
             rec['receipt_claims'] = compare_receipt_claims(receipt, r2, mode, F)
     if node_rec['pinned']:                       # the pinned file is unchanged after the last node call
@@ -792,8 +926,10 @@ def value_ok(want, got, dtype, reader):
     return False
 
 
-def compare_sheet(name, rows, cells, reader, F):
+def compare_sheet(name, rows, cells, reader, F, label=None):
+    """name: the EXPECTED_SAVED_VALUES.json (writer004) sheet name; label: the workbook sheet it maps to (v5, O33)."""
     ncols = SHEET_COLS.get(name)
+    label = name if label is None else label
     counts = {'rows': len(rows), 'columns': ncols, 'checked_cells': 0, 'nonempty_expected': 0,
               'strings': 0, 'numbers': 0, 'empty': 0}
     remaining = dict(cells)
@@ -806,12 +942,12 @@ def compare_sheet(name, rows, cells, reader, F):
             if want is not None:
                 counts['nonempty_expected'] += 1
             if not value_ok(want, got, dtype, reader):
-                F.add('value_type_mismatch', {'reader': reader, 'sheet': name, 'cell': f'{col_letters(j)}{i}',
+                F.add('value_type_mismatch', {'reader': reader, 'sheet': label, 'cell': f'{col_letters(j)}{i}',
                                               'expected_type': k, 'actual_type': kind(got), 'actual_cell_type': dtype,
                                               'expected': want, 'actual': got})
     for (r, c), (got, dtype) in sorted(remaining.items()):
         if got is not None or dtype in ('f', 'str', 'e'):
-            F.add('unexpected_populated_cell', {'reader': reader, 'sheet': name, 'cell': f'{col_letters(c)}{r}',
+            F.add('unexpected_populated_cell', {'reader': reader, 'sheet': label, 'cell': f'{col_letters(c)}{r}',
                                                 'actual': got, 'actual_cell_type': dtype})
     return counts
 
@@ -831,7 +967,7 @@ def check_limits(name, cells, F):
 
 
 def check_sheet_name(name, F):
-    if not name.strip() or len(name) > EXCEL['sheet_name_chars'] or re.search(r'[\[\]:*?/\\]', name) or name.startswith("'") or name.endswith("'"):
+    if not name.strip() or utf16_len(name) > EXCEL['sheet_name_chars'] or re.search(r'[\[\]:*?/\\]', name) or name.startswith("'") or name.endswith("'"):
         F.add('excel_limit', {'sheet': name, 'limit': 'sheet_name'})
 
 
@@ -841,8 +977,11 @@ def font_extras(font):
             ('font.underline', None, font.u), ('font.vertAlign', None, font.vertAlign))
 
 
-def check_formatting(wb, expected_rows, F):
-    """The writer004 formatSheet/main-sheet formatting as the portable writer expresses it."""
+def check_formatting(wb, expected_rows, F, mapping=None):
+    """The writer004 formatSheet/main-sheet formatting as the portable writer expresses it. v5: every body cell has no fill,
+    G and H (單價, 複價) of the main sheet included (O34; writer004 filled them #F1F3F5). mapping: EXPECTED sheet name ->
+    workbook sheet name (O33)."""
+    mapping = mapping or {}
     checked = 0
 
     def bad(sheet, cell, prop, want, got):
@@ -850,11 +989,12 @@ def check_formatting(wb, expected_rows, F):
 
     def rgb(color):
         return None if color is None else getattr(color, 'rgb', None)
-    for name in SHEETS:
-        if name not in wb.sheetnames:
+    for xname in SHEETS:
+        name = mapping.get(xname, xname)
+        if name not in wb.sheetnames or xname not in expected_rows:
             continue
         ws = wb[name]
-        ncols, nrows = SHEET_COLS[name], len(expected_rows[name])
+        ncols, nrows = SHEET_COLS[xname], len(expected_rows[xname])
         for c in range(1, ncols + 1):
             cell = ws.cell(row=1, column=c)
             a = cell.coordinate
@@ -870,19 +1010,17 @@ def check_formatting(wb, expected_rows, F):
                 cell = ws.cell(row=r, column=c)
                 a = cell.coordinate
                 checked += 1
-                main_num = name == SHEETS[0] and c in (6, 16, 17)
-                main_fill = name == SHEETS[0] and c in (7, 8)
+                main_num = xname == SHEETS[0] and c in (6, 16, 17)
+                price = xname == SHEETS[0] and c in (7, 8)          # O34: G and H have no fill, like every body cell
                 for prop, want, got in (('font.name', 'Arial', cell.font.name), ('font.size', 11, cell.font.sz), ('font.bold', False, bool(cell.font.b)),
                                         ('font.color', 'FF172033', rgb(cell.font.color)), ('align.vertical', 'top', cell.alignment.vertical),
                                         ('align.wrap', True, cell.alignment.wrap_text),
                                         ('align.horizontal', 'right' if main_num else None, cell.alignment.horizontal),
                                         ('number_format', 'General', cell.number_format),
-                                        ('fill.type', 'solid' if main_fill else None, cell.fill.fill_type)) + font_extras(cell.font):
+                                        ('fill.type.o34_price_column' if price else 'fill.type', None, cell.fill.fill_type)) + font_extras(cell.font):
                     if got != want:
                         bad(name, a, prop, want, got)
-                if main_fill and rgb(cell.fill.fgColor) != 'FFF1F3F5':
-                    bad(name, a, 'fill.color', 'FFF1F3F5', rgb(cell.fill.fgColor))
-        for j, w in enumerate(WIDTHS[name], start=1):
+        for j, w in enumerate(WIDTHS[xname], start=1):
             got = ws.column_dimensions[col_letters(j)].width
             if got != w:
                 bad(name, col_letters(j), 'column_width', w, got)
@@ -901,7 +1039,7 @@ def check_formatting(wb, expected_rows, F):
             if d.height is not None and d.height > EXCEL['row_height_points']:
                 F.add('excel_limit', {'sheet': name, 'row': r, 'limit': 'row_height_points', 'value': d.height})
         tab = rgb(ws.sheet_properties.tabColor)
-        want_tab = 'FF29445D' if name == SHEETS[0] else None
+        want_tab = 'FF29445D' if xname == SHEETS[0] else None
         if tab != want_tab:
             bad(name, None, 'tab_color', want_tab, tab)
     return checked
@@ -922,11 +1060,56 @@ def load_expected(ebytes, F):
         return None
 
 
+def resolve_deliverable(out_dir, receipt, F):
+    """v5 (O33): the workbook to read and its sheet names, re-derived from the receipt's deliverable.job_title with saved QA's
+    own derive_deliverable (never the receipt's file or sheet names). Findings (deliverable_name): a receipt without a
+    deliverable record, a job title that cannot be derived, receipt deliverable fields or output_xlsx.file that differ from
+    the derivation, no workbook under the derived file name, another .xlsx in the output directory. Returns (derived record
+    or None, the record whose names are used, report section); when the title cannot be derived the v2.5 names are used."""
+    def bad(**kw):
+        F.add('deliverable_name', kw)
+    dl = receipt.get('deliverable') if isinstance(receipt, dict) else None
+    title = dl.get('job_title') if isinstance(dl, dict) else None
+    if receipt is not None and not isinstance(dl, dict):
+        bad(check='WRITER_RECEIPT.json has no deliverable record (writer v2.6)')
+    try:
+        derived = derive_deliverable(title)
+    except DeliverableNameError as e:
+        bad(check='the job title in WRITER_RECEIPT.json cannot be derived', reason=e.reason, **e.detail)
+        derived = None
+    use = derived or derive_deliverable(None)
+    mismatched = []
+    if isinstance(dl, dict) and derived is not None:
+        mismatched = [k for k in DELIVERABLE_FIELDS if canonical([k in dl, dl.get(k)]) != canonical([True, derived[k]])]
+        if mismatched:
+            bad(check='WRITER_RECEIPT.json deliverable differs from the derivation from its job title', fields=mismatched,
+                detail={k: {'receipt': canonical(dl.get(k))[:300], 'derived': canonical(derived[k])[:300]} for k in mismatched})
+    receipt_file = (receipt.get('output_xlsx') or {}).get('file') if isinstance(receipt, dict) else None
+    if receipt is not None and receipt_file != use['xlsx_file']:
+        bad(check='WRITER_RECEIPT.json output_xlsx.file differs from the derived file name', receipt=str(receipt_file)[:300],
+            derived=use['xlsx_file'])
+    xlsx = out_dir / use['xlsx_file']
+    if not xlsx.is_file():
+        bad(check='no workbook under the derived file name', file=use['xlsx_file'])
+    others = sorted(q.name for q in out_dir.iterdir() if q.name.lower().endswith('.xlsx') and q.name != use['xlsx_file'])
+    if others:
+        bad(check='another workbook in the output directory', files=others[:20], derived=use['xlsx_file'])
+    section = {'job_title': title, 'derived_here': derived is not None, 'xlsx_file': use['xlsx_file'], 'main_sheet': use['main_sheet'],
+               'sheet_mapping': use['sheet_mapping'], 'receipt_fields_equal_derivation': bool(derived is not None and isinstance(dl, dict)
+                                                                                                and not mismatched),
+               'receipt_output_xlsx_file': receipt_file, 'derivation': (
+                   {k: derived[k] for k in ('normalized_title', 'dash_removed_at', 'name', 'main_sheet_cut')} if derived else None),
+               'note': ('File and sheet names re-derived here from the receipt\'s job title (saved QA\'s own implementation of the O33 '
+                        'rule). The job title itself is a per-job input like the carrier: whether it is the harness\'s title for this '
+                        'job is the operator\'s check, not made here.')}
+    return derived, use, section
+
+
 def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node', checker_node_sha256=None):
-    """checker_node_sha256 given: node is the --checker-node absolute path, pinned by that sha256 (third review G2)."""
-    xlsx = out_dir / XLSX_NAME
+    """checker_node_sha256 given: node is the --checker-node absolute path, pinned by that sha256 (third review G2).
+    v5 (O33): the workbook and its sheet names come from resolve_deliverable."""
     exp_path = out_dir / 'EXPECTED_SAVED_VALUES.json'
-    xbytes, ebytes = xlsx.read_bytes(), exp_path.read_bytes()
+    ebytes = exp_path.read_bytes()
     F = Findings()
     exp_sheets = load_expected(ebytes, F)
     receipt_path = out_dir / 'WRITER_RECEIPT.json'
@@ -941,29 +1124,34 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
         except (UnicodeDecodeError, ValueError) as e:
             F.add('integrity', {'check': 'WRITER_RECEIPT.json unreadable', 'detail': str(e)[:200]})
             receipt = None
+    derived, use, deliverable = resolve_deliverable(out_dir, receipt, F)
+    mapping = {m['expected_saved_values_sheet']: m['workbook_sheet'] for m in use['sheet_mapping']}
+    xlsx = out_dir / use['xlsx_file']
+    xbytes = xlsx.read_bytes() if xlsx.is_file() else None
     if receipt is not None:
-        if (receipt.get('output_xlsx') or {}).get('sha256') != sha256(xbytes):
+        if xbytes is not None and (receipt.get('output_xlsx') or {}).get('sha256') != sha256(xbytes):
             F.add('integrity', {'check': 'xlsx sha256 differs from WRITER_RECEIPT.json'})
         if (receipt.get('expected_saved_values') or {}).get('sha256') != sha256(ebytes):
             F.add('integrity', {'check': 'EXPECTED_SAVED_VALUES.json sha256 differs from WRITER_RECEIPT.json'})
 
     structure = None
-    try:
-        structure = check_structure(xlsx, F)
-    except Exception as e:                      # noqa: BLE001 - a malformed package is a finding, not a crash
-        F.add('reader_error', {'reader': 'structure', 'error': repr(e)[:300]})
+    if xbytes is not None:
+        try:
+            structure = check_structure(xlsx, F, use['main_sheet'])
+        except Exception as e:                  # noqa: BLE001 - a malformed package is a finding, not a crash
+            F.add('reader_error', {'reader': 'structure', 'error': repr(e)[:300]})
 
     provenance = {'checked': False, 'note': 'Not checked: run with --carrier and --writer-dir. Without them a consistent replacement of '
                                             'EXPECTED_SAVED_VALUES.json and the workbook (with or without WRITER_RECEIPT.json) is not detected.'}
     if carrier is not None:
         try:
-            provenance = check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256)
+            provenance = check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F, checker_node_sha256, derived)
         except Exception as e:                  # noqa: BLE001
             F.add('provenance', {'check': 'provenance check failed', 'error': repr(e)[:300]})
             provenance = {'checked': True, 'result': 'ERROR'}
 
     readers, per_reader, header_checks, raw, wb_f, fmt_checked = {}, {}, {}, None, None, None
-    if exp_sheets is not None:
+    if exp_sheets is not None and xbytes is not None:
         exp_rows = {s['name']: s['values'] for s in exp_sheets}
         if [s['name'] for s in exp_sheets] != SHEETS:
             F.add('expected_shape', {'check': 'sheet names/order', 'actual': [s['name'] for s in exp_sheets]})
@@ -990,18 +1178,22 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                 if reader == 'openpyxl_formulas':
                     wb_f = (wb, sheets)
                 readers[reader] = (order, {k: v['cells'] for k, v in sheets.items()})
+        want_order = [mapping.get(s['name'], s['name']) for s in exp_sheets]      # v5 (O33): the derived workbook names
         for reader, (order, cells_by_sheet) in readers.items():
-            if order != [s['name'] for s in exp_sheets]:
-                F.add('sheet_order', {'reader': reader, 'actual': order, 'expected': [s['name'] for s in exp_sheets]})
+            if order != want_order:
+                F.add('sheet_order', {'reader': reader, 'actual': order, 'expected': want_order})
             counts = []
             for s in exp_sheets:
-                cells = cells_by_sheet.get(s['name'], {})
-                counts.append(compare_sheet(s['name'], s['values'], cells, reader, F))
+                cells = cells_by_sheet.get(mapping.get(s['name'], s['name']), {})
+                counts.append(compare_sheet(s['name'], s['values'], cells, reader, F, mapping.get(s['name'], s['name'])))
             per_reader[reader] = counts
             if reader == 'raw_ooxml':
                 for name in order:
                     check_sheet_name(name, F)
-            main = cells_by_sheet.get(SHEETS[0], {})
+                if (order[:1] or [None])[0] != use['main_sheet']:
+                    F.add('deliverable_name', {'check': 'the workbook\'s first sheet is not the derived main sheet name',
+                                               'actual': (order[:1] or [None])[0], 'derived': use['main_sheet']})
+            main = cells_by_sheet.get(mapping[SHEETS[0]], {})
             row1 = [main.get((1, c), (None, None))[0] for c in range(1, 18)]
             header_checks[f'{reader}_main_row1_A_Q_equals_17_headers'] = row1 == HEADERS
             header_checks[f'{reader}_main_R1_empty'] = main.get((1, 18), (None, None))[0] is None
@@ -1034,7 +1226,7 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
 
         # readers agree with each other on every populated cell
         if len(readers) == 3:
-            for name in SHEETS:
+            for name in (mapping[x] for x in SHEETS):
                 a = {k: v[0] for k, v in readers['openpyxl_formulas'][1].get(name, {}).items() if v[0] is not None}
                 b = {k: v[0] for k, v in readers['openpyxl_data_only'][1].get(name, {}).items() if v[0] is not None}
                 c_ = {k: v[0] for k, v in readers['raw_ooxml'][1].get(name, {}).items() if v[0] is not None}
@@ -1048,7 +1240,7 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                 check_limits(name, cells, F)
         if formatting and wb_f is not None:
             try:
-                fmt_checked = check_formatting(wb_f[0], exp_rows, F)
+                fmt_checked = check_formatting(wb_f[0], exp_rows, F, mapping)
             except Exception as e:              # noqa: BLE001
                 F.add('reader_error', {'reader': 'formatting', 'error': repr(e)[:300]})
 
@@ -1063,7 +1255,8 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                     'expected_shape', 'integrity', 'reader_error', 'unknown_cell_type', 'unparsable_number',
                     'zip_parts', 'xml_structure', 'hidden_attribute', 'sheet_state', 'workbook_structure', 'worksheet_structure',
                     'whitespace_not_preserved', 'styles_structure', 'cell_value_children', 'number_text', 'duplicate_reference',
-                    'font_structure', 'pinned_part', 'element_namespace', 'provenance', 'receipt_claim_mismatch')
+                    'font_structure', 'pinned_part', 'element_namespace', 'provenance', 'receipt_claim_mismatch',
+                    'pinned_template', 'deliverable_name')
     unclassified = sorted(k for k in F.items if k not in value_checks and k != 'formatting')
     value_fail = sum(F.count(k) for k in value_checks) + sum(F.count(k) for k in unclassified)
     fmt_fail = F.count('formatting')
@@ -1071,9 +1264,11 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
     import openpyxl
     return {
         'schema': 'cps.export.saved-qa.v1', 'tool': VERSION, 'status': status,
-        'xlsx': {'file': xlsx.name, 'sha256': sha256(xbytes), 'bytes': len(xbytes)},
+        'xlsx': {'file': xlsx.name, 'sha256': sha256(xbytes) if xbytes is not None else None,
+                 'bytes': len(xbytes) if xbytes is not None else None},
         'expected_saved_values': {'file': exp_path.name, 'sha256': sha256(ebytes)},
         'writer_receipt_present': receipt is not None,
+        'deliverable': deliverable,
         'expected_provenance': provenance,
         'structure': structure,
         'readers': list(readers), 'sheet_order': raw['order'] if raw else None,
@@ -1087,7 +1282,8 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                                                                   'workbook_structure', 'worksheet_structure', 'whitespace_not_preserved',
                                                                   'styles_structure', 'unknown_cell_type', 'unparsable_number',
                                                                   'cell_value_children', 'number_text', 'duplicate_reference', 'font_structure',
-                                                                  'pinned_part', 'element_namespace')),
+                                                                  'pinned_part', 'element_namespace', 'pinned_template')),
+                   'deliverable_name_failures': F.count('deliverable_name'),
                    'provenance_failures': F.count('provenance'), 'receipt_claim_mismatches': F.count('receipt_claim_mismatch'),
                    'expected_provenance_checked': bool(provenance.get('checked')),
                    'formatting_failures': fmt_fail if formatting else None,
@@ -1101,27 +1297,31 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
                   '--writer-dir also the provenance of EXPECTED and of the xlsx from the carrier (a writer rerun) and the receipt fields '
                   'saved QA compares. Not source semantics, not what @oai/artifact-tool would have saved (L2-L5), not Excel display, '
                   'not visual QA.'),
-        'cps_evidence_preconditions': evidence_preconditions(status, provenance, formatting),
+        'cps_evidence_preconditions': evidence_preconditions(status, provenance, formatting, deliverable),
         'native_excel_validation': False, 'openpyxl': openpyxl.__version__,
     }
 
 
-def evidence_preconditions(status, provenance, formatting):
+def evidence_preconditions(status, provenance, formatting, deliverable=None):
     """README "Conditions of use": what this report can show of them. The carrier check against the route convert receipt
-    or the freeze record is the operator's, and visual QA is a separate reviewer's."""
+    or the freeze record is the operator's, the job-title check against the harness's per-job input too (v5, O33), and
+    visual QA is a separate reviewer's."""
     cn = provenance.get('checker_node') or {}
     pinned = bool(provenance.get('checked') and cn.get('pinned') and cn.get('sha256_verified')
                   and cn.get('sha256_after_check') == cn.get('sha256'))
     out = {'provenance_checked': bool(provenance.get('checked')), 'provenance_result': provenance.get('result'),
            'formatting_checked': bool(formatting), 'pinned_checker_node': pinned,
-           'checker_node': ({k: cn.get(k) for k in ('executable', 'realpath', 'sha256', 'pinned_sha256', 'version')} if cn else None)}
+           'checker_node': ({k: cn.get(k) for k in ('executable', 'realpath', 'sha256', 'pinned_sha256', 'version')} if cn else None),
+           'job_title': (deliverable or {}).get('job_title'), 'xlsx_file': (deliverable or {}).get('xlsx_file'),
+           'main_sheet': (deliverable or {}).get('main_sheet')}
     out['all_checked_here_met'] = bool(status == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and out['provenance_result'] == 'PASS'
                                        and out['formatting_checked'] and pinned)
     out['note'] = ('CPS evidence needs all of these (README "Conditions of use"): status PASS; provenance checked with result PASS; '
                    'formatting checked (a run with --no-formatting is not CPS evidence); the checker node pinned by --checker-node '
                    'and --checker-node-sha256 from the admission record (pinned_checker_node). all_checked_here_met says whether '
                    'they hold. Not checked here: that --carrier is the frozen route carrier (expected_provenance.carrier_sha256 '
-                   'against the route convert receipt or the freeze record), and the visual QA.')
+                   'against the route convert receipt or the freeze record), that job_title is the harness\'s per-job project '
+                   'folder title for this job (the file and sheet names are derived from it here), and the visual QA.')
     return out
 
 
@@ -1162,14 +1362,17 @@ def main(argv=None):
     carrier = Path(a.carrier).resolve(strict=True) if a.carrier else None
     writer_dir = Path(a.writer_dir).absolute() if a.writer_dir else None
     report_path = Path(a.report) if a.report else out_dir / 'SAVED_QA.json'
-    before = sha256((out_dir / XLSX_NAME).read_bytes())
+
+    def workbooks():                            # v5: every .xlsx of the output directory (the name is derived, O33)
+        return {q.name: sha256(q.read_bytes()) for q in sorted(out_dir.iterdir()) if q.is_file() and q.name.lower().endswith('.xlsx')}
+    before = workbooks()
     try:
         rep = run_qa(out_dir, formatting=not a.no_formatting, carrier=carrier, writer_dir=writer_dir,
                      node=a.checker_node or a.node or 'node', checker_node_sha256=pin)
     except Exception as e:                      # noqa: BLE001 - never crash without a report
         rep = {'schema': 'cps.export.saved-qa.v1', 'tool': VERSION, 'status': 'SAVED_QA_FAILED',
                'findings': {'qa_error': {'count': 1, 'first': [repr(e)[:1000]]}}, 'totals': {'value_check_failures': 1}}
-    if sha256((out_dir / XLSX_NAME).read_bytes()) != before:
+    if workbooks() != before:
         rep['status'] = 'SAVED_QA_FAILED'
         rep.setdefault('findings', {})['workbook_changed_during_qa'] = {'count': 1}
         if isinstance(rep.get('cps_evidence_preconditions'), dict):

@@ -28,6 +28,11 @@ Route
   process of the run executes that realpath. Recorded, not enforced: the writer cannot tell node from a wrapper that
   adds flags, so the record only shows which binary ran; saved_qa.py --checker-node/--checker-node-sha256 pins the
   checker's node.
+  Owner decisions O33-O34 (v2.6): with --job-title (the project folder title, a per-job input supplied by the harness, never
+  by the generator) the workbook is <name>.xlsx and the main sheet <name> (derive_deliverable); EXPECTED_SAVED_VALUES.json
+  keeps writer004's sheet names, and the receipt's deliverable.sheet_mapping maps them to the workbook's. Without
+  --job-title the names are the v2.5 ones (research-draft.xlsx, 未填研究草稿). G and H (單價, 複價) body cells are never
+  shaded (O34): they have the body style of the other columns.
 
 Mode v2 (candidate 046f carriers made by route v4.2, which keeps the route v4.1 relaxations unchanged;
 FIELD_ROLES R48, R52, R54, R57; O13, O16)
@@ -54,17 +59,17 @@ FIELD_ROLES R48, R52, R54, R57; O13, O16)
 
 Usage
   python3 -I -B writer_portable.py --carrier /abs/carrier.json --out /abs/new-dir \
-      --writer-dir /abs/dir-with-writer004.mjs [--node node] [--mode v1|v2]
-Outputs in --out (created; must not exist): research-draft.xlsx, EXPECTED_SAVED_VALUES.json,
+      --writer-dir /abs/dir-with-writer004.mjs [--node node] [--mode v1|v2] [--job-title "<project folder title>"]
+Outputs in --out (created; must not exist): research-draft.xlsx (with --job-title: <name>.xlsx), EXPECTED_SAVED_VALUES.json,
 WRITER_RECEIPT.json. A refusal creates nothing and prints a JSON refusal on stderr (exit 1).
 """
-import argparse, copy, datetime, hashlib, io, json, math, os, platform, re, shutil, subprocess, sys, tempfile, types, zipfile, zlib
+import argparse, copy, datetime, hashlib, io, json, math, os, platform, re, shutil, subprocess, sys, tempfile, types, unicodedata, zipfile, zlib
 from decimal import Decimal
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.5'
+VERSION = 'cps-export-writer-portable.v2.6'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -131,7 +136,7 @@ SHEET_ORDER = [SHEET_MAIN, SHEET_REVIEW, SHEET_COMPONENTS, SHEET_LINKS]   # writ
 WIDTHS_17 = [18, 30, 38, 48, 9, 12, 12, 12, 20, 18, 22, 18, 24, 24, 18, 12, 14]
 WIDTHS_LINKS = [24, 12, 24, 12, 12, 12, 65, 65]
 WIDTHS_REVIEW = [18, 23, 38, 38, 88, 62, 18]
-COLOR_TEXT, COLOR_HEADER_FILL, COLOR_HEADER_TEXT, COLOR_PRICE_FILL = '172033', '29445D', 'FFFFFF', 'F1F3F5'
+COLOR_TEXT, COLOR_HEADER_FILL, COLOR_HEADER_TEXT = '172033', '29445D', 'FFFFFF'
 FIXED_TIME = datetime.datetime(1980, 1, 1, 0, 0, 0)
 
 # JavaScript \s (and String.prototype.trim) whitespace: WhiteSpace + LineTerminator.
@@ -140,6 +145,69 @@ FORMULA_LIKE_RE = re.compile('^[' + re.escape(JS_WS) + ']*[=+@-]')       # write
 ARRAY_INDEX_RE = re.compile(r'(?:0|[1-9][0-9]*)', re.ASCII)
 OOXML_ESCAPE_RE = re.compile(r'_x[0-9A-Fa-f]{4}_')
 XML_ILLEGAL_RE = re.compile('[\u0000-\u0008\u000b\u000c\u000e-\u001f\ud800-\udfff\ufffe\uffff]')
+
+# Owner decisions O33-O34 (writer v2.6). O33: the deliverable name from the project folder title (--job-title, a per-job input
+# supplied by the harness). saved_qa.py re-derives it with its own implementation of the same rule (the tests check equality).
+PROFILE = 'owner_O33_O34'
+JOB_TITLE_SUFFIX = '(未填)'
+CASE_ID_RE = re.compile(r'[0-9]{7}')           # the leading 7-digit case id (ASCII digits after NFKC)
+CASE_ID_DIGITS, DASH_WINDOW = 7, 6              # the first '-' among the first 6 characters after the case id
+WINDOWS_FORBIDDEN = '\\/:*?"<>|'              # replaced by '-' in the file name
+EXCEL_SHEET_FORBIDDEN = ':\\/?*[]'            # replaced by '-' in the sheet name
+EXCEL_SHEET_NAME_MAX = 31                       # UTF-16 code units, suffix included
+FILE_NAME_MAX_BYTES = 255                       # one path component (UTF-8 bytes; NAME_MAX on Linux)
+O33_RULE = ('O33: name = the --job-title, NFKC-normalized, with every whitespace character removed (str.isspace() or U+FEFF), '
+            'which must then start with a 7-digit ASCII case id; the first "-" among the 6 characters after the case id is removed '
+            '(no other); "(未填)" is appended. File <name>.xlsx with \\ / : * ? " < > | replaced by "-". Main sheet <name> with '
+            ': \\ / ? * [ ] replaced by "-", the text before "(未填)" cut so that the sheet name has at most 31 UTF-16 code units '
+            '(whole code points only). Refused (JOB_TITLE_INVALID): no case id, a control, surrogate or U+FFFE/U+FFFF character, a '
+            'literal _xHHHH_ in the sheet name, or a file name longer than 255 UTF-8 bytes. Without --job-title: research-draft.xlsx '
+            'and 未填研究草稿 (v2.5).')
+O34_RULE = ('O34: G and H (單價, 複價) body cells of the main sheet are not shaded: they have the body style of the other columns '
+            '(Arial 11 #172033, top, wrap, no fill). Always in v2.6, with or without --job-title.')
+
+
+def title_whitespace(ch):
+    return ch.isspace() or ch == '\ufeff'
+
+
+def deliverable_record(title=None):
+    """O33 (v2.6): the workbook file name, the main sheet name and the EXPECTED -> workbook sheet mapping. title None: the v2.5
+    names. Raises Refused('JOB_TITLE_INVALID', 'usage', {'reason': ...})."""
+    def refuse(reason, **kw):
+        raise Refused('JOB_TITLE_INVALID', 'usage', dict(reason=reason, **kw))
+    rec = {'profile': PROFILE, 'job_title': title, 'o33_naming_applied': title is not None, 'normalized_title': None,
+           'dash_removed_at': None, 'name': None, 'xlsx_file': XLSX_NAME, 'main_sheet': SHEET_MAIN, 'main_sheet_cut': False}
+    if title is not None:
+        if not isinstance(title, str):
+            refuse('NOT_A_STRING')
+        norm = ''.join(ch for ch in unicodedata.normalize('NFKC', title) if not title_whitespace(ch))
+        if CASE_ID_RE.match(norm) is None:
+            refuse('CASE_ID_REQUIRED', normalized_title=norm[:100])
+        bad = [ch for ch in norm if unicodedata.category(ch) in ('Cc', 'Cs') or XML_ILLEGAL_RE.match(ch)]
+        if bad:
+            refuse('UNREPRESENTABLE_CHARACTER', code_points=['U+%04X' % ord(ch) for ch in bad[:10]])
+        k = norm.find('-', CASE_ID_DIGITS, CASE_ID_DIGITS + DASH_WINDOW)
+        base = norm if k < 0 else norm[:k] + norm[k + 1:]
+        name = base + JOB_TITLE_SUFFIX
+        xlsx_file = ''.join('-' if ch in WINDOWS_FORBIDDEN else ch for ch in name) + '.xlsx'
+        sheet_base = ''.join('-' if ch in EXCEL_SHEET_FORBIDDEN else ch for ch in base)
+        budget, cut = EXCEL_SHEET_NAME_MAX - js_len(JOB_TITLE_SUFFIX), ''
+        for ch in sheet_base:
+            if js_len(cut + ch) > budget:
+                break
+            cut += ch
+        sheet = cut + JOB_TITLE_SUFFIX
+        if OOXML_ESCAPE_RE.search(sheet):
+            refuse('LITERAL_OOXML_ESCAPE_SEQUENCE', main_sheet=sheet)
+        if len(xlsx_file.encode('utf-8')) > FILE_NAME_MAX_BYTES:
+            refuse('FILE_NAME_TOO_LONG', utf8_bytes=len(xlsx_file.encode('utf-8')), limit=FILE_NAME_MAX_BYTES)
+        rec.update(normalized_title=norm, dash_removed_at=None if k < 0 else k, name=name, xlsx_file=xlsx_file, main_sheet=sheet,
+                   main_sheet_cut=cut != sheet_base)
+    rec['sheet_mapping'] = [{'expected_saved_values_sheet': n, 'workbook_sheet': rec['main_sheet'] if n == SHEET_MAIN else n}
+                            for n in SHEET_ORDER]
+    rec['o34_price_columns_unshaded'] = True
+    return rec
 
 LIMITATIONS = [
     'NOT ADMITTED: research export route; requires an independent review before CPS may use it.',
@@ -169,7 +237,13 @@ LIMITATIONS = [
     'Node binary: node_environment.node records the realpath and sha256 of the executable every node process of this run '
     'executed. The writer records it and does not enforce it (a wrapper script that adds node flags is recorded as itself); '
     'saved_qa.py with --checker-node and --checker-node-sha256 pins the checker\'s node.',
+    'Owner decision O34 (v2.6): G and H (單價, 複價) body cells of the main sheet are not shaded; writer004 formatSheet filled '
+    'them #F1F3F5. This formatting deviates from writer004 on purpose; cell values and types are unchanged.',
 ]
+NAMING_LIMITATION = ('Owner decision O33 (v2.6): the workbook is <name>.xlsx and its main sheet <name> (deliverable in this receipt). '
+                     'EXPECTED_SAVED_VALUES.json keeps writer004\'s sheet name 未填研究草稿 for the main sheet '
+                     '(deliverable.sheet_mapping maps it), and the review sheet\'s JSON text (項目 rows, "sheet") names 未填研究草稿 '
+                     'as writer004\'s matrices do.')
 
 
 RELAXATION_LIMITATION = ('Route v4.1 relaxations (candidate 046f; route v4.2 keeps them unchanged): this carrier uses M/N job-input selection_evidence (O13, R48; '
@@ -456,12 +530,13 @@ def _format_sheet(ws, nrows, ncols, widths):
     ws.row_dimensions[1].height = 36
 
 
-def build_workbook(m, n_items):
+def build_workbook(m, n_items, main_sheet=SHEET_MAIN):
+    """main_sheet: the main sheet's name in the workbook (O33, v2.6; default the writer004 name). G and H are not shaded (O34)."""
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, PatternFill
+    from openpyxl.styles import Alignment
     wb = Workbook()
     wb.remove(wb.active)
-    ws = wb.create_sheet(SHEET_MAIN)
+    ws = wb.create_sheet(main_sheet)
     rs = wb.create_sheet(SHEET_REVIEW)
     ws.sheet_properties.tabColor = 'FF' + COLOR_HEADER_FILL
     cs = wb.create_sheet(SHEET_COMPONENTS)
@@ -480,10 +555,7 @@ def build_workbook(m, n_items):
             cell = ws.cell(row=r, column=j + 1)
             cell.number_format = 'General'
             cell.alignment = right
-    price_fill = PatternFill(fill_type='solid', fgColor='FF' + COLOR_PRICE_FILL)
-    for j in (6, 7):
-        for r in range(2, n_items + 2):
-            ws.cell(row=r, column=j + 1).fill = price_fill
+    # O34 (v2.6): G and H (單價, 複價) keep the body style of _format_sheet; writer004 filled them #F1F3F5
     wb.active = 0
     wb.calculation.fullCalcOnLoad = False          # no formulas; do not ask the application to recalculate
     wb.properties.creator = 'CPS writer_portable (openpyxl)'
@@ -823,10 +895,11 @@ def _first_difference(a, b):
 
 
 # ------------------------------------------------------------------ main build
-def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=ROUTE_V4_TOOL):
+def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=ROUTE_V4_TOOL, job_title=None):
     started = datetime.datetime.now(datetime.timezone.utc).isoformat()
     if mode not in ('v1', 'v2'):
         raise Refused('MODE_UNKNOWN', 'usage', mode)
+    deliverable = deliverable_record(job_title)            # O33 (v2.6); refused here, before anything is created
     for p, k in ((carrier_path, 'carrier'), (out_dir, 'out'), (writer_dir, 'writer_dir')):
         if not p.is_absolute():
             raise Refused('ABSOLUTE_CLI_PATH_REQUIRED', 'usage', k)
@@ -899,11 +972,11 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
     problems = portable_writability(m)
     if problems:
         raise Refused('PORTABLE_UNREPRESENTABLE', 'writability', {'count': len(problems), 'first': problems[:20]})
-    xlsx = save_workbook_bytes(build_workbook(m, len(carrier['items'])))
+    xlsx = save_workbook_bytes(build_workbook(m, len(carrier['items']), deliverable['main_sheet']))
 
     out_dir.mkdir(parents=False, exist_ok=False)
     try:
-        with open(out_dir / XLSX_NAME, 'xb') as f:
+        with open(out_dir / deliverable['xlsx_file'], 'xb') as f:
             f.write(xlsx)
         with open(out_dir / 'EXPECTED_SAVED_VALUES.json', 'xb') as f:
             f.write(expected)
@@ -916,9 +989,10 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         receipt = {
             'schema': 'cps.export.writer-receipt.v1', 'status': 'PORTABLE_ASSEMBLED_NOT_ADMITTED', 'writer': VERSION,
             'mode': mode, 'relaxations': relax,
+            'deliverable': dict(deliverable, rules={'o33': O33_RULE, 'o34': O34_RULE}),
             'admitted': False, 'required_review': 'Independent review of the portable writer before any CPS use.',
             'input_carrier': {'path': str(carrier_path), 'sha256': carrier_sha, 'bytes': len(raw)},
-            'output_xlsx': {'file': XLSX_NAME, 'sha256': sha256(xlsx), 'bytes': len(xlsx)},
+            'output_xlsx': {'file': deliverable['xlsx_file'], 'sha256': sha256(xlsx), 'bytes': len(xlsx)},
             'expected_saved_values': {'file': 'EXPECTED_SAVED_VALUES.json', 'sha256': sha256(expected),
                                       'identical_to_writer004_prepareMatrices_output': not relax['applied'],
                                       **({'identical_to_writer004_prepareMatrices_on_placeholder_copy_except_documented_cells': True}
@@ -937,7 +1011,8 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
                               'writer_portable.py_sha256': sha256(Path(__file__).read_bytes()),
                               'writer004_matrices.mjs_sha256': sha256(NODE_MATRICES.read_bytes())},
             'formulas_written': False, 'arithmetic': False, 'semantic_source_validation': False, 'native_excel_validation': False,
-            'limitations': LIMITATIONS + ([RELAXATION_LIMITATION] if relax['applied'] else []), 'started': started,
+            'limitations': LIMITATIONS + ([RELAXATION_LIMITATION] if relax['applied'] else [])
+                           + ([NAMING_LIMITATION] if deliverable['o33_naming_applied'] else []), 'started': started,
             'ended': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         with open(out_dir / 'WRITER_RECEIPT.json', 'x', encoding='utf-8') as f:
@@ -947,7 +1022,7 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
             f.write(json.dumps({'status': 'FAILED_PARTIAL_OUTPUT_PRESERVED', 'error': repr(e)[:2000]}, ensure_ascii=False, indent=2) + '\n')
         raise
     return {'status': receipt['status'], 'mode': mode, 'relaxations_applied': relax['applied'], 'out': str(out_dir),
-            'xlsx_sha256': receipt['output_xlsx']['sha256'],
+            'xlsx_file': deliverable['xlsx_file'], 'main_sheet': deliverable['main_sheet'], 'xlsx_sha256': receipt['output_xlsx']['sha256'],
             'expected_sha256': receipt['expected_saved_values']['sha256'], 'sheets': receipt['sheets']}
 
 
@@ -960,9 +1035,11 @@ def main(argv=None):
     ap.add_argument('--mode', default='v1', choices=('v1', 'v2'),
                     help='v2: candidate 046f carriers (route v4.2, with the v4.1 relaxations: M/N selection evidence, C-null research_draft); '
                          'v1: unchanged writer004 gate')
+    ap.add_argument('--job-title', help='O33 (v2.6): the project folder title, a per-job input supplied by the harness (never by the '
+                                        'generator); names the workbook <name>.xlsx and the main sheet <name>')
     a = ap.parse_args(argv)
     try:
-        res = build(Path(a.carrier), Path(a.out), Path(a.writer_dir), a.node, a.mode)
+        res = build(Path(a.carrier), Path(a.out), Path(a.writer_dir), a.node, a.mode, job_title=a.job_title)
     except Refused as e:
         sys.stderr.write(json.dumps({'status': 'REFUSED', 'code': e.code, 'stage': e.stage, 'detail': e.detail}, ensure_ascii=True) + '\n')
         return 1

@@ -32,10 +32,16 @@ Proves on invented carriers:
       --checker-node/--checker-node-sha256 refuses the wrapper's output (WRITER004_REFUSED) and never runs PATH's node;
       G3 the reviewer's p1 receipt edits, each compared receipt field edited on its own, fail with receipt_claim_mismatch
       naming the fields. Provenance runs use the pinned checker node (the node found in PATH, by realpath and sha256).
+  (k) writer v2.6, owner decisions O33-O34: the deliverable name derivation (dash removal, no dash, the cut to 31 with (未填)
+      kept, forbidden characters, NFKC and whitespace, refusals) gives the same record in the writer and in saved QA, also on
+      4,000 random titles; titled outputs differ from untitled ones only in the file name and xl/workbook.xml, which equals the
+      pinned template with the escaped derived name; saved QA passes them with provenance (the rerun gets --job-title); the
+      naming tampers K01-K13 fail as listed (K12, a consistent re-titling, passes: the job title is the operator's check);
+      G and H have the body style in every output (no #F1F3F5, also in the renders).
 Usage: python3 -I -B run_export_tests.py --writer-dir /abs/archived/writer --work /abs/new-dir [--skip-visual]
 Prints a JSON summary with passed and failed lists; exit 0 only if nothing failed.
 """
-import argparse, copy, hashlib, importlib.util, json, math, os, random, re, shlex, shutil, struct, subprocess, sys, zipfile
+import argparse, copy, hashlib, importlib.util, json, math, os, random, re, shlex, shutil, struct, subprocess, sys, unicodedata, zipfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -731,7 +737,8 @@ def main():
     reviewer22 = [t for t in tampers if t['group'] == 'reviewer'] + [t for t in tampers if t['name'].endswith(('_T21', '_T22'))]
     record('g_tamper_counts', code == 0 and len(reviewer22) == 22 and len([t for t in tampers if t['group'] == 'extra']) >= 16
            and sorted(t['name'][:3] for t in tampers if t['group'] == 'review2') == ['N01', 'N02', 'N03', 'N04', 'N05', 'N06', 'N07', 'N10', 'N11']
-           and sorted(t['name'][:3] for t in tampers if t['group'] == 'review3') == ['B01', 'B02', 'B03', 'B04', 'B05', 'B06'], err[-300:])
+           and sorted(t['name'][:3] for t in tampers if t['group'] == 'review3') == ['B01', 'B02', 'B03', 'B04', 'B05', 'B06']
+           and sorted(t['name'][:4] for t in tampers if t['group'] == 'o34') == ['O34a', 'O34b'], err[-300:])
     for t in tampers:
         d = Path(t['dir'])
         c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
@@ -1039,25 +1046,231 @@ def main():
         res[tag] = [c, rp.exists()]
     record('h_g2_checker_node_usage_errors', len(res) == 6 and all(v == [2, False] for v in res.values()), res)
 
+    # ------------------------------------------------ (k) writer v2.6: owner decisions O33 (deliverable naming) and O34 (G/H)
+    # The name derivation in the writer (deliverable_record) and saved QA's own (derive_deliverable) give the same record or the
+    # same refusal reason on every case and on random titles; titled outputs differ from untitled ones only in the file name and
+    # in xl/workbook.xml, which equals the pinned template with the escaped derived name; G and H have the body style everywhere.
+    def derive_both(title):
+        try:
+            w = ['ok', wp.deliverable_record(title)]
+        except wp.Refused as e:
+            w = ['refused', e.code, e.stage, (e.detail or {}).get('reason')]
+        try:
+            q = ['ok', sq.derive_deliverable(title)]
+        except sq.DeliverableNameError as e:
+            q = ['refused', 'JOB_TITLE_INVALID', 'usage', e.reason]
+        return w, q
+    T1, T2 = '1141002甲公司-乙案管三', '1141003乙公司-甲案'
+    T_LONG = '1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(11K+000~11K+725)'
+    T_SPECIAL = '1141002甲公司-乙&<>"\'|案，丙'
+    name_cases = {     # name: (title, xlsx file, main sheet, dash_removed_at, main_sheet_cut)
+        'dash_removed': (T1, '1141002甲公司乙案管三(未填).xlsx', '1141002甲公司乙案管三(未填)', 10, False),
+        'no_dash': ('1130204丙公司丁案', '1130204丙公司丁案(未填).xlsx', '1130204丙公司丁案(未填)', None, False),
+        'dash_6th_character_after_case_id_removed': ('1141002甲乙丙丁戊-己案', '1141002甲乙丙丁戊己案(未填).xlsx', '1141002甲乙丙丁戊己案(未填)', 12, False),
+        'dash_7th_character_after_case_id_kept': ('1141002甲乙丙丁戊己-庚案', '1141002甲乙丙丁戊己-庚案(未填).xlsx', '1141002甲乙丙丁戊己-庚案(未填)', None, False),
+        'only_first_dash_removed': ('1141002甲公司-乙案-丙', '1141002甲公司乙案-丙(未填).xlsx', '1141002甲公司乙案-丙(未填)', 10, False),
+        'dash_directly_after_case_id_removed': ('1141002-甲公司-乙案', '1141002甲公司-乙案(未填).xlsx', '1141002甲公司-乙案(未填)', 7, False),
+        'long_cut_to_31_keeps_suffix': (T_LONG, T_LONG + '(未填).xlsx', '1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉(未填)', None, True),
+        'forbidden_characters': ('1141002甲-乙/丙:丁*?"<>|[]\\戊', '1141002甲乙-丙-丁------[]-戊(未填).xlsx', '1141002甲乙-丙-丁--"<>|---戊(未填)', 8, False),
+        'forbidden_characters_and_cut': ('1141002甲公司-乙/丙:丁*戊?己"庚<辛>壬|癸[子]丑', '1141002甲公司乙-丙-丁-戊-己-庚-辛-壬-癸[子]丑(未填).xlsx',
+                                         '1141002甲公司乙-丙-丁-戊-己"庚<辛>壬|癸(未填)', 10, True),
+        'nfkc_and_whitespace': ('　１１４１００２ 甲公司－ＡＢ案（一）\t管三 ，丙﻿\n', '1141002甲公司AB案(一)管三,丙(未填).xlsx',
+                                '1141002甲公司AB案(一)管三,丙(未填)', 10, False),
+        'special_characters': (T_SPECIAL, "1141002甲公司乙&---'-案,丙(未填).xlsx", '1141002甲公司乙&<>"\'|案,丙(未填)', 10, False),
+        'astral_cut_whole_code_points': ('1141002' + '\U00020000' * 15, '1141002' + '\U00020000' * 15 + '(未填).xlsx',
+                                         '1141002' + '\U00020000' * 10 + '(未填)', None, True),
+        'file_name_254_bytes_accepted': ('1141002' + '甲' * 78, '1141002' + '甲' * 78 + '(未填).xlsx', '1141002' + '甲' * 20 + '(未填)', None, True),
+    }
+    for label, (title, want_file, want_sheet, want_k, want_cut) in name_cases.items():
+        w, q = derive_both(title)
+        d_ = w[1] if w[0] == 'ok' else {}
+        record(f'k_derive_{label}', w[0] == q[0] == 'ok' and w[1] == q[1] and d_['xlsx_file'] == want_file and d_['main_sheet'] == want_sheet
+               and d_['dash_removed_at'] == want_k and d_['main_sheet_cut'] is want_cut and wp.js_len(d_['main_sheet']) <= 31
+               and d_['main_sheet'].endswith('(未填)') and d_['name'].endswith('(未填)') and d_['o33_naming_applied'] is True
+               and d_['sheet_mapping'][0] == {'expected_saved_values_sheet': '未填研究草稿', 'workbook_sheet': want_sheet}
+               and [m_['workbook_sheet'] for m_ in d_['sheet_mapping'][1:]] == wp.SHEET_ORDER[1:]
+               and len(want_file.encode('utf-8')) <= 255, {'writer': w, 'saved_qa': q})
+    refusal_cases = {'empty': ('', 'CASE_ID_REQUIRED'), 'whitespace_only': (' 　\t\n', 'CASE_ID_REQUIRED'),
+                     'no_case_id': ('甲公司-乙案', 'CASE_ID_REQUIRED'), 'six_digit_case_id': ('114100甲公司', 'CASE_ID_REQUIRED'),
+                     'arabic_indic_digits': ('١١٤١٠٠٢甲', 'CASE_ID_REQUIRED'),
+                     'c0_control': ('1141002甲\x01乙', 'UNREPRESENTABLE_CHARACTER'), 'c1_control': ('1141002甲\x80乙', 'UNREPRESENTABLE_CHARACTER'),
+                     'delete': ('1141002甲\x7f', 'UNREPRESENTABLE_CHARACTER'), 'lone_surrogate': ('1141002甲\ud800', 'UNREPRESENTABLE_CHARACTER'),
+                     'noncharacter_fffe': ('1141002甲￾', 'UNREPRESENTABLE_CHARACTER'),
+                     'ooxml_escape_in_sheet_name': ('1141002_x0041_甲', 'LITERAL_OOXML_ESCAPE_SEQUENCE'),
+                     'file_name_257_bytes': ('1141002' + '甲' * 79, 'FILE_NAME_TOO_LONG'), 'not_a_string': (1141002, 'NOT_A_STRING')}
+    for label, (title, reason) in refusal_cases.items():
+        w, q = derive_both(title)
+        record(f'k_derive_refuses_{label}', w == q == ['refused', 'JOB_TITLE_INVALID', 'usage', reason], {'writer': w, 'saved_qa': q})
+    w, q = derive_both(None)
+    record('k_derive_untitled_is_v25_names', w[0] == q[0] == 'ok' and w[1] == q[1] and w[1]['xlsx_file'] == 'research-draft.xlsx'
+           and w[1]['main_sheet'] == '未填研究草稿' and w[1]['o33_naming_applied'] is False and w[1]['job_title'] is None
+           and [m_['workbook_sheet'] for m_ in w[1]['sheet_mapping']] == wp.SHEET_ORDER and w[1]['profile'] == sq.PROFILE == 'owner_O33_O34', [w, q])
+    rnd_t = random.Random(3306)
+    pool_t = list('0123456789０１２３') + ['-', '－', '‐', '甲', '乙', '公司', '案', 'A', 'z', '(', ')', '（', '，', ',', '~', '+', '_x0041_', '_x00'] \
+        + list('\\/:*?"<>|[]&\'') + [' ', '\t', '\n', '　', ' ', '﻿', '​', '\x85', '\x1c', '\x01', '\U00020000', '\ud800', 'é', 'é']
+    disagree, n_ok, n_ref = [], 0, 0
+    for _ in range(4000):
+        head = (''.join(rnd_t.choice('0123456789０１') for _ in range(7)) if rnd_t.random() < 0.85 else '')
+        title = head + ''.join(rnd_t.choice(pool_t) for _ in range(rnd_t.randint(0, rnd_t.choice((8, 40, 120)))))
+        w, q = derive_both(title)
+        if w != q:
+            disagree.append([title, w, q])
+        n_ok += w[0] == 'ok'
+        n_ref += w[0] == 'refused'
+    record('k_derive_writer_and_saved_qa_agree_on_4000_random_titles', not disagree and n_ok > 1000 and n_ref > 200,
+           {'disagree': disagree[:3], 'ok': n_ok, 'refused': n_ref})
+    ws_diff = [c for c in range(0x110000) if wp.title_whitespace(chr(c)) != bool(sq.TITLE_WS_RE.fullmatch(chr(c)))]
+    bad_diff = [c for c in range(0x110000) if (unicodedata.category(chr(c)) in ('Cc', 'Cs') or bool(wp.XML_ILLEGAL_RE.match(chr(c))))
+                != bool(sq.TITLE_BAD_RE.fullmatch(chr(c)))]
+    record('k_title_whitespace_and_refused_character_sets_equal_over_all_code_points', not ws_diff and not bad_diff,
+           {'whitespace': ws_diff[:10], 'refused': bad_diff[:10]})
+    record('k_template_pins', sha(sq.WORKBOOK_TEMPLATE.encode('utf-8')) == sq.PINNED_TEMPLATES['xl/workbook.xml']['template_sha256']
+           == '3b831f50f102d38062f2c4abe30ef190f8a755daa20f48fe36363afd7b31f13a' and sq.WORKBOOK_TEMPLATE.count(sq.MAIN_SHEET_TOKEN) == 1
+           and sha(sq.template_part('xl/workbook.xml', '未填研究草稿')) == 'cb9bc2217b38cc95ee8c68f2e4c40a2282a048b7cfe9f69b27bba3615bd2f3ce'
+           and sq.PINNED_PARTS['xl/styles.xml'] == '1a5ff017aafeada8347ec417982f3decacce97bdab69cf504d588a61e863ea9c'
+           and sq.PINNED_PARTS['docProps/app.xml'] == '209fca6b00afe72a5029754b94be5953d8f16d96f67130325566b9366ad4ccc5'
+           and sq.xml_attribute_escape('a&b<c>d"e\'f') == 'a&amp;b&lt;c&gt;d&quot;e\'f')
+    # titled writer outputs and their untitled counterparts
+    tdir = work / 'titled'
+    tdir.mkdir()
+    titled_specs = {'v01_t1': (ef / 'valid' / 'v01_base.json', T1, 'v1', outs / 'v01_base'),
+                    'v01_long': (ef / 'valid' / 'v01_base.json', T_LONG, 'v1', outs / 'v01_base'),
+                    'fid_special': (fid, T_SPECIAL, 'v1', fid_out),
+                    'fid_special_v2': (fid, T_SPECIAL, 'v2', fid_v2),
+                    'v2_w09_t1': (ef2 / 'valid' / 'w09_relaxed_all.json', T1, 'v2', outs / 'v2_w09_relaxed_all')}
+    titled = {}
+    for tag, (car, title, mode_, plain) in titled_specs.items():
+        od = tdir / tag
+        c, o, e = run(PY + [EXPORT / 'writer_portable.py', '--carrier', car, '--out', od, '--writer-dir', wd, '--mode', mode_, '--job-title=' + title])
+        dv = sq.derive_deliverable(title)
+        rc = json.loads((od / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')) if c == 0 else {}
+        rp_ = json.loads((plain / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+        ok = c == 0 and sorted(x.name for x in od.iterdir()) == sorted([dv['xlsx_file'], 'EXPECTED_SAVED_VALUES.json', 'WRITER_RECEIPT.json'])
+        if ok:
+            titled[tag] = od
+            with zipfile.ZipFile(od / dv['xlsx_file']) as zt, zipfile.ZipFile(plain / 'research-draft.xlsx') as zp:
+                parts_t, parts_p = zt.namelist(), zp.namelist()
+                differ_parts = [n_ for n_ in parts_p if zt.read(n_) != zp.read(n_)]
+                wbx = zt.read('xl/workbook.xml')
+                app_ok = zt.read('docProps/app.xml') == zp.read('docProps/app.xml') and dv['main_sheet'].encode('utf-8') not in zt.read('docProps/app.xml')
+            names_t = openpyxl.load_workbook(od / dv['xlsx_file'], read_only=True).sheetnames
+            ok = (parts_t == parts_p and differ_parts == ['xl/workbook.xml'] and wbx == sq.template_part('xl/workbook.xml', dv['main_sheet']) and app_ok
+                  and names_t == [dv['main_sheet']] + wp.SHEET_ORDER[1:]
+                  and (od / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (plain / 'EXPECTED_SAVED_VALUES.json').read_bytes()
+                  and rc['deliverable'] == dict(wp.deliverable_record(title), rules={'o33': wp.O33_RULE, 'o34': wp.O34_RULE})
+                  and {k: rc['deliverable'][k] for k in sq.DELIVERABLE_FIELDS} == dv and rc['output_xlsx']['file'] == dv['xlsx_file']
+                  and rc['deliverable']['job_title'] == title and rc['writer'] == 'cps-export-writer-portable.v2.6'
+                  and all(rc[k] == rp_[k] for k in ('matrices_sha256', 'sheets', 'cross_check', 'expected_saved_values', 'relaxations', 'mode'))
+                  and wp.NAMING_LIMITATION in rc['limitations'] and wp.NAMING_LIMITATION not in rp_['limitations'])
+        record(f'k_titled_write_{tag}', ok, {'stderr': e[-300:], 'files': sorted(x.name for x in od.iterdir()) if od.is_dir() else None})
+    for tag, od in titled.items():
+        car, title = titled_specs[tag][0], titled_specs[tag][1]
+        dv = sq.derive_deliverable(title)
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', tdir / f'qa_{tag}.json'])
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', od, '--report', tdir / f'qa_prov_{tag}.json', '--carrier', car, '--writer-dir', wd] + checker)
+        q1, q2 = qa_report(tdir / f'qa_{tag}.json'), qa_report(tdir / f'qa_prov_{tag}.json')
+        pv = q2.get('expected_provenance', {})
+        dl1 = q1.get('deliverable', {})
+        record(f'k_titled_saved_qa_passes_{tag}', c1 == 0 and c2 == 0 and q1.get('status') == q2.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
+               and q1.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and dl1.get('xlsx_file') == dv['xlsx_file']
+               and dl1.get('main_sheet') == dv['main_sheet'] and dl1.get('receipt_fields_equal_derivation') is True and dl1.get('job_title') == title
+               and q1.get('xlsx', {}).get('file') == dv['xlsx_file'] and q1['totals']['formatting_failures'] == 0
+               and q1['structure']['pinned_templates']['xl/workbook.xml']['main_sheet'] == dv['main_sheet']
+               and pv.get('result') == 'PASS' and pv.get('rerun_job_title') == title and pv.get('rerun_xlsx_file') == dv['xlsx_file']
+               and pv.get('xlsx_byte_identical') is True and pv.get('receipt_claims', {}).get('match') is True
+               and 'deliverable' in pv['receipt_claims'].get('compared_fields', []) and pinned_node_ok(q2, writer004_check=titled_specs[tag][2] == 'v1')
+               and q2['cps_evidence_preconditions'].get('job_title') == title,
+               {'no_prov': [q1.get('status'), q1.get('findings')], 'prov': [q2.get('status'), q2.get('findings'), pv.get('result')]})
+    record('k_titled_v2_without_relaxations_equals_v1_bytes', 'fid_special' in titled and 'fid_special_v2' in titled
+           and (titled['fid_special'] / sq.derive_deliverable(T_SPECIAL)['xlsx_file']).read_bytes()
+           == (titled['fid_special_v2'] / sq.derive_deliverable(T_SPECIAL)['xlsx_file']).read_bytes())
+    for label, title, reason in (('no_case_id', '甲公司-乙案', 'CASE_ID_REQUIRED'), ('file_name_too_long', '1141002' + '甲' * 79, 'FILE_NAME_TOO_LONG'),
+                                 ('control_character', '1141002甲\x01乙', 'UNREPRESENTABLE_CHARACTER'), ('empty', '', 'CASE_ID_REQUIRED')):
+        od = tdir / f'refused_{label}'
+        c, o, e = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef / 'valid' / 'v01_base.json', '--out', od, '--writer-dir', wd, '--job-title=' + title])
+        ref = refusal(e)
+        record(f'k_writer_refuses_title_{label}', c == 1 and not od.exists() and ref.get('code') == 'JOB_TITLE_INVALID' and ref.get('stage') == 'usage'
+               and (ref.get('detail') or {}).get('reason') == reason, ref)
+    # untitled outputs keep the v2.5 names; every output (untitled and titled) has the body style on G and H
+    v25_named, gh_bad, gh_rows, n_gh = [], [], 0, 0
+    all_out = sorted({d for d in outs.iterdir() if (d / 'WRITER_RECEIPT.json').is_file()} | {fid_out, fid_v2} | set(titled.values()))
+    for d in all_out:
+        rc = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+        dv = sq.derive_deliverable(rc['deliverable']['job_title'])
+        if rc['deliverable']['job_title'] is None:
+            with zipfile.ZipFile(d / 'research-draft.xlsx') as z:
+                if not (rc['deliverable'] == dict(wp.deliverable_record(None), rules={'o33': wp.O33_RULE, 'o34': wp.O34_RULE})
+                        and rc['output_xlsx']['file'] == 'research-draft.xlsx'
+                        and sha(z.read('xl/workbook.xml')) == 'cb9bc2217b38cc95ee8c68f2e4c40a2282a048b7cfe9f69b27bba3615bd2f3ce'):
+                    v25_named.append(d.name)
+        n_gh += 1
+        with zipfile.ZipFile(d / dv['xlsx_file']) as z:
+            st_ = z.read('xl/styles.xml').decode('utf-8')
+            s1 = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+        styles_of = dict(re.findall(r'<c r="([A-Z]+[0-9]+)" s="([0-9]+)"', s1))
+        rows_ = sorted({int(r_[1:]) for r_ in styles_of if r_[0] == 'G' and r_[1:] != '1'})
+        gh_rows += len(rows_)
+        if 'F1F3F5' in st_ or '<fills count="3">' not in st_ or not rows_ or any(
+                not (styles_of.get(f'G{r_}') == styles_of.get(f'H{r_}') == styles_of.get(f'I{r_}') == styles_of.get(f'A{r_}')) for r_ in rows_):
+            gh_bad.append(d.name)
+    record('k_untitled_outputs_keep_v25_names', not v25_named and len(all_out) >= 30 and len(all_out) - len(titled) >= 25, v25_named[:5])
+    record('k_gh_have_the_body_style_in_every_output', not gh_bad and n_gh >= 30 and gh_rows > 400, {'bad': gh_bad[:5], 'outputs': n_gh, 'rows': gh_rows})
+    wb_gh = openpyxl.load_workbook(titled['v01_t1'] / sq.derive_deliverable(T1)['xlsx_file']) if 'v01_t1' in titled else None
+    ws_gh = wb_gh[sq.derive_deliverable(T1)['main_sheet']] if wb_gh else None
+    record('k_gh_no_fill_openpyxl', ws_gh is not None and all(ws_gh.cell(row=r_, column=c_).fill.fill_type is None for r_ in range(2, ws_gh.max_row + 1)
+                                                              for c_ in (7, 8)) and ws_gh.max_row >= 3
+           and all(ws_gh.cell(row=r_, column=c_)._style == ws_gh.cell(row=r_, column=9)._style == ws_gh.cell(row=r_, column=1)._style
+                   for r_ in range(2, ws_gh.max_row + 1) for c_ in (7, 8)))
+    # naming tampers (O33) from the titled fidelity output
+    ntd = work / 'tampers_naming'
+    code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'naming', titled.get('fid_special', work / 'missing'), ntd, T2])
+    ntamp = json.loads((ntd / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
+    record('k_naming_tamper_counts', code == 0 and [t['name'][:3] for t in ntamp] == [f'K{k:02d}' for k in range(1, 14)], err[-300:])
+    for t in ntamp:
+        d = Path(t['dir'])
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+        q1 = qa_report(d / 'SAVED_QA.json')
+        f1 = set(q1.get('findings', {}))
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd] + checker)
+        q2 = qa_report(d / 'SAVED_QA_PROVENANCE.json')
+        f2, pv = set(q2.get('findings', {})), q2.get('expected_provenance', {})
+        if t['findings']:
+            no_prov = c1 == 1 and q1.get('status') == 'SAVED_QA_FAILED' and set(t['findings']) <= f1 and (not t['only'] or f1 == set(t['findings']))
+        else:
+            no_prov = c1 == 0 and q1.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and not f1
+        if t['provenance'] == 'passes':
+            prov = c2 == 0 and q2.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS' and pv.get('rerun_job_title') == T2
+        else:
+            prov = (c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED' and pv.get('result') == t['provenance_result'] and set(t['findings']) <= f2
+                    and (t['provenance'] != 'provenance' or 'provenance' in f2)
+                    and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False)
+        record(f"k_naming_tamper_{t['name']}", no_prov and prov and 'Traceback' not in e1 + e2,
+               {'no_prov': [q1.get('status'), sorted(f1)], 'prov': [q2.get('status'), sorted(f2), pv.get('result')], 'stderr': (e1 + e2)[-300:]})
+
     # ------------------------------------------------ third review G1: the pinned parts are byte-constant in every writer output
+    # v5 (writer v2.6): 7 byte pins plus the xl/workbook.xml template with the derived main sheet name, titled outputs included
     pinned_dirs = sorted({d for d in outs.iterdir() if (d / 'WRITER_RECEIPT.json').is_file()}
                          | {work / n for n in ('repeat_v01', 'repeat_v2_w01_job_inputs', 'repeat_v2_w09_relaxed_all', 's1_env_valid_out', 's1_openssl_valid_out')}
-                         | {fid_out, fid_v2} | set(outs_w.values()))
-    differ, n_pinned = [], 0
+                         | {fid_out, fid_v2} | set(outs_w.values()) | set(titled.values()))
+    differ, n_pinned, n_titled_pinned = [], 0, 0
     for d in pinned_dirs:
         if not (d / 'WRITER_RECEIPT.json').is_file():
             differ.append([d.name, 'missing'])
             continue
         rc = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
-        if rc['output_xlsx']['sha256'] != sha((d / 'research-draft.xlsx').read_bytes()):
+        dv = sq.derive_deliverable((rc.get('deliverable') or {}).get('job_title'))
+        if rc['output_xlsx']['sha256'] != sha((d / dv['xlsx_file']).read_bytes()):
             differ.append([d.name, 'not the writer output'])
             continue
         n_pinned += 1
-        with zipfile.ZipFile(d / 'research-draft.xlsx') as z:
+        n_titled_pinned += dv['o33_naming_applied']
+        with zipfile.ZipFile(d / dv['xlsx_file']) as z:
             differ += [[d.name, part] for part, h in sq.PINNED_PARTS.items() if sha(z.read(part)) != h]
-    record('g_pinned_parts_constant_in_every_output', n_pinned >= 30 and not differ and len(sq.PINNED_PARTS) == 8
-           and set(sq.PINNED_PARTS) == set(sq.EXPECTED_PARTS) - {f'xl/worksheets/sheet{k}.xml' for k in (1, 2, 3, 4)},
-           {'outputs': n_pinned, 'differ': differ[:10]})
+            differ += [[d.name, part] for part in sq.PINNED_TEMPLATES if z.read(part) != sq.template_part(part, dv['main_sheet'])]
+    record('g_pinned_parts_constant_in_every_output', n_pinned >= 35 and n_titled_pinned >= 5 and not differ and len(sq.PINNED_PARTS) == 7
+           and set(sq.PINNED_TEMPLATES) == {'xl/workbook.xml'} and not set(sq.PINNED_PARTS) & set(sq.PINNED_TEMPLATES)
+           and set(sq.PINNED_PARTS) | set(sq.PINNED_TEMPLATES) == set(sq.EXPECTED_PARTS) - {f'xl/worksheets/sheet{k}.xml' for k in (1, 2, 3, 4)},
+           {'outputs': n_pinned, 'titled': n_titled_pinned, 'differ': differ[:10]})
 
     # ------------------------------------------------ (j) number text (second review F1(b))
     # Every form the writer writes is JavaScript String(v) (writer_portable js_number); saved_qa's pattern accepts each one.
@@ -1158,7 +1371,8 @@ def main():
             record('d_manifest_states_render_limits', 'General format' in lim and 'row taller than one printed page is clipped' in lim
                    and 'complete_render means that every PDF page was rendered' in lim and 'Never re-save' in lim
                    and m1.get('possibly_clipped_cells', {}).get('count') == 0 and '[[sheet name]] marker' in (m1.get('page_sheet_mapping_basis') or '')
-                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v2',
+                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v3'
+                   and m1.get('main_sheet') == '未填研究草稿' and m1.get('sheet_order') == wp.SHEET_ORDER,
                    {'limitations': m1.get('limitations'), 'basis': m1.get('page_sheet_mapping_basis')})
         keep = ['未填研究草稿', '組成參考', '組成連結']
         code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v08_many_items' / 'research-draft.xlsx', '--dest', vis / 'v08_filtered',
@@ -1180,15 +1394,51 @@ def main():
                and ml.get('complete_render') is True and all(ml['page_sheet_mapping'].values()), {'stderr': err[-300:], 'flagged': sorted(fl)[:8]})
         code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', outs / 'v04_text_edges' / 'research-draft.xlsx', '--dest', vis / 'v04_exact', '--mode', 'exact'])
         me = json.loads((vis / 'v04_exact' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
-        record('d_visual_qa_exact_mode', code == 0 and me.get('pages', 0) >= 1 and me['render_copy']['identical_to_saved'], err[-300:])
+        record('d_visual_qa_exact_mode', code == 0 and me.get('pages', 0) >= 1 and me['render_copy']['identical_to_saved']
+               and me.get('main_sheet') == '未填研究草稿' and me.get('sheet_order') == wp.SHEET_ORDER, err[-300:])
+        # v3 (writer v2.6, O33/O34): titled outputs map every page to its sheet and the manifest names the main sheet; --sheet
+        # selects a sheet whose name holds a comma; main-sheet pages show no #F1F3F5 area, while the O34a tamper (G/H grey again),
+        # rendered as a control, does
+        def grey_pixels(png):
+            from PIL import Image
+            with Image.open(png) as im:
+                return next((n_ for n_, col in im.convert('RGB').getcolors(1 << 24) if col == (0xF1, 0xF3, 0xF5)), 0)
+        vis_titled = {}
+        for tag, title in (('fid_special', T_SPECIAL), ('v01_long', T_LONG)):
+            dv = sq.derive_deliverable(title)
+            code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', titled.get(tag, work / 'missing') / dv['xlsx_file'], '--dest', vis / f't_{tag}', '--dpi', '100'])
+            mt_ = json.loads((vis / f't_{tag}' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
+            vis_titled[tag] = mt_
+            mp_ = mt_.get('page_sheet_mapping') or {}
+            record(f'd_visual_qa_titled_{tag}', code == 0 and mt_.get('complete_render') is True and mp_ and all(mp_.values())
+                   and set(mp_.values()) == set(mt_.get('sheet_order') or []) and mt_.get('main_sheet') == dv['main_sheet']
+                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v3'
+                   and {i['sheet'] for i in mt_['images']} == set(mt_['sheet_order']) and mt_['saved_xlsx']['unchanged_after_render'],
+                   {'stderr': err[-300:], 'mapping': list(mp_.values())[:6], 'main_sheet': mt_.get('main_sheet')})
+        dv_s = sq.derive_deliverable(T_SPECIAL)
+        code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', titled.get('fid_special', work / 'missing') / dv_s['xlsx_file'], '--dest', vis / 't_fid_special_filter',
+                                   '--dpi', '50', '--sheet', dv_s['main_sheet'], '--sheet', '組成連結'])
+        mf2 = json.loads((vis / 't_fid_special_filter' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
+        record('d_visual_qa_sheet_option_selects_a_name_with_a_comma', code == 0 and ',' in dv_s['main_sheet']
+               and {i['sheet'] for i in mf2.get('images', [])} == {dv_s['main_sheet'], '組成連結'} and mf2.get('complete_render') is False
+               and mf2.get('sheet_filter') == [dv_s['main_sheet'], '組成連結'] and all((mf2.get('page_sheet_mapping') or {'x': None}).values()), err[-300:])
+        code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', td / 'O34a_gh_grey_fill_restored' / 'research-draft.xlsx', '--dest', vis / 'o34a_control', '--dpi', '100'])
+        mc_ = json.loads((vis / 'o34a_control' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
+        grey = {}
+        for tag, mf_, root in (('v01_untitled', m1 or {}, vis / 'v01_run1'), ('fid_special_titled', vis_titled.get('fid_special', {}), vis / 't_fid_special'),
+                               ('v01_long_titled', vis_titled.get('v01_long', {}), vis / 't_v01_long'), ('o34a_control', mc_, vis / 'o34a_control')):
+            grey[tag] = [grey_pixels(root / i['file']) for i in mf_.get('images', []) if i['sheet'] == mf_.get('main_sheet')]
+        record('d_visual_gh_not_grey', all(grey[k] and max(grey[k]) <= 50 for k in ('v01_untitled', 'fid_special_titled', 'v01_long_titled'))
+               and grey['o34a_control'] and min(grey['o34a_control']) >= 1000, grey)
 
     failed = [r for r in results if not r['pass']]
-    summary = {'suite': 'cps-export-portable-writer-tests.v4', 'tests': len(results), 'passed_count': len(results) - len(failed),
+    summary = {'suite': 'cps-export-portable-writer-tests.v5', 'tests': len(results), 'passed_count': len(results) - len(failed),
                'failed_count': len(failed), 'passed': [r['test'] for r in results if r['pass']], 'failed': failed,
                'fixtures_invented': True, 'valid_fixtures': len(valid), 'invalid_fixtures': len(invalid),
                'valid_fixtures_v2': len(valid2), 'invalid_fixtures_v2': len(invalid2),
                'saved_qa_tampers': len(tampers), 'saved_qa_tampers_v2': len(tampers2), 'saved_qa_tampers_downgrade': len(tamd),
                'receipt_claim_tampers': n_receipt_tampers, 'pinned_part_outputs_checked': n_pinned,
+               'titled_outputs': len(titled), 'naming_tampers': len(ntamp), 'name_derivation_cases': len(name_cases) + len(refusal_cases) + 1,
                'checker_node': {'realpath': node_real, 'sha256': node_sha, 'version': node_version},
                'make_tamper_fixtures_sha256': sha((HERE / 'make_tamper_fixtures.py').read_bytes()),
                'writer_portable_sha256': sha((EXPORT / 'writer_portable.py').read_bytes()),

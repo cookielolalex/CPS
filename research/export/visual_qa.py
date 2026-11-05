@@ -17,7 +17,12 @@ Modes
 
 Usage
   python3 -I -B visual_qa.py --xlsx /abs/research-draft.xlsx --dest /abs/new-dir [--mode fit-width|exact] [--dpi 150]
-      [--sheets name1,name2]   (PNG only for those sheets; rendered.pdf keeps every page)
+      [--sheets name1,name2] [--sheet NAME ...]   (PNG only for those sheets; rendered.pdf keeps every page)
+
+v3 (writer v2.6, owner decision O33): the main sheet may be named <name> from the job title instead of 未填研究草稿. Pages
+map to sheets by the [[sheet name]] marker whatever the name; the manifest records the workbook's sheet order and its main
+sheet (the first sheet, the 17-column deliverable). --sheet NAME (repeatable) selects sheets by exact name, so a name that
+holds a comma (NFKC turns a fullwidth comma into ',') can be selected; --sheets keeps its comma-separated form.
 
 What the render does not show (v2, review S4; also in the manifest limitations): numbers display in the
 General format, so the stored binary64 precision is not visible; a row taller than a printed page is
@@ -32,7 +37,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-visual-qa.v2'
+VERSION = 'cps-export-visual-qa.v3'
 HEADER_MARKER = '[[{}]]'                 # page header text: [[sheet name]] (review N1)
 EXCEL_MAX_ROW_HEIGHT_PT = 409.0          # Excel row-height limit; also far below one A3 page in LibreOffice
 LINE_HEIGHT_PT = 15.0                    # approximate line height of 11 pt text with the CJK fallback font
@@ -244,8 +249,11 @@ def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='p
         if mode == 'exact':
             copy.write_bytes(before)
             names, changes = None, []
+            with zipfile.ZipFile(xlsx) as z:
+                order = [n for n, _ in sheet_parts(z)]
         elif mode == 'fit-width':
             names, changes = make_fit_width_copy(xlsx, copy)
+            order = list(names)
         else:
             raise RenderError('UNKNOWN_MODE')
         copy_bytes = copy.read_bytes()
@@ -331,6 +339,9 @@ def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='p
         'pdf': {'file': 'rendered.pdf', 'sha256': sha256(pdf_bytes), 'pages': pages,
                 'note': 'PDF bytes carry LibreOffice creation metadata and may differ between runs; PNG pixels are the reproducible artifact.'},
         'pages': len(entries), 'images': entries,
+        'sheet_order': order, 'main_sheet': order[0] if order else None,
+        'main_sheet_note': ('the first sheet: the 17-column deliverable (未填研究草稿, or <name> from the job title under owner '
+                            'decision O33, writer v2.6)'),
         'sheet_filter': sheets or None,
         'complete_render': selected is None and not fallback and (pages is None or len(entries) == pages),
         'page_sheet_mapping': ({str(n): v for n, v in sorted(page_sheets.items())} if page_sheets else None),
@@ -374,8 +385,10 @@ def main(argv=None):
     ap.add_argument('--timeout', type=int, default=900)
     ap.add_argument('--tmp-root')
     ap.add_argument('--sheets', help='comma-separated sheet names to render as PNG (fit-width mode); default all')
+    ap.add_argument('--sheet', action='append', help='v3: one sheet name to render as PNG, exact (repeatable; for names with a comma)')
     a = ap.parse_args(argv)
-    sheets = [x for x in a.sheets.split(',') if x] if a.sheets else None
+    sheets = ([x for x in a.sheets.split(',') if x] if a.sheets else []) + list(a.sheet or [])
+    sheets = list(dict.fromkeys(sheets)) or None
     try:
         m = render(Path(a.xlsx).resolve(strict=True), Path(a.dest).absolute(), a.mode, a.dpi, a.soffice, a.pdftoppm, a.timeout, a.tmp_root, sheets)
     except (RenderError, subprocess.SubprocessError, OSError) as e:

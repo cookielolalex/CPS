@@ -10,10 +10,13 @@ Metric (declared before any qualification run; changes need a new version and re
   admitted only when its similarity is >= 0.5. Similarity = 0.7*sim(C+' '+D) + 0.15*eq(E) + 0.15*eq(F)
   on normalized values (C and D joined so the creator's C/D split does not block alignment), where sim
   is difflib's ratio and eq is 1/0.
-  Fields. The 10 item positions A–F, I, J, P and Q are scored per row; G and H (stage blanks) are
-  reported but not scored. K, L, M, N and O are job-level identifiers (the creator writes them on
-  every row in later files and on the first row only in older files): each is scored once per case
-  as one position, the target's modal non-null value against the CPS modal non-null value (v1.2). For an aligned pair, a position counts when either side is non-null; it matches when the
+  Fields. In v1 the 10 item positions A–F, I, J, P and Q were scored per row; v2 moves C and D to one
+  description position and v4 moves A and B to panel positions (both below), so the positions scored
+  per row are now E, F, I, J, P and Q. G and H (stage blanks) are reported but not scored. K, L, M, N
+  and O are job-level identifiers (the creator writes them on every row in later files and on the
+  first row only in older files): each is scored once per case as one position, the target's modal
+  non-null value against the CPS modal non-null value (v1.2; v4 tie-break below). For an aligned
+  pair, a per-row position counts when either side is non-null; it matches when the
   normalized values are equal. A target row with no partner contributes each non-null position as a
   miss; a CPS row with no partner contributes each non-null position as an error.
   Score = matched / counted (per case). The governing mode is `normalized`; `strict` is reported.
@@ -50,11 +53,36 @@ Metric (declared before any qualification run; changes need a new version and re
   depending on that convention. v4 removes A and B from the per-row positions and scores each as panel
   positions per case: the set of distinct non-null normalized A values on the target rows against the
   set on the CPS rows (all rows, paired or not), counted = max(|target set|, |CPS set|), matched =
-  |intersection|; the same, separately, for B. So one wrong panel name counts once (as on one row in v3),
-  and a missing or extra panel name or size counts once per distinct value.
+  |intersection| (a wrong value and a missing one offset as one substitution). B is scored per size unit:
+  the distinct (A, B) pairs with B non-null on each side (a pair without A is dropped when its B also
+  appears with an A), matched one-to-one, preferring units with equal non-null A and then equal B, with
+  as many pairs as the smaller side; matched = matched units with equal B, counted = max(units). So one
+  wrong panel name counts once (as on one row in v3); a size counts once per panel name, so a swapped,
+  borrowed or omitted size of two panels with the same size still counts; a missing or extra name or
+  size counts once per distinct value. `per_field` carries A or B only when it counts at least one
+  position (as for K-O); v3 always wrote both keys.
+  Not scored by v4 (disclosed): (1) panels identical in A and B count once; (2) a whole label (A and B
+  together) moved to another panel; (3) which rows carry A/B, so a right A/B on a device row costs
+  nothing; (4) CPS rows that carry only A/B and no other scored value cost nothing when their A/B
+  values also appear elsewhere; (5) while CPS has fewer distinct A values than the target, an extra
+  wrong A costs nothing (counted stays at the target's count), so a guess is free; v3 charged a guess
+  written on a row whose target row has no A. `ab_row_check` (diagnostic, not scored) lists for the
+  manual critical-error review: `paired_conflicts`, aligned pairs whose non-null A or B differ;
+  `cps_unpartnered`, CPS A/B on a row whose aligned target row has neither A nor B, or on an unpaired
+  CPS row. Cases (2)-(5) show there when the CPS value sits on a paired row with a different target
+  value, on a row whose target has no A/B, or on an unpaired row; (1) never shows.
+  Job-level K-O modal tie-break (v4): `max(dict.fromkeys(values), key=values.count)`, so on a tie the
+  value first in row order wins and the result is repeatable. v2 and v3 use `max(set(values), ...)`,
+  which picks by set iteration order; string hashing is randomised per process (and `-I` ignores
+  PYTHONHASHSEED), so frozen v2 (compare_target048) and frozen v3 (compare_target049) are not
+  repeatable on a case with a K-O tie: the same inputs can score differently between runs.
   Row alignment, gap fill, every other position, normalization, the description score and the 0.95
-  reading are unchanged. The v3 score is reported as `v3_per_row_AB` (diagnostic). Under O31 the deployment
-  reading is pooled by the frozen aggregator; a single case's 0.95 reading is a diagnostic.
+  reading are unchanged from v3, apart from that tie-break. Diagnostics: `v3_per_row_AB` is v3
+  scoring (A and B per row) on the v3/v4 pairs; `v2_alignment` is the genuine v2 number, v2 scoring
+  (A and B per row) on the v2 pairs. Both are computed here with the v4 tie-break, so each equals its
+  frozen evaluator except on a K-O tie. Under
+  O31 the deployment reading is pooled by the O31 gate aggregator re-pinned to v4
+  (`aggregate_qualification050.py`); a single case's 0.95 reading is a diagnostic.
   Deployment reading (O12, O19): a case "matches" at score >= 0.95 in the governing mode. Row recall,
   row precision and per-field rates are diagnostics.
 Usage: python3 -I -B compare_target050.py --target T.xlsx --target-sha HEX --carrier C.json
@@ -246,6 +274,57 @@ def desc_score(T, C, pairs):
     return {'matched': matched, 'counted': counted, 'rate': (matched / counted) if counted else None, 'target': 0.75}
 
 
+def _assign_max(w):
+    """Maximum-weight assignment for an n x m integer matrix, 1 <= n <= m (Kuhn-Munkres with
+    potentials). Returns {row: column}; every row is assigned."""
+    n, m = len(w), len(w[0])
+    INF = float('inf')
+    u, v, p, way = [0] * (n + 1), [0] * (m + 1), [0] * (m + 1), [0] * (m + 1)
+    for i in range(1, n + 1):
+        p[0], j0 = i, 0
+        minv, used = [INF] * (m + 1), [False] * (m + 1)
+        while True:
+            used[j0] = True
+            i0, delta, j1 = p[j0], INF, 0
+            for j in range(1, m + 1):
+                if not used[j]:
+                    cur = -w[i0 - 1][j - 1] - u[i0] - v[j]
+                    if cur < minv[j]:
+                        minv[j], way[j] = cur, j0
+                    if minv[j] < delta:
+                        delta, j1 = minv[j], j
+            for j in range(m + 1):
+                if used[j]:
+                    u[p[j]] += delta; v[j] -= delta
+                else:
+                    minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0:
+                break
+        while j0:
+            j1 = way[j0]; p[j0] = p[j1]; j0 = j1
+    return {p[j] - 1: j - 1 for j in range(1, m + 1) if p[j]}
+
+
+def size_units(R, mode):
+    """v4 B units: the distinct (A, B) pairs with B non-null; (None, b) is dropped when b also appears with an A."""
+    u = {(norm(r[0], mode), norm(r[1], mode)) for r in R if norm(r[1], mode) is not None}
+    named = {b for a, b in u if a is not None}
+    return sorted((x for x in u if x[0] is not None or x[1] not in named), key=repr)
+
+
+def size_score(T, C, mode):
+    """v4 B: (matched, counted). Units are matched one-to-one (min(units) pairs), preferring an equal
+    non-null A, then an equal B; the weights make that order strict, so the counts do not depend on ties."""
+    tu, cu = size_units(T, mode), size_units(C, mode)
+    if not tu or not cu:
+        return 0, max(len(tu), len(cu))
+    a, b = (tu, cu) if len(tu) <= len(cu) else (cu, tu)
+    big = len(b) + 1
+    w = [[1 + big * (x[0] is not None and x[0] == y[0]) + (x[1] == y[1]) for y in b] for x in a]
+    return sum(a[i][1] == b[j][1] for i, j in _assign_max(w).items()), len(b)
+
+
 def score(T, C, pairs, mode, scored=None, panel=None):
     scored = SCORED if scored is None else scored
     panel = PANEL_LEVEL if panel is None else panel
@@ -274,25 +353,49 @@ def score(T, C, pairs, mode, scored=None, panel=None):
                 if norm(C[j][k], mode) is not None:
                     counted += 1; per[COLS[k]][1] += 1
     for k in panel:
-        ts = {norm(r[k], mode) for r in T if norm(r[k], mode) is not None}
-        cs = {norm(r[k], mode) for r in C if norm(r[k], mode) is not None}
-        if not ts and not cs:
+        if k == 1:
+            x, u = size_score(T, C, mode)
+        else:
+            ts = {norm(r[k], mode) for r in T if norm(r[k], mode) is not None}
+            cs = {norm(r[k], mode) for r in C if norm(r[k], mode) is not None}
+            u, x = max(len(ts), len(cs)), len(ts & cs)
+        if not u:
             continue
-        u, x = max(len(ts), len(cs)), len(ts & cs)
         counted += u; matched += x; per[COLS[k]] = [x, u]
     for k in JOB_LEVEL:
         tv = [norm(r[k], mode) for r in T if norm(r[k], mode) is not None]
         cv = [norm(r[k], mode) for r in C if norm(r[k], mode) is not None]
         if not tv and not cv:
             continue
-        tm = max(set(tv), key=tv.count) if tv else None
-        cm = max(set(cv), key=cv.count) if cv else None
+        tm = max(dict.fromkeys(tv), key=tv.count) if tv else None   # ties: first in row order (v4)
+        cm = max(dict.fromkeys(cv), key=cv.count) if cv else None
         counted += 1; per[COLS[k]] = [int(tm == cm), 1]
         matched += int(tm == cm)
     return {'matched': matched, 'counted': counted, 'score': (matched / counted) if counted else None,
             'per_field': {k: {'matched': v[0], 'counted': v[1]} for k, v in per.items()},
             'cps_GH_nonnull_on_paired_rows': gh_nonnull}
 
+
+
+def ab_row_check(T, C, pairs, trows, items):
+    """v4 diagnostic for the manual critical-error review (not scored): aligned pairs whose non-null A or B
+    differ, and CPS A/B on a row whose aligned target row has neither A nor B, or on an unpaired row."""
+    pc = {j: i for i, j, _ in pairs}
+    conflicts, unpartnered = [], []
+    for j, r in enumerate(C):
+        i = pc.get(j)
+        t_ab = None if i is None else [norm(T[i][k], 'normalized') for k in PANEL_LEVEL]
+        for k in PANEL_LEVEL:
+            c = norm(r[k], 'normalized')
+            if c is None:
+                continue
+            t = None if i is None else t_ab[k]
+            if t is not None and t != c:
+                conflicts.append({'target_row': trows[i]['row'], 'cps_id': items[j]['id'], 'field': COLS[k], 'target': text_of(t), 'cps': text_of(c)})
+            elif i is None or t_ab == [None, None]:
+                unpartnered.append({'target_row': None if i is None else trows[i]['row'], 'cps_id': items[j]['id'], 'field': COLS[k], 'cps': text_of(c)})
+    return {'paired_conflicts': conflicts, 'cps_unpartnered': unpartnered,
+            'note': 'diagnostic only: A/B placement and panel association are not scored (v4, O35)'}
 
 
 def score_v3(T, C, pairs, mode):
@@ -305,7 +408,7 @@ def evaluate(target_path, carrier):
     C = [it['values'] for it in carrier['items']]
     v2_pairs = align(T, C)
     pairs, filled = gap_fill(T, C, v2_pairs)
-    v2 = score(T, C, v2_pairs, 'normalized')
+    v2 = score(T, C, v2_pairs, 'normalized', scored=SCORED_V3, panel=[])   # the compare_target048 (v2) number
     v3_ab = score_v3(T, C, pairs, 'normalized')
     out = {'schema': VERSION, 'target_sheet': tg['sheet'], 'target_header_row': tg['header_row'],
            'target_column_map': tg['column_map'], 'target_columns_in_canonical_order': tg['columns_in_canonical_order'],
@@ -318,11 +421,12 @@ def evaluate(target_path, carrier):
            'modes': {m: score(T, C, pairs, m) for m in ('normalized', 'strict')},
            'description_cd': desc_score(T, C, pairs),
            'gap_filled_pairs': [{'target_row': tg['rows'][i]['row'], 'cps_id': carrier['items'][j]['id'], 'similarity': round(s, 4)} for i, j, s in filled],
+           'ab_row_check': ab_row_check(T, C, pairs, tg['rows'], carrier['items']),
            'v3_per_row_AB': {'normalized_matched': v3_ab['matched'], 'normalized_counted': v3_ab['counted'], 'normalized_score': v3_ab['score'],
-                             'note': 'diagnostic only: v3 scoring (A and B per row) on the v3/v4 pairs'},
+                             'note': 'diagnostic only: v3 scoring (A and B per row) on the v3/v4 pairs, with the v4 K-O tie-break'},
            'v2_alignment': {'paired_rows': len(v2_pairs), 'normalized_matched': v2['matched'], 'normalized_counted': v2['counted'],
                             'normalized_score': v2['score'], 'description_cd': desc_score(T, C, v2_pairs),
-                            'note': 'diagnostic only: the v2 (compare_target048) alignment without gap fill'}}
+                            'note': 'diagnostic only: the v2 (compare_target048) number: v2 alignment without gap fill, scored as v2 (A and B per row), with the v4 K-O tie-break'}}
     g = out['modes']['normalized']['score']
     out['governing'] = {'mode': 'normalized', 'score': g, 'threshold': 0.95, 'case_matches_at_95': (g is not None and g >= 0.95),
                         'description_cd_rate': out['description_cd']['rate'], 'description_target_0_75_met': (out['description_cd']['rate'] or 0) >= 0.75}
