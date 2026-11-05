@@ -102,3 +102,13 @@ Any pair found ineligible later, including a reserved target that turns out to b
 - Evaluator v3 (`compare_target049`, gap fill) was approved after two reviews and frozen at `b600c046…`. It governs qualification (O23).
 - The 0.75 C/D target is reported only (O24).
 - The company tables are the owner-approved recommended entries (O27). Neither was built from any qualification or reserved case.
+
+## Qualification job inputs (L/M/N, O13), 2026-11-05
+
+The job inputs are built by a deterministic builder that reads only the case id, the registry or listing folder title, and a customer-name table. The table was drawn from the L/M/N columns of the 37 exposed tuning targets; no other column was used. No qualification or reserved target was opened. The builder was calibrated on those 37 exposed cases. Match rates are exact matches against the creator's own modal values:
+
+- **L** is the bare case id. It matched in 21 of the 23 cases where she wrote L; the other 2 used a hyphenated form.
+- **N** is the folder title minus the case id and the customer short name. It matched in 11 of 23. In the misses her wording differs from the folder title in ways that cannot be derived from it.
+- **M** is the customer table's full name, taken from the nearest earlier case of that customer. It matched in 16 of 23, leave-one-case-out. Her form changed over time, from short names to full company names.
+- **Blank era.** In 14 of the 37 exposed cases, an unbroken run of case ids from 1130605 to 1140307, she left L, M and N blank. R48 (O13) always fills them, which is current practice. So every case in that era loses its 3 job-level positions. Six of the 30 pool cases fall in it. This is recorded as an expected loss, not adjusted for.
+- **Coverage.** Of the 53 jobs (15 non-reserved and 38 reserved), 23 get M from the table and 13 fall back to the folder short name. 17 reserved cases from 110–112 still need their folder titles from a Drive listing before their inputs can be built.
