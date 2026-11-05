@@ -558,7 +558,7 @@ def check_writer_dir(writer_dir):
 
 
 def check_node_environment(node, real_dir):
-    """Review S1: resolve @oai/artifact-tool the way node resolves it from writer004.mjs, with the sanitized environment,
+    """Review S1: resolve @oai/artifact-tool the way node resolves it from writer004.mjs, with the allowlisted environment,
     and refuse unless it is the pinned CPS validation stub. Runs before any other node process."""
     stage = 'gate:node_environment'
     env, kept, removed = node_env()

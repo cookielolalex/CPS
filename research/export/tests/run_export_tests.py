@@ -21,11 +21,15 @@ Proves on invented carriers:
       extra structural tampers, are all caught; no input crashes saved_qa;
   (h) provenance of EXPECTED (review S3): with --carrier/--writer-dir, consistent EXPECTED+xlsx tampers (receipt stale,
       updated or deleted) are caught in v1 and v2, and every untampered output passes;
-  (i) visual_qa helpers (review S4, N1): page mapping by the [[sheet name]] marker; possibly clipped cells.
+  (i) visual_qa helpers (review S4, N1): page mapping by the [[sheet name]] marker; possibly clipped cells;
+  (j) second review (round 2): the round-2 tampers N01-N07, N10, N11 and the receipt-mode downgrade fail saved QA
+      (provenance always reruns the writer and compares the xlsx); number text: every form the writer writes (JavaScript
+      String(v): 1e-7, 5e-324, -0 written as 0, ...) matches the saved_qa pattern, and other texts do not; the node
+      environment is an allowlist (OPENSSL_CONF, the reviewer's A3, LD_*, NODE_* removed).
 Usage: python3 -I -B run_export_tests.py --writer-dir /abs/archived/writer --work /abs/new-dir [--skip-visual]
 Prints a JSON summary with passed and failed lists; exit 0 only if nothing failed.
 """
-import argparse, copy, hashlib, importlib.util, json, math, os, random, shutil, struct, subprocess, sys, zipfile
+import argparse, copy, hashlib, importlib.util, json, math, os, random, re, shutil, struct, subprocess, sys, zipfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -547,16 +551,28 @@ def main():
     sq = load(EXPORT / 'saved_qa.py', 'saved_qa_under_test')
     record('f_saved_qa_pins_equal_writer', {k: set(v) for k, v in sq.WRITER_PINS.items()} == {k: set(v) for k, v in wp.WRITER_PINS.items()}
            and sq.ARTIFACT_TOOL_STUB_SHA256 == wp.ARTIFACT_TOOL_STUB_SHA256 == '67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4'
-           and sq.ARTIFACT_TOOL_STUB_PACKAGE == wp.ARTIFACT_TOOL_STUB_PACKAGE and sq.RESOLVE_CJS == wp.RESOLVE_CJS and sq.RESOLVE_ESM == wp.RESOLVE_ESM)
+           and sq.ARTIFACT_TOOL_STUB_PACKAGE == wp.ARTIFACT_TOOL_STUB_PACKAGE and sq.RESOLVE_CJS == wp.RESOLVE_CJS and sq.RESOLVE_ESM == wp.RESOLVE_ESM
+           and sq.NODE_ENV_KEEP == wp.NODE_ENV_KEEP == ('PATH', 'HOME', 'TMPDIR', 'LANG') and sq.NODE_ENV_KEEP_PREFIXES == wp.NODE_ENV_KEEP_PREFIXES == ('LC_',))
+    # second review N-c: the node environment is an allowlist (writer and saved_qa give the same result)
+    synthetic = {'PATH': '/bin', 'HOME': '/h', 'TMPDIR': '/t', 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8', 'LC_CTYPE': 'C.UTF-8',
+                 'NODE_OPTIONS': '--import=x', 'NODE_PATH': '/x', 'NODE_EXTRA_CA_CERTS': '/x', 'OPENSSL_CONF': '/x', 'OPENSSL_MODULES': '/x',
+                 'LD_PRELOAD': '/x.so', 'LD_LIBRARY_PATH': '/x', 'path': '/x', 'XLC_ALL': 'x', 'PYTHONPATH': '/x', 'SSL_CERT_FILE': '/x', 'CPS_ANY': '1'}
+    want_kept = ['HOME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'PATH', 'TMPDIR']
+    e_w, k_w, r_w = wp.node_env(synthetic)
+    e_q, k_q, r_q = sq.node_env(synthetic)
+    record('f_node_env_allowlist', k_w == k_q == want_kept and sorted(e_w) == want_kept and e_w == e_q
+           and r_w == r_q == sorted(set(synthetic) - set(want_kept)), {'kept': k_w, 'removed': r_w})
     code, out, err = run(['node', '-e', wp.RESOLVE_CJS, wd.resolve() / 'writer004.mjs', wp.ARTIFACT_TOOL_SPECIFIER])
     stub_path = Path(json.loads(out)['resolved']) if code == 0 else None
-    removed_now = sorted(k for k in os.environ if k.upper().startswith('NODE_'))
+    kept_now = sorted(k for k in os.environ if wp.node_env_allowed(k))
+    removed_now = sorted(k for k in os.environ if not wp.node_env_allowed(k))
     for name in ('v01_base', 'v08_many_items'):
         ne = json.loads((outs / name / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')).get('node_environment', {})
         at = ne.get('artifact_tool', {})
         record(f'f_receipt_node_environment_{name}', stub_path is not None and at.get('resolved_path') == str(stub_path)
                and at.get('esm_resolved_path') == str(stub_path) and at.get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256
-               and ne.get('removed_variables') == removed_now, ne)
+               and ne.get('removed_variables') == removed_now and ne.get('kept_variables') == kept_now
+               and set(kept_now) <= {'PATH', 'HOME', 'TMPDIR', 'LANG'} | {k for k in kept_now if k.startswith('LC_')}, ne)
     nev2 = json.loads((outs / 'v2_w09_relaxed_all' / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')).get('node_environment', {})
     record('f_receipt_node_environment_v2', nev2.get('artifact_tool', {}).get('sha256') == wp.ARTIFACT_TOOL_STUB_SHA256, nev2)
     base_obj = json.loads((ef / 'valid' / 'v01_base.json').read_text(encoding='utf-8'))
@@ -652,6 +668,31 @@ def main():
     record('f_node_variables_removed_same_bytes', c4 == 0 and (od / 'research-draft.xlsx').read_bytes() == (outs / 'v01_base' / 'research-draft.xlsx').read_bytes()
            and (od / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (outs / 'v01_base' / 'EXPECTED_SAVED_VALUES.json').read_bytes()
            and {'NODE_OPTIONS', 'NODE_PATH'} <= set(rc.get('node_environment', {}).get('removed_variables', [])), e4[-300:])
+    # the second review's A3: OPENSSL_CONF naming a missing provider aborts node at startup (a real provider .so would run
+    # native code inside node). Effective on direct node; the allowlist removes it (with LD_LIBRARY_PATH and any other
+    # variable), so the writer gives the same bytes, and saved_qa's provenance check is unaffected too.
+    cnf = work / 's1_openssl' / 'openssl.cnf'
+    cnf.parent.mkdir()
+    cnf.write_text('nodejs_conf = nc\n[nc]\nproviders = pv\n[pv]\nevil = evs\n[evs]\nmodule = /nonexistent/evil_provider.so\nactivate = 1\n', encoding='utf-8')
+    env_ssl = dict(NODE_CLEAN_ENV, OPENSSL_CONF=str(cnf))
+    c5, o5, e5 = run(['node', '-e', "require('node:crypto').createHash('sha256');process.stdout.write('ran')"], env=NODE_CLEAN_ENV)
+    c6, o6, e6 = run(['node', '-e', "require('node:crypto').createHash('sha256');process.stdout.write('ran')"], env=env_ssl)
+    record('f_openssl_conf_attack_effective_on_direct_node', c5 == 0 and o5 == 'ran' and c6 != 0 and o6 != 'ran', {'clean': c5, 'openssl_conf': c6, 'stderr': e6[-200:]})
+    env_bad = dict(os.environ, OPENSSL_CONF=str(cnf), LD_LIBRARY_PATH=str(work / 's1_openssl' / 'nonexistent'), CPS_TEST_UNLISTED_VARIABLE='1')
+    od = work / 's1_openssl_valid_out'
+    c4, o4, e4 = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef / 'valid' / 'v01_base.json', '--out', od, '--writer-dir', wd], env=env_bad)
+    ne = json.loads((od / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')).get('node_environment', {}) if c4 == 0 else {}
+    record('f_openssl_conf_removed_same_bytes', c4 == 0 and (od / 'research-draft.xlsx').read_bytes() == (outs / 'v01_base' / 'research-draft.xlsx').read_bytes()
+           and (od / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (outs / 'v01_base' / 'EXPECTED_SAVED_VALUES.json').read_bytes()
+           and {'OPENSSL_CONF', 'LD_LIBRARY_PATH', 'CPS_TEST_UNLISTED_VARIABLE'} <= set(ne.get('removed_variables', []))
+           and not {'OPENSSL_CONF', 'LD_LIBRARY_PATH', 'CPS_TEST_UNLISTED_VARIABLE'} & set(ne.get('kept_variables', ['?']))
+           and ne.get('environment', '').startswith('allowlist'), {'stderr': e4[-300:], 'node_environment': ne})
+    rp = work / 's1_openssl_saved_qa.json'
+    c4, o4, e4 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', rp, '--carrier', ef / 'valid' / 'v01_base.json', '--writer-dir', wd], env=env_bad)
+    pv = qa_report(rp).get('expected_provenance', {})
+    record('f_openssl_conf_saved_qa_provenance_unaffected', c4 == 0 and pv.get('result') == 'PASS'
+           and 'OPENSSL_CONF' in pv.get('node_environment', {}).get('removed_variables', [])
+           and 'OPENSSL_CONF' not in pv.get('node_environment', {}).get('kept_variables', ['OPENSSL_CONF']), pv)
 
     # ------------------------------------------------ (g) saved_qa structure: the reviewer's 22 tampers (review S2)
     mt = load(HERE / 'make_tamper_fixtures.py', 'make_tamper_fixtures_under_test')
@@ -670,7 +711,8 @@ def main():
     code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'tamper', fid_out, td])
     tampers = json.loads((td / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
     reviewer22 = [t for t in tampers if t['group'] == 'reviewer'] + [t for t in tampers if t['name'].endswith(('_T21', '_T22'))]
-    record('g_tamper_counts', code == 0 and len(reviewer22) == 22 and len([t for t in tampers if t['group'] == 'extra']) >= 9, err[-300:])
+    record('g_tamper_counts', code == 0 and len(reviewer22) == 22 and len([t for t in tampers if t['group'] == 'extra']) >= 16
+           and sorted(t['name'][:3] for t in tampers if t['group'] == 'review2') == ['N01', 'N02', 'N03', 'N04', 'N05', 'N06', 'N07', 'N10', 'N11'], err[-300:])
     for t in tampers:
         d = Path(t['dir'])
         c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
@@ -686,10 +728,12 @@ def main():
         c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd])
         q = qa_report(d / 'SAVED_QA_PROVENANCE.json')
         fnd = q.get('findings', {})
-        want = t.get('provenance_finding')
-        record(f"h_provenance_catches_{t['name']}" if want else f"h_with_provenance_still_fails_{t['name']}",
-               c2 == 1 and q.get('status') == 'SAVED_QA_FAILED' and (want is None or want in fnd)
-               and 'Traceback' not in e2, {'status': q.get('status'), 'findings': {k: v['count'] for k, v in fnd.items()}})
+        pv = q.get('expected_provenance', {})
+        # v3 (second review F1(a)): every tamper changes the xlsx, and the rerun's xlsx is compared whatever the receipt mode
+        record(f"h_provenance_catches_{t['name']}", c2 == 1 and q.get('status') == 'SAVED_QA_FAILED' and t.get('provenance_finding') in fnd
+               and pv.get('xlsx_byte_identical') is False and (t['finding'] in (None, 'any') or t['finding'] in fnd)
+               and 'Traceback' not in e2, {'status': q.get('status'), 'findings': {k: v['count'] for k, v in fnd.items()},
+                                           'xlsx_byte_identical': pv.get('xlsx_byte_identical')})
 
     # ------------------------------------------------ (h) provenance of EXPECTED (review S3)
     for x in valid:
@@ -699,7 +743,8 @@ def main():
         q = qa_report(rp)
         pv = q.get('expected_provenance', {})
         record(f"h_provenance_v1_pass_{x['name']}", code == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS'
-               and pv.get('expected_byte_identical') is True and pv.get('receipt_mode') == 'v1'
+               and pv.get('expected_byte_identical') is True and pv.get('xlsx_byte_identical') is True and pv.get('receipt_mode') == 'v1'
+               and pv.get('writer004_expected_byte_identical') is True and pv.get('rerun_mode') == 'v2'
                and pv.get('node_environment', {}).get('artifact_tool_sha256') == wp.ARTIFACT_TOOL_STUB_SHA256, {'findings': q.get('findings'), 'provenance': pv})
     for x in valid2:
         od = outs / ('v2_' + x['name'])
@@ -708,8 +753,8 @@ def main():
         q = qa_report(rp)
         pv = q.get('expected_provenance', {})
         record(f"h_provenance_v2_pass_{x['name']}", code == 0 and q.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS' and pv.get('result') == 'PASS'
-               and pv.get('expected_byte_identical') is True and pv.get('xlsx_byte_identical') is True and pv.get('receipt_mode') == 'v2',
-               {'findings': q.get('findings'), 'provenance': pv})
+               and pv.get('expected_byte_identical') is True and pv.get('xlsx_byte_identical') is True and pv.get('receipt_mode') == 'v2'
+               and 'writer004_expected_byte_identical' not in pv, {'findings': q.get('findings'), 'provenance': pv})
     # consistent EXPECTED+xlsx tampers of a v2 output (full rerun), and a v2 view-only tamper with a consistent receipt
     v2src, v2car = outs / 'v2_w09_relaxed_all', ef2 / 'valid' / 'w09_relaxed_all.json'
     td2 = work / 'tampers_v2'
@@ -748,7 +793,8 @@ def main():
     code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', md, '--carrier', v2car, '--writer-dir', wd])
     q = qa_report(md / 'SAVED_QA.json')
     record('h_provenance_receipt_mode_v1_on_relaxed_output', code == 1 and q.get('expected_provenance', {}).get('result') == 'WRITER004_REFUSED'
-           and q['findings']['provenance']['first'][0].get('code') in ('SELECTION_ONLY_ENGINEERING_ID', 'UNRESOLVED_ITEM_MUST_BE_HELD'),
+           and q['findings']['provenance']['first'][0].get('code') in ('SELECTION_ONLY_ENGINEERING_ID', 'UNRESOLVED_ITEM_MUST_BE_HELD')
+           and q['expected_provenance'].get('xlsx_byte_identical') is True and q['expected_provenance'].get('rerun_relaxations_applied') is True,
            q.get('expected_provenance'))
     # the provenance rerun uses the pinned node environment: the planted writer directory is refused
     rp = work / 'prov_planted.json'
@@ -762,6 +808,93 @@ def main():
            and 'ARTIFACT_TOOL_NOT_PINNED' in json.dumps(q.get('findings', {})), q.get('expected_provenance'))
     code, out, err = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', outs / 'v01_base', '--report', work / 'prov_usage.json', '--carrier', ef / 'valid' / 'v01_base.json'])
     record('h_provenance_usage_carrier_needs_writer_dir', code == 2 and not (work / 'prov_usage.json').exists(), err[-200:])
+    # receipt-mode downgrade (second review F2): a --mode v2 output of the fidelity probe (no O13/R57: the v1 bytes), tampered,
+    # with the receipt mode kept or edited to v1. The rerun's xlsx is compared whatever the mode says.
+    fid_v2 = work / 'tamper_base_output_v2'
+    code, out, err = run(PY + [EXPORT / 'writer_portable.py', '--carrier', fid, '--out', fid_v2, '--writer-dir', wd, '--mode', 'v2'])
+    rc2 = json.loads((fid_v2 / 'WRITER_RECEIPT.json').read_text(encoding='utf-8')) if code == 0 else {}
+    record('h_fidelity_probe_v2_equals_v1_bytes', code == 0 and rc2.get('mode') == 'v2' and rc2['relaxations']['applied'] is False
+           and (fid_v2 / 'research-draft.xlsx').read_bytes() == (fid_out / 'research-draft.xlsx').read_bytes()
+           and (fid_v2 / 'EXPECTED_SAVED_VALUES.json').read_bytes() == (fid_out / 'EXPECTED_SAVED_VALUES.json').read_bytes(), err[-300:])
+    tdd = work / 'tampers_downgrade'
+    code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'downgrade', fid_v2, tdd])
+    tamd = json.loads((tdd / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
+    record('h_downgrade_tamper_counts', code == 0 and [t['name'][:2] for t in tamd] == ['D1', 'D2', 'D3'], err[-300:])
+    for t in tamd:
+        d = Path(t['dir'])
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+        q1 = qa_report(d / 'SAVED_QA.json')
+        if t['passes_without_provenance']:
+            no_prov_ok = c1 == 0 and q1.get('status') == 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
+        else:
+            no_prov_ok = c1 == 1 and t['finding'] in q1.get('findings', {})
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd])
+        q2 = qa_report(d / 'SAVED_QA_PROVENANCE.json')
+        pv, fnd = q2.get('expected_provenance', {}), q2.get('findings', {})
+        ok = (no_prov_ok and c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED' and 'provenance' in fnd and pv.get('result') == 'FAILED'
+              and pv.get('receipt_mode') == t['receipt_mode'] and pv.get('xlsx_byte_identical') is False and pv.get('expected_byte_identical') is True
+              and (t['finding'] is None and set(fnd) == {'provenance'} or t['finding'] in fnd)
+              and (t['receipt_mode'] != 'v1' or pv.get('writer004_expected_byte_identical') is True)
+              and 'Traceback' not in e1 + e2)
+        record(f"h_provenance_catches_downgrade_{t['name']}", ok, {'no_prov': [q1.get('status'), list(q1.get('findings', {}))],
+                                                                  'prov': [q2.get('status'), {k: v['count'] for k, v in fnd.items()}],
+                                                                  'provenance': {k: pv.get(k) for k in ('receipt_mode', 'result', 'xlsx_byte_identical',
+                                                                                                         'expected_byte_identical', 'writer004_expected_byte_identical')}})
+
+    # ------------------------------------------------ (j) number text (second review F1(b))
+    # Every form the writer writes is JavaScript String(v) (writer_portable js_number); saved_qa's pattern accepts each one.
+    # The fidelity output holds the first ten at the given main-sheet cells; the others are checked against node String(v).
+    forms = [('seventeen_digit_double', 0.30000000000000004, '0.30000000000000004', 'F2'), ('exponent_negative_1e-7', 1e-7, '1e-7', 'F3'),
+             ('integer_from_grouped_text', 1234567.0, '1234567', 'Q3'), ('integer_2_52_plus_1', 4503599627370497.0, '4503599627370497', 'F4'),
+             ('fraction_1_0000000000000002', 1.0000000000000002, '1.0000000000000002', 'P4'), ('subnormal_5e-324', 5e-324, '5e-324', 'F5'),
+             ('negative_zero_written_0', -0.0, '0', 'F6'), ('fraction_0_000001_no_exponent', 1e-6, '0.000001', 'Q6'),
+             ('fraction_0_7999999999999999', 0.7999999999999999, '0.7999999999999999', 'F7'),
+             ('fraction_123456789_12345678', 123456789.12345678, '123456789.12345678', 'P7'),
+             ('negative_integer', -5.0, '-5', None), ('negative_fraction', -1234.5, '-1234.5', None), ('negative_exponent', -1e-7, '-1e-7', None),
+             ('max_safe_integer', 9007199254740991.0, '9007199254740991', None), ('exponent_positive_1e21', 1e21, '1e+21', None),
+             ('max_double', 1.7976931348623157e308, '1.7976931348623157e+308', None), ('min_normal', 2.2250738585072014e-308, '2.2250738585072014e-308', None)]
+    vp2 = work / 'number_forms.json'
+    vp2.write_text(json.dumps([f[1] for f in forms]), encoding='ascii')
+    code, out, err = run(['node', '-e', "const v=JSON.parse(require('node:fs').readFileSync(process.argv[1],'utf8'));"
+                                        "process.stdout.write(JSON.stringify(v.map(x=>String(x))))", vp2])
+    node_str = json.loads(out) if code == 0 else []
+    with zipfile.ZipFile(fid_out / 'research-draft.xlsx') as z:
+        vtexts = dict(re.findall(r'<c r="([A-Z]+[0-9]+)"[^>]*><v>([^<]*)</v></c>', z.read('xl/worksheets/sheet1.xml').decode('utf-8')))
+    fid_main = json.loads((fid_out / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8'))['sheets'][0]['values']
+    for k, (label, v, js, cell) in enumerate(forms):
+        in_output = cell is None or (vtexts.get(cell) == js and same_value(fid_main[int(cell[1:]) - 1][ord(cell[0]) - 65], v))
+        record(f'j_number_text_form_{label}', len(node_str) == len(forms) and node_str[k] == js == wp.js_number(v) and sq.number_text_ok(js) and in_output,
+               {'node': node_str[k] if k < len(node_str) else None, 'python': wp.js_number(v), 'xlsx': vtexts.get(cell)})
+    refused = ['1_234_567', '\uff11\uff12\uff13', '\u0661\u0662', ' 1', '1 ', '1\n', '+1', '1E-7', '1e5', '.5', '1.', '01', '00', '0x1F', 'NaN',
+               'Infinity', '-Infinity', '', '-', '1e', '1e+', '\u00b2', '1,234', '1.2.3']
+    record('j_number_text_refuses_other_forms', not [x for x in refused if sq.number_text_ok(x)], [x for x in refused if sq.number_text_ok(x)])
+    # the pattern accepts js_number of every number of the 3,000-value fuzz (node equality: test a_js_stringify_fuzz_parity_3000)
+    # and of 20,000 random finite binary64 values
+    def numbers(v):
+        if isinstance(v, bool) or v is None or isinstance(v, str):
+            return []
+        if isinstance(v, (int, float)):
+            return [v]
+        return [n for x in (v.values() if isinstance(v, dict) else v) for n in numbers(x)]
+    rnd = random.Random(2404)
+    pool = [n for x in parsed for n in numbers(x)]
+    while len(pool) < len([n for x in parsed for n in numbers(x)]) + 20000:
+        f = struct.unpack('<d', rnd.getrandbits(64).to_bytes(8, 'little'))[0]
+        if math.isfinite(f):
+            pool.append(f)
+    bad_num = [wp.js_number(n) for n in pool if math.isfinite(float(n)) and not sq.number_text_ok(wp.js_number(n))]
+    record('j_number_text_accepts_js_number_of_fuzz_and_random_doubles', len(pool) > 20000 and not bad_num, {'count': len(pool), 'refused': bad_num[:5]})
+    # every number text in every writer output of this run matches (saved QA passed on each, so this is the same check made explicit)
+    texts, bad_t = 0, []
+    for od in sorted([d for d in outs.iterdir() if (d / 'research-draft.xlsx').is_file()] + [fid_out, fid_v2]):
+        with zipfile.ZipFile(od / 'research-draft.xlsx') as z:
+            for part in z.namelist():
+                if part.startswith('xl/worksheets/'):
+                    for t_ in re.findall(r'<v>([^<]*)</v>', z.read(part).decode('utf-8')):
+                        texts += 1
+                        if not sq.number_text_ok(t_):
+                            bad_t.append([od.name, part, t_])
+    record('j_every_number_text_in_every_output_matches', texts > 500 and not bad_t, {'texts': texts, 'refused': bad_t[:5]})
 
     # ------------------------------------------------ (i) visual_qa helpers (review S4, N1), without LibreOffice
     vq = load(EXPORT / 'visual_qa.py', 'visual_qa_under_test')
@@ -832,11 +965,11 @@ def main():
         record('d_visual_qa_exact_mode', code == 0 and me.get('pages', 0) >= 1 and me['render_copy']['identical_to_saved'], err[-300:])
 
     failed = [r for r in results if not r['pass']]
-    summary = {'suite': 'cps-export-portable-writer-tests.v2', 'tests': len(results), 'passed_count': len(results) - len(failed),
+    summary = {'suite': 'cps-export-portable-writer-tests.v3', 'tests': len(results), 'passed_count': len(results) - len(failed),
                'failed_count': len(failed), 'passed': [r['test'] for r in results if r['pass']], 'failed': failed,
                'fixtures_invented': True, 'valid_fixtures': len(valid), 'invalid_fixtures': len(invalid),
                'valid_fixtures_v2': len(valid2), 'invalid_fixtures_v2': len(invalid2),
-               'saved_qa_tampers': len(tampers), 'saved_qa_tampers_v2': len(tampers2),
+               'saved_qa_tampers': len(tampers), 'saved_qa_tampers_v2': len(tampers2), 'saved_qa_tampers_downgrade': len(tamd),
                'make_tamper_fixtures_sha256': sha((HERE / 'make_tamper_fixtures.py').read_bytes()),
                'writer_portable_sha256': sha((EXPORT / 'writer_portable.py').read_bytes()),
                'saved_qa_sha256': sha((EXPORT / 'saved_qa.py').read_bytes()), 'visual_qa_sha256': sha((EXPORT / 'visual_qa.py').read_bytes()),

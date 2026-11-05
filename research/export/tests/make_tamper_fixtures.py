@@ -5,10 +5,16 @@
                      spaces, 17-digit doubles, 1e-7, the denormal 5e-324, -0, JavaScript key order in metadata, a
                      formula-like and an error-literal nonitem text, a lone surrogate inside JSON review text.
   tamper SRC DEST    From a writer output SRC (made from that carrier), the reviewer's 22 tampered outputs T01..T22
-                     plus extra structural tampers X01..X09 and the consistent EXPECTED+xlsx variants C1..C3, each in
-                     its own directory, and DEST/TAMPERS.json with the finding each one must produce.
+                     plus extra structural tampers X01..X16, the second review's N01..N07, N10, N11 (review round 2,
+                     s2_tampers.py) and the consistent EXPECTED+xlsx variants C1..C3, each in its own directory, and
+                     DEST/TAMPERS.json with the finding each one must produce.
+  downgrade SRC DEST From a --mode v2 writer output SRC of a carrier without O13/R57 (same bytes as v1), the second
+                     review's receipt-mode downgrade (F2, s3_attacks2.py): D1 the N01 tamper with the receipt mode kept
+                     v2, D2 the same with the receipt mode edited to v1, D3 a change no structural check sees (pane
+                     ySplit, the second review's N12) with the receipt mode edited to v1; DEST/TAMPERS.json as above.
 Usage: python3 -I -B make_tamper_fixtures.py carrier /abs/v01_base.json /abs/new.json
        python3 -I -B make_tamper_fixtures.py tamper /abs/writer-output /abs/new-dir
+       python3 -I -B make_tamper_fixtures.py downgrade /abs/writer-output-mode-v2 /abs/new-dir
 """
 import copy, hashlib, json, re, sys, zipfile
 from pathlib import Path
@@ -128,6 +134,41 @@ EXTRA_TAMPERS = {
 }
 
 
+# Second review (round 2, F1): tampers LibreOffice reads differently from the three Python readers (s2_tampers.py,
+# verbatim edits). N04/N05 (duplicates first; LibreOffice is last-wins like Python) and N11 (superscript) are added
+# because the checks for them were added too.
+D2_CELL = '<c r="D2" s="2" t="inlineStr"><is><t>123</t></is></c>'
+BODY_FONT = r'<font><name val="Arial"/><color rgb="FF172033"/>'
+REVIEW2_TAMPERS = {
+    'N01_second_v_in_number_cell': ({S1: sub1(r'<v>0\.30000000000000004</v>', '<v>0.30000000000000004</v><v>999</v>')}, 'cell_value_children'),
+    'N02_second_is_in_string_cell': ({S1: sub1(re.escape(D2_CELL), '<c r="D2" s="2" t="inlineStr"><is><t>123</t></is><is><t>EVIL</t></is></c>')}, 'cell_value_children'),
+    'N03_v_beside_is': ({S1: sub1(re.escape(D2_CELL), '<c r="D2" s="2" t="inlineStr"><v>EVIL</v><is><t>123</t></is></c>')}, 'cell_value_children'),
+    'N04_duplicate_cell_ref_first': ({S1: sub1(re.escape('<c r="C2" s="2" t="inlineStr">'),
+                                                '<c r="C2" s="2" t="inlineStr"><is><t>EVIL</t></is></c><c r="C2" s="2" t="inlineStr">')}, 'duplicate_reference'),
+    'N05_duplicate_row_first': ({S1: sub1(r'<row r="2">', '<row r="2"><c r="A2" s="2" t="inlineStr"><is><t>EVIL</t></is></c></row><row r="2">')}, 'duplicate_reference'),
+    'N06_number_text_underscore': ({S1: sub1(r'<v>1234567</v>', '<v>1_234_567</v>')}, 'number_text'),
+    'N07_number_text_fullwidth': ({S1: sub1(r'<v>1234567</v>', '<v>\uff11\uff12\uff13\uff14\uff15\uff16\uff17</v>')}, 'number_text'),
+    'N10_strike_body_font': ({ST: sub1(BODY_FONT, '<font><name val="Arial"/><strike val="1"/><color rgb="FF172033"/>')}, 'font_structure'),
+    'N11_superscript_body_font': ({ST: sub1(BODY_FONT, '<font><name val="Arial"/><vertAlign val="superscript"/><color rgb="FF172033"/>')}, 'font_structure'),
+}
+# Extra checks of saved_qa v3 beyond the second review's list, one tamper each.
+EXTRA_TAMPERS.update({
+    'X10_t_child_element': ({S1: sub1(re.escape(D2_CELL), '<c r="D2" s="2" t="inlineStr"><is><t>12<b/>3</t></is></c>')}, 'cell_value_children'),
+    'X11_v_child_element': ({S1: sub1(r'<v>1234567</v>', '<v>1234567<b/></v>')}, 'cell_value_children'),
+    'X12_cell_ref_outside_its_row': ({S1: sub1(r'<c r="B2" ', '<c r="B9" ')}, 'worksheet_structure'),
+    'X13_cells_out_of_order': ({S1: sub1(r'(<c r="A2" [^>]*><is><t>[^<]*</t></is></c>)(<c r="B2" [^>]*><is><t>[^<]*</t></is></c>)', r'\2\1')}, 'worksheet_structure'),
+    'X14_number_text_leading_space': ({S1: sub1(r'<v>1234567</v>', '<v> 1234567</v>')}, 'number_text'),
+    'X15_number_text_uppercase_exponent': ({S1: sub1(r'<v>1e-7</v>', '<v>1E-7</v>')}, 'number_text'),
+    'X16_font_second_color': ({ST: sub1(BODY_FONT, '<font><name val="Arial"/><color rgb="FF172033"/><color rgb="FFFFFFFF"/>')}, 'font_structure'),
+})
+# Receipt-mode downgrade (second review F2): name -> (edits, receipt mode to write, finding without provenance or None)
+DOWNGRADE_TAMPERS = {
+    'D1_v2_output_second_v_mode_kept': ({S1: REVIEW2_TAMPERS['N01_second_v_in_number_cell'][0][S1]}, 'v2', 'cell_value_children'),
+    'D2_v2_output_second_v_mode_downgraded_to_v1': ({S1: REVIEW2_TAMPERS['N01_second_v_in_number_cell'][0][S1]}, 'v1', 'cell_value_children'),
+    'D3_v2_output_pane_ysplit_mode_downgraded_to_v1': ({S1: sub1(r'ySplit="1" topLeftCell="D2"', 'ySplit="60" topLeftCell="D2"')}, 'v1', None),
+}
+
+
 def write_tampered(src_xlsx, dst_xlsx, edits):
     if '=' in edits:
         dst_xlsx.write_bytes(edits['='](None))
@@ -173,7 +214,7 @@ def consistent_change(src, d):
 def make_tampers(src, dest, consistent_only=False):
     dest.mkdir(parents=True, exist_ok=False)
     index = []
-    groups = [] if consistent_only else [('reviewer', REVIEWER_TAMPERS), ('extra', EXTRA_TAMPERS)]
+    groups = [] if consistent_only else [('reviewer', REVIEWER_TAMPERS), ('extra', EXTRA_TAMPERS), ('review2', REVIEW2_TAMPERS)]
     for group, table in groups:
         for name, (edits, finding) in table.items():
             d = dest / name
@@ -182,7 +223,8 @@ def make_tampers(src, dest, consistent_only=False):
                 (d / f).write_bytes((src / f).read_bytes())
             write_tampered(src / 'research-draft.xlsx', d / 'research-draft.xlsx', edits)
             update_receipt(d)          # consistent receipt: the integrity hashes alone cannot catch it
-            index.append({'name': name, 'dir': str(d), 'group': group, 'finding': finding, 'passes_without_provenance': False})
+            index.append({'name': name, 'dir': str(d), 'group': group, 'finding': finding, 'passes_without_provenance': False,
+                          'provenance_finding': 'provenance'})
     # consistent EXPECTED+xlsx change: C1 receipt left stale, C2 receipt hashes updated (review T21), C3 receipt deleted (T22)
     for name, receipt in (('C1_consistent_receipt_stale', 'stale'), ('C2_consistent_receipt_updated_T21', 'updated'),
                           ('C3_consistent_receipt_deleted_T22', 'deleted')):
@@ -201,6 +243,29 @@ def make_tampers(src, dest, consistent_only=False):
     return index
 
 
+def make_downgrade(src, dest):
+    """The second review's receipt-mode downgrade (F2) from a --mode v2 output of a carrier without O13/R57."""
+    rc = json.loads((src / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+    assert rc['mode'] == 'v2' and rc['relaxations']['applied'] is False, 'needs a mode v2 output without O13/R57 relaxations'
+    dest.mkdir(parents=True, exist_ok=False)
+    index = []
+    for name, (edits, mode, finding) in DOWNGRADE_TAMPERS.items():
+        d = dest / name
+        d.mkdir()
+        for f in ('EXPECTED_SAVED_VALUES.json', 'WRITER_RECEIPT.json'):
+            (d / f).write_bytes((src / f).read_bytes())
+        write_tampered(src / 'research-draft.xlsx', d / 'research-draft.xlsx', edits)
+        update_receipt(d)
+        r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+        r['mode'] = mode
+        (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        index.append({'name': name, 'dir': str(d), 'group': 'downgrade', 'receipt_mode': mode, 'finding': finding,
+                      'passes_without_provenance': finding is None, 'provenance_finding': 'provenance'})
+    (dest / 'TAMPERS.json').write_text(json.dumps({'invented': True, 'source_output': str(src), 'tampers': index},
+                                                  ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    return index
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 4 and sys.argv[1] == 'carrier':
         base = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
@@ -208,5 +273,7 @@ if __name__ == '__main__':
     elif len(sys.argv) in (4, 5) and sys.argv[1] == 'tamper':
         idx = make_tampers(Path(sys.argv[2]), Path(sys.argv[3]), consistent_only=len(sys.argv) == 5 and sys.argv[4] == '--consistent-only')
         print(json.dumps({'tampers': len(idx)}))
+    elif len(sys.argv) == 4 and sys.argv[1] == 'downgrade':
+        print(json.dumps({'tampers': len(make_downgrade(Path(sys.argv[2]), Path(sys.argv[3])))}))
     else:
         sys.exit(__doc__)

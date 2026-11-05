@@ -1,0 +1,90 @@
+{
+  "schema": "cps.columns.v1",
+  "columns": [
+    {
+      "index": 1,
+      "letter": "A",
+      "label": "盤體名稱"
+    },
+    {
+      "index": 2,
+      "letter": "B",
+      "label": "盤體規格"
+    },
+    {
+      "index": 3,
+      "letter": "C",
+      "label": "材料名稱"
+    },
+    {
+      "index": 4,
+      "letter": "D",
+      "label": "規格"
+    },
+    {
+      "index": 5,
+      "letter": "E",
+      "label": "單位"
+    },
+    {
+      "index": 6,
+      "letter": "F",
+      "label": "數量"
+    },
+    {
+      "index": 7,
+      "letter": "G",
+      "label": "單價"
+    },
+    {
+      "index": 8,
+      "letter": "H",
+      "label": "複價"
+    },
+    {
+      "index": 9,
+      "letter": "I",
+      "label": "型號"
+    },
+    {
+      "index": 10,
+      "letter": "J",
+      "label": "廠牌"
+    },
+    {
+      "index": 11,
+      "letter": "K",
+      "label": "訂購廠商"
+    },
+    {
+      "index": 12,
+      "letter": "L",
+      "label": "工程編號"
+    },
+    {
+      "index": 13,
+      "letter": "M",
+      "label": "訂購客戶"
+    },
+    {
+      "index": 14,
+      "letter": "N",
+      "label": "使用客戶"
+    },
+    {
+      "index": 15,
+      "letter": "O",
+      "label": "需要日期"
+    },
+    {
+      "index": 16,
+      "letter": "P",
+      "label": "需要數量"
+    },
+    {
+      "index": 17,
+      "letter": "Q",
+      "label": "合約價"
+    }
+  ]
+}

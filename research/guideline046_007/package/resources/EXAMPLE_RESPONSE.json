@@ -1,0 +1,1877 @@
+{
+ "schema": "cps.semantic-source-refs.v2",
+ "case_id": "EXAMPLE046F",
+ "family_id": "EXAMPLE046F",
+ "inventory_sha256": "8645ac9ea63fb8b293c0f0ce9194354512d4abd5416310fc6a50bceca31d96b1",
+ "status": "research_draft",
+ "groups": [
+  {
+   "id": "G1",
+   "name": "控制盤",
+   "specification": "600W*800H*300D",
+   "relationship": "physical_enclosure",
+   "anchor_refs": [
+    "cell:S1!A4"
+   ],
+   "name_refs": [
+    "cell:S1!B4"
+   ],
+   "specification_refs": [
+    "cell:S1!B4"
+   ],
+   "quantity_basis": "the enclosure row R001 itself (R56); it is the only member",
+   "limitations": [
+    "One-row carrier group for the R56 enclosure row: the interface carries A and B only through a group whose name and specification equal them (R56). No other row carries A or B and no other groups are formed."
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "R001",
+   "role": "demand",
+   "group_id": "G1",
+   "status": "research_draft",
+   "values": [
+    "控制盤",
+    "600W*800H*300D",
+    "箱體",
+    "SUS304，髮絲面",
+    "面",
+    1,
+    null,
+    null,
+    null,
+    "示例機電",
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    25000
+   ],
+   "proofs": {
+    "A": {
+     "refs": [
+      "cell:S1!B4"
+     ],
+     "transformation": "enclosure noun 控制盤 taken from the line",
+     "role_basis": "priced line supplying an enclosure itself (R56)"
+    },
+    "B": {
+     "refs": [
+      "cell:S1!B4"
+     ],
+     "transformation": "dimensions W600×H800×D300 written as <w>W*<h>H*<d>D",
+     "role_basis": "dimensions stated in the source line, mm (R56)"
+    },
+    "C": {
+     "refs": [
+      "cell:S1!B4",
+      "context:glossary"
+     ],
+     "transformation": "generic enclosure word named in the glossary resource",
+     "role_basis": "enclosure row (R56, R58)"
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B4"
+     ],
+     "transformation": "description minus the prefix 產品, the category word 箱體, the enclosure noun 控制盤 and the dimensions; SUS304 and 髮絲面 are not rating tokens, so the comma stays (R53)",
+     "role_basis": "remaining material and finish text of the enclosure row (R56)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C4"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D4"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "Enclosure row: I is null (R56). The model cell H4 is empty."
+    },
+    "J": {
+     "refs": [
+      "cell:S1!G4"
+     ],
+     "transformation": "copied brand cell",
+     "role_basis": "the material list states the enclosure's brand (廠牌 column): J is that value, not the company name (R56)"
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E4"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line: Q is its unit price, never the amount (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B4"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C4"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D4"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E4"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F4"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I4 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A4"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R002",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    "XMC",
+    "AC110V，附端子蓋",
+    "只",
+    2,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    1500
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "refs": [
+      "cell:S1!B5",
+      "context:glossary"
+     ],
+     "transformation": "glossary abbreviation for the head noun 電磁接觸器, after the prefix 產品 and the category word 電磁開關 that the glossary lists",
+     "role_basis": "equipment line (contactor) whose device the glossary lists (R52, R58)"
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B5",
+      "cell:S1!B6"
+     ],
+     "transformation": "rest of the description after the prefix, the category chain and C's segment; continuation row joined with no separator; 附端子蓋 is not a rating token, so the comma stays (R53)",
+     "role_basis": "remaining specification of an equipment line (R52)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C5"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D5"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "The line's brand and model cells (廠牌 G5, 型號 H5) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
+    },
+    "J": {
+     "reason": "The line's brand and model cells (廠牌 G5, 型號 H5) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E5"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line: unit price, not the amount 3000 (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B5",
+      "cell:S1!B6"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C5"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D5"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E5"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F5"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cells I5 and I6 are empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A5"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R003",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    "XCS",
+    "φ30mm 2a2b",
+    "個",
+    3,
+    null,
+    null,
+    "不含估價",
+    "不含估價",
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    null
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "refs": [
+      "cell:S1!B7",
+      "context:glossary"
+     ],
+     "transformation": "glossary abbreviation for the head noun 選擇開關, after the prefix 產品 and the category chain 控制開關類 (ends in 類)",
+     "role_basis": "equipment line (switch) whose device the glossary lists (R52, R58)"
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B7"
+     ],
+     "transformation": "rest of the description after the prefix, the category chain and C's segment; the comma between the rating tokens φ30mm and 2a2b becomes one space (R53)",
+     "role_basis": "remaining specification (R52, R53)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C7"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D7"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "refs": [
+      "cell:S1!F7"
+     ],
+     "transformation": "copied status text from the amount cell",
+     "role_basis": "not-estimated line (R50, R55)"
+    },
+    "J": {
+     "refs": [
+      "cell:S1!F7"
+     ],
+     "transformation": "copied status text from the amount cell",
+     "role_basis": "not-estimated line (R50, R55)"
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "reason": "Not-estimated line: Q is null (R54); the unit-price cell E7 is empty."
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B7"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C7"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D7"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [],
+     "reason_if_empty": "unit-price cell E7 is empty"
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F7"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I7 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A7"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R004",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    "XNB",
+    "3P 50AT AC 25KA",
+    "只",
+    1,
+    null,
+    null,
+    "XB-50",
+    "示例丙牌",
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    800
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "refs": [
+      "cell:S1!B8",
+      "context:glossary"
+     ],
+     "transformation": "glossary abbreviation for the head noun 無熔絲開關 (after the prefix 產品; no category chain)",
+     "role_basis": "equipment line (breaker) whose device the glossary lists (R52, R58)"
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B8"
+     ],
+     "transformation": "rating tokens 3P, 50AT, AC, 25KA joined with single spaces; the wrapping brackets are dropped (R53)",
+     "role_basis": "remaining rating list of an equipment line (R52, R53)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C8"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D8"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "refs": [
+      "cell:S1!H8"
+     ],
+     "transformation": "copied model cell",
+     "role_basis": "model stated in the line's own 型號 cell; with a 材料清單, I and J come only from its cells (R47b, R55)"
+    },
+    "J": {
+     "refs": [
+      "cell:S1!G8"
+     ],
+     "transformation": "copied brand cell",
+     "role_basis": "brand stated in the line's own 廠牌 cell; with a 材料清單, I and J come only from its cells (R47b, R55)"
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E8"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B8"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C8"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D8"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E8"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F8"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I8 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A8"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R005",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    null,
+    "600V XLPE電纜，3C 2mm²",
+    "M",
+    120,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    45
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "reason": "Material line (cable and wire): C is null (R52); the route accepts a null C as research_draft (R57)."
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B9"
+     ],
+     "transformation": "description without the prefix 產品 and the category chain 電線電纜類; the comma between the rating tokens 3C and 2mm² becomes one space, the other comma stays (R53)",
+     "role_basis": "material line (R52)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C9"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D9"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "Material line: I is null (R55). The model cell H9 is empty."
+    },
+    "J": {
+     "reason": "Material line: J is null (R55). The brand cell G9 is empty."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E9"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B9"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C9"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D9"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E9"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F9"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I9 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A9"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R006",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    "ATS",
+    "3P 160A",
+    "只",
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    12000
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "refs": [
+      "cell:S1!B10"
+     ],
+     "transformation": "the Latin acronym ATS written in brackets after the noun 自動切換開關; the glossary lists no abbreviation for it",
+     "role_basis": "equipment line (transfer switch): C is the acronym alone (R52, O20)"
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B10"
+     ],
+     "transformation": "rest of the description after the prefix and C's segment; rating tokens 3P and 160A joined with one space (R53)",
+     "role_basis": "remaining rating list of an equipment line (R52, R53)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C10"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D10"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "The line's brand and model cells (廠牌 G10, 型號 H10) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
+    },
+    "J": {
+     "reason": "The line's brand and model cells (廠牌 G10, 型號 H10) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E10"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B10"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C10"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D10"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E10"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F10"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I10 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A10"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R007",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    null,
+    "盤體組立配線工資",
+    "式",
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    8000
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "reason": "Service and labour line: C is null (R52); the route accepts a null C as research_draft (R57)."
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B11"
+     ],
+     "transformation": "copied description (single segment, no generic prefix)",
+     "role_basis": "service and labour line (R52)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C11"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D11"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "Service line: I is null (R55)."
+    },
+    "J": {
+     "reason": "Service line: J is null (R55)."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E11"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B11"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C11"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D11"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E11"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F11"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I11 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A11"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R008",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    null,
+    "流量計",
+    "台",
+    1,
+    null,
+    null,
+    "FM-100",
+    "示例儀器",
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    50000
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "reason": "Single-segment description whose noun the glossary does not list: C is null and the text goes to D (R52)."
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B12"
+     ],
+     "transformation": "copied single-segment description",
+     "role_basis": "single-segment line without a glossary entry (R52)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C12"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D12"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "refs": [
+      "cell:S1!H12"
+     ],
+     "transformation": "copied model cell",
+     "role_basis": "priced equipment line (instrument): model stated in the line's own 型號 cell (R55)"
+    },
+    "J": {
+     "refs": [
+      "cell:S1!G12"
+     ],
+     "transformation": "copied brand cell",
+     "role_basis": "priced equipment line (instrument): brand stated in the line's own 廠牌 cell (R55)"
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E12"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B12"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C12"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D12"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E12"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F12"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I12 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A12"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R009",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    "XPL",
+    null,
+    "只",
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    150
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "refs": [
+      "cell:S1!B13",
+      "context:glossary"
+     ],
+     "transformation": "glossary abbreviation for the single-segment noun 指示燈",
+     "role_basis": "single-segment description whose noun the glossary lists: C is the abbreviation (R52, R58)"
+    },
+    "D": {
+     "reason": "Single-segment description whose noun the glossary lists: D is null (R52). The remark I13 holds a supply marker and a not-used note; they do not remove the line and never enter a field (R50, R52)."
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C13"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D13"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "The line's brand and model cells (廠牌 G13, 型號 H13) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
+    },
+    "J": {
+     "reason": "The line's brand and model cells (廠牌 G13, 型號 H13) are empty. With a 材料清單, I and J come only from its cells; the brand table is not used (R47b, R55, O17)."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E13"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B13"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C13"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D13"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E13"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F13"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [
+      "cell:S1!I13"
+     ],
+     "reason_if_empty": null
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A13"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R010",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    null,
+    "運費",
+    "式",
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    3000
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "reason": "Fee line: C is null (R52); the route accepts a null C as research_draft (R57)."
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B18"
+     ],
+     "transformation": "copied description",
+     "role_basis": "the sender's unnumbered fee line before the end row is a row (R50); fee line (R52)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C18"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "refs": [
+      "cell:S1!D18"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own quantity cell (數量), verbatim (R57)"
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "Fee line: I is null (R55)."
+    },
+    "J": {
+     "reason": "Fee line: J is null (R55)."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E18"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B18"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C18"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D18"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E18"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F18"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I18 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!B18"
+   ],
+   "review_reasons": []
+  },
+  {
+   "id": "R011",
+   "role": "demand",
+   "group_id": null,
+   "status": "research_draft",
+   "values": [
+    null,
+    null,
+    null,
+    "固定螺絲，M6",
+    "包",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "EXAMPLE046F",
+    "示例縣自來水事業處",
+    "示例淨水場控制盤更新",
+    null,
+    null,
+    80
+   ],
+   "proofs": {
+    "A": {
+     "reason": "Not the enclosure row: A is null (R56)."
+    },
+    "B": {
+     "reason": "Not the enclosure row: B is null (R56)."
+    },
+    "C": {
+     "reason": "Hardware line: C is null (R52); the route accepts a null C as research_draft (R57)."
+    },
+    "D": {
+     "refs": [
+      "cell:S1!B19"
+     ],
+     "transformation": "description without the prefix 產品 and the category chain 五金類; 固定螺絲 is not a rating token, so the comma before M6 stays (R53)",
+     "role_basis": "hardware line (R52)"
+    },
+    "E": {
+     "refs": [
+      "cell:S1!C19"
+     ],
+     "transformation": "copied",
+     "role_basis": "the line's own unit cell (單位), verbatim (R57)"
+    },
+    "F": {
+     "reason": "The quantity cell D19 holds the text 5包, a number written with a unit; F must be a number, so it is null (R57). The text stays in the raw quantity."
+    },
+    "G": {
+     "reason": "G stays null (R57)."
+    },
+    "H": {
+     "reason": "H stays null (R57)."
+    },
+    "I": {
+     "reason": "Hardware line: I is null (R55)."
+    },
+    "J": {
+     "reason": "Hardware line: J is null (R55)."
+    },
+    "K": {
+     "reason": "K stays null (R48)."
+    },
+    "L": {
+     "refs": [
+      "context:case_identity"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "internal case id supplied with the job (R48)"
+    },
+    "M": {
+     "refs": [
+      "context:customer_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "customer full name supplied with the job (R48)"
+    },
+    "N": {
+     "refs": [
+      "context:project_name"
+     ],
+     "transformation": "copied job input",
+     "role_basis": "project short name supplied with the job (R48)"
+    },
+    "O": {
+     "reason": "O stays null (R48)."
+    },
+    "P": {
+     "reason": "P stays null (R48)."
+    },
+    "Q": {
+     "refs": [
+      "cell:S1!E19"
+     ],
+     "transformation": "copied unit price",
+     "role_basis": "priced line (R54)"
+    }
+   },
+   "raw_refs": {
+    "description": {
+     "refs": [
+      "cell:S1!B19"
+     ],
+     "reason_if_empty": null
+    },
+    "unit": {
+     "refs": [
+      "cell:S1!C19"
+     ],
+     "reason_if_empty": null
+    },
+    "quantity": {
+     "refs": [
+      "cell:S1!D19"
+     ],
+     "reason_if_empty": null
+    },
+    "unit_price": {
+     "refs": [
+      "cell:S1!E19"
+     ],
+     "reason_if_empty": null
+    },
+    "amount": {
+     "refs": [
+      "cell:S1!F19"
+     ],
+     "reason_if_empty": null
+    },
+    "remarks": {
+     "refs": [],
+     "reason_if_empty": "remarks cell I19 is empty"
+    }
+   },
+   "anchor_refs": [
+    "cell:S1!A19"
+   ],
+   "review_reasons": [
+    "The quantity is written as text with a unit (5包), so F is null (R57)."
+   ]
+  }
+ ],
+ "component_links": [],
+ "source_roles": [
+  {
+   "role": "header",
+   "refs": [
+    "cell:S1!A1",
+    "cell:S1!A2",
+    "cell:S1!B2",
+    "cell:S1!C2",
+    "cell:S1!D2",
+    "cell:S1!E2",
+    "cell:S1!F2",
+    "cell:S1!G2",
+    "cell:S1!H2",
+    "cell:S1!I2"
+   ],
+   "reason": "title and column headers of the material list"
+  },
+  {
+   "role": "section",
+   "refs": [
+    "cell:S1!A3",
+    "cell:S1!B3",
+    "cell:S1!A17",
+    "cell:S1!B17"
+   ],
+   "reason": "section headings inside the quoted range; headings are not rows (R50)"
+  },
+  {
+   "role": "item_identifier",
+   "refs": [
+    "cell:S1!A4",
+    "cell:S1!A5",
+    "cell:S1!A7",
+    "cell:S1!A8",
+    "cell:S1!A9",
+    "cell:S1!A10",
+    "cell:S1!A11",
+    "cell:S1!A12",
+    "cell:S1!A13",
+    "cell:S1!A19"
+   ],
+   "reason": "item numbers"
+  },
+  {
+   "role": "demand_content",
+   "refs": [
+    "cell:S1!B4",
+    "cell:S1!C4",
+    "cell:S1!D4",
+    "cell:S1!E4",
+    "cell:S1!F4",
+    "cell:S1!G4",
+    "cell:S1!B5",
+    "cell:S1!C5",
+    "cell:S1!D5",
+    "cell:S1!E5",
+    "cell:S1!F5",
+    "cell:S1!B6",
+    "cell:S1!B7",
+    "cell:S1!C7",
+    "cell:S1!D7",
+    "cell:S1!F7",
+    "cell:S1!B8",
+    "cell:S1!C8",
+    "cell:S1!D8",
+    "cell:S1!E8",
+    "cell:S1!F8",
+    "cell:S1!G8",
+    "cell:S1!H8",
+    "cell:S1!B9",
+    "cell:S1!C9",
+    "cell:S1!D9",
+    "cell:S1!E9",
+    "cell:S1!F9",
+    "cell:S1!B10",
+    "cell:S1!C10",
+    "cell:S1!D10",
+    "cell:S1!E10",
+    "cell:S1!F10",
+    "cell:S1!B11",
+    "cell:S1!C11",
+    "cell:S1!D11",
+    "cell:S1!E11",
+    "cell:S1!F11",
+    "cell:S1!B12",
+    "cell:S1!C12",
+    "cell:S1!D12",
+    "cell:S1!E12",
+    "cell:S1!F12",
+    "cell:S1!G12",
+    "cell:S1!H12",
+    "cell:S1!B13",
+    "cell:S1!C13",
+    "cell:S1!D13",
+    "cell:S1!E13",
+    "cell:S1!F13",
+    "cell:S1!I13",
+    "cell:S1!B18",
+    "cell:S1!C18",
+    "cell:S1!D18",
+    "cell:S1!E18",
+    "cell:S1!F18",
+    "cell:S1!B19",
+    "cell:S1!C19",
+    "cell:S1!D19",
+    "cell:S1!E19",
+    "cell:S1!F19"
+   ],
+   "reason": "description, unit, quantity, unit-price, amount, brand, model and remark cells of the rows"
+  },
+  {
+   "role": "excluded_supply",
+   "refs": [
+    "cell:S1!A14",
+    "cell:S1!B14",
+    "cell:S1!C14",
+    "cell:S1!D14",
+    "cell:S1!F14"
+   ],
+   "reason": "no enclosure and no estimate: not in the quoted supply (R45); zero-state line: the amount F14 is a cached 0, the unit-price cell E14 is empty and the line has no status, so it is not a row (R50)"
+  },
+  {
+   "role": "excluded_supply",
+   "refs": [
+    "cell:S1!A15",
+    "cell:S1!B15",
+    "cell:S1!C15",
+    "cell:S1!D15"
+   ],
+   "reason": "no enclosure and no estimate: not in the quoted supply (R45); the price cells E15 and F15 are empty and the line has no status (R50)"
+  },
+  {
+   "role": "financial_summary",
+   "refs": [
+    "cell:S1!B16",
+    "cell:S1!F16"
+   ],
+   "reason": "合計 written in the description column: a block total, not the end of the quoted range (R49, R11)"
+  },
+  {
+   "role": "financial_summary",
+   "refs": [
+    "cell:S1!E20",
+    "cell:S1!F20"
+   ],
+   "reason": "end row: 合計 in the unit-price column closes the quoted range (R49, R11)"
+  },
+  {
+   "role": "excluded_supply",
+   "refs": [
+    "cell:S1!A21",
+    "cell:S1!B21",
+    "cell:S1!C21",
+    "cell:S1!D21",
+    "cell:S1!E21",
+    "cell:S1!F21"
+   ],
+   "reason": "outside the quoted range (R49): the line is after the end row 20"
+  },
+  {
+   "role": "commercial_note",
+   "refs": [
+    "cell:S1!A22"
+   ],
+   "reason": "validity note after the end row (R11, R49)"
+  },
+  {
+   "role": "footer",
+   "refs": [
+    "cell:S1!A23"
+   ],
+   "reason": "sender's signature line after the end row (R49)"
+  }
+ ],
+ "limitations": [
+  "Invented example for candidate 046f (R47b-R58, route v4.2). No real material list, contract, customer, company or resource; the glossary is an invented placeholder.",
+  "Source: the company material list (材料清單), the bound job source (R47b, O17). The contract is not packed for the generator, and the packet has no brand table: I and J come only from the material list's cells (R55, O17), so R002, R006 and R009 leave them null.",
+  "Quoted range: rows 4-19 of 材料清單, ending at row 20 (合計 in the unit-price column E20). The 合計 in B16 is a block total in the description column (R49).",
+  "Totals observed, not repaired (R10): the block total F16 = 104800 equals the amounts of rows 4-13; the end total F20 = 108200 adds F18 and F19.",
+  "G1 is the one-row physical_enclosure carrier group of the R56 enclosure row R001.",
+  "R005, R007, R008, R010 and R011 have C null under R52 and stay research_draft (R57; route v4.2 warns R57_NULL_C_RESEARCH_DRAFT, and the export needs the portable writer mode v2).",
+  "Q is filled although source adoption is unverified (R54, O16; route v4.2 warns O16_Q_UNVERIFIED_ADOPTION). It is the quoted unit price, not evidence of an accepted contract rate."
+ ]
+}

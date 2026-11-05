@@ -1,0 +1,22 @@
+{
+  "superseded_for_C_D": "Candidate 046f (2026-11-04): FIELD_ROLES R52 (with R53 and R56) decides C and D, including the company glossary prefix, category chain and abbreviations and the order glossary, acronym, single segment, head noun, other; I and J follow R55 (a brand or model stated in the bound source; with a 材料清單 only its cells; on a contract job only, the owner-reviewed company brand table; O17, O18). R47b-R58 govern where this policy disagrees. Kept unchanged below as background and for earlier candidates.",
+  "schema": "cps.naming-policy.draft.v1",
+  "status": "DRAFT_UNTESTED_NOT_DEPLOYED",
+  "default": "Preserve source-language lexical names and exact source spelling; no automatic translation or canonical abbreviation.",
+  "preserve_generic_source_prefixes": true,
+  "specific_name_policy": "Retain the more specific identifying noun and compound/accessory/service identity; retain source category in C unless a separately versioned presentation rule moves it into ancillary context.",
+  "model_role_policy": "Source-supported model role required; code shape or model-memory lookup alone is insufficient.",
+  "unknown_code_policy": "Retain exact token and source location with unresolved role; do not populate I merely from code shape.",
+  "approved_aliases": [],
+  "alias_entry_required_fields": [
+    "source_expression",
+    "display_expression",
+    "context_and_exclusions",
+    "authority_path",
+    "authority_sha256",
+    "approval_basis",
+    "policy_version",
+    "preserved_source_evidence"
+  ],
+  "evaluation_policy": "Literal agreement, semantic identity, role correctness, coverage, and unresolved fields remain separate. No retrospective rescoring."
+}

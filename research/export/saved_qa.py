@@ -351,6 +351,11 @@ def check_structure(path, F):
     return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS)}
 
 
+def number_text_ok(text):
+    """Number text the writer writes: ASCII, JavaScript Number::toString of a finite number (NUMBER_TEXT_RE, whole text)."""
+    return isinstance(text, str) and text.isascii() and NUMBER_TEXT_RE.fullmatch(text) is not None
+
+
 def check_sheet_data(part, sheet_data, bad):
     """Rows and cells of one worksheet's <sheetData> (review S2; v3 second review F1(b): value children, number text,
     duplicate and out-of-row references). Readers differ on these: Python readers take the first matching child and
@@ -415,7 +420,7 @@ def check_sheet_data(part, sheet_data, bad):
                         bad('cell_value_children', part=n, cell=where, problem='<v> with attributes or child elements',
                             attributes=dict(x.attrib), children=[local(y.tag) for y in x])
                     text = x.text or ''
-                    if typ == 'n' and not (text.isascii() and NUMBER_TEXT_RE.fullmatch(text)):
+                    if typ == 'n' and not number_text_ok(text):
                         bad('number_text', part=n, cell=where, text=text[:100],
                             problem='number text is not ASCII JavaScript Number::toString text')
                 if xt == 'is':
