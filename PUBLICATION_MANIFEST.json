@@ -1581,6 +1581,46 @@
       "path": "research/evaluation/PROPOSAL_050.md",
       "bytes": 3575,
       "sha256": "63d7f0b8e672544b8acf143a892cdd5cef69750f009add46355ef6d6a130a555"
+    },
+    {
+      "path": "deploy/README.md",
+      "bytes": 1270,
+      "sha256": "cb4b089f3f64ef63af92a607c065655aab78fe6e9e1608b91caee9a9cefa394f"
+    },
+    {
+      "path": "deploy/setup_vm.sh",
+      "bytes": 1706,
+      "sha256": "7eb89e500a450acddfbcd6062dec0d0fad7a7d94c08d2ffe56a14ea231b74ace"
+    },
+    {
+      "path": "deploy/check_env.py",
+      "bytes": 3016,
+      "sha256": "59d70e41a1f1ddccae4ad680467f1bc17f24fa631dbd2e8c61da06d578c3df8b"
+    },
+    {
+      "path": "deploy/writer_route/writer/writer004.mjs",
+      "bytes": 24011,
+      "sha256": "70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7"
+    },
+    {
+      "path": "deploy/writer_route/writer/validate_carrier_v4.mjs",
+      "bytes": 1121,
+      "sha256": "984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013"
+    },
+    {
+      "path": "deploy/writer_route/writer/receipt_bytes.mjs",
+      "bytes": 744,
+      "sha256": "b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c"
+    },
+    {
+      "path": "deploy/writer_route/node_modules/@oai/artifact-tool/index.mjs",
+      "bytes": 451,
+      "sha256": "67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4"
+    },
+    {
+      "path": "deploy/writer_route/node_modules/@oai/artifact-tool/package.json",
+      "bytes": 127,
+      "sha256": "5a93295fdcc83c399de1f1616040ddce237eddd9f40d3a69933cb2c5a461b46d"
     }
   ]
 }
