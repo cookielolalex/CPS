@@ -62,9 +62,9 @@
   "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
   "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2).",
   "Scoped packets (A35-A37): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet.",
-  "Enclosure rows (R56; A18, A19, A21, A31-A33, A38-A48): unless a case gives a section heading or analysis-block title, the line is not under one that names a panel, so A comes from the line. Dimensions without a unit are millimetres. Each enclosure row is carried by its own one-row physical_enclosure group whose name and specification equal A and B; no other row carries A or B (O30)."
+  "Enclosure rows (R56; A18, A19, A21, A31-A33, A38-A49): unless a case gives a section heading or analysis-block title, the line is not under one that names a panel, so A comes from the line. Dimensions without a unit are millimetres. Each enclosure row is carried by its own one-row physical_enclosure group whose name and specification equal A and B; no other row carries A or B (O30)."
  ],
- "case_count": 48,
+ "case_count": 49,
  "cases": [
   {
    "id": "A01",
@@ -603,7 +603,7 @@
      ]
     }
    },
-   "reason": "Without its item label 壹、 and the trailing work word 工程, the heading's panel name is 機電, which holds no box noun, so the heading names no panel and A is the line's own enclosure noun phrase. The prefix 產品 and the glossary's enclosure word 箱體 (箱 followed by 體, so it names no box) are dropped, and the first segment naming a box, 甲-1 控制盤, is cut after the enclosure word that ends its box noun. The tag 甲-1 is kept (046f dropped it). B is built from the W/H/D-labelled dimensions in the description; they have no unit, so they are millimetres. C is the glossary's generic enclosure word. D is what remains after the prefix, the category segment, the text A took from the line and the dimensions, each with its delimiter (SUS304 and 髮絲面 are not rating tokens, so the comma stays). I is null. The brand cell is empty, so J is the company name."
+   "reason": "Without its item label 壹、 and the trailing work word 工程, the heading's panel name is 機電, which holds no box noun, so the heading names no panel and A is the line's own enclosure noun phrase. The prefix 產品 and the glossary's enclosure word 箱體 (a bare word after the prefix, so it names no box) are dropped, and the first segment naming a box, 甲-1 控制盤, is cut after the enclosure word that ends its box noun. The tag 甲-1 is kept (046f dropped it). B is built from the W/H/D-labelled dimensions in the description; they have no unit, so they are millimetres. C is the glossary's generic enclosure word. D is what remains after the prefix, the category segment, the text A took from the line and the dimensions, each with its delimiter (SUS304 and 髮絲面 are not rating tokens, so the comma stays). I is null. The brand cell is empty, so J is the company name."
   },
   {
    "id": "A19",
@@ -1847,6 +1847,46 @@
     ]
    },
    "reason": "Without its item label 壹、 and the trailing work word 工程, the heading's panel name is 控制盤, which holds one box noun and ends with it, so the heading names a panel. In each packet the line is the first enclosure row in the scope and is not a subsidiary box. In the first packet the panel name has no tag and the row's own box noun 甲-1 控制盤 has the tag 甲-1, so A comes from the line and keeps the tag (a tag is never lost); D drops the text A took. In the second packet the line has no box noun, so A is the panel name 控制盤, cited from the heading cell. B comes from the W/H/D-labelled dimensions in the line's own description (no unit, so millimetres), and D is SUS304 in both packets."
+  },
+  {
+   "id": "A49",
+   "rule": "R56 Terms (a noun ending in 箱體 names a box; the bare words 箱體 and 盤體 do not)",
+   "input": {
+    "heading": "<3> 盤體設備",
+    "description": "產品，箱體，甲-2 控制箱體，W:600，H:800，D:250",
+    "unit": "面",
+    "quantity": 1,
+    "unit_price": 30000,
+    "amount": 30000
+   },
+   "expected": {
+    "row": true,
+    "A": "甲-2 控制箱體",
+    "B": "600W*800H*250D",
+    "C": "箱體",
+    "D": null,
+    "I": null,
+    "J": "示例機電股份有限公司",
+    "Q": 30000,
+    "group": "one-row physical_enclosure group whose name and specification equal A and B; the row is its only member",
+    "cites": {
+     "A": [
+      "description cell"
+     ],
+     "B": [
+      "description cell"
+     ],
+     "C": [
+      "description cell",
+      "context:glossary"
+     ],
+     "J": [
+      "description cell",
+      "context:company_name"
+     ]
+    }
+   },
+   "reason": "Without its item label <3> and the trailing 設備, the heading's panel name is 盤體, a bare word that names no box, so the heading names no panel and A comes from the line. In the line, the prefix 產品 and the bare word 箱體 (the glossary's enclosure word, after only the prefix) are dropped; it names no box. In 甲-2 控制箱體, 體 follows 箱 at the end of the noun and text stands before the enclosure word, so the segment names a box whose box noun includes 體: A is 甲-2 控制箱體, cut after 體, with the tag 甲-2 kept. B comes from the W/H/D-labelled dimensions (no unit, so millimetres). C is the glossary's generic enclosure word. Once the prefix, 箱體, the text A took and the dimensions are removed, nothing remains, so D is null with a reason. I is null; the brand cell is empty, so J is the company name."
   }
  ]
 }
