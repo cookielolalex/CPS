@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/handoff/CURRENT_STATUS.md",
-      "bytes": 12900,
-      "sha256": "3443cb596eed125a7cc4c489f133f7fe3faad28b18acb41fb65d3f3846770457"
+      "bytes": 15252,
+      "sha256": "1dd9dbcb98ebcfecc031fbd79aeab846eeb7669c742eb5f712cf37a80531d523"
     },
     {
       "path": "docs/handoff/DECISIONS.md",
@@ -1584,8 +1584,8 @@
     },
     {
       "path": "deploy/README.md",
-      "bytes": 1270,
-      "sha256": "cb4b089f3f64ef63af92a607c065655aab78fe6e9e1608b91caee9a9cefa394f"
+      "bytes": 1431,
+      "sha256": "f9b82882e9e2b545d2683a8a0a96aad7ec5760f115eb3a868c20d7cd8d3d2804"
     },
     {
       "path": "deploy/setup_vm.sh",
