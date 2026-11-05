@@ -59,5 +59,16 @@
   "N2": "zip entry raw name vs normalised name not rejected (caught by provenance; condition 7)",
   "N3": "saved_qa does not verify its own tool hashes (condition 3)",
   "N4": "node path compared by operator (condition 2)"
+ },
+ "addendum_2026_11_05_visual_review_protocol": {
+  "recorded_by": "orchestrator, before any qualification output exists",
+  "render": "visual_qa.py renders every sheet (complete_render true is required).",
+  "reviewed_pages": [
+   "every page of the main sheet 未填研究草稿 (the 17-column deliverable) and of the composition sheets 組成參考 and 組成連結",
+   "for the review sheet 來源與審查: pages 1 and 2, the last page, and every page that holds a cell listed in possibly_clipped_cells"
+  ],
+  "reason": "the review sheet holds the raw provenance JSON and renders to about 90 pages per run; the deployment bar element is saved 17-column and visual QA. Condition 7 \"every PNG\" is read as every PNG of the reviewed set above; the full render is kept for audit.",
+  "checklist": "the 9-item README checklist; items 1-7 and 9 on the main and composition sheets, item 8 on the reviewed review-sheet pages",
+  "record": "VISUAL_REVIEW.json per run: page -> item -> pass/fail with a short note; any fail makes the run fail visual QA"
  }
 }
