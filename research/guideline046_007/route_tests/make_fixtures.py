@@ -812,7 +812,7 @@ def scoped_fixtures(enc, index):
     inv_mut('v43_fact_bill_index_wrong', mm, payload=P(bill_sheet_index=1))
     inv_mut('v43_fact_bill_out_of_scope', mm, payload=P_sheet(1, in_scope=False))
     inv_mut('v43_fact_in_scope_role_summary', mm, payload=P_sheet(1, role='summary'))
-    inv_mut('v43_fact_out_of_scope_role_bill_word', mm, payload=P_sheet(3, role='statistics'))
+    inv_mut('v43_fact_out_of_scope_role_unknown', mm, payload=P_sheet(3, role='statistics'))
     inv_mut('v43_fact_content_count_mismatch', mm, payload=P_sheet(1, content_cells=content - 1))
     inv_mut('v43_fact_end_row_beyond_sheet', mm, payload=P(end_row=11))
     inv_mut('v43_fact_end_row_not_after_header', mm, payload=P(end_row=2))

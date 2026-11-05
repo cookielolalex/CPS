@@ -774,7 +774,7 @@ def scope_fact(inv, rep):
                          'inventory': [s['index'] for s in inv_sheets]})
     else:
         for s, t in zip(sheets, inv_sheets):
-            diff = [k for k in SCOPE_SHEET_JOIN if s[k] != t[k]]
+            diff = [k for k in SCOPE_SHEET_JOIN if s[k] != t.get(k)]
             if diff:
                 problems.append({'problem': 'sheet differs from the inventory', 'sheet': s['index'], 'keys': diff})
     for s in sheets:
