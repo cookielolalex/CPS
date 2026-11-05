@@ -235,7 +235,7 @@ check('CLI: correct pins pass', p.returncode == 0 and json.loads(out2.read_text(
 check('v2 pins: v4 schema and the sha256 of compare_target050.py on disk',
       ag.EVALUATOR_SCHEMA == 'cps.target-comparison050.v1' and ag.EVALUATOR_SHA256 == hashlib.sha256((HERE.parent / 'compare_target050.py').read_bytes()).hexdigest(),
       (ag.EVALUATOR_SCHEMA, ag.EVALUATOR_SHA256))
-check('v2 keeps the gate constants of v1', (ag.VERSION, ag.POOLED_MIN, ag.CASE_FLOOR, ag.POOL_SIZE, ag.READERS) == ('cps.qualification-gate.v1', 0.95, 0.90, 30, ('A', 'B')),
+check('v2 gate schema is cps.qualification-gate.v2 and keeps the v1 gate constants', (ag.VERSION, ag.POOLED_MIN, ag.CASE_FLOOR, ag.POOL_SIZE, ag.READERS) == ('cps.qualification-gate.v2', 0.95, 0.90, 30, ('A', 'B')),
       (ag.VERSION, ag.POOLED_MIN, ag.CASE_FLOOR, ag.POOL_SIZE, ag.READERS))
 
 V1 = HERE.parent / 'aggregate_qualification.py'
@@ -245,7 +245,8 @@ if AGQ.resolve() == (HERE.parent / 'aggregate_qualification050.py').resolve():
     def body(path):
         t = ast.parse(Path(path).read_text(encoding='utf-8')); t.body = t.body[1:]; return ast.unparse(t)
     exp, got = body(V1), body(AGQ)
-    reps = [("EVALUATOR_SCHEMA = 'cps.target-comparison049.v1'", "EVALUATOR_SCHEMA = 'cps.target-comparison050.v1'"),
+    reps = [("VERSION = 'cps.qualification-gate.v1'", "VERSION = 'cps.qualification-gate.v2'"),
+            ("EVALUATOR_SCHEMA = 'cps.target-comparison049.v1'", "EVALUATOR_SCHEMA = 'cps.target-comparison050.v1'"),
             ("EVALUATOR_SHA256 = 'b600c04619c943ec78f577c4a681df3cc3d035638fab36f9be3f946eea5904c9'", f"EVALUATOR_SHA256 = '{ag.EVALUATOR_SHA256}'"),
             ("per, m_sum, c_sum, d_m, d_c, v2_m, v2_c, filled = ({}, 0, 0, 0, 0, 0, 0, 0)",
              "per, m_sum, c_sum, d_m, d_c, v2_m, v2_c, v3_m, v3_c, filled = ({}, 0, 0, 0, 0, 0, 0, 0, 0, 0)"),
@@ -257,7 +258,7 @@ if AGQ.resolve() == (HERE.parent / 'aggregate_qualification050.py').resolve():
     once = all(exp.count(a) == 1 for a, _ in reps)
     for a, b in reps:
         exp = exp.replace(a, b)
-    check('v2 code equals frozen v1 apart from the module docstring, the two pins and the v3_per_row_AB pooling (AST)',
+    check('v2 code equals frozen v1 apart from the module docstring, VERSION, the two pins and the v3_per_row_AB pooling (AST)',
           once and exp == got, 'diff aggregate_qualification.py aggregate_qualification050.py')
 
 r = ag.gate(manifest(ok, schema='cps.target-comparison049.v1', ev='b600c04619c943ec78f577c4a681df3cc3d035638fab36f9be3f946eea5904c9'))

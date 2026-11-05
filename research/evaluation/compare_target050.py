@@ -68,9 +68,9 @@ Metric (declared before any qualification run; changes need a new version and re
   wrong A costs nothing (counted stays at the target's count), so a guess is free; v3 charged a guess
   written on a row whose target row has no A. `ab_row_check` (diagnostic, not scored) lists for the
   manual critical-error review: `paired_conflicts`, aligned pairs whose non-null A or B differ;
-  `cps_unpartnered`, CPS A/B on a row whose aligned target row has neither A nor B, or on an unpaired
-  CPS row. Cases (2)-(5) show there when the CPS value sits on a paired row with a different target
-  value, on a row whose target has no A/B, or on an unpaired row; (1) never shows.
+  `cps_unpartnered`, a CPS A (or B) on a row whose aligned target row has no A (or no B), or on an
+  unpaired CPS row. Cases (2)-(5) show there when the CPS value sits on a paired row with a different
+  target value, on a row whose target has no value in that field, or on an unpaired row; (1) never shows.
   Job-level K-O modal tie-break (v4): `max(dict.fromkeys(values), key=values.count)`, so on a tie the
   value first in row order wins and the result is repeatable. v2 and v3 use `max(set(values), ...)`,
   which picks by set iteration order; string hashing is randomised per process (and `-I` ignores
@@ -379,7 +379,7 @@ def score(T, C, pairs, mode, scored=None, panel=None):
 
 def ab_row_check(T, C, pairs, trows, items):
     """v4 diagnostic for the manual critical-error review (not scored): aligned pairs whose non-null A or B
-    differ, and CPS A/B on a row whose aligned target row has neither A nor B, or on an unpaired row."""
+    differ, and a CPS A (or B) on a row whose aligned target row has no A (or no B), or on an unpaired row."""
     pc = {j: i for i, j, _ in pairs}
     conflicts, unpartnered = [], []
     for j, r in enumerate(C):
@@ -392,7 +392,7 @@ def ab_row_check(T, C, pairs, trows, items):
             t = None if i is None else t_ab[k]
             if t is not None and t != c:
                 conflicts.append({'target_row': trows[i]['row'], 'cps_id': items[j]['id'], 'field': COLS[k], 'target': text_of(t), 'cps': text_of(c)})
-            elif i is None or t_ab == [None, None]:
+            elif t is None:
                 unpartnered.append({'target_row': None if i is None else trows[i]['row'], 'cps_id': items[j]['id'], 'field': COLS[k], 'cps': text_of(c)})
     return {'paired_conflicts': conflicts, 'cps_unpartnered': unpartnered,
             'note': 'diagnostic only: A/B placement and panel association are not scored (v4, O35)'}

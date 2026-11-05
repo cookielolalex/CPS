@@ -134,8 +134,8 @@ check('ab_row_check: right A/B repeated on a paired device row: scored 1.0 (disc
       o10['governing']['score'] == 1.0 and cells(abc(o10)['cps_unpartnered']) == [(5, 'R004', 'A'), (5, 'R004', 'B')] and abc(o10)['paired_conflicts'] == [], (o10['governing'], abc(o10)))
 encA = row(PANEL, None, '箱體', 'SUS304', '面', 1, None, '示例電機', 30000)
 o11 = ev([encA] + devs, [enc] + devs)
-check('ab_row_check: CPS B on a paired row whose target row has A only is not listed (the rule is "neither")',
-      abc(o11)['paired_conflicts'] == [] and abc(o11)['cps_unpartnered'] == [] and o11['modes']['normalized']['per_field']['B'] == {'matched': 0, 'counted': 1}, (abc(o11), o11['modes']['normalized']['per_field']))
+check('ab_row_check: CPS B on a paired row whose target row has A only is listed (per-field rule)',
+      abc(o11)['paired_conflicts'] == [] and cells(abc(o11)['cps_unpartnered']) == [(2, 'R001', 'B')] and o11['modes']['normalized']['per_field']['B'] == {'matched': 0, 'counted': 1}, (abc(o11), o11['modes']['normalized']['per_field']))
 check('ab_row_check is not scored: per_field has no ab_row_check entry and sums still hold',
       'ab_row_check' not in o10['modes']['normalized']['per_field']
       and sum(v['counted'] for v in o10['modes']['normalized']['per_field'].values()) == o10['modes']['normalized']['counted'], o10['modes']['normalized'])

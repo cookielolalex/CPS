@@ -1,9 +1,8 @@
 """Qualification gate aggregation for CPS, v2 (owner decisions O31 and O35, 2026-11-05). Evaluation role only.
 v2 is the frozen v1 (`aggregate_qualification.py`, sha256 d48b81f3...) re-pinned to evaluator v4 under O35
 ("the O31 gate aggregator is re-pinned to v4"); the gate logic is unchanged. v1 stays frozen and refuses
-v4 outputs (EVALUATOR_SCHEMA). The gate output keeps schema `cps.qualification-gate.v1`; a v2 output is
-told apart by `evaluator_schema`, `evaluator_sha256`, `inputs.aggregator_sha256` and the added
-`reported_not_gating.v3_per_row_AB_pooled`.
+v4 outputs (EVALUATOR_SCHEMA). The gate output schema is `cps.qualification-gate.v2` (v1 writes
+`cps.qualification-gate.v1`); it also adds `reported_not_gating.v3_per_row_AB_pooled`.
 
 Gate (declared before any qualification output is scored):
   For each of the two original readers (A and B), over the frozen qualification pool (30 pairs, O25/O26):
@@ -49,9 +48,9 @@ Usage: python3 -I -B aggregate_qualification.py --manifest M.json --manifest-sha
 import argparse, hashlib, json, re
 from pathlib import Path
 
-VERSION = 'cps.qualification-gate.v1'
+VERSION = 'cps.qualification-gate.v2'
 EVALUATOR_SCHEMA = 'cps.target-comparison050.v1'
-EVALUATOR_SHA256 = 'ca10ae5f9507e39a6e0e714b77d5b49bf39f7924d1cb55246f877e148c0a75cb'
+EVALUATOR_SHA256 = 'fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859'
 POOLED_MIN = 0.95
 CASE_FLOOR = 0.90
 POOL_SIZE = 30

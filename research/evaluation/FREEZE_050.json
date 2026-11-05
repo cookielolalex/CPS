@@ -1,0 +1,24 @@
+{
+ "schema": "cps.evaluator-freeze.v1",
+ "frozen_utc": "2026-11-05T08:43:54.545536+00:00",
+ "evaluator": {
+  "path": "research/evaluation/compare_target050.py",
+  "sha256": "fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859",
+  "output_schema": "cps.target-comparison050.v1"
+ },
+ "tests": {
+  "tests/test_compare_target050.py": "ae6d0026708049056caa658fb2027bd45a7cefb78170dd5cd62c1f16cd56ccbe",
+  "tests/test_review050_fixtures.py": "3833d77bcd7e9b73427686e2510bcad4d8564030071ba9bfcaf23c12aee3fc32"
+ },
+ "results": "test_compare_target050 43/43, test_review050_fixtures 12/12; frozen v3 suite 36/36 unchanged",
+ "governs": "qualification under owner decision O35 (supersedes v3 for qualification; v3 b600c046 and v2 stay frozen and are reported beside v4)",
+ "reviews": [
+  "round 1: APPROVE_AFTER_LISTED_FIXES (B1 B per panel, B2 ab_row_check, S1-S5)",
+  "delta: APPROVE_AFTER_LISTED_FIXES D1 (per-field ab_row_check) and D2 (gate schema v2), applied verbatim; frozen at the reviewer-computed sha256"
+ ],
+ "conditions_of_use": [
+  "The evaluator brief must tell the manual critical-error reviewer to check every ab_row_check entry, with the critical-error class \"a panel A or B on another panel, or A/B on a row that is not its enclosure row\" (review S5/N2). This goes in the next harness version and must be in place before any qualification evaluation.",
+  "Disclosed unscored cases: identical panels count once; a whole label moved to another panel; which rows carry A/B; rows carrying only A/B whose values appear elsewhere; a free guess while CPS has fewer distinct names than the target.",
+  "Frozen v2/v3 are not repeatable on K-O ties (random tie-break); v4 uses the first value in row order. The five 046f dev cases have no K-O ties."
+ ]
+}

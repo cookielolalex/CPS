@@ -389,5 +389,16 @@
   "pool_canonical_sha256": "bb949367ca023a7c89217f17d08fdaf8315c35cba7db2957e24962c96851bcf8",
   "decision": "O31"
  },
- "deployment_artifact_export": "research/export/ADMISSION_WRITER_V25.json"
+ "deployment_artifact_export": "research/export/ADMISSION_WRITER_V25.json",
+ "evaluator_v4": {
+  "path": "research/evaluation/compare_target050.py",
+  "sha256": "fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859",
+  "freeze": "research/evaluation/FREEZE_050.json",
+  "status": "FROZEN_GOVERNS_QUALIFICATION (O35)"
+ },
+ "qualification_gate_v2": {
+  "path": "research/evaluation/aggregate_qualification050.py",
+  "sha256": "e5aa4fc770cbf75560c3f073f03e01360cb46fd8e0ce708726b2991bfe5bc76f",
+  "freeze": "research/evaluation/FREEZE_AGG_O31_V2.json"
+ }
 }

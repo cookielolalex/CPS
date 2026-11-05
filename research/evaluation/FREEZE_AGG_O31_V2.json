@@ -1,0 +1,23 @@
+{
+ "schema": "cps.aggregator-freeze.v1",
+ "frozen_utc": "2026-11-05T08:43:54.545536+00:00",
+ "aggregator": {
+  "path": "research/evaluation/aggregate_qualification050.py",
+  "sha256": "e5aa4fc770cbf75560c3f073f03e01360cb46fd8e0ce708726b2991bfe5bc76f",
+  "output_schema": "cps.qualification-gate.v2"
+ },
+ "tests": {
+  "tests/test_aggregate_qualification050.py": "47a52c095fd5aaad91a53cc7fc84c06739fd4055973e524348dd84d593cb6c7b",
+  "tests/test_aggregate_real_eval050.py": "5b19e7e63c53b9e0185a0662563e9061bb2987521383faba1f9d28f721890647"
+ },
+ "results": "test_aggregate_qualification050 52/52, test_aggregate_real_eval050 11/11; frozen v1 suites 43/43 and 6/6 unchanged",
+ "evaluator_pinned": {
+  "path": "research/evaluation/compare_target050.py",
+  "sha256": "fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859",
+  "schema": "cps.target-comparison050.v1"
+ },
+ "decision": "O31 gate (per reader A and B: pooled >= 0.95, every case >= 0.90) under evaluator v4 (O35); v3_per_row_AB pooled is reported, not gating",
+ "pool_canonical_sha256": "bb949367ca023a7c89217f17d08fdaf8315c35cba7db2957e24962c96851bcf8",
+ "supersedes_for_qualification": "research/evaluation/aggregate_qualification.py (v1, d48b81f3, FREEZE_AGG_O31.json), which stays frozen and refuses v4 outputs",
+ "conditions_of_use": "as FREEZE_AGG_O31.json (decision read only from historical_match_element_passes; nonattempt carriers embed the reader id; declared hashes verified against frozen records; pool composition verified separately)"
+}

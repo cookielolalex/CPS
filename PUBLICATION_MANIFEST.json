@@ -19,8 +19,8 @@
     },
     {
       "path": "CURRENT_STATE.json",
-      "bytes": 11733,
-      "sha256": "3bb7eead8feeb72fbde1d996f52d2311f200f7fc37f48d892a91b51f53d34444"
+      "bytes": 12222,
+      "sha256": "96e85e177e2383bc27d6836d7e3219964ced19d21a88d6ee155aa1951a7722ab"
     },
     {
       "path": "docs/evidence/CYCLE_045.md",
@@ -1250,7 +1250,7 @@
     {
       "path": "research/export/writer_portable.py",
       "bytes": 63478,
-      "sha256": "dd5fa9234a6cf3141b27b052565b80deb955977f909d2a75d617b3c597ec69bb"
+      "sha256": "c24dc69c34281d55c0a1f727976cc2300a27527bb02f95cb9a82dc2d1dd9412d"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O10_O12.md",
@@ -1569,18 +1569,18 @@
     },
     {
       "path": "research/evaluation/compare_target050.py",
-      "bytes": 25459,
-      "sha256": "ca10ae5f9507e39a6e0e714b77d5b49bf39f7924d1cb55246f877e148c0a75cb"
+      "bytes": 25463,
+      "sha256": "fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859"
     },
     {
       "path": "research/evaluation/tests/test_compare_target050.py",
-      "bytes": 18517,
-      "sha256": "1484151e546c562b07296a66043e0e0b6dbf31ce9ba22416282b0c1262a003e1"
+      "bytes": 18529,
+      "sha256": "ae6d0026708049056caa658fb2027bd45a7cefb78170dd5cd62c1f16cd56ccbe"
     },
     {
       "path": "research/evaluation/PROPOSAL_050.md",
-      "bytes": 10922,
-      "sha256": "2ba97639ac6e8b0685ef8b00d07f215be82d62b905273f4a9c36b929b5bd1e17"
+      "bytes": 11162,
+      "sha256": "c2e3102be62b8cf2d57a026fcb142d33a676c8e9c2df0d266b3ab92730b96fb6"
     },
     {
       "path": "deploy/README.md",
@@ -1624,13 +1624,13 @@
     },
     {
       "path": "research/evaluation/aggregate_qualification050.py",
-      "bytes": 12811,
-      "sha256": "449ef4e44de446f28373ef24fe2cbcb86e3641c59d658a3db1425381544e8779"
+      "bytes": 12751,
+      "sha256": "e5aa4fc770cbf75560c3f073f03e01360cb46fd8e0ce708726b2991bfe5bc76f"
     },
     {
       "path": "research/evaluation/tests/test_aggregate_qualification050.py",
-      "bytes": 17562,
-      "sha256": "024e5e360584b4867a9eae9a25f3b5ef4a9f31edba67f33c2a1f1e899d71b9fc"
+      "bytes": 17709,
+      "sha256": "47a52c095fd5aaad91a53cc7fc84c06739fd4055973e524348dd84d593cb6c7b"
     },
     {
       "path": "research/evaluation/tests/test_aggregate_real_eval050.py",
@@ -1641,6 +1641,16 @@
       "path": "research/evaluation/tests/test_review050_fixtures.py",
       "bytes": 5919,
       "sha256": "3833d77bcd7e9b73427686e2510bcad4d8564030071ba9bfcaf23c12aee3fc32"
+    },
+    {
+      "path": "research/evaluation/FREEZE_050.json",
+      "bytes": 1769,
+      "sha256": "4139b227ce203d5206a8f927e700c10fd228db64797379ba379dd2c0c99d3072"
+    },
+    {
+      "path": "research/evaluation/FREEZE_AGG_O31_V2.json",
+      "bytes": 1519,
+      "sha256": "bcea4b8565bfc1c60f22707dbe95031708f34922ff5f60c49d4068b8e296d115"
     }
   ]
 }

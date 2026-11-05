@@ -1,11 +1,11 @@
 # Proposed evaluator v4: compare_target050 (A/B scored per panel), 2026-11-05
 
-**Status: proposed under owner decision O35 ("Score A/B per panel"). Not frozen, not governing.** Round 1 of the independent review returned APPROVE_AFTER_LISTED_FIXES against `feccaf21…`. The listed fixes B1, B2 and S1–S4 are applied below; S5 is deferred to the next harness version. The fixed code needs a delta review, then a freeze by SHA before any qualification output is evaluated. Until then the frozen v3, `compare_target049.py` (`b600c046…`), stays as it is.
+**Status: frozen 2026-11-05 after review round 1 and a delta review (D1, D2 applied verbatim); governs qualification under O35.** Freeze records: `FREEZE_050.json` (evaluator) and `FREEZE_AGG_O31_V2.json` (gate aggregator v2). The text below describes the review history. Round 1 of the independent review returned APPROVE_AFTER_LISTED_FIXES against `feccaf21…`. The listed fixes B1, B2 and S1–S4 are applied below; S5 is deferred to the next harness version. The fixed code needs a delta review, then a freeze by SHA before any qualification output is evaluated. Until then the frozen v3, `compare_target049.py` (`b600c046…`), stays as it is.
 
 | File | sha256 |
 |---|---|
-| `compare_target050.py` (after round-1 fixes) | `ca10ae5f9507e39a6e0e714b77d5b49bf39f7924d1cb55246f877e148c0a75cb` |
-| `aggregate_qualification050.py` (aggregator v2, pins the line above) | `449ef4e44de446f28373ef24fe2cbcb86e3641c59d658a3db1425381544e8779` |
+| `compare_target050.py` (frozen, after round-1 fixes and delta D1) | `fc723405c41ca4a46e4318913ecd742316682c2f9edb8b35ae59ca1a9acc3859` |
+| `aggregate_qualification050.py` (frozen aggregator v2, delta D2; pins the line above) | `e5aa4fc770cbf75560c3f073f03e01360cb46fd8e0ce708726b2991bfe5bc76f` |
 
 ## Problem
 
@@ -46,9 +46,9 @@ v4 does not score:
 
 A new diagnostic, not scored, for the manual critical-error review:
 - `paired_conflicts`: aligned pairs whose non-null A or B differ (target row, CPS id, field, both values);
-- `cps_unpartnered`: CPS A or B on a row whose aligned target row has neither A nor B, or on an unpaired CPS row.
+- `cps_unpartnered` (delta D1, per field): a CPS A (or B) on a row whose aligned target row has no A (or no B), or on an unpaired CPS row.
 
-Cases 2–5 above appear there when the CPS value sits on a paired row with a different target value, on a row whose target has no A/B, or on an unpaired row. Case 1 never appears. A CPS null is never listed, so a group-wide target with an enclosure-only CPS lists nothing.
+Cases 2–5 above appear there when the CPS value sits on a paired row with a different target value, on a row whose target has no value in that field, or on an unpaired row. Case 1 never appears. A CPS null is never listed, so a group-wide target with an enclosure-only CPS lists nothing.
 
 The reviewer also asked that `EVALUATOR_BRIEF_TEMPLATE` §3 gain this critical-error class: "a panel's A or B on another panel, or A/B on a row that is not its enclosure row (check every `ab_row_check` entry)". The brief is byte-pinned by the frozen 046f admission, so the change goes into the next harness version with S5 below.
 
@@ -104,7 +104,7 @@ Apart from the module docstring, the code differs from v1 in three places, and a
 - `EVALUATOR_SHA256` = the sha256 of `compare_target050.py` above;
 - `v3_per_row_AB` is pooled as `reported_not_gating.v3_per_row_AB_pooled`, because O35 says v3 numbers are reported beside v4. It does not gate.
 
-The gate output keeps schema `cps.qualification-gate.v1`. A v2 output is told apart by `evaluator_schema`, `evaluator_sha256`, `inputs.aggregator_sha256` and the added field.
+The gate output schema is `cps.qualification-gate.v2` (delta D2; v1 writes `cps.qualification-gate.v1`). It also adds `reported_not_gating.v3_per_row_AB_pooled`.
 
 ## Tests
 
