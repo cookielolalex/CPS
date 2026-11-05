@@ -1066,26 +1066,26 @@ def main():
         except sq.DeliverableNameError as e:
             q = ['refused', 'JOB_TITLE_INVALID', 'usage', e.reason]
         return w, q
-    T1, T2 = '1141002甲公司-乙案管三', '1141003乙公司-甲案'
-    T_LONG = '1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(11K+000~11K+725)'
-    T_SPECIAL = '1141002甲公司-乙&<>"\'|案，丙'
+    T1, T2 = '9990102甲公司-乙案丁戊', '9990103乙公司-甲案'
+    T_LONG = '9990803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(1K+200~3K+450)'
+    T_SPECIAL = '9990102甲公司-乙&<>"\'|案，丙'
     name_cases = {     # name: (title, xlsx file, main sheet, dash_removed_at, main_sheet_cut)
-        'dash_removed': (T1, '1141002甲公司乙案管三(未填).xlsx', '1141002甲公司乙案管三(未填)', 10, False),
-        'no_dash': ('1130204丙公司丁案', '1130204丙公司丁案(未填).xlsx', '1130204丙公司丁案(未填)', None, False),
-        'dash_6th_character_after_case_id_removed': ('1141002甲乙丙丁戊-己案', '1141002甲乙丙丁戊己案(未填).xlsx', '1141002甲乙丙丁戊己案(未填)', 12, False),
-        'dash_7th_character_after_case_id_kept': ('1141002甲乙丙丁戊己-庚案', '1141002甲乙丙丁戊己-庚案(未填).xlsx', '1141002甲乙丙丁戊己-庚案(未填)', None, False),
-        'only_first_dash_removed': ('1141002甲公司-乙案-丙', '1141002甲公司乙案-丙(未填).xlsx', '1141002甲公司乙案-丙(未填)', 10, False),
-        'dash_directly_after_case_id_removed': ('1141002-甲公司-乙案', '1141002甲公司-乙案(未填).xlsx', '1141002甲公司-乙案(未填)', 7, False),
-        'long_cut_to_31_keeps_suffix': (T_LONG, T_LONG + '(未填).xlsx', '1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉(未填)', None, True),
-        'forbidden_characters': ('1141002甲-乙/丙:丁*?"<>|[]\\戊', '1141002甲乙-丙-丁------[]-戊(未填).xlsx', '1141002甲乙-丙-丁--"<>|---戊(未填)', 8, False),
-        'forbidden_characters_and_cut': ('1141002甲公司-乙/丙:丁*戊?己"庚<辛>壬|癸[子]丑', '1141002甲公司乙-丙-丁-戊-己-庚-辛-壬-癸[子]丑(未填).xlsx',
-                                         '1141002甲公司乙-丙-丁-戊-己"庚<辛>壬|癸(未填)', 10, True),
-        'nfkc_and_whitespace': ('　１１４１００２ 甲公司－ＡＢ案（一）\t管三 ，丙﻿\n', '1141002甲公司AB案(一)管三,丙(未填).xlsx',
-                                '1141002甲公司AB案(一)管三,丙(未填)', 10, False),
-        'special_characters': (T_SPECIAL, "1141002甲公司乙&---'-案,丙(未填).xlsx", '1141002甲公司乙&<>"\'|案,丙(未填)', 10, False),
-        'astral_cut_whole_code_points': ('1141002' + '\U00020000' * 15, '1141002' + '\U00020000' * 15 + '(未填).xlsx',
-                                         '1141002' + '\U00020000' * 10 + '(未填)', None, True),
-        'file_name_254_bytes_accepted': ('1141002' + '甲' * 78, '1141002' + '甲' * 78 + '(未填).xlsx', '1141002' + '甲' * 20 + '(未填)', None, True),
+        'dash_removed': (T1, '9990102甲公司乙案丁戊(未填).xlsx', '9990102甲公司乙案丁戊(未填)', 10, False),
+        'no_dash': ('9990204丙公司丁案', '9990204丙公司丁案(未填).xlsx', '9990204丙公司丁案(未填)', None, False),
+        'dash_6th_character_after_case_id_removed': ('9990102甲乙丙丁戊-己案', '9990102甲乙丙丁戊己案(未填).xlsx', '9990102甲乙丙丁戊己案(未填)', 12, False),
+        'dash_7th_character_after_case_id_kept': ('9990102甲乙丙丁戊己-庚案', '9990102甲乙丙丁戊己-庚案(未填).xlsx', '9990102甲乙丙丁戊己-庚案(未填)', None, False),
+        'only_first_dash_removed': ('9990102甲公司-乙案-丙', '9990102甲公司乙案-丙(未填).xlsx', '9990102甲公司乙案-丙(未填)', 10, False),
+        'dash_directly_after_case_id_removed': ('9990102-甲公司-乙案', '9990102甲公司-乙案(未填).xlsx', '9990102甲公司-乙案(未填)', 7, False),
+        'long_cut_to_31_keeps_suffix': (T_LONG, T_LONG + '(未填).xlsx', '9990803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉(未填)', None, True),
+        'forbidden_characters': ('9990102甲-乙/丙:丁*?"<>|[]\\戊', '9990102甲乙-丙-丁------[]-戊(未填).xlsx', '9990102甲乙-丙-丁--"<>|---戊(未填)', 8, False),
+        'forbidden_characters_and_cut': ('9990102甲公司-乙/丙:丁*戊?己"庚<辛>壬|癸[子]丑', '9990102甲公司乙-丙-丁-戊-己-庚-辛-壬-癸[子]丑(未填).xlsx',
+                                         '9990102甲公司乙-丙-丁-戊-己"庚<辛>壬|癸(未填)', 10, True),
+        'nfkc_and_whitespace': ('　９９９０１０２ 甲公司－ＡＢ案（一）\t丁戊 ，丙﻿\n', '9990102甲公司AB案(一)丁戊,丙(未填).xlsx',
+                                '9990102甲公司AB案(一)丁戊,丙(未填)', 10, False),
+        'special_characters': (T_SPECIAL, "9990102甲公司乙&---'-案,丙(未填).xlsx", '9990102甲公司乙&<>"\'|案,丙(未填)', 10, False),
+        'astral_cut_whole_code_points': ('9990102' + '\U00020000' * 15, '9990102' + '\U00020000' * 15 + '(未填).xlsx',
+                                         '9990102' + '\U00020000' * 10 + '(未填)', None, True),
+        'file_name_254_bytes_accepted': ('9990102' + '甲' * 78, '9990102' + '甲' * 78 + '(未填).xlsx', '9990102' + '甲' * 20 + '(未填)', None, True),
     }
     for label, (title, want_file, want_sheet, want_k, want_cut) in name_cases.items():
         w, q = derive_both(title)
@@ -1099,11 +1099,11 @@ def main():
     refusal_cases = {'empty': ('', 'CASE_ID_REQUIRED'), 'whitespace_only': (' 　\t\n', 'CASE_ID_REQUIRED'),
                      'no_case_id': ('甲公司-乙案', 'CASE_ID_REQUIRED'), 'six_digit_case_id': ('114100甲公司', 'CASE_ID_REQUIRED'),
                      'arabic_indic_digits': ('١١٤١٠٠٢甲', 'CASE_ID_REQUIRED'),
-                     'c0_control': ('1141002甲\x01乙', 'UNREPRESENTABLE_CHARACTER'), 'c1_control': ('1141002甲\x80乙', 'UNREPRESENTABLE_CHARACTER'),
-                     'delete': ('1141002甲\x7f', 'UNREPRESENTABLE_CHARACTER'), 'lone_surrogate': ('1141002甲\ud800', 'UNREPRESENTABLE_CHARACTER'),
-                     'noncharacter_fffe': ('1141002甲￾', 'UNREPRESENTABLE_CHARACTER'),
-                     'ooxml_escape_in_sheet_name': ('1141002_x0041_甲', 'LITERAL_OOXML_ESCAPE_SEQUENCE'),
-                     'file_name_257_bytes': ('1141002' + '甲' * 79, 'FILE_NAME_TOO_LONG'), 'not_a_string': (1141002, 'NOT_A_STRING')}
+                     'c0_control': ('9990102甲\x01乙', 'UNREPRESENTABLE_CHARACTER'), 'c1_control': ('9990102甲\x80乙', 'UNREPRESENTABLE_CHARACTER'),
+                     'delete': ('9990102甲\x7f', 'UNREPRESENTABLE_CHARACTER'), 'lone_surrogate': ('9990102甲\ud800', 'UNREPRESENTABLE_CHARACTER'),
+                     'noncharacter_fffe': ('9990102甲￾', 'UNREPRESENTABLE_CHARACTER'),
+                     'ooxml_escape_in_sheet_name': ('9990102_x0041_甲', 'LITERAL_OOXML_ESCAPE_SEQUENCE'),
+                     'file_name_257_bytes': ('9990102' + '甲' * 79, 'FILE_NAME_TOO_LONG'), 'not_a_string': (9990102, 'NOT_A_STRING')}
     for label, (title, reason) in refusal_cases.items():
         w, q = derive_both(title)
         record(f'k_derive_refuses_{label}', w == q == ['refused', 'JOB_TITLE_INVALID', 'usage', reason], {'writer': w, 'saved_qa': q})
@@ -1202,8 +1202,8 @@ def main():
     record('k_titled_v2_without_relaxations_equals_v1_bytes', 'fid_special' in titled and 'fid_special_v2' in titled
            and all((titled['fid_special'] / sq.derive_deliverable(T_SPECIAL)[k]).read_bytes()
                    == (titled['fid_special_v2'] / sq.derive_deliverable(T_SPECIAL)[k]).read_bytes() for k in ('xlsx_file', 'qa_workbook_file')))
-    for label, title, reason in (('no_case_id', '甲公司-乙案', 'CASE_ID_REQUIRED'), ('file_name_too_long', '1141002' + '甲' * 79, 'FILE_NAME_TOO_LONG'),
-                                 ('control_character', '1141002甲\x01乙', 'UNREPRESENTABLE_CHARACTER'), ('empty', '', 'CASE_ID_REQUIRED')):
+    for label, title, reason in (('no_case_id', '甲公司-乙案', 'CASE_ID_REQUIRED'), ('file_name_too_long', '9990102' + '甲' * 79, 'FILE_NAME_TOO_LONG'),
+                                 ('control_character', '9990102甲\x01乙', 'UNREPRESENTABLE_CHARACTER'), ('empty', '', 'CASE_ID_REQUIRED')):
         od = tdir / f'refused_{label}'
         c, o, e = run(PY + [EXPORT / 'writer_portable.py', '--carrier', ef / 'valid' / 'v01_base.json', '--out', od, '--writer-dir', wd, '--job-title=' + title])
         ref = refusal(e)
@@ -1358,6 +1358,72 @@ def main():
         record(f"l_deliverable_tamper_{t['name']}", no_prov and prov and 'Traceback' not in e1 + e2,
                {'no_prov': [q1.get('status'), sorted(f1)], 'prov': [q2.get('status'), sorted(f2), pv.get('result'),
                                                                     pv.get('deliverable_xlsx_byte_identical')], 'stderr': (e1 + e2)[-300:]})
+    # review of v2.7, W1: column widths read as LibreOffice reads them (one <col> per column, first one wins), both workbooks;
+    # N3: symbolic links refused
+    if 'fid_special' in titled:
+        src_t = titled['fid_special']
+        dvs = sq.derive_deliverable(T_SPECIAL)
+        wdir = work / 'tampers_cols'
+        wdir.mkdir()
+
+        def insert_first_col(x):
+            k = x.index('<cols>') + len('<cols>')
+            return x[:k] + '<col width="0.5" customWidth="1" min="1" max="17"/>' + x[k:]
+
+        def drop_col(j):
+            return mt.sub1(r'<col width="[0-9.]+" customWidth="1" min="%d" max="%d"/>' % (j, j), '')
+
+        def no_width(j):
+            return mt.sub1(r'<col width="[0-9.]+" customWidth="1" min="%d" max="%d"/>' % (j, j), '<col customWidth="1" min="%d" max="%d"/>' % (j, j))
+
+        def dup_zero(j):
+            return mt.sub1(r'(<col width="[0-9.]+" customWidth="1" min="%d" max="%d"/>)' % (j, j),
+                           lambda m_: m_.group(1) + '<col width="0" customWidth="1" min="%d" max="%d"/>' % (j, j))
+        col_tampers = {'W1a_deliverable_leading_wide_range_col': ('xlsx_file', mt.S1, insert_first_col),
+                       'W1b_deliverable_col_H_dropped': ('xlsx_file', mt.S1, drop_col(8)),
+                       'W1c_deliverable_col_J_width_removed': ('xlsx_file', mt.S1, no_width(10)),
+                       'W1d_deliverable_col_J_duplicate_zero': ('xlsx_file', mt.S1, dup_zero(10)),
+                       'W1e_deliverable_col_A_max_0': ('xlsx_file', mt.S1, mt.sub1(r'min="1" max="1"/>', 'min="1" max="0"/>')),
+                       'W1f_internal_review_sheet_leading_wide_range_col': ('qa_workbook_file', 'xl/worksheets/sheet2.xml', insert_first_col),
+                       'W1g_internal_main_sheet_col_P_dropped': ('qa_workbook_file', mt.S1, drop_col(16))}
+        for name, (which, part, edit) in col_tampers.items():
+            d = wdir / name
+            shutil.copytree(src_t, d)
+            fn = dvs[which]
+            (d / fn).unlink()
+            mt.write_tampered(src_t / fn, d / fn, {part: edit})
+            mt.update_receipt(d)
+            c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+            q1 = qa_report(d / 'SAVED_QA.json')
+            ws_f = q1.get('findings', {}).get('worksheet_structure', {}).get('first', [])
+            hit = any(isinstance(e_, dict) and str(e_.get('problem', '')).startswith('cols') for e_ in ws_f)
+            tagged = any(isinstance(e_, dict) and e_.get('workbook') == 'deliverable' for e_ in ws_f)
+            c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid,
+                                   '--writer-dir', wd] + checker)
+            q2 = qa_report(d / 'SAVED_QA_PROVENANCE.json')
+            record(f'l_cols_tamper_{name}', c1 == 1 and hit and tagged == (which == 'xlsx_file') and c2 == 1 and 'provenance' in q2.get('findings', {})
+                   and 'Traceback' not in e1 + e2, {'no_prov': sorted(q1.get('findings', {})), 'prov': sorted(q2.get('findings', {}))})
+        # N3: the deliverable replaced by a symbolic link to identical bytes outside the output directory
+        d = wdir / 'N3_deliverable_symlink'
+        shutil.copytree(src_t, d)
+        outside = work / 'n3_outside_copy.xlsx'
+        shutil.copyfile(src_t / dvs['xlsx_file'], outside)
+        (d / dvs['xlsx_file']).unlink()
+        os.symlink(outside, d / dvs['xlsx_file'])
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+        c2, o2, e2 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d, '--report', d / 'SAVED_QA_PROVENANCE.json', '--carrier', fid, '--writer-dir', wd] + checker)
+        q1, q2 = qa_report(d / 'SAVED_QA.json'), qa_report(d / 'SAVED_QA_PROVENANCE.json')
+        record('l_symlinked_deliverable_refused', c1 == 1 and c2 == 1 and 'integrity' in q1.get('findings', {}) and 'integrity' in q2.get('findings', {})
+               and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False, [sorted(q1.get('findings', {})), sorted(q2.get('findings', {}))])
+        # visual_qa v4.1: N1 numbers wider than the column are listed; N6 the first <col> covering a column gives its width
+        cut_f = vq_l.possibly_cut_cells(src_t / dvs['xlsx_file'])
+        nums = {x['cell'] for x in cut_f['first'] if x['kind'] == 'number'}
+        record('l_visual_numbers_wider_than_column_listed', {'F2', 'P7'} <= nums and cut_f['no_wrap_number_cells_checked'] > 10
+               and all(x['kind'] in ('string', 'number') for x in cut_f['first']), sorted(nums)[:10])
+        cut_w = vq_l.possibly_cut_cells(wdir / 'W1a_deliverable_leading_wide_range_col' / dvs['xlsx_file'])
+        record('l_visual_first_col_wins', cut_w['count'] > cut_f['count'] and all(x['column_width'] == 0.5 for x in cut_w['first']),
+               {'tampered': cut_w['count'], 'writer': cut_f['count']})
+
     # visual-QA helpers on the deliverable (no LibreOffice): printed gridlines only where the view shows them; no-wrap cut cells
     if 'v05_long' in titled:
         dv5 = sq.derive_deliverable(T1)
@@ -1515,7 +1581,7 @@ def main():
             record('d_manifest_states_render_limits', 'General format' in lim and 'row taller than one printed page is clipped' in lim
                    and 'complete_render means that every PDF page was rendered' in lim and 'Never re-save' in lim
                    and m1.get('possibly_clipped_cells', {}).get('count') == 0 and '[[sheet name]] marker' in (m1.get('page_sheet_mapping_basis') or '')
-                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4'
+                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.1'
                    and not any('printOptions' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c)
                    and m1.get('main_sheet') == '未填研究草稿' and m1.get('sheet_order') == wp.SHEET_ORDER,
                    {'limitations': m1.get('limitations'), 'basis': m1.get('page_sheet_mapping_basis')})
@@ -1557,7 +1623,7 @@ def main():
             mp_ = mt_.get('page_sheet_mapping') or {}
             record(f'd_visual_qa_titled_{tag}', code == 0 and mt_.get('complete_render') is True and mp_ and all(mp_.values())
                    and set(mp_.values()) == set(mt_.get('sheet_order') or []) and mt_.get('main_sheet') == dv['main_sheet']
-                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4'
+                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.1'
                    and {i['sheet'] for i in mt_['images']} == set(mt_['sheet_order']) and mt_['saved_xlsx']['unchanged_after_render'],
                    {'stderr': err[-300:], 'mapping': list(mp_.values())[:6], 'main_sheet': mt_.get('main_sheet')})
         dv_s = sq.derive_deliverable(T_SPECIAL)

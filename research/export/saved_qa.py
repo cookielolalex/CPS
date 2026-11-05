@@ -66,6 +66,11 @@ three readers (which must agree), no formula, error cell, defined name or extern
 format cell by cell. Its findings carry "workbook": "deliverable". The receipt's deliverable_xlsx is compared with the rerun's
 (receipt claims), its sha256 with the file, and the provenance rerun byte-compares the deliverable too. An untitled output
 has no deliverable (receipt deliverable_xlsx null) and is checked exactly as in v5.
+v6.1 (review of v2.7, W1 and N3): every worksheet's <cols> must hold exactly one <col> per column, in order, with
+min = max = the column, customWidth="1" and the pinned width (WIDTHS per internal sheet, DELIVERY widths for the deliverable):
+LibreOffice uses the first <col> that covers a column, openpyxl the last, and openpyxl gives a column without width its
+default, so a leading wide-range <col> or a dropped one passed the openpyxl width check. The workbooks, EXPECTED_SAVED_VALUES.json
+and WRITER_RECEIPT.json must be regular files in the output directory, not symbolic links (finding integrity).
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
@@ -80,7 +85,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v6'
+VERSION = 'cps-export-saved-qa.v6.1'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -196,6 +201,27 @@ DELIVERY = {'font': '新細明體', 'size': 12, 'header_fill': 'FFC0C0C0', 'bord
 DELIVERY_ROW_HT = {'header': '23.25', 'body': '20.45'}       # the row ht attribute text openpyxl writes
 DELIVERY_PANE = {'ySplit': '1', 'topLeftCell': 'A2', 'activePane': 'bottomLeft', 'state': 'frozen'}
 DELIVERY_SHEET_VIEW_ATTRS = ('tabSelected', 'workbookViewId')  # no showGridLines: gridlines show
+WIDTH_TEXT_RE = re.compile(r'[0-9]+(?:\.[0-9]+)?')
+
+
+def expected_cols(kind, part):
+    """v6.1 (review W1): the pinned widths of a worksheet part, one per column from A; None for a part with no pin."""
+    if kind == 'deliverable':
+        return DELIVERY['widths'] if part == 'xl/worksheets/sheet1.xml' else None
+    return {'xl/worksheets/sheet%d.xml' % (i + 1): WIDTHS[name] for i, name in enumerate(SHEETS)}.get(part)
+
+
+def cols_ok(cols, want):
+    """Exactly one <col> per column 1..len(want), in order: attributes exactly min, max, width, customWidth; min = max = the
+    column; customWidth "1"; width plain decimal text within 1e-9 of the pin (openpyxl writes 81.9 as 81.90000000000001)."""
+    if len(cols) != len(want):
+        return False
+    for j, (c, w) in enumerate(zip(cols, want), start=1):
+        a = c.attrib
+        if tag_name(c) != 'col' or set(a) != {'min', 'max', 'width', 'customWidth'} or a['min'] != str(j) or a['max'] != str(j) \
+                or a['customWidth'] != '1' or not WIDTH_TEXT_RE.fullmatch(a['width']) or abs(float(a['width']) - w) > 1e-9:
+            return False
+    return True
 
 
 def xml_attribute_escape(name):
@@ -545,6 +571,8 @@ def check_structure(path, F, main_sheet=SHEETS[0], kind='qa'):
         if any(k not in WORKSHEET_CHILDREN for k in kids) or kids != order or 'sheetData' not in kids:
             bad('worksheet_structure', part=n, problem='worksheet child elements',
                 unexpected=[k for k in kids if k not in WORKSHEET_CHILDREN], actual=kids[:20])
+        if expected_cols(kind, n) is not None and 'cols' not in kids:
+            bad('worksheet_structure', part=n, problem='cols missing (v6.1: every column has its pinned width)')
         for el in root:
             tag = tag_name(el)
             if tag == 'sheetPr':
@@ -577,6 +605,11 @@ def check_structure(path, F, main_sheet=SHEETS[0], kind='qa'):
                 for col in el:
                     if tag_name(col) != 'col' or any(k not in ('min', 'max', 'width', 'customWidth') for k in col.attrib):
                         bad('worksheet_structure', part=n, problem='col', attributes=dict(col.attrib))
+                want_cols = expected_cols(kind, n)
+                if want_cols is not None and not cols_ok(list(el), want_cols):
+                    bad('worksheet_structure', part=n, problem='cols: exactly one <col> per column, in order, min = max = the column, '
+                        'customWidth="1", the pinned width (LibreOffice uses the first <col> covering a column, openpyxl the last; v6.1)',
+                        actual=[dict(c.attrib) for c in list(el)[:30]], expected=want_cols)
             elif tag == 'sheetData':
                 check_sheet_data(n, el, bad, kind)
             elif tag == 'pageMargins':
@@ -1312,6 +1345,10 @@ def resolve_deliverable(out_dir, receipt, F):
     or None, the record whose names are used, report section); when the title cannot be derived the v2.5 names are used."""
     def bad(**kw):
         F.add('deliverable_name', kw)
+    for q in sorted(out_dir.iterdir()):        # v6.1 (review N3): the files saved QA reads are regular files, not links
+        if q.is_symlink() and (q.name.lower().endswith('.xlsx') or q.name in ('EXPECTED_SAVED_VALUES.json', 'WRITER_RECEIPT.json')):
+            F.add('integrity', {'check': 'a symbolic link in the output directory: the workbooks, EXPECTED_SAVED_VALUES.json and '
+                                         'WRITER_RECEIPT.json must be regular files', 'file': q.name})
     dl = receipt.get('deliverable') if isinstance(receipt, dict) else None
     title = dl.get('job_title') if isinstance(dl, dict) else None
     if receipt is not None and not isinstance(dl, dict):

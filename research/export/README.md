@@ -155,9 +155,9 @@ Because the name starts with 7 digits and ends in `(未填)`, it can never begin
 
 | Title (invented) | File | Main sheet |
 |---|---|---|
-| `1141002甲公司-乙案管三` | `1141002甲公司乙案管三(未填).xlsx` | `1141002甲公司乙案管三(未填)` |
-| `1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(11K+000~11K+725)` | `1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(11K+000~11K+725)(未填).xlsx` | `1130803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉(未填)` (31) |
-| `1141002甲公司-乙&<>"'\|案，丙` | `1141002甲公司乙&---'-案,丙(未填).xlsx` | `1141002甲公司乙&<>"'\|案,丙(未填)` |
+| `9990102甲公司-乙案丁戊` | `9990102甲公司乙案丁戊(未填).xlsx` | `9990102甲公司乙案丁戊(未填)` |
+| `9990803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(1K+200~3K+450)` | `9990803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥(1K+200~3K+450)(未填).xlsx` | `9990803甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉(未填)` (31) |
+| `9990102甲公司-乙&<>"'\|案，丙` | `9990102甲公司乙&---'-案,丙(未填).xlsx` | `9990102甲公司乙&<>"'\|案,丙(未填)` |
 
 **What changes in the output.** Only the file name and `xl/workbook.xml` change; the latter holds the main sheet's name in `<sheet name="…">`. This was measured on every titled output of the suite, against the untitled output of the same carrier:
 
@@ -167,7 +167,7 @@ Because the name starts with 7 digits and ends in `(未填)`, it can never begin
 
 The receipt gains a `deliverable` section:
 
-- `profile` `owner_O33_O34`;
+- `profile` `owner_O33_O34` (v2.7: `owner_O33_O34_O38`, with `qa_workbook_file`, `deliverable_workbook` and `deliverable_format` added);
 - `job_title` exactly as given, `o33_naming_applied`, `normalized_title`, and `dash_removed_at` (an index into the normalized title);
 - `name`, `xlsx_file`, `main_sheet` and `main_sheet_cut`;
 - `sheet_mapping`: each `EXPECTED_SAVED_VALUES.json` sheet with its workbook sheet;
@@ -231,6 +231,16 @@ The writer v2.7 deliverables of the four owner samples show zero cell, style, wi
 - **values:** three readers against the main sheet of `EXPECTED_SAVED_VALUES.json`, exactly one sheet, the 17 headers, no formula, error cell, defined name or external relationship, and the three readers agree;
 - **format** (unless `--no-formatting`): every cell A1:Q*n* against the O38 format, plus widths, heights, the freeze, gridlines and no tab colour;
 - **provenance:** the rerun's deliverable must be byte-identical (`deliverable_xlsx_byte_identical`), and `deliverable_xlsx` is a compared receipt claim. `cps_evidence_preconditions` reports `deliverable_checked` and `deliverable_byte_identical_to_rerun`; for a titled output, `all_checked_here_met` requires both.
+
+**Review of v2.7 (2026-11-05, independent reviewer): ADMIT_AFTER_LISTED_FIXES.** Applied in saved_qa v6.1 and visual_qa v4.1; the writer is unchanged:
+- **W1, required.** openpyxl lets a later `<col>` replace an earlier one and gives a column without a width its default. LibreOffice uses the first `<col>` covering a column. Six width tampers passed saved QA without provenance, the leading wide-range form also on the admitted v4. saved_qa v6.1 requires, in every worksheet of both workbooks, exactly one `<col>` per column, in order, with `min` = `max` = the column, `customWidth="1"` and the pinned width (`expected_cols`, `cols_ok`; tests `l_cols_tamper_W1a`–`W1g`).
+- **D1, required.** Two test titles paired real development case ids with fragments of those cases' project titles. Every test title now uses invented ids (`999xxxx`) and invented text. The earlier commits remain in the published history.
+- **N1.** Numbers wider than the narrower O38 columns F and Q show as `1E+06` or with fewer digits. visual_qa v4.1 lists such number cells in `possibly_cut_cells` (`kind` `number`).
+- **N3.** A deliverable replaced by a symbolic link to identical bytes passed. saved_qa v6.1 refuses symbolic links for the workbooks, `EXPECTED_SAVED_VALUES.json` and the receipt (`integrity`).
+- **N6.** visual_qa's width map now takes the first `<col>` that covers a column.
+- **N4, N7.** Documentation: these conditions of use, the checklist, the admission record.
+- **N2, open.** The deliverable's default (Normal) font is openpyxl's Calibri 11, so column widths are in that font's digit width. The approved previews share this default.
+- **N5, open.** Eleven edits that change no cell value pass without provenance and fail with it.
 
 **visual_qa v4.** In fit-width mode a sheet whose view shows gridlines also gets `<printOptions gridLines="1"/>`, so the render shows its cell lines as the screen does. The modification is recorded. The internal workbook's sheets hide gridlines and get none. `possibly_cut_cells` lists no-wrap string cells whose estimated width exceeds the column, or that hold a line feed, with whether their neighbours are filled. `possibly_clipped_cells` now considers only cells that wrap. fc-match is recorded for 新細明體 and PMingLiU too.
 
@@ -338,10 +348,10 @@ These are the conditions under which the reviewers' ADMIT_AFTER_LISTED_FIXES ver
 - **Required runs (third review).** CPS evidence needs a saved QA run with `--carrier` and `--writer-dir`, without `--no-formatting`, and with `expected_provenance.result` = `PASS`. `--carrier` must be the frozen route carrier: its sha256 (`expected_provenance.carrier_sha256` in `SAVED_QA.json`) must be checked against `carrier_sha256` in the route convert receipt (`ADAPTER_RECEIPT.json`) or against the freeze record. Saved QA reads neither; the check is the operator's, and the record must show it. Provenance is relative to the carrier given: a consistent rebuild from a modified carrier passes with that carrier and fails with the original (second review N-a, `s3_attacks3.py`).
 - **Job title (v2.6, owner decision O33).** The writer's `--job-title` is the harness's per-job project folder title for this job. It is supplied like L/M/N job inputs under O13, and never by the generator. Saved QA derives the file and sheet names from `deliverable.job_title` in the receipt and checks them. It cannot know whether that title belongs to this job: a consistent re-titling passes (tamper K12). So the operator checks `deliverable.job_title` (also in `cps_evidence_preconditions.job_title`) against the harness's per-job input record, as for the carrier, and the record must show the check. Use the writer004 sheet names (`未填研究草稿`) only for outputs made without `--job-title`.
 - **Checker environment (third review G2).** The checker runs saved QA from a clean shell, independent of the producer's environment, with the system node pinned by absolute path and sha256: `--checker-node /abs/node --checker-node-sha256 <hex>`. The sha256 comes from the admission record. Neither the path nor the sha256 is ever taken from the producer's receipt, from the producer's `--node`, or from `PATH`. The checker reports the node path and sha256: `expected_provenance.checker_node` (executable, realpath, sha256, version), `writer004_check_node`, `rerun_node`, and `cps_evidence_preconditions.pinned_checker_node` = true. A run without `--checker-node` is not CPS evidence, whatever binary it used.
-- **Receipt (third review G3).** Only the receipt fields that saved QA compares with the rerun receipt count as evidence: `mode`, `relaxations` (without the route port path), `cross_check`, `expected_saved_values`, `matrices_sha256`, `sheets`, `writer`, `writer_files`, `status`, `admitted` (`expected_provenance.receipt_claims.match` = true). The v2 relaxation classes and documented cells are taken from the checker's rerun (`expected_provenance.rerun_relaxation_classes`, `rerun_documented_cells`), not from the delivered receipt. Every other receipt field is the producer's claim and not evidence: paths, times, `node_environment` (the producer's node included), `tool_versions`, `gate`, `limitations`.
+- **Receipt (third review G3).** Only the receipt fields that saved QA compares with the rerun receipt count as evidence: `mode`, `relaxations` (without the route port path), `cross_check`, `expected_saved_values`, `matrices_sha256`, `sheets`, `writer`, `writer_files`, `status`, `admitted`, and from v2.6/v2.7 `deliverable` and `deliverable_xlsx` (`expected_provenance.receipt_claims.match` = true). The v2 relaxation classes and documented cells are taken from the checker's rerun (`expected_provenance.rerun_relaxation_classes`, `rerun_documented_cells`), not from the delivered receipt. Every other receipt field is the producer's claim and not evidence: paths, times, `node_environment` (the producer's node included), `tool_versions`, `gate`, `limitations`.
 - **Mode v2 (carried over: second review N-b, review N4, L10).** Use `--mode v2` for CPS only on a carrier whose route v4.2 convert receipt (`ADAPTER_RECEIPT.json`) has `export_mode_required` = `"v2"` and `policy_checks` = `"applied"`. The suite's invented v2 fixtures include pre-046f mechanics carriers (`policy_checks` = `"not_applied_no_job_input_facts"`); they test the writer's mechanics and are not a CPS use. Report a v2 output as "writer004 on the placeholder copy plus the documented cells": its `EXPECTED_SAVED_VALUES.json` differs from writer004 `prepareMatrices` on the placeholder copy only in the documented review cells (L10). The writer and saved QA check only that M and N selection evidence has the documented shape and that the saved cells equal the carrier. Whether M and N carry the job's customer and project names, as the job-input facts say, is checked by route v4.2's R48 policy checks (`R48_JOB_INPUT_REQUIRED`, `R48_JOB_INPUT_REF`, `R48_JOB_INPUT_VALUE_MISMATCH`, `R48_FIELD_MUST_BE_NULL`) when the carrier is made, not here. Mode v2 is not a way past any other writer004 refusal; a v2 run on a carrier without O13/R57 is the v1 route with the same bytes. Mode v1 (default) is for carriers that writer004 `validateCarrier` accepts unchanged; its `EXPECTED_SAVED_VALUES.json` is the text writer004 `prepareMatrices` gives for the carrier.
 - **Scope (third review).** When the required runs pass, saved QA establishes saved-cell fidelity to writer004's intended matrices:
-  - the saved workbook holds exactly the values and types of `EXPECTED_SAVED_VALUES.json` in all four sheets, read by three readers that agree;
+  - the saved workbook holds exactly the values and types of `EXPECTED_SAVED_VALUES.json` in all four sheets, read by three readers that agree; for a titled v2.7 output, the delivered workbook holds exactly the main sheet's values and types, read the same way;
   - `EXPECTED_SAVED_VALUES.json` and the xlsx are byte-identical to a writer rerun on the carrier with the pinned checker node, and when the receipt says v1, `EXPECTED_SAVED_VALUES.json` is byte-identical to writer004 `prepareMatrices` on the carrier;
   - the compared receipt claims equal the rerun's;
   - the package holds only the writer's parts, the 7 pinned parts are byte-identical to every writer output's, `xl/workbook.xml` equals its pinned template with the derived main sheet name (v5), the file and sheet names follow from the receipt's job title (v5, O33), and nothing hides or alters what a cell shows (structure list above);
@@ -371,7 +381,7 @@ These are the conditions under which the reviewers' ADMIT_AFTER_LISTED_FIXES ver
 - **Delivered workbook checklist (v2.7, owner decision O38).** For every PNG of the delivered `<name>.xlsx`, the reviewer records:
   1. the workbook has one sheet, `<name>`, and the header row shows the 17 headers (`盤體名稱` … `合約價`) in order, A to Q;
   2. header cells are black text on grey `#C0C0C0`, centred, with thin cell borders;
-  3. cell lines (gridlines) show on every page;
+  3. cell lines (gridlines) show on every page. The render's printed gridlines come from visual_qa's own print patch, so this item shows that the patch ran. The evidence that the sheet shows gridlines in Excel is saved QA's sheet-view check (no `showGridLines`; review N7);
   4. no column is hidden or zero-width;
   5. no tofu: no boxes or missing-glyph marks in place of characters;
   6. E, F, L, M, N and Q are centred, and C is left-aligned;
@@ -474,7 +484,7 @@ What the tests prove:
 
     Both refuse 13 titles with the same reason: empty, whitespace only, no case id, 6 digits, Arabic-Indic digits, C0/C1/DEL controls, a lone surrogate, U+FFFE, `_x0041_`, a 257-byte file name, not a string. They agree on 4,000 random titles, and their whitespace and refused-character sets are equal over all code points. The template's sha256 is pinned, and substituting `未填研究草稿` gives the v4 pin `cb9bc221…f3ce`.
   - **Titled outputs.** Five titled outputs are built from v01_base (twice: the example title and the long title), from the fidelity probe in v1 and v2 (the special-character title) and from `v2_w09_relaxed_all`. Against the untitled output of the same carrier:
-    - the directory holds exactly the derived file, `EXPECTED_SAVED_VALUES.json` and the receipt;
+    - the directory holds exactly the derived files, `EXPECTED_SAVED_VALUES.json` and the receipt (v2.7: the deliverable and `INTERNAL_QA_WORKBOOK.xlsx`; the comparisons below are of the internal workbook);
     - every part except `xl/workbook.xml` is byte-identical, `docProps/app.xml` included, and it holds no sheet name;
     - `xl/workbook.xml` equals the template with the escaped name;
     - openpyxl reads the derived sheet names;

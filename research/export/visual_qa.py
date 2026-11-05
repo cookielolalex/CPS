@@ -32,6 +32,10 @@ whose estimated text width exceeds the column width or that hold a line feed: in
 neighbour or is cut at a filled one, and a line feed is not shown as a new line. possibly_clipped_cells now considers only
 cells that wrap (every cell of the internal workbook, as before).
 
+v4.1 (review of v2.7, N1 and N6): the column-width map takes the first <col> that covers a column, as LibreOffice does;
+possibly_cut_cells also lists no-wrap number cells whose General-format text is wider than the column (Excel and LibreOffice then
+show fewer digits, an exponent form such as 1E+06, or ####), with kind "number" (string cells have kind "string").
+
 What the render does not show (v2, review S4; also in the manifest limitations): numbers display in the
 General format, so the stored binary64 precision is not visible; a row taller than a printed page is
 clipped (LibreOffice does not split a row across pages); complete_render means every page was rendered,
@@ -45,7 +49,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-visual-qa.v4'
+VERSION = 'cps-export-visual-qa.v4.1'
 HEADER_MARKER = '[[{}]]'                 # page header text: [[sheet name]] (review N1)
 EXCEL_MAX_ROW_HEIGHT_PT = 409.0          # Excel row-height limit; also far below one A3 page in LibreOffice
 LINE_HEIGHT_PT = 15.0                    # approximate line height of 11 pt text with the CJK fallback font
@@ -257,7 +261,7 @@ def possibly_cut_cells(xlsx):
     saved_qa.py."""
     import xml.etree.ElementTree as ET
     m = '{%s}' % MAIN_NS
-    flagged, checked = [], 0
+    flagged, checked, checked_numbers = [], 0, 0
     with zipfile.ZipFile(xlsx) as z:
         shared = []
         if 'xl/sharedStrings.xml' in z.namelist():
@@ -268,7 +272,7 @@ def possibly_cut_cells(xlsx):
             widths = {}
             for col in root.iter(m + 'col'):
                 for k in range(int(col.attrib.get('min', 1)), int(col.attrib.get('max', 1)) + 1):
-                    widths[k] = float(col.attrib.get('width', DEFAULT_COLUMN_WIDTH))
+                    widths.setdefault(k, float(col.attrib.get('width', DEFAULT_COLUMN_WIDTH)))   # v4.1: the first <col> wins
             filled = {c.attrib.get('r') for c in root.iter(m + 'c') if c.find(m + 'v') is not None or c.find(m + 'is') is not None}
             for c, text in _string_cells(z, root, shared, m):
                 wraps, size, horizontal = styles.get(int(c.attrib.get('s', 0) or 0), (False, 11.0, None))
@@ -289,12 +293,28 @@ def possibly_cut_cells(xlsx):
                         return out
                     left = letters(col_no - 1) + row if col_no > 1 else None
                     right = letters(col_no + 1) + row
-                    flagged.append({'sheet': name, 'cell': ref, 'chars': len(text), 'line_feeds': len(lines) - 1, 'column_width': w,
-                                    'estimated_width': round(est, 2), 'horizontal': horizontal,
+                    flagged.append({'sheet': name, 'cell': ref, 'kind': 'string', 'chars': len(text), 'line_feeds': len(lines) - 1,
+                                    'column_width': w, 'estimated_width': round(est, 2), 'horizontal': horizontal,
                                     'neighbours_filled': {'left': left in filled if left else None, 'right': right in filled}})
+            for c in root.iter(m + 'c'):          # v4.1 (review N1): numbers wider than their column
+                v = c.find(m + 'v')
+                if c.attrib.get('t', 'n') != 'n' or v is None or not v.text:
+                    continue
+                wraps, size, horizontal = styles.get(int(c.attrib.get('s', 0) or 0), (False, 11.0, None))
+                if wraps:
+                    continue
+                checked_numbers += 1
+                ref = c.attrib.get('r', '')
+                w = widths.get(_col_no(ref), DEFAULT_COLUMN_WIDTH)
+                est = len(v.text) * size / 11.0
+                if est > max(1.0, w - 1.0):
+                    flagged.append({'sheet': name, 'cell': ref, 'kind': 'number', 'chars': len(v.text), 'line_feeds': 0, 'column_width': w,
+                                    'estimated_width': round(est, 2), 'horizontal': horizontal, 'neighbours_filled': None})
     return {'count': len(flagged), 'first': flagged[:CLIP_LIST_CAP], 'no_wrap_string_cells_checked': checked,
+            'no_wrap_number_cells_checked': checked_numbers,
             'criterion': ('no-wrap string cell whose estimated width > column width (wide East Asian characters = 2 units, times font '
-                          'size / 11 pt), or that holds a line feed'),
+                          'size / 11 pt), or that holds a line feed; no-wrap number cell whose stored text, times font size / 11 pt, is '
+                          'wider than the column width less 1 (v4.1: shown with fewer digits, as 1E+06, or as ####)'),
             'note': ('Heuristic. In Excel the text of these cells runs into empty neighbours and is cut at a filled one; a line feed '
                      'shows as one line. Check their values in SAVED_QA.json / the saved workbook, not in the PNGs.')}
 
@@ -317,7 +337,7 @@ def possibly_clipped_cells(xlsx):
             widths = {}
             for col in root.iter(m + 'col'):
                 for k in range(int(col.attrib.get('min', 1)), int(col.attrib.get('max', 1)) + 1):
-                    widths[k] = float(col.attrib.get('width', DEFAULT_COLUMN_WIDTH))
+                    widths.setdefault(k, float(col.attrib.get('width', DEFAULT_COLUMN_WIDTH)))   # v4.1: the first <col> wins
             for c, text in _string_cells(z, root, shared, m):
                 if styles and not styles.get(int(c.attrib.get('s', 0) or 0), (True,))[0]:
                     continue                                 # v4: a cell that does not wrap (possibly_cut_cells)
