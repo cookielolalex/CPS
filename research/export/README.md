@@ -450,7 +450,39 @@ What the tests prove:
     | K12 consistent re-titling to T2 (file, sheet, receipt) | passes | passes (the job title is the operator's check) |
     | K13 receipt title without a case id | only `deliverable_name` | `JOB_TITLE_INVALID`, no rerun |
 
-Latest run (2026-11-05, writer v2.5 engineer's run for the third review's fixes, not a review): 459 of 459 tests passed with visual tests (13 visual) against the archived writer004 original, in 460 s, and 446 of 446 without visual tests against the second reviewer's public-copy writer directory (`writer_review2/pubroute/writer`: `research/checkpoint045/writer` plus the stub), in 387 s; each from a fresh work directory. Fixtures: 11 valid and 21 invalid v1, 11 valid and 17 invalid v2; 54 saved-QA tampers of the fidelity probe (the 48 of v2.4 plus B01–B06), 4 of a relaxed v2 output, the 3 downgrade tampers D1–D3, and 21 receipt-claim tampers (16 of `v2_w09_relaxed_all`, 5 of the v1 fidelity output); 33 untampered writer outputs checked for the pinned parts. Every provenance run used the pinned checker node `/opt/node22/bin/node` (sha256 `2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff`, v22.23.4; `/usr/local/bin/node` is a symlink to it), found by realpath of the `node` on `PATH`. Versions: writer_portable.py `fe60010c…ebeb` (`cps-export-writer-portable.v2.5`), saved_qa.py `2469e812…e406` (`cps-export-saved-qa.v4`), visual_qa.py `7b1f8ec1…e143` (unchanged, `cps-export-visual-qa.v2`), writer004_matrices.mjs `028dbdae…b3f8` (unchanged), tests/make_tamper_fixtures.py `e32d782a…570a`, tests/run_export_tests.py `416dd5ba…f497` and route v4.2 `cps046b_route.py` `9db8033b…811d`. Byte identity against the third reviewer's archived run (`writer_review3/work_arch/w`), and the same against its public-copy run:
+Latest run (2026-11-05, writer v2.6 engineer's run for owner decisions O33–O34, not a review). Each suite ran from a fresh work directory:
+
+- **With visual tests,** against the archived writer004 original: 529 of 529 passed (17 visual), in 516 s.
+- **Without visual tests,** against the second reviewer's public-copy writer directory (`writer_review2/pubroute/writer`): 512 of 512 passed, in 413 s.
+
+Fixtures and tampers:
+
+- v1: 11 valid and 21 invalid; v2: 11 valid and 17 invalid;
+- 56 saved-QA tampers of the fidelity probe (the 54 of v2.5 plus O34a/O34b), 4 of a relaxed v2 output, the 3 downgrade tampers and 21 receipt-claim tampers;
+- 5 titled outputs and the 13 naming tampers K01–K13;
+- 27 name-derivation cases and 4,000 random titles;
+- 38 untampered writer outputs checked for the pinned parts and the template (5 of them titled).
+
+Every provenance run used the pinned checker node `/opt/node22/bin/node` (sha256 `2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff`, v22.23.4). The exact `#F1F3F5` pixels on the main-sheet page were 10 (untitled, 150 dpi), 6 and 6 (the two titled renders, 100 dpi) and 9,084 (the O34a control, 100 dpi).
+
+Versions:
+
+- writer_portable.py `c24dc69c…412d` (`cps-export-writer-portable.v2.6`);
+- saved_qa.py `15b201ff…b603` (`cps-export-saved-qa.v5`);
+- visual_qa.py `c73d66b8…14cc` (`cps-export-visual-qa.v3`);
+- writer004_matrices.mjs `028dbdae…b3f8` (unchanged);
+- tests/make_tamper_fixtures.py `c4248447…f7ce`;
+- tests/run_export_tests.py `5e36233f…110f`;
+- route v4.2 `cps046b_route.py` `9db8033b…811d` (unchanged).
+
+Compared with the v2.5 engineer's runs (`writer_fix25/work_arch` and `work_pub`, file by file at the same paths):
+
+- all 120 `EXPECTED_SAVED_VALUES.json` and all 67 fixture carriers are byte-identical;
+- every workbook present in both runs differs only in `xl/styles.xml` and in `sheet1.xml`, where the G/H body cells' `s="4"` becomes `s="2"` (checked by substitution);
+- the 4 openpyxl re-saves of (b) also differ in their `docProps/core.xml` time;
+- X09 (not a zip) is identical. In X05 (duplicate zip entry) a lookup by name reads the injected duplicate `sheet1.xml`, so only `styles.xml` shows as differing.
+
+Before v2.6: 2026-11-05, writer v2.5 engineer's run for the third review's fixes, not a review: 459 of 459 tests passed with visual tests (13 visual) against the archived writer004 original, in 460 s, and 446 of 446 without visual tests against the second reviewer's public-copy writer directory (`writer_review2/pubroute/writer`: `research/checkpoint045/writer` plus the stub), in 387 s; each from a fresh work directory. Fixtures: 11 valid and 21 invalid v1, 11 valid and 17 invalid v2; 54 saved-QA tampers of the fidelity probe (the 48 of v2.4 plus B01–B06), 4 of a relaxed v2 output, the 3 downgrade tampers D1–D3, and 21 receipt-claim tampers (16 of `v2_w09_relaxed_all`, 5 of the v1 fidelity output); 33 untampered writer outputs checked for the pinned parts. Every provenance run used the pinned checker node `/opt/node22/bin/node` (sha256 `2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff`, v22.23.4; `/usr/local/bin/node` is a symlink to it), found by realpath of the `node` on `PATH`. Versions: writer_portable.py `fe60010c…ebeb` (`cps-export-writer-portable.v2.5`), saved_qa.py `2469e812…e406` (`cps-export-saved-qa.v4`), visual_qa.py `7b1f8ec1…e143` (unchanged, `cps-export-visual-qa.v2`), writer004_matrices.mjs `028dbdae…b3f8` (unchanged), tests/make_tamper_fixtures.py `e32d782a…570a`, tests/run_export_tests.py `416dd5ba…f497` and route v4.2 `cps046b_route.py` `9db8033b…811d`. Byte identity against the third reviewer's archived run (`writer_review3/work_arch/w`), and the same against its public-copy run:
 - all 91 `EXPECTED_SAVED_VALUES.json` and all 161 PNGs are identical;
 - 87 of 91 xlsx are identical, and the other 4 are the runner's own openpyxl re-saves (`tamper_formula`, `tamper_header`, `tamper_number_to_text`, `tamper_text_to_number`), which differ only in their `docProps/core.xml` time;
 - 60 of 62 carriers are identical, and the two fixture indexes differ only in the work-directory paths;
