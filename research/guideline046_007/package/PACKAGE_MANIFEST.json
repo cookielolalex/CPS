@@ -5,19 +5,19 @@
   "parent_manifest_sha256": "5f5502a7117e734c5a2f999227c6f0a8a95927c7dce959d28f11e11dbb620467",
   "status": "DRAFT_UNDER_INDEPENDENT_REVIEW_NOT_FROZEN",
   "target_runtime": "Owner-adopted qualification runtime claude-opus-5-5 (decision 2026-11-03); every run records the actual model, effort and tools.",
-  "semantic_review": "round 1 (2026-11-05, one fresh independent context): SEMANTIC_APPROVE_AFTER_LISTED_FIXES on R56/O30 (enclosure-row A/B), R59 (scoped packets), route v4.3 and the scope-stage harness. The round-1 fixes (B1, Q1-Q3, S1-S10, S12, S13, S15, N1-N3, N6, N7) are applied, plus the R56 Terms exception for a noun ending in 箱體/盤體 (from the evaluation-role replay); S11 not adopted; the round-1 replay is done on 15 exposed cases (A 45/65, 47/65 with the exception; heading-derived 26/28; B 28/65; post hoc). Awaits a confirmation review",
+  "semantic_review": "round 1 (2026-11-05, one fresh independent context): SEMANTIC_APPROVE_AFTER_LISTED_FIXES on R56/O30 (enclosure-row A/B), R59 (scoped packets), route v4.3 and the scope-stage harness; round-1 fixes (B1, Q1-Q3, S1-S10, S12, S13, S15, N1-N3, N6, N7) applied, plus the R56 Terms exception for a noun ending in 箱體/盤體; S11 not adopted; round-1 replay on 15 exposed cases done (A 47/65 with the exception, heading-derived 26/28, B 28/65; post hoc). Delta review (2026-11-05): SEMANTIC_APPROVE_AFTER_LISTED_FIXES, no further semantic round needed; delta review D1–D4 applied; replay confirmation pending",
   "route": {
     "path": "tools/cps046b_route.py",
     "version": "cps046g-route.v4.3"
   },
-  "utf8_bytes": 492595,
+  "utf8_bytes": 495633,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 25365,
-      "sha256": "856265275c74ac39481b00efb98fe2e61f8bdcb6e642c8342e1fb75fd638e93b"
+      "bytes": 26456,
+      "sha256": "0c38e7a1d46f07abf26e8110915a244788b6216103470b415320756bc2ff0b74"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -36,8 +36,8 @@
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 75351,
-      "sha256": "6f4085aacc9fb87ea3feec87374c6384ea0d9d5c0d8ea7bcaf558c119cd36683"
+      "bytes": 76620,
+      "sha256": "1f5c8742bfb64610894f7d90ba8e281f1ec6ef3479bccf0a14f70cdcf6375f65"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -56,8 +56,8 @@
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
-      "bytes": 12443,
-      "sha256": "1f5ff860b54869c113f88fb11d633b9df1d4f8b52ab2a3f630de49a928c4ca85"
+      "bytes": 12957,
+      "sha256": "7d1b9f4a8c7b6c955d2f1ae0fbd933a069f4c6d17d4d32008b8acb0355e7bb51"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
@@ -81,8 +81,8 @@
     },
     {
       "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 60472,
-      "sha256": "25ef1be7f020a99af3bb06235b5e25a2330ffc24f934e3ed2411e33f93bd8098"
+      "bytes": 60636,
+      "sha256": "4ee77d4197bddae5f5ec3a703e4df750cf3cca00c1f67c9702a68b5e4cdda160"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
