@@ -49,3 +49,9 @@ No unmatched position comes from CPS breaking a rule.
 - A decision on enclosure tags in A.
 - How older-template targets are handled in qualification.
 - Qualification on unexposed cases, including 10 reserved, after the writer is admitted and visual QA has run.
+
+## Disclosure added 2026-11-05: where the job inputs came from
+
+In this trial, the M and N job inputs were set from each target's modal M/N values (訂購客戶 and 使用客戶). Where the target left them blank, they came from the registry folder name. So M and N matched by construction wherever the target filled them. They are 2 job-level positions per case, about 0.3–0.8% of each governing denominator. The scores above are kept as recorded.
+
+Qualification will not do this. Reserved targets must stay closed until every output is frozen, and an answer must not be the source of an input. Qualification job inputs are built deterministically from the case id, the registry folder name and a customer-name table drawn only from exposed tuning targets. The builder is calibrated on those exposed cases before any qualification generation.
