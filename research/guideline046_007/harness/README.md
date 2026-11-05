@@ -85,6 +85,22 @@ The scope stage is source preparation. It runs after the full packet is built (`
 
 `expected_sha256` lists the full and scoped inventory hashes from the receipt, so `freeze_admission.py` refuses a mismatch (`PIN_MISMATCH`). Record in the plan fields: the decision's `admissible` value (it must be true), `--verify` PASS, `check-inventory` with `scope: applied` and `policy_checks: applied`, and the in-scope content-cell count. A packet at or below the threshold records `scope: not_applied` and the tool's `NOT_APPLIED` proposal.
 
+### Validation of `scope_tool.py` on the study inventories (046g review S14, D4)
+
+Source role, 2026-11-05. `scope_tool.py` (`cps046g-scope-tool.v2`, sha256 `e9190c2f9f0caf9fb030d0aab2b1ab569e3606dff4d3d1752eb1b8b9c4d756af`) was run on the five full inventories of the large material-list structure study (`research/guideline046_005/STUDY_LARGE_MATLIST_STRUCTURE_20261105.md`; exposed tuning cases, every sheet in scope). No target, output or evaluator file was read. The tool's outputs hold private source text and stay outside the repository; this record gives counts only. It was run twice, before and after the delta-review wording, with identical computed values.
+
+| Case | Literal/cached content cells | Status | BILL1 candidates | Bill sheet | Header row | Range rows | End cell | In-range lines (priced / not estimated / no price, no status) | Linked analysis blocks | Flags | Holds |
+|---|---:|---|---|---:|---:|---|---|---|---:|---|---|
+| 1131112 | 7,629 | PROPOSED | 1 | 2 | 8 | 14–100 | E100 | 78 (23 / 55 / 0) | 0 | none | none |
+| 1131207 | 4,604 | PROPOSED | 1 | 2 | 8 | 11–78 | E78 | 67 (27 / 40 / 0) | 0 | none | none |
+| 1140304 | 2,459 | NOT_APPLIED | 1 | 2 | 8 | 10–96 | E96 | 83 (36 / 47 / 0) | 0 | none | none |
+| 1140607 | 3,965 | PROPOSED | 1 | 2 | 8 | 14–146 | E146 | 61 (23 / 38 / 0) | 8 (1 priced, 7 not-estimated parents) | `LINKED_BLOCKS_OUT_OF_SCOPE` (analysis sheet) | none |
+| 1140808 | 5,286 | PROPOSED | 1 | 1 | 8 | 13–129 | E129 | 77 (27 / 50 / 0) | 0 | `OUT_OF_SCOPE_NONZERO_PRICES` (analysis sheet, 42 cells) | none |
+
+- The bill sheet, header row, end row and flags reproduce the study in 5 of 5 cases. 1140304 comes out `NOT_APPLIED` at 2,459 cells (threshold 2,500), so every sheet stays in scope and there is no `context:scope`. The in-range line counts, the analysis block and component counts (189/1,075, 114/614, 31/128, 8/37, 94/488) and the in-scope content cells of the four scoped cases (543, 452, 999, 637) also match the study. There are no hidden sheets, and R51 condition (i) holds in none of the five.
+- 1140607's 3,965 counts literal and cached-formula cells; the study's 3,968 also counts 3 missing-cache cells. The tool attributes its 8 links to code and name (0 by outline path), where the study reports code, name and outline path agreeing on each link; the linked-block count and the parent split are the same, so no flag or scope decision differs. 1140808's 42 cells are consistent with the study's 21 owner-fixed component prices.
+- This is the tool reproducing the study whose rule it implements, on the same five cases. It is not an independent test on other layouts. No tool change followed from it.
+
 **After the freeze (evaluation role).** For a scoped packet the evaluator also receives the decision and the full inventory. It classifies an unmatched historical row whose source line lies on a scoped-out sheet, or below the declared end row, as *scope loss* and reports it separately (`EVALUATOR_BRIEF_TEMPLATE.md`). Scope loss is never repaired in a scored output.
 
 ## Admission and export notes
