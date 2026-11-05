@@ -6,6 +6,7 @@ These files are for the CPS operator's VM. They contain no case data.
 |---|---|
 | `setup_vm.sh` | Installs the toolchain on Debian/Ubuntu. That is Python 3.11+ in a venv (openpyxl 3.1.5, xlrd 2.0.2, lxml), Node v22, LibreOffice with `pdftoppm`, Noto CJK fonts, and Playwright Chromium. |
 | `check_env.py` | Writes `ENV_REPORT.json`: tool versions and paths, the node binary's sha256, and which requirements are met. |
+| `render_examples.py` | Renders the interview example excerpts (.xlsx) to PNG on the VM (LibreOffice, pdftoppm 120 dpi, trimmed and stacked), as the kit did. |
 | `writer_route/` | A writer directory for the export tools. It holds the public writer copy (`writer004.mjs` 70d7f664…, `validate_carrier_v4.mjs`, `receipt_bytes.mjs`) and the CPS validation stub `node_modules/@oai/artifact-tool` (67134aca…). Pass `--writer-dir <repo>/deploy/writer_route/writer`. |
 
 ## Export self-test on a new VM

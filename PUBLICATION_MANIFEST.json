@@ -1589,8 +1589,8 @@
     },
     {
       "path": "deploy/setup_vm.sh",
-      "bytes": 1706,
-      "sha256": "7eb89e500a450acddfbcd6062dec0d0fad7a7d94c08d2ffe56a14ea231b74ace"
+      "bytes": 1719,
+      "sha256": "f708ade8f3c3adae3e941e23cd738c953bd747229d3f9987d6dc038c4aa2017b"
     },
     {
       "path": "deploy/check_env.py",
@@ -1651,6 +1651,11 @@
       "path": "research/evaluation/FREEZE_AGG_O31_V2.json",
       "bytes": 1519,
       "sha256": "bcea4b8565bfc1c60f22707dbe95031708f34922ff5f60c49d4068b8e296d115"
+    },
+    {
+      "path": "deploy/render_examples.py",
+      "bytes": 1703,
+      "sha256": "eb71b1ba6a17af454f582497b48ac3c7e849a903562ae1d87851ce8b5a52e63e"
     }
   ]
 }

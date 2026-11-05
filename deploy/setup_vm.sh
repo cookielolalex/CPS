@@ -15,7 +15,7 @@ fi
 # Python packages in a venv (openpyxl is pinned: the export pins docProps/app.xml as written by openpyxl 3.1.5)
 python3 -m venv "${CPS_VENV:-$HOME/cps-venv}"
 "${CPS_VENV:-$HOME/cps-venv}/bin/pip" install --upgrade pip
-"${CPS_VENV:-$HOME/cps-venv}/bin/pip" install 'openpyxl==3.1.5' 'xlrd==2.0.2' 'lxml>=5'
+"${CPS_VENV:-$HOME/cps-venv}/bin/pip" install 'openpyxl==3.1.5' 'xlrd==2.0.2' 'lxml>=5' 'pillow>=10'
 # Chromium for source view images (Playwright)
 if ! command -v npx >/dev/null; then echo "npx missing"; exit 1; fi
 mkdir -p "$HOME/cps-playwright" && cd "$HOME/cps-playwright" && npm init -y >/dev/null && npm install playwright@1 >/dev/null && npx playwright install --with-deps chromium
