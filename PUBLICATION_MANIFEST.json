@@ -1541,6 +1541,16 @@
       "path": "research/guideline046_005/STUDY_LARGE_MATLIST_STRUCTURE_20261105.md",
       "bytes": 18721,
       "sha256": "2beddf9dcaaa66baee0e5552d85838bef87296e0212d45b98e20aafe7e71a168"
+    },
+    {
+      "path": "research/evaluation/FREEZE_AGG_O31.json",
+      "bytes": 2102,
+      "sha256": "3e2db19b522dd47d7234214b24a0ea12f1196a239ea623ac4ba3de524534d495"
+    },
+    {
+      "path": "research/evaluation/tests/test_aggregate_real_eval.py",
+      "bytes": 5248,
+      "sha256": "a4b23325f490f877a14e9399ddca7b5730f402de2e17cd3feebb2413be0caea1"
     }
   ]
 }

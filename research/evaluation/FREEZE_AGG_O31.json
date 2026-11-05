@@ -1,0 +1,41 @@
+{
+ "schema": "cps.aggregator-freeze.v1",
+ "frozen_utc": "2026-11-05T06:17:06.933681+00:00",
+ "aggregator": {
+  "path": "research/evaluation/aggregate_qualification.py",
+  "sha256": "d48b81f341d12acfff1b87fc6bb978f46da10b6847534cc0d69799fd664f113a",
+  "output_schema": "cps.qualification-gate.v1"
+ },
+ "tests": {
+  "research/evaluation/tests/test_aggregate_qualification.py": {
+   "sha256": "c37dffcb1e312a174b6c03bdd61e18507cef83d75ded4cf62ffa190c3d5fadf2",
+   "result": "43/43"
+  },
+  "research/evaluation/tests/test_aggregate_real_eval.py": {
+   "sha256": "a4b23325f490f877a14e9399ddca7b5730f402de2e17cd3feebb2413be0caea1",
+   "result": "6/6 (genuine compare_target049 outputs)"
+  }
+ },
+ "evaluator_pinned": {
+  "path": "research/evaluation/compare_target049.py",
+  "sha256": "b600c04619c943ec78f577c4a681df3cc3d035638fab36f9be3f946eea5904c9"
+ },
+ "decision": "O31: per reader A and B, pooled matched/counted over the 30 pairs >= 0.95 and every case >= 0.90",
+ "pool_canonical_sha256": "bb949367ca023a7c89217f17d08fdaf8315c35cba7db2957e24962c96851bcf8",
+ "pool_canonical_form": "sha256 of json.dumps(sorted(pool), ensure_ascii=False, separators=(\",\",\":\")) in UTF-8; pool membership is private (O26); pass this value as --pool-sha",
+ "reviews": [
+  "round 1: APPROVE_AFTER_LISTED_FIXES (B1-B3, S1-S7); reviewer patch adopted unchanged",
+  "delta: APPROVE at this sha256"
+ ],
+ "conditions_of_use": [
+  "read the decision only from historical_match_element_passes; a failing gate still exits 0 (delta note O2)",
+  "nonattempt carriers embed the reader id so the two readers never share a carrier (delta note O4)",
+  "the declared target and carrier sha256 values must be verified against the frozen admission, expectations and convert records during the qualification review; the aggregator cannot establish them",
+  "pool composition (>= 10 reserved, independence) is verified against the private pool record, not by this script"
+ ],
+ "not_adopted_optional": [
+  "O1 global carrier uniqueness",
+  "O2 nonzero exit on failure",
+  "O3 single read per file (each would change the frozen sha256)"
+ ]
+}
