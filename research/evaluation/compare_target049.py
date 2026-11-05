@@ -25,19 +25,24 @@ Metric (declared before any qualification run; changes need a new version and re
   ，,、;；:：()（）[]【】/ removed, a leading 產品 dropped; equal strings match. A target row with no
   partner, or a CPS row with no partner, counts as a description miss when non-empty. The
   description rate is reported with the secondary target 0.75.
-  v3 (compare_target049, proposed 2026-11-04, before any qualification run; v2 stays frozen): gap fill.
-  Under v2 a pair needs similarity >= 0.5, and 0.7 of the similarity is C+D wording. Two rows for the
-  same source line, at the same position and agreeing on every scored field, are therefore left
-  unpaired when the creator's wording differs completely (for example an abbreviation alone against a
-  full description), and each side then counts all its non-null scored positions as misses. That lets
-  C/D wording decide the governing score, which O19 excludes. v3 keeps the v2 alignment and then fills
-  gaps. Take as anchors the v2 pairs plus a virtual start and end. Between two consecutive anchors, if
-  the gap holds the same number k >= 1 of unpaired target rows and unpaired CPS rows, pair them in
-  order, but only when every one of the k positional pairs has equal normalized E and equal normalized
-  F, and E or F is non-null on each. A gap with unequal counts, or with any pair failing that test, is
-  left unpaired. Filled pairs are scored exactly like v2 pairs (all positions, including the
-  description position), and the output lists them separately (`gap_filled_pairs`). The v2 alignment
-  and its score are reported as `v2_alignment` diagnostics. No other part of the metric changes.
+  v3 (compare_target049, 2026-11-05; owner decision O23: adopted if the independent review approves;
+  v2 stays frozen). Gap fill. The O19 record accepts that C/D quality affects the governing score
+  indirectly through row alignment, and that a missing or extra row counts every non-description
+  position. v3 narrows that effect for rows that agree on the line's identity outside C/D. It is a
+  change to the recorded metric, approved by the owner under O23. v3 keeps the v2 alignment, then takes
+  the v2 pairs as anchors plus a virtual start and end. Inside each gap between consecutive anchors it
+  computes an order-preserving maximum matching of the gap's unpaired target and CPS rows on this key:
+  equal normalized E and equal normalized F (not both null), and either equal non-null Q or equal
+  non-null I (型號) other than the status text 不含估價. The traceback takes the earliest pair that
+  keeps the maximum and otherwise skips the target row on a tie. Filled pairs are scored exactly like
+  v2 pairs, on every position including the description position. `pairs` flags each filled pair
+  (`gap_filled`), and `gap_filled_pairs` lists them. Fields, normalization, the job-level K-O and the
+  0.95 reading do not change. The description rate does: a filled pair counts one description
+  position where v2 counted one per unpaired side, so the rate rises with no new matching
+  description. Row recall and precision rise as well. The v2 alignment, its score and its description
+  rate are reported as `v2_alignment` diagnostics. Reworded not-estimated lines have no identity field
+  outside C/D, so they stay unpaired as in v2. The description target of 0.75 is reported only and
+  does not gate (O24).
   Deployment reading (O12, O19): a case "matches" at score >= 0.95 in the governing mode. Row recall,
   row precision and per-field rates are diagnostics.
 Usage: python3 -I -B compare_target049.py --target T.xlsx --target-sha HEX --carrier C.json
@@ -165,23 +170,45 @@ def align(T, C):
 
 
 
+STATUS_TEXT = ('str', '不含估價')
+
+
+def fill_key_ok(t, c):
+    """v3 fill test: equal normalized E and F (not both null), and the same line identity outside C/D:
+    equal non-null Q, or equal non-null I other than the status text 不含估價."""
+    e, f = norm(t[4], 'normalized'), norm(t[5], 'normalized')
+    if e != norm(c[4], 'normalized') or f != norm(c[5], 'normalized') or (e is None and f is None):
+        return False
+    q = norm(t[16], 'normalized')
+    if q is not None and q == norm(c[16], 'normalized'):
+        return True
+    i = norm(t[8], 'normalized')
+    return i is not None and i != STATUS_TEXT and i == norm(c[8], 'normalized')
+
+
 def gap_fill(T, C, pairs):
-    """v3: positional pairing inside equal-count gaps between consecutive v2 pairs (see the docstring)."""
+    """v3: inside each gap between consecutive v2 pairs (and the virtual start and end), an
+    order-preserving maximum matching of the gap's unpaired rows on fill_key_ok. Traceback takes the
+    earliest pair that keeps the maximum, and otherwise skips the target row on a tie."""
     bounds = [(-1, -1)] + [(i, j) for i, j, _ in pairs] + [(len(T), len(C))]
     filled = []
     for (i0, j0), (i1, j1) in zip(bounds, bounds[1:]):
         ti, cj = list(range(i0 + 1, i1)), list(range(j0 + 1, j1))
-        if not ti or len(ti) != len(cj):
+        if not ti or not cj:
             continue
-        ok = True
-        for a, b in zip(ti, cj):
-            ea, eb = norm(T[a][4], 'normalized'), norm(C[b][4], 'normalized')
-            fa, fb = norm(T[a][5], 'normalized'), norm(C[b][5], 'normalized')
-            if ea != eb or fa != fb or (ea is None and fa is None):
-                ok = False
-                break
-        if ok:
-            filled += [(a, b, similarity(T[a], C[b])) for a, b in zip(ti, cj)]
+        ok = [[fill_key_ok(T[a], C[b]) for b in cj] for a in ti]
+        L = [[0] * (len(cj) + 1) for _ in range(len(ti) + 1)]
+        for x in range(len(ti) - 1, -1, -1):
+            for y in range(len(cj) - 1, -1, -1):
+                L[x][y] = max(L[x + 1][y], L[x][y + 1], L[x + 1][y + 1] + 1 if ok[x][y] else 0)
+        x = y = 0
+        while x < len(ti) and y < len(cj):
+            if ok[x][y] and L[x][y] == L[x + 1][y + 1] + 1:
+                filled.append((ti[x], cj[y], similarity(T[ti[x]], C[cj[y]]))); x += 1; y += 1
+            elif L[x + 1][y] >= L[x][y + 1]:
+                x += 1
+            else:
+                y += 1
     return sorted(pairs + filled), filled
 
 DESC_PUNCT = re.compile(r'[\s，,、;；:：()（）\[\]【】/]')
@@ -257,12 +284,14 @@ def evaluate(target_path, carrier):
            'row_recall': (len(pairs) / len(T)) if T else None, 'row_precision': (len(pairs) / len(C)) if C else None,
            'unpaired_target_rows': [tg['rows'][i]['row'] for i in range(len(T)) if i not in {p[0] for p in pairs}],
            'unpaired_cps_ids': [carrier['items'][j]['id'] for j in range(len(C)) if j not in {p[1] for p in pairs}],
-           'pairs': [{'target_row': tg['rows'][i]['row'], 'cps_id': carrier['items'][j]['id'], 'similarity': round(s, 4)} for i, j, s in pairs],
+           'pairs': [{'target_row': tg['rows'][i]['row'], 'cps_id': carrier['items'][j]['id'], 'similarity': round(s, 4),
+                      'gap_filled': (i, j) in {(a, b) for a, b, _ in filled}} for i, j, s in pairs],
            'modes': {m: score(T, C, pairs, m) for m in ('normalized', 'strict')},
            'description_cd': desc_score(T, C, pairs),
            'gap_filled_pairs': [{'target_row': tg['rows'][i]['row'], 'cps_id': carrier['items'][j]['id'], 'similarity': round(s, 4)} for i, j, s in filled],
            'v2_alignment': {'paired_rows': len(v2_pairs), 'normalized_matched': v2['matched'], 'normalized_counted': v2['counted'],
-                            'normalized_score': v2['score'], 'note': 'diagnostic only: the v2 (compare_target048) alignment without gap fill'}}
+                            'normalized_score': v2['score'], 'description_cd': desc_score(T, C, v2_pairs),
+                            'note': 'diagnostic only: the v2 (compare_target048) alignment without gap fill'}}
     g = out['modes']['normalized']['score']
     out['governing'] = {'mode': 'normalized', 'score': g, 'threshold': 0.95, 'case_matches_at_95': (g is not None and g >= 0.95),
                         'description_cd_rate': out['description_cd']['rate'], 'description_target_0_75_met': (out['description_cd']['rate'] or 0) >= 0.75}

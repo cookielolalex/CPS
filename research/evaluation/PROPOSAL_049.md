@@ -1,6 +1,25 @@
-# Proposed evaluator v3: compare_target049 (gap fill), 2026-11-04
+# Proposed evaluator v3: compare_target049 (gap fill), 2026-11-04, revised 2026-11-05
 
-**Status: proposed. Not frozen and not governing.** It needs an independent review and the owner's approval. The frozen v2 (`compare_target048.py`) stays unchanged and governs every result recorded so far.
+**Status: revised after review round 1 (APPROVE_AFTER_LISTED_FIXES). Not frozen and not governing.** Under owner decision O23 ("Adopt v3 if review OK"), it governs qualification only after the reviewer approves the revision and v3 is frozen by SHA. The frozen v2 (`compare_target048.py`) stays unchanged and governs every result recorded so far. O24: the description target of 0.75 is reported only and does not gate.
+
+## Round-1 review and revision
+
+The first proposal filled a gap whenever E and F were equal. The adversarial review built invented cases where that paired different lines that happen to share a unit and quantity, causing false passes:
+- a different fee line, 式/1, rose from 0.906 to 0.984;
+- a different 不含估價 line rose from 0.879 to 1.000;
+- a different device, 只/2, rose from 0.853 to 0.952.
+
+In 600-trial simulations it produced 17–37 false passes, against 0–4 under v2.
+
+The review also corrected the framing. The O19 record had accepted that C/D quality affects row alignment indirectly, so v3 is a change to the recorded metric (now approved under O23), not a fix to v2.
+
+Revisions:
+- **B1 (fill key):** a filled pair needs equal E and F plus the line's identity outside C/D. That means equal non-null Q, or equal non-null I other than 不含估價. The fill uses an order-preserving maximum matching inside each gap, not equal-count positional pairing.
+- **S1:** the docstring now discloses that the description rate, row recall and row precision rise with filled pairs.
+- **S2:** filled pairs are flagged in `pairs`, and the v2 description rate is reported.
+- **S3:** tests 4 and 8 changed on purpose, and the reviewer's fixtures C0–C11 were added. Tests now pass 36/36.
+
+Every adversarial fixture now scores what the reviewer's line-identity oracle allows, or lower. The exception is C8a: garbage C/D with every other field right scores 1.000 with a description rate of 0.0. The governing score allows this by design (O19, O24), and `description_cd` reports it.
 
 ## Problem
 
@@ -10,7 +29,7 @@ Suppose CPS and the creator wrote the same source line at the same position, agr
 
 A private diagnostic on the frozen 046f development outputs found 7 such pairs, all at matching positions with equal E and F. They are 4 in 1141002, 2 in 1131202 and 1 in 1140506. In most of them Q, I and J also agree.
 
-## Change
+## Change (as first proposed; superseded by B1 above)
 
 Keep the v2 alignment unchanged, then fill gaps:
 - Take the v2 pairs as anchors, plus a virtual start and a virtual end.
@@ -24,13 +43,15 @@ Tests: `tests/test_compare_target049.py`, invented fixtures, 17/17 pass.
 
 ## Effect on the frozen 046f development outputs (post hoc, diagnostic only)
 
-| Case | v2 | v3 | Gap-filled pairs |
-|---|---:|---:|---:|
-| 1130803 | 0.985 | 0.985 | 0 |
-| 1140506 | 0.962 | 0.982 | 1 |
-| 1131202 | 0.942 | 0.966 | 2 |
-| 1141002 | 0.928 | 0.984 | 4 |
-| 1130204 (old template, excluded by O21) | 0.585 | 0.585 | 0 |
+| Case | v2 | v3 as first proposed | Revised v3 (B1) | Gap-filled pairs (revised) |
+|---|---:|---:|---:|---:|
+| 1130803 | 0.985 | 0.985 | 0.985 | 0 |
+| 1140506 | 0.962 | 0.982 | 0.962 | 0 |
+| 1131202 | 0.942 | 0.966 | 0.966 | 2 |
+| 1141002 | 0.928 | 0.984 | 0.959 | 2 |
+| 1130204 (old template, excluded by O21) | 0.585 | 0.585 | 0.585 | 0 |
+
+Two of the four current-template development cases cross 0.95 only under v3 (1131202 and 1141002). v3 was designed after those v2 results were known.
 
 Readers A and B are identical in both versions.
 
