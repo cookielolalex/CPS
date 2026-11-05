@@ -1214,8 +1214,8 @@
     },
     {
       "path": "research/export/saved_qa.py",
-      "bytes": 47915,
-      "sha256": "dc45c0de1f73cda9658589f3c0e7603a15f31e4dc41f5a002eae38394427ab63"
+      "bytes": 56046,
+      "sha256": "48ce5efca73b2b9c58cdc1f403d0d150dbd61a387fa190b2b8a6012146fa001e"
     },
     {
       "path": "research/export/tests/make_export_fixtures.py",
@@ -1249,8 +1249,8 @@
     },
     {
       "path": "research/export/writer_portable.py",
-      "bytes": 53707,
-      "sha256": "f1c955377a6bbdd809f5738dbd62dec56a0d27f7a782dca04a7118c461940e21"
+      "bytes": 54685,
+      "sha256": "c0f5bb6a3df10845295f326e96d263de37ad21db735924a9b2b0560d24af707b"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O10_O12.md",

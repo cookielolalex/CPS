@@ -15,8 +15,10 @@ Route
   5. The .xlsx is written with openpyxl: same sheet names and order, cell values and value
      types (strings stay strings, numbers stay numbers, no formulas), and the writer004
      formatting that openpyxl can express. Bytes are reproducible (fixed zip/docProps times).
-  Node environment (v2.3, review S1; before step 1): every node process runs with every NODE_* variable removed from
-  its environment (NODE_OPTIONS, NODE_PATH, ...). Before any node run, @oai/artifact-tool is resolved the
+  Node environment (v2.3, review S1; v2.4, second review N-c; before step 1): every node process runs with an
+  allowlisted environment: PATH, HOME, TMPDIR, LANG and LC_* only (NODE_ENV_KEEP), so no NODE_* variable
+  (NODE_OPTIONS, NODE_PATH, ...), OPENSSL_CONF, LD_PRELOAD, LD_LIBRARY_PATH or any other variable reaches node; the
+  kept and removed variable names are recorded in the receipt. Before any node run, @oai/artifact-tool is resolved the
   way node resolves it from writer004.mjs (createRequire(writer004 URL).resolve, and the ESM resolver
   from the writer directory, which must agree); the resolved file must be the pinned CPS validation stub
   (ARTIFACT_TOOL_STUB_SHA256) with the documented package.json. The pinned writer files must be regular
@@ -57,7 +59,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.3'
+VERSION = 'cps-export-writer-portable.v2.4'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -101,6 +103,11 @@ ARTIFACT_TOOL_SPECIFIER = '@oai/artifact-tool'
 ARTIFACT_TOOL_STUB_SHA256 = '67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4'
 ARTIFACT_TOOL_STUB_PACKAGE = {'name': '@oai/artifact-tool', 'version': '0.0.0-cps-validation-stub', 'type': 'module',
                               'main': 'index.mjs', 'exports': './index.mjs'}
+# Node environment (v2.4, second review N-c): only these variables reach any node process (POSIX names; LC_* by prefix).
+NODE_ENV_KEEP = ('PATH', 'HOME', 'TMPDIR', 'LANG')
+NODE_ENV_KEEP_PREFIXES = ('LC_',)
+NODE_ENV_DESCRIPTION = ('allowlist: only PATH, HOME, TMPDIR, LANG and LC_* from os.environ (no NODE_*, OPENSSL_CONF, LD_PRELOAD, '
+                        'LD_LIBRARY_PATH or any other variable)')
 # node -e (CommonJS): resolve the specifier from writer004.mjs, as the review asks (S1).
 RESOLVE_CJS = ("const {createRequire}=require('node:module');const {pathToFileURL}=require('node:url');"
                "process.stdout.write(JSON.stringify({resolved:createRequire(pathToFileURL(process.argv[1]).href)"
@@ -151,8 +158,9 @@ LIMITATIONS = [
     'Number-to-String text; strings equal to Excel error literals (#N/A, #REF!, ...) are forced to string type.',
     'docProps created/modified and zip member times are fixed to 1980-01-01T00:00:00 so the bytes are reproducible; '
     'the actual run time is in WRITER_RECEIPT.json.',
-    'Node environment: every node process ran with all NODE_* environment variables removed; @oai/artifact-tool resolved '
-    'from writer004.mjs to the pinned CPS validation stub (node_environment in this receipt).',
+    'Node environment: every node process ran with an allowlisted environment (PATH, HOME, TMPDIR, LANG and LC_* only; no NODE_*, '
+    'OPENSSL_CONF, LD_PRELOAD, LD_LIBRARY_PATH or other variable); @oai/artifact-tool resolved from writer004.mjs to the pinned '
+    'CPS validation stub (node_environment in this receipt, with the kept and removed variable names).',
 ]
 
 
@@ -505,15 +513,20 @@ def save_workbook_bytes(wb):
 
 
 # ------------------------------------------------------------------ gate and cross-check
-def node_env():
-    """The environment for every node process: os.environ without any NODE_* variable (NODE_OPTIONS, NODE_PATH, ...).
-    Returns (env, removed variable names)."""
-    removed = sorted(k for k in os.environ if k.upper().startswith('NODE_'))
-    return {k: v for k, v in os.environ.items() if not k.upper().startswith('NODE_')}, removed
+def node_env_allowed(name):
+    return name in NODE_ENV_KEEP or name.startswith(NODE_ENV_KEEP_PREFIXES)
+
+
+def node_env(environ=None):
+    """The environment for every node process (second review N-c): only the allowlisted variables of os.environ
+    (NODE_ENV_KEEP and LC_*). Returns (env, kept variable names, removed variable names)."""
+    environ = os.environ if environ is None else environ
+    env = {k: v for k, v in environ.items() if node_env_allowed(k)}
+    return env, sorted(env), sorted(k for k in environ if not node_env_allowed(k))
 
 
 def run(cmd, timeout=180, cwd=None):
-    """Run a node command with the sanitized environment (node_env)."""
+    """Run a node command with the allowlisted environment (node_env)."""
     p = subprocess.run(cmd, capture_output=True, timeout=timeout, env=node_env()[0], cwd=cwd)
     return p.returncode, p.stdout, p.stderr
 
@@ -548,7 +561,7 @@ def check_node_environment(node, real_dir):
     """Review S1: resolve @oai/artifact-tool the way node resolves it from writer004.mjs, with the sanitized environment,
     and refuse unless it is the pinned CPS validation stub. Runs before any other node process."""
     stage = 'gate:node_environment'
-    env, removed = node_env()
+    env, kept, removed = node_env()
     w = real_dir / 'writer004.mjs'
     try:
         code, out, err = run([node, '-e', RESOLVE_CJS, str(w), ARTIFACT_TOOL_SPECIFIER], 60)
@@ -576,7 +589,7 @@ def check_node_environment(node, real_dir):
         pkg = None
     if pkg != ARTIFACT_TOOL_STUB_PACKAGE:
         raise Refused('ARTIFACT_TOOL_PACKAGE_UNEXPECTED', stage, {'package_json': str(pkg_path), 'content': pkg})
-    return {'environment': 'os.environ with every NODE_* variable removed', 'removed_variables': removed,
+    return {'environment': NODE_ENV_DESCRIPTION, 'kept_variables': kept, 'removed_variables': removed,
             'node': {'command': node, 'executable': shutil.which(node, path=env.get('PATH')), 'version': tool_version([node, '--version'])},
             'artifact_tool': {'specifier': ARTIFACT_TOOL_SPECIFIER,
                               'resolved_by': "createRequire(pathToFileURL(<writer dir>/writer004.mjs)).resolve('@oai/artifact-tool'); "

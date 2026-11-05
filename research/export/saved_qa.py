@@ -1,4 +1,4 @@
-"""CPS saved 17-column workbook QA (read-only; part of the NOT ADMITTED portable export route).
+r"""CPS saved 17-column workbook QA (read-only; part of the NOT ADMITTED portable export route).
 
 Reopens the saved workbook and compares every cell of every sheet with the writer's
 EXPECTED_SAVED_VALUES.json (value and type, exact). Three independent readers:
@@ -15,13 +15,22 @@ every sheet has state="visible"; no hidden or zeroHeight attribute with a true v
 children and window visibility; cell-format children. Unknown cell types (t="d", ...) are findings, never a
 crash. WRITER_RECEIPT.json must exist and its hashes must match.
 
-Provenance of EXPECTED (v2, review S3; with --carrier and --writer-dir): the carrier sha256 must equal the
-receipt's. Receipt mode v1: writer004_matrices.mjs reruns writer004 prepareMatrices on the carrier (pinned
-writer files, pinned @oai/artifact-tool stub, every NODE_* variable removed) and its text must be
-byte-identical to EXPECTED_SAVED_VALUES.json. Receipt mode v2, or no receipt: writer_portable.py --mode v2
-reruns into a temporary directory and EXPECTED_SAVED_VALUES.json and the xlsx must be byte-identical
-(builds are reproducible). Without these options provenance is not checked (reported as such).
-Self-contained: it does not import the writer (mode v2 provenance runs it as a separate process).
+Cell values and fonts (v3, second review F1(b); always checked): each <c> holds at most one value child, <v> for
+t="n" and <is> for t="inlineStr", and an inlineStr cell has no <v>; <v> and <t> carry text only (no child element);
+number text is ASCII and matches -?(0|[1-9][0-9]*)(\.[0-9]+)?(e[+-][0-9]+)? (JavaScript Number::toString of a
+finite number, the writer's text); no duplicate row number or cell reference in a worksheet, every cell reference
+in its own row, rows and cells in ascending order; fonts hold only name, color, sz and b (font 0, openpyxl's
+default font, also family and scheme), each at most once. The formatting check also requires no italic,
+strike, underline or vertAlign on any checked cell.
+
+Provenance of EXPECTED (v3, second review F1(a)/F2; with --carrier and --writer-dir): the carrier sha256 must
+equal the receipt's. Whatever the receipt's mode says, writer_portable.py --mode v2 reruns into a temporary
+directory and EXPECTED_SAVED_VALUES.json and the xlsx must be byte-identical (builds are reproducible, and v2
+gives the v1 bytes for a carrier without O13/R57). When the receipt says mode v1, writer004_matrices.mjs also
+reruns writer004 prepareMatrices on the carrier (pinned writer files, pinned @oai/artifact-tool stub, the same
+allowlisted node environment as the writer) and its text must be byte-identical to EXPECTED_SAVED_VALUES.json.
+Without these options provenance is not checked (reported as such).
+Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
   python3 -I -B saved_qa.py --output-dir /abs/writer-output [--report /abs/SAVED_QA.json] [--no-formatting]
@@ -34,7 +43,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v2'
+VERSION = 'cps-export-saved-qa.v3'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -50,6 +59,19 @@ SHEET_FORMAT_ATTRS = {'baseColWidth': '8', 'defaultRowHeight': '15'}
 CELL_TYPES = ('n', 's', 'inlineStr', 'b', 'e', 'str')
 FALSE_VALUES = ('0', 'false')
 XML_SPACE = '{http://www.w3.org/XML/1998/namespace}space'
+# v3 (second review F1(b)): the number text the writer writes is JavaScript Number::toString of a finite number
+# (writer_portable js_number: '1e-7', '5e-324', '0.30000000000000004', '-0' written as '0'). ASCII only; fullmatch.
+NUMBER_TEXT_RE = re.compile(r'-?(0|[1-9][0-9]*)(\.[0-9]+)?(e[+-][0-9]+)?')
+CELL_REF_RE = re.compile(r'([A-Z]{1,3})([1-9][0-9]*)')
+ROW_NUMBER_RE = re.compile(r'[1-9][0-9]*')
+# Font children the writer's styles.xml holds: openpyxl's default font 0 (Calibri: name, family, color, sz, scheme)
+# and the writer's body and header fonts (name, color, sz; b on the header). Each at most once.
+FONT0_CHILDREN = ('name', 'family', 'color', 'sz', 'scheme')
+FONT_CHILDREN = ('name', 'color', 'sz', 'b')
+# Node environment (v3, second review N-c); the same allowlist as writer_portable.py (the tests check equality):
+# only these variables reach node (no OPENSSL_CONF, LD_PRELOAD, LD_LIBRARY_PATH, NODE_* or any other variable).
+NODE_ENV_KEEP = ('PATH', 'HOME', 'TMPDIR', 'LANG')
+NODE_ENV_KEEP_PREFIXES = ('LC_',)
 # Node environment for mode v1 provenance; the same pins as writer_portable.py (the tests check equality).
 WRITER_PINS = {
     'writer004.mjs': ('85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7', '70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7'),
@@ -307,31 +329,7 @@ def check_structure(path, F):
                     if local(col.tag) != 'col' or any(k not in ('min', 'max', 'width', 'customWidth') for k in col.attrib):
                         bad('worksheet_structure', part=n, problem='col', attributes=dict(col.attrib))
             elif tag == 'sheetData':
-                for row in el:
-                    ra = row.attrib
-                    if local(row.tag) != 'row' or any(k not in ('r', 'spans', 'ht', 'customHeight') for k in ra) \
-                            or (('ht' in ra or 'customHeight' in ra) and (ra.get('r') != '1' or ra.get('ht') != '36')):
-                        bad('worksheet_structure', part=n, problem='row attributes', row=ra.get('r'), attributes=dict(ra))
-                    for c in row:
-                        where = c.attrib.get('r')
-                        if local(c.tag) != 'c' or any(k not in ('r', 's', 't') for k in c.attrib):
-                            bad('worksheet_structure', part=n, problem='cell attributes', cell=where, attributes=dict(c.attrib))
-                        for x in c:
-                            xt = local(x.tag)
-                            if xt not in ('v', 'is', 'f'):
-                                bad('worksheet_structure', part=n, problem='cell child', cell=where, child=xt)
-                            if xt == 'is':
-                                ts = list(x)
-                                if len(ts) != 1 or local(ts[0].tag) != 't':
-                                    bad('worksheet_structure', part=n, problem='inline string must be one plain <t> (no rich-text runs)',
-                                        cell=where, actual=[local(t.tag) for t in ts])
-                                for t in ts:
-                                    if any(k != XML_SPACE for k in t.attrib):
-                                        bad('worksheet_structure', part=n, problem='<t> attributes', cell=where, attributes=dict(t.attrib))
-                                    text = t.text or ''
-                                    if text != text.strip(' \t\r\n') and t.attrib.get(XML_SPACE) != 'preserve':
-                                        bad('whitespace_not_preserved', part=n, cell=where,
-                                            problem='leading or trailing whitespace without xml:space="preserve" (applications may drop it)')
+                check_sheet_data(n, el, bad)
             elif tag == 'pageMargins':
                 if any(k not in ('left', 'right', 'top', 'bottom', 'header', 'footer') for k in el.attrib):
                     bad('worksheet_structure', part=n, problem='pageMargins attributes', attributes=dict(el.attrib))
@@ -342,13 +340,112 @@ def check_structure(path, F):
             for x in xf:
                 if local(x.tag) != 'alignment' or any(a not in ('horizontal', 'vertical', 'wrapText') for a in x.attrib):
                     bad('styles_structure', xf=k, element=local(x.tag), attributes=dict(x.attrib))
+        # fonts (v3, second review F1(b)): the writer's children only, each at most once (no strike, italic,
+        # underline, vertAlign, outline, shadow, ...)
+        for fonts in st.iterfind('m:fonts', NS):
+            for k, font in enumerate(fonts):
+                kids = [local(x.tag) for x in font]
+                allowed = FONT0_CHILDREN if k == 0 else FONT_CHILDREN
+                if local(font.tag) != 'font' or any(x not in allowed for x in kids) or len(kids) != len(set(kids)):
+                    bad('font_structure', font=k, element=local(font.tag), children=kids, allowed=list(allowed))
     return {'parts': sorted(set(names)), 'expected_parts': list(EXPECTED_PARTS)}
 
 
+def check_sheet_data(part, sheet_data, bad):
+    """Rows and cells of one worksheet's <sheetData> (review S2; v3 second review F1(b): value children, number text,
+    duplicate and out-of-row references). Readers differ on these: Python readers take the first matching child and
+    accept any text int()/float() accept; LibreOffice took the last <v>/<is>, an empty cell for a <v> beside <is>, and
+    1 or 0 for '1_234_567' or fullwidth digits (review round 2, N01-N07)."""
+    n = part
+    seen_rows, seen_cells, last_row = set(), set(), 0
+    for row in sheet_data:
+        ra = row.attrib
+        if local(row.tag) != 'row' or any(k not in ('r', 'spans', 'ht', 'customHeight') for k in ra) \
+                or (('ht' in ra or 'customHeight' in ra) and (ra.get('r') != '1' or ra.get('ht') != '36')):
+            bad('worksheet_structure', part=n, problem='row attributes', row=ra.get('r'), attributes=dict(ra))
+        rn = ra.get('r')
+        rnum = int(rn) if rn is not None and ROW_NUMBER_RE.fullmatch(rn) else None
+        if rnum is None:
+            bad('worksheet_structure', part=n, problem='row without a valid r attribute', row=rn)
+        elif rnum in seen_rows:
+            bad('duplicate_reference', part=n, problem='duplicate row number', row=rn)
+        elif rnum < last_row:
+            bad('worksheet_structure', part=n, problem='rows not in ascending order', row=rn, after=last_row)
+        if rnum is not None:
+            seen_rows.add(rnum)
+            last_row = max(last_row, rnum)
+        last_col = 0
+        for c in row:
+            where = c.attrib.get('r')
+            if local(c.tag) != 'c' or any(k not in ('r', 's', 't') for k in c.attrib):
+                bad('worksheet_structure', part=n, problem='cell attributes', cell=where, attributes=dict(c.attrib))
+            m = CELL_REF_RE.fullmatch(where) if where is not None else None
+            if m is None:
+                bad('worksheet_structure', part=n, problem='cell without a valid r attribute', cell=where, row=rn)
+            else:
+                cr, cc = addr_to_rc(where)
+                if where in seen_cells:
+                    bad('duplicate_reference', part=n, problem='duplicate cell reference', cell=where)
+                elif cc <= last_col and cr == rnum:
+                    bad('worksheet_structure', part=n, problem='cells not in ascending column order', cell=where)
+                if rnum is not None and cr != rnum:
+                    bad('worksheet_structure', part=n, problem='cell reference outside its row', cell=where, row=rn)
+                seen_cells.add(where)
+                last_col = max(last_col, cc)
+            typ = c.attrib.get('t', 'n')
+            kids = [local(x.tag) for x in c]
+            values = [k for k in kids if k in ('v', 'is')]
+            problems = []
+            if len(values) > 1:
+                problems.append('more than one value child')
+            if kids.count('f') > 1:
+                problems.append('more than one <f>')
+            if typ == 'inlineStr' and 'v' in kids:
+                problems.append('<v> in an inlineStr cell')
+            if typ != 'inlineStr' and 'is' in kids:
+                problems.append('<is> in a cell that is not inlineStr')
+            if problems:
+                bad('cell_value_children', part=n, cell=where, type=typ, children=kids, problem='; '.join(problems))
+            for x in c:
+                xt = local(x.tag)
+                if xt not in ('v', 'is', 'f'):
+                    bad('worksheet_structure', part=n, problem='cell child', cell=where, child=xt)
+                if xt == 'v':
+                    if x.attrib or len(x):
+                        bad('cell_value_children', part=n, cell=where, problem='<v> with attributes or child elements',
+                            attributes=dict(x.attrib), children=[local(y.tag) for y in x])
+                    text = x.text or ''
+                    if typ == 'n' and not (text.isascii() and NUMBER_TEXT_RE.fullmatch(text)):
+                        bad('number_text', part=n, cell=where, text=text[:100],
+                            problem='number text is not ASCII JavaScript Number::toString text')
+                if xt == 'is':
+                    ts = list(x)
+                    if len(ts) != 1 or local(ts[0].tag) != 't':
+                        bad('worksheet_structure', part=n, problem='inline string must be one plain <t> (no rich-text runs)',
+                            cell=where, actual=[local(t.tag) for t in ts])
+                    for t in ts:
+                        if any(k != XML_SPACE for k in t.attrib):
+                            bad('worksheet_structure', part=n, problem='<t> attributes', cell=where, attributes=dict(t.attrib))
+                        if len(t):
+                            bad('cell_value_children', part=n, cell=where, problem='<t> with child elements',
+                                children=[local(y.tag) for y in t])
+                        text = t.text or ''
+                        if text != text.strip(' \t\r\n') and t.attrib.get(XML_SPACE) != 'preserve':
+                            bad('whitespace_not_preserved', part=n, cell=where,
+                                problem='leading or trailing whitespace without xml:space="preserve" (applications may drop it)')
+
+
 # ------------------------------------------------------------------ provenance of EXPECTED (review S3)
-def node_env():
-    removed = sorted(k for k in os.environ if k.upper().startswith('NODE_'))
-    return {k: v for k, v in os.environ.items() if not k.upper().startswith('NODE_')}, removed
+def node_env_allowed(name):
+    return name in NODE_ENV_KEEP or name.startswith(NODE_ENV_KEEP_PREFIXES)
+
+
+def node_env(environ=None):
+    """The environment of every node process: only the allowlisted variables (NODE_ENV_KEEP and LC_*), as in
+    writer_portable.py. Returns (env, kept names, removed names)."""
+    environ = os.environ if environ is None else environ
+    env = {k: v for k, v in environ.items() if node_env_allowed(k)}
+    return env, sorted(env), sorted(k for k in environ if not node_env_allowed(k))
 
 
 def run_node(cmd, timeout=600, cwd=None):
@@ -362,7 +459,7 @@ class ProvenanceRefused(Exception):
 
 def pinned_node_environment(node, writer_dir):
     """The writer's S1 checks: pinned writer files in the writer directory itself, @oai/artifact-tool resolved from
-    writer004.mjs (require and import resolvers agree) to the pinned stub, every NODE_* variable removed."""
+    writer004.mjs (require and import resolvers agree) to the pinned stub, the allowlisted node environment."""
     real = Path(os.path.realpath(writer_dir))
     for name, allowed in WRITER_PINS.items():
         p = writer_dir / name
@@ -386,12 +483,18 @@ def pinned_node_environment(node, writer_dir):
         pkg = None
     if h != ARTIFACT_TOOL_STUB_SHA256 or pkg != ARTIFACT_TOOL_STUB_PACKAGE:
         raise ProvenanceRefused({'check': '@oai/artifact-tool is not the pinned CPS validation stub', 'resolved': cjs, 'sha256': h})
-    return real, {'artifact_tool_resolved_path': cjs, 'artifact_tool_sha256': h, 'removed_variables': node_env()[1]}
+    _, kept, removed = node_env()
+    return real, {'artifact_tool_resolved_path': cjs, 'artifact_tool_sha256': h, 'kept_variables': kept, 'removed_variables': removed}
 
 
 def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F):
+    """v3 (second review F1(a), F2): the writer rerun (--mode v2) always runs and both EXPECTED_SAVED_VALUES.json and the
+    xlsx are byte-compared, whatever the receipt's mode says (the receipt is not authenticated). A receipt that says v1
+    also gets the writer004 prepareMatrices comparison (run first). The result is PASS, or the first refusal code
+    (NODE_ENVIRONMENT_REFUSED, WRITER004_REFUSED, WRITER_RERUN_FAILED, UNKNOWN_MODE), or FAILED."""
     def bad(**kw):
         F.add('provenance', kw)
+    codes = []
     rec = {'checked': True, 'carrier': str(carrier), 'writer_dir': str(writer_dir)}
     raw = carrier.read_bytes()
     rec['carrier_sha256'] = sha256(raw)
@@ -404,62 +507,66 @@ def check_provenance(receipt, ebytes, xbytes, carrier, writer_dir, node, F):
             bad(check='carrier sha256 differs from WRITER_RECEIPT.json input_carrier.sha256',
                 carrier=rec['carrier_sha256'], receipt=rec['receipt_carrier_sha256'])
         mode = receipt.get('mode')
+        if mode not in ('v1', 'v2'):
+            bad(check='unknown receipt mode', mode=mode)
+            codes.append('UNKNOWN_MODE')
     rec['receipt_mode'] = mode
+    rec['method'] = ('writer_portable.py --mode v2 rerun into a temporary directory, whatever the receipt mode says; '
+                     'EXPECTED_SAVED_VALUES.json and the xlsx byte-compared (builds are reproducible; v2 gives the v1 bytes for a '
+                     'carrier without O13/R57)' + ('; receipt mode v1: also writer004_matrices.mjs (writer004 prepareMatrices on the '
+                                                   'carrier) byte-compared with EXPECTED_SAVED_VALUES.json' if mode == 'v1' else ''))
+    rec['writer004_check'] = 'run (receipt mode v1)' if mode == 'v1' else 'not run (receipt mode is not v1)'
     if mode == 'v1':
-        rec['method'] = 'writer004_matrices.mjs (writer004 prepareMatrices on the carrier) byte-compared with EXPECTED_SAVED_VALUES.json'
         try:
             real, env_rec = pinned_node_environment(node, writer_dir)
         except ProvenanceRefused as e:
             bad(**e.args[0])
-            rec['result'] = 'NODE_ENVIRONMENT_REFUSED'
-            return rec
-        rec['node_environment'] = env_rec
-        code, out, err = run_node([node, str(NODE_MATRICES), '--writer', str(real / 'writer004.mjs'), '--carrier', str(carrier)])
-        rec['writer004_matrices.mjs_sha256'] = sha256(NODE_MATRICES.read_bytes())
-        if code != 0:
-            try:
-                ref_code = json.loads(err.decode('utf-8').strip().splitlines()[-1]).get('code')
-            except (ValueError, IndexError, AttributeError, UnicodeDecodeError):
-                ref_code = None
-            bad(check='writer004 prepareMatrices refused the carrier', code=ref_code, stderr=err.decode('utf-8', 'replace')[-300:])
-            rec['result'] = 'WRITER004_REFUSED'
-            return rec
-        rec['writer004_expected_sha256'] = sha256(out)
-        rec['expected_byte_identical'] = out == ebytes
-        if out != ebytes:
-            bad(check='EXPECTED_SAVED_VALUES.json differs from writer004 prepareMatrices on the carrier')
-    elif mode in ('v2', None):
-        rec['method'] = ('writer_portable.py --mode v2 rerun into a temporary directory; EXPECTED_SAVED_VALUES.json and the xlsx '
-                         'byte-compared (builds are reproducible; v2 gives the v1 bytes for a carrier without O13/R57)')
-        with tempfile.TemporaryDirectory(prefix='cps_saved_qa_rerun_') as td:
-            dest = Path(td) / 'rerun'
-            p = subprocess.run([sys.executable, '-I', '-B', str(WRITER), '--carrier', str(carrier), '--out', str(dest),
-                                '--writer-dir', str(writer_dir), '--node', node, '--mode', 'v2'], capture_output=True, timeout=1800)
-            rec['writer_portable.py_sha256'] = sha256(WRITER.read_bytes())
-            if p.returncode != 0:
-                err = p.stderr.decode('utf-8', 'replace')
+            codes.append('NODE_ENVIRONMENT_REFUSED')
+        else:
+            rec['node_environment'] = env_rec
+            code, out, err = run_node([node, str(NODE_MATRICES), '--writer', str(real / 'writer004.mjs'), '--carrier', str(carrier)])
+            rec['writer004_matrices.mjs_sha256'] = sha256(NODE_MATRICES.read_bytes())
+            if code != 0:
                 try:
-                    ref = json.loads(err.strip().splitlines()[-1])
-                    ref = {'code': ref.get('code'), 'stage': ref.get('stage')}
-                except (ValueError, IndexError, AttributeError):
-                    ref = None
-                bad(check='writer rerun refused or failed', refusal=ref, stderr=err[-400:])
-                rec['result'] = 'WRITER_RERUN_FAILED'
-                return rec
+                    ref_code = json.loads(err.decode('utf-8').strip().splitlines()[-1]).get('code')
+                except (ValueError, IndexError, AttributeError, UnicodeDecodeError):
+                    ref_code = None
+                bad(check='writer004 prepareMatrices refused the carrier', code=ref_code, stderr=err.decode('utf-8', 'replace')[-300:])
+                codes.append('WRITER004_REFUSED')
+            else:
+                rec['writer004_expected_sha256'] = sha256(out)
+                rec['writer004_expected_byte_identical'] = out == ebytes
+                if out != ebytes:
+                    bad(check='EXPECTED_SAVED_VALUES.json differs from writer004 prepareMatrices on the carrier')
+    with tempfile.TemporaryDirectory(prefix='cps_saved_qa_rerun_') as td:
+        dest = Path(td) / 'rerun'
+        p = subprocess.run([sys.executable, '-I', '-B', str(WRITER), '--carrier', str(carrier), '--out', str(dest),
+                            '--writer-dir', str(writer_dir), '--node', node, '--mode', 'v2'], capture_output=True, timeout=1800)
+        rec['writer_portable.py_sha256'] = sha256(WRITER.read_bytes())
+        if p.returncode != 0:
+            err = p.stderr.decode('utf-8', 'replace')
+            try:
+                ref = json.loads(err.strip().splitlines()[-1])
+                ref = {'code': ref.get('code'), 'stage': ref.get('stage')}
+            except (ValueError, IndexError, AttributeError):
+                ref = None
+            bad(check='writer rerun refused or failed', refusal=ref, stderr=err[-400:])
+            codes.append('WRITER_RERUN_FAILED')
+            e2 = x2 = r2 = None
+        else:
             e2, x2 = (dest / 'EXPECTED_SAVED_VALUES.json').read_bytes(), (dest / XLSX_NAME).read_bytes()
             r2 = json.loads((dest / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+    if r2 is not None:
         rec['rerun_writer'] = r2.get('writer')
+        rec['rerun_mode'] = r2.get('mode')
+        rec['rerun_relaxations_applied'] = (r2.get('relaxations') or {}).get('applied')
         rec['rerun_node_environment'] = r2.get('node_environment')
         rec['expected_byte_identical'], rec['xlsx_byte_identical'] = e2 == ebytes, x2 == xbytes
         if e2 != ebytes:
             bad(check='EXPECTED_SAVED_VALUES.json differs from the writer rerun on the carrier')
         if x2 != xbytes:
             bad(check='research-draft.xlsx differs from the writer rerun on the carrier')
-    else:
-        bad(check='unknown receipt mode', mode=mode)
-        rec['result'] = 'UNKNOWN_MODE'
-        return rec
-    rec['result'] = 'PASS' if not F.count('provenance') else 'FAILED'
+    rec['result'] = 'PASS' if not F.count('provenance') else (codes[0] if codes else 'FAILED')
     return rec
 
 
@@ -521,6 +628,12 @@ def check_sheet_name(name, F):
         F.add('excel_limit', {'sheet': name, 'limit': 'sheet_name'})
 
 
+def font_extras(font):
+    """v3 (second review F1(b), N10/N11): font properties the writer never sets; each must be off."""
+    return (('font.italic', False, bool(font.i)), ('font.strike', False, bool(font.strike)),
+            ('font.underline', None, font.u), ('font.vertAlign', None, font.vertAlign))
+
+
 def check_formatting(wb, expected_rows, F):
     """The writer004 formatSheet/main-sheet formatting as the portable writer expresses it."""
     checked = 0
@@ -542,7 +655,7 @@ def check_formatting(wb, expected_rows, F):
             for prop, want, got in (('font.name', 'Arial', cell.font.name), ('font.size', 11, cell.font.sz), ('font.bold', True, cell.font.b),
                                     ('font.color', 'FFFFFFFF', rgb(cell.font.color)), ('fill.type', 'solid', cell.fill.fill_type),
                                     ('fill.color', 'FF29445D', rgb(cell.fill.fgColor)), ('align.horizontal', 'center', cell.alignment.horizontal),
-                                    ('align.vertical', 'center', cell.alignment.vertical), ('align.wrap', True, cell.alignment.wrap_text)):
+                                    ('align.vertical', 'center', cell.alignment.vertical), ('align.wrap', True, cell.alignment.wrap_text)) + font_extras(cell.font):
                 if got != want:
                     bad(name, a, prop, want, got)
         for r in range(2, nrows + 1):
@@ -557,7 +670,7 @@ def check_formatting(wb, expected_rows, F):
                                         ('align.wrap', True, cell.alignment.wrap_text),
                                         ('align.horizontal', 'right' if main_num else None, cell.alignment.horizontal),
                                         ('number_format', 'General', cell.number_format),
-                                        ('fill.type', 'solid' if main_fill else None, cell.fill.fill_type)):
+                                        ('fill.type', 'solid' if main_fill else None, cell.fill.fill_type)) + font_extras(cell.font):
                     if got != want:
                         bad(name, a, prop, want, got)
                 if main_fill and rgb(cell.fill.fgColor) != 'FFF1F3F5':
@@ -741,7 +854,8 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
                     'defined_names', 'external_relationship', 'unexpected_part', 'reader_disagreement', 'excel_limit',
                     'expected_shape', 'integrity', 'reader_error', 'unknown_cell_type', 'unparsable_number',
                     'zip_parts', 'xml_structure', 'hidden_attribute', 'sheet_state', 'workbook_structure', 'worksheet_structure',
-                    'whitespace_not_preserved', 'styles_structure', 'provenance')
+                    'whitespace_not_preserved', 'styles_structure', 'cell_value_children', 'number_text', 'duplicate_reference',
+                    'font_structure', 'provenance')
     unclassified = sorted(k for k in F.items if k not in value_checks and k != 'formatting')
     value_fail = sum(F.count(k) for k in value_checks) + sum(F.count(k) for k in unclassified)
     fmt_fail = F.count('formatting')
@@ -763,7 +877,8 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
                    'reader_disagreements': F.count('reader_disagreement'),
                    'structure_failures': sum(F.count(k) for k in ('zip_parts', 'xml_structure', 'hidden_attribute', 'sheet_state',
                                                                   'workbook_structure', 'worksheet_structure', 'whitespace_not_preserved',
-                                                                  'styles_structure', 'unknown_cell_type', 'unparsable_number')),
+                                                                  'styles_structure', 'unknown_cell_type', 'unparsable_number',
+                                                                  'cell_value_children', 'number_text', 'duplicate_reference', 'font_structure')),
                    'provenance_failures': F.count('provenance'), 'expected_provenance_checked': bool(provenance.get('checked')),
                    'formatting_failures': fmt_fail if formatting else None,
                    'formatting_cells_checked': fmt_checked, 'value_check_failures': value_fail},
@@ -774,6 +889,11 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node')
         'findings': F.report(),
         'scope': ('Saved-workbook fidelity to the writer matrix (EXPECTED_SAVED_VALUES.json) and package structure; with --carrier and '
                   '--writer-dir also the provenance of EXPECTED from the carrier. Not source semantics, not visual QA.'),
+        'cps_evidence_preconditions': {
+            'provenance_checked': bool(provenance.get('checked')), 'formatting_checked': bool(formatting),
+            'note': ('CPS evidence needs both (README "Conditions of use"): --carrier must be the frozen route carrier, its sha256 '
+                     '(expected_provenance.carrier_sha256) checked against the route convert receipt or the freeze record, and a run '
+                     'with --no-formatting is not CPS evidence.')},
         'native_excel_validation': False, 'openpyxl': openpyxl.__version__,
     }
 
