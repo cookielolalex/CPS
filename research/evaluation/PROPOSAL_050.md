@@ -83,15 +83,15 @@ CPS keeps writing A/B on the enclosure row only (O30), its current practice. The
 
 ## Effect on the frozen 046f development outputs (reader A, diagnostic, post hoc)
 
-The v3 and round-1 v4 columns were recorded before the review. The column for the fixed v4 must be re-run with `compare_target050.py` at `ca10ae5f…` by someone in the evaluation role. The author did not read the private outputs for this revision.
+The v3 and round-1 v4 columns were recorded before the review. The fixed-v4 columns were run by the orchestrator in the evaluation role with `compare_target050.py` at `ca10ae5f…` (2026-11-05). None of these five cases has a K–O tie on either side, so their recorded v2/v3 numbers are repeatable.
 
 | Case | v3 | v4 round 1 (`feccaf21…`, superseded) | v4 fixed (`ca10ae5f…`) | `ab_row_check` conflicts / unpartnered |
 |---|---:|---:|---:|---:|
-| 1130803 | 0.985 | 0.985 | [TO FILL] | [TO FILL] |
-| 1140506 | 0.962 | 0.962 | [TO FILL] | [TO FILL] |
-| 1131202 | 0.966 | 0.968 | [TO FILL] | [TO FILL] |
-| 1141002 | 0.959 | 0.962 | [TO FILL] | [TO FILL] |
-| 1130204 (old template, excluded) | 0.585 | 0.586 | [TO FILL] | [TO FILL] |
+| 1130803 | 0.985 | 0.985 | 0.985 | 0 / 1 |
+| 1140506 | 0.962 | 0.962 | 0.962 | 1 / 0 |
+| 1131202 | 0.966 | 0.968 | 0.968 | 3 / 0 |
+| 1141002 | 0.959 | 0.962 | 0.960 | 4 / 0 |
+| 1130204 (old template, excluded) | 0.585 | 0.586 | 0.586 | 0 / 2 |
 
 On these enclosure-only targets, round-1 v4 was equal to v3 or slightly higher. It was higher where several enclosure rows share one name. No CPS output exists yet for the three window files.
 

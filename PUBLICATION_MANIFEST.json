@@ -1209,13 +1209,13 @@
     },
     {
       "path": "research/export/README.md",
-      "bytes": 81087,
-      "sha256": "799428e68fbd98144bf7f2ee7e74911365189ae92f81d3bc4907f6475cd063a7"
+      "bytes": 101604,
+      "sha256": "2437e75307fa6aeb480cdd96be7d9eb0ec3a219c0a24c719afde1ca00f0dae61"
     },
     {
       "path": "research/export/saved_qa.py",
-      "bytes": 73881,
-      "sha256": "2469e812b50aef16ec66df21a73cd2c360063b77a038a948be701b45375be406"
+      "bytes": 90117,
+      "sha256": "15b201ff2c73322ff8543fa11852487abc294039aade4fbda5ada83424c0b603"
     },
     {
       "path": "research/export/tests/make_export_fixtures.py",
@@ -1229,8 +1229,8 @@
     },
     {
       "path": "research/export/tests/run_export_tests.py",
-      "bytes": 96789,
-      "sha256": "416dd5bad57157ef0c2ad6865a607d499c9e0df3b68f110869c94c1c4908f497"
+      "bytes": 120976,
+      "sha256": "5e36233f1a388cdbd97b8e17ec69dedf613da4daa4c578a1054f689a3b3e110f"
     },
     {
       "path": "research/export/tests/stringify_fuzz.mjs",
@@ -1239,8 +1239,8 @@
     },
     {
       "path": "research/export/visual_qa.py",
-      "bytes": 22062,
-      "sha256": "7b1f8ec167dcbb9083af5d41f6b5376f568a5f0a94085905066cba758d8be143"
+      "bytes": 23176,
+      "sha256": "c73d66b8280785e9e3c562ca632cd5745653011c48fce92b5e7b5378883714cc"
     },
     {
       "path": "research/export/writer004_matrices.mjs",
@@ -1249,8 +1249,8 @@
     },
     {
       "path": "research/export/writer_portable.py",
-      "bytes": 56960,
-      "sha256": "fe60010c758b6951af6522d8412a313af70428f5c73bf0300919f774aaceebeb"
+      "bytes": 63478,
+      "sha256": "dd5fa9234a6cf3141b27b052565b80deb955977f909d2a75d617b3c597ec69bb"
     },
     {
       "path": "research/guideline046_005/DECISIONS_OWNER_O10_O12.md",
@@ -1514,8 +1514,8 @@
     },
     {
       "path": "research/export/tests/make_tamper_fixtures.py",
-      "bytes": 29666,
-      "sha256": "e32d782a00898bab8e44ac2913fe6cf524dc10a0b7f101a4cd8d2c281273570a"
+      "bytes": 38518,
+      "sha256": "c424844784f328f91d1e71e2992d543b792e179c6c280f44b8969c346cfcf7ce"
     },
     {
       "path": "research/evaluation/FREEZE_049.json",
@@ -1569,18 +1569,18 @@
     },
     {
       "path": "research/evaluation/compare_target050.py",
-      "bytes": 19135,
-      "sha256": "feccaf21753e167a768d1cbdaf1755fdd31ad8fbcea7f7aef2f309b03c22929c"
+      "bytes": 25459,
+      "sha256": "ca10ae5f9507e39a6e0e714b77d5b49bf39f7924d1cb55246f877e148c0a75cb"
     },
     {
       "path": "research/evaluation/tests/test_compare_target050.py",
-      "bytes": 5705,
-      "sha256": "42736d89de250ed7b2c6ca386ab457d93485afd7aa44c2f338d28cf8b5af9ea3"
+      "bytes": 18517,
+      "sha256": "1484151e546c562b07296a66043e0e0b6dbf31ce9ba22416282b0c1262a003e1"
     },
     {
       "path": "research/evaluation/PROPOSAL_050.md",
-      "bytes": 3575,
-      "sha256": "63d7f0b8e672544b8acf143a892cdd5cef69750f009add46355ef6d6a130a555"
+      "bytes": 10922,
+      "sha256": "2ba97639ac6e8b0685ef8b00d07f215be82d62b905273f4a9c36b929b5bd1e17"
     },
     {
       "path": "deploy/README.md",
@@ -1621,6 +1621,26 @@
       "path": "deploy/writer_route/node_modules/@oai/artifact-tool/package.json",
       "bytes": 127,
       "sha256": "5a93295fdcc83c399de1f1616040ddce237eddd9f40d3a69933cb2c5a461b46d"
+    },
+    {
+      "path": "research/evaluation/aggregate_qualification050.py",
+      "bytes": 12811,
+      "sha256": "449ef4e44de446f28373ef24fe2cbcb86e3641c59d658a3db1425381544e8779"
+    },
+    {
+      "path": "research/evaluation/tests/test_aggregate_qualification050.py",
+      "bytes": 17562,
+      "sha256": "024e5e360584b4867a9eae9a25f3b5ef4a9f31edba67f33c2a1f1e899d71b9fc"
+    },
+    {
+      "path": "research/evaluation/tests/test_aggregate_real_eval050.py",
+      "bytes": 8748,
+      "sha256": "5b19e7e63c53b9e0185a0662563e9061bb2987521383faba1f9d28f721890647"
+    },
+    {
+      "path": "research/evaluation/tests/test_review050_fixtures.py",
+      "bytes": 5919,
+      "sha256": "3833d77bcd7e9b73427686e2510bcad4d8564030071ba9bfcaf23c12aee3fc32"
     }
   ]
 }
