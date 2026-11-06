@@ -1,0 +1,51 @@
+{
+ "schema": "cps.release.v1",
+ "status": "RELEASED_FOR_QUALIFICATION",
+ "release_version": "EXAMPLE-0000",
+ "meaning": "INVENTED EXAMPLE. Every field below is one the job runner reads; the hashes and paths are placeholders, not a release.",
+ "repository": {
+  "url": "https://github.com/cookielolalex/CPS",
+  "branch": "claude/cool-ptolemy-vsfpr5",
+  "commit": "0000000000000000000000000000000000000000",
+  "root": "/home/dot/cps"
+ },
+ "package": {
+  "path": "research/guideline046_007/package",
+  "manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+ },
+ "harness": {"path": "research/guideline046_007/harness"},
+ "source_prep": {
+  "path": "research/guideline046_003/source_prep",
+  "deps_bundle": "/home/dot/cps-deps",
+  "node_path": "/home/dot/cps-playwright/node_modules"
+ },
+ "writer": {
+  "admission": "research/export/ADMISSION_WRITER_V27.json",
+  "admission_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "writer_dir": "deploy/writer_route/writer"
+ },
+ "checker_node": {
+  "path": "/usr/bin/node",
+  "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+ },
+ "admitted_checker_node_sha256": [
+  "2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff",
+  "1111111111111111111111111111111111111111111111111111111111111111"
+ ],
+ "saved_qa_clean_path": "/usr/bin:/bin",
+ "tables": {
+  "glossary": {"path": "/home/dot/cps_runtime/tables/GLOSSARY.json", "sha256": "2222222222222222222222222222222222222222222222222222222222222222"},
+  "brand_table": {"path": "/home/dot/cps_runtime/tables/BRAND_TABLE.json", "sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+  "company_name_sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+ },
+ "qualification": {
+  "admission_sha256": ["5555555555555555555555555555555555555555555555555555555555555555"]
+ },
+ "pinned_files_sha256": {
+  "deploy/run/cps_job.py": "6666666666666666666666666666666666666666666666666666666666666666",
+  "deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md": "7777777777777777777777777777777777777777777777777777777777777777",
+  "research/guideline046_007/harness/make_job_config.py": "8888888888888888888888888888888888888888888888888888888888888888"
+ },
+ "run_job_commands": "RUN_JOB_COMMANDS.md",
+ "options": "OPTIONS.json"
+}
