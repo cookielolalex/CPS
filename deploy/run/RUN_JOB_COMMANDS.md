@@ -9,9 +9,9 @@ This is the command sheet for the operator (the Dot). `05_RUNBOOK_CPS_JOB.md` sa
 1. `cps_runtime/RELEASE.json` must say `"status": "RELEASED_FOR_USE"` for real jobs, or `"RELEASED_FOR_QUALIFICATION"` for qualification jobs. The runner refuses anything else.
 2. The repository clone (`repository.root`) must be a git checkout at exactly `repository.commit`, with no change to any tracked file. Run the runner from that clone (`$CPS/deploy/run/cps_job.py`). The runner refuses a release without a commit (`RELEASE_COMMIT_REQUIRED`), a folder git cannot verify (`REPOSITORY_NOT_VERIFIABLE`), another commit (`REPOSITORY_COMMIT_MISMATCH`), a changed tracked file (`REPOSITORY_DIRTY`), a runner outside the clone (`RUNNER_NOT_IN_RELEASED_REPOSITORY`) and cached bytecode (`__pycache__`, `.pyc`) in the package, harness, source-prep, export or runner folders (`PYCACHE_PRESENT`; delete them).
 3. The release pins every file the runner executes or fills in (`pinned_files_sha256`, or the qualification admission): `deploy/run/cps_job.py`, `deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md`, the seven harness files and the five source-prep files listed under "Release fields". Anything missing is refused (`RELEASE_PINS_INCOMPLETE`).
-4. Activate the Python environment with openpyxl 3.1.5 and xlrd 2.0.2 (`source ~/cps-venv/bin/activate`). The runner calls every tool with the same `python3`.
-5. `node` (v22) must be on `PATH`, with LibreOffice (`soffice`), `pdftoppm`, `pdfinfo` and `pdftotext`. The runner records the path and version of each at `prepare` and `finish`.
-6. The builders read openpyxl and xlrd from a *deps bundle*: a folder whose `private/deps` is the venv's `site-packages`. Make it once:
+4. Load the toolchain in every new shell. On the no-root VM (`deploy/setup_vm_user.sh`, tested 2026-11-06), run `source ~/cps-tools/env.sh`: it puts the venv's `python3` (openpyxl 3.1.5, xlrd 2.0.2), node v22, `soffice`, `pdftoppm`, `pdfinfo` and `pdftotext` first on `PATH`, and sets `NODE_PATH` for Playwright (release `source_prep.node_path`). On a VM set up with `deploy/setup_vm.sh`, activate that setup's Python environment instead. The runner calls every tool with the same `python3`, and records its path and version.
+5. `node` (v22) must be on `PATH`, with LibreOffice (`soffice`), `pdftoppm`, `pdfinfo` and `pdftotext`. The runner records the path and version of each at `prepare` and `finish`, and the names (never the values) of the environment variables the tools receive.
+6. The builders read openpyxl and xlrd from a *deps bundle*: a folder whose `private/deps` is the venv's `site-packages`. The no-root setup makes it: `~/cps-tools/builder-deps` (`~/cps-tools/RELEASE_PATHS.json` records it). On another setup, make it once:
    ```bash
    mkdir -p ~/cps-deps/private
    ln -s "$(python3 -c 'import openpyxl, os; print(os.path.dirname(os.path.dirname(openpyxl.__file__)))')" ~/cps-deps/private/deps
@@ -30,9 +30,11 @@ ME="<your model name as your platform reports it>"
 
 ## Rules for every command
 
-- **One command at a time per job.** Every subcommand holds a lock on `<job>/.cps_job.lock`. A second command on the same job is refused with `REFUSED: JOB_BUSY`, and nothing is recorded. `finish` runs for minutes (saved QA and two LibreOffice renders). Never interrupt it, never re-issue it, and never start another command on that job while it runs. If your shell tool times out, wait and check `RUN_RECORD.json`; do not run it again.
+- **One command at a time per job.** Every subcommand holds a lock on the job folder itself, and every tool it starts holds it too, so the folder stays locked until the last tool has ended, even if the runner was killed. A second command on the same job is refused with `REFUSED: JOB_BUSY`, and nothing is recorded. `finish` runs for minutes (saved QA and two LibreOffice renders). Never interrupt it, never re-issue it, and never start another command on that job while it runs. If your shell tool times out, wait and check `RUN_RECORD.json`; do not run it again.
 - **An interrupted stage is final.** If a command is killed after it began consuming (for example `finish` after the response was frozen), the next command on that job records the stage as `INTERRUPTED` (`NEXT: STOP_INTERRUPTED`), and the stage never runs again in that folder. Tell the owner.
 - **Keep each printed `run_record_sha256` outside the VM.** Every command prints one JSON line with `run_record_sha256`. Send it to the owner (or keep it in your notes outside the VM) after each command. The runner verifies the record's hash chain on every command (`RUN_RECORD_CHAIN_BROKEN`), but a record cut back to an earlier entry is still a valid chain: only the hashes kept outside the VM show it. In qualification the ledger keeps them too.
+- **Never move or rename a job folder, a jobs root or the ledger.** The record and the qualification ledger name each folder by its path: a moved qualification folder is refused (`QUALIFICATION_JOB_NOT_IN_LEDGER`), `verify-frozen` fails on it, and a missing ledger is refused (`QUALIFICATION_LEDGER_MISSING`).
+- **`REFUSED: RUNNER_ERROR`** means an unexpected error before the stage began consuming (for example an unreadable file). Nothing was consumed, and the traceback is in `logs/`. Fix the cause or tell the owner, then run the same command again. `NEXT: STOP_RUNNER_ERROR` is the same error after the stage began consuming: a recorded stop.
 - **Fixed file locations.** The scope reader writes `scope/reader/output/SCOPE_READER_RESPONSE.json`, the generator writes `run/<reader>/output/response.json`, you write `run/GENERATION_RECORD.json`, and the visual reviewer writes `qa/visual_review/VISUAL_REVIEW.json`. The runner refuses any other path.
 
 ## Job inputs (runbook §2)
@@ -63,7 +65,7 @@ A contract job (no 材料清單) has `"source_kind": "contract"` and also `"bran
 {"schema": "cps.job-title.v1", "case_id": "1141002", "job_title": "1141002<the project folder title as given>"}
 ```
 
-The title starts with exactly the case id (the next character is not another digit), and holds no invisible format character such as U+200B or U+202E (`JOB_TITLE_INVALID`, `JOB_TITLE_FORMAT_CHARACTER`). The writer derives the delivered file name from it.
+The title starts with exactly the case id in ASCII digits (not fullwidth digits; the next character is not another digit), and holds no invisible format character such as U+200B or U+202E and no line or paragraph separator such as U+2028 (`JOB_TITLE_INVALID`, `JOB_TITLE_FORMAT_CHARACTER`). The writer derives the delivered file name from it.
 
 ## Stage 1: prepare
 
@@ -97,15 +99,16 @@ The last line is one of:
 2. Then run:
    ```bash
    $R scope-finish --job-dir $JOBS/<case id> --reader-response $JOBS/<case id>/scope/reader/output/SCOPE_READER_RESPONSE.json \
+      --reader-prompt-sha256 "$(sha256sum $JOBS/<case id>/scope/SCOPE_READER_PROMPT.md | cut -d' ' -f1)" \
       --reader-conversation-id "<the reader conversation's id or link>" --operator-model "$ME"
    ```
-   It freezes the reader's file before anything reads it. It then re-checks the scope tool's files, the full packet and the reader's folder against the `prepare` pins, and runs `scope_agree.py`, `make_scoped_inventory.py` and its `--verify` (both must report the route's own check of the scoped inventory as PASS), `check-inventory` on the scoped packet (`scope: applied`), and `prepare_run.py`. `--reader-conversation-id` is optional; it is your attestation, recorded as given.
+   `--reader-prompt-sha256` is the sha256 of the prompt file you pasted; it must equal the one `prepare` wrote (`READER_PROMPT_SHA256_MISMATCH`, nothing consumed). It is required for qualification jobs (`READER_PROMPT_SHA256_REQUIRED`). It freezes the reader's file before anything reads it. It then re-checks the scope tool's files, the full packet, the reader prompt and the reader's folder against the `prepare` pins, and runs `scope_agree.py`, `make_scoped_inventory.py` and its `--verify` (both must report the route's own check of the scoped inventory as PASS), `check-inventory` on the scoped packet (`scope: applied`), and `prepare_run.py`. `--reader-conversation-id` is optional; it is your attestation, recorded as given (never a template placeholder such as `<...>`).
 
 | Last line | What to do |
 |---|---|
 | `NEXT: GENERATE prompt=<P> folder=<F>` | Stage 3. |
 | `NEXT: OWNER_DECISION` | The tool and the reader disagree (`scope/decision/SCOPE_HOLD.json`). Tell the owner. Never pick a side, never ask a second reader. |
-| `NEXT: STOP_<reason>` | Tell the owner. For example, `STOP_SCOPE_READER_RESPONSE_REFUSED` means the reader's JSON was malformed, `STOP_SCOPE_DECISION_NOT_ADMISSIBLE` means it was not a fresh-context reader, and `STOP_SCOPE_INPUTS_CHANGED` or `STOP_SCOPE_READER_INPUT_CHANGED` means a file pinned at `prepare` changed. |
+| `NEXT: STOP_<reason>` | Tell the owner. For example, `STOP_SCOPE_READER_RESPONSE_REFUSED` means the reader's JSON was malformed, `STOP_SCOPE_DECISION_NOT_ADMISSIBLE` means it was not a fresh-context reader, and `STOP_SCOPE_INPUTS_CHANGED` or `STOP_SCOPE_READER_INPUT_CHANGED` means a file pinned at `prepare` changed (`CHANGED_SCOPE_READER_PROMPT`: the reader prompt). |
 
 ## Stage 3: generation (after `NEXT: GENERATE`)
 
@@ -116,14 +119,19 @@ Never edit the response. Never give the conversation anything else: no other job
 Then write the **generation record** `$JOBS/<case id>/run/GENERATION_RECORD.json` (`cps.generation-record.v1`). It is required for qualification jobs and recorded when given for real jobs. `deploy/run/GENERATION_RECORD.example.json` shows every field with invented values:
 - `case_id`, `reader`;
 - `platform`, `model` (the observed model id as your platform shows it), `effort` (the reasoning setting, or `unknown`), `conversation_id` (the id or share link, so an account export can be matched later);
-- `started_utc`, `ended_utc` of the conversation (ISO 8601 with `Z`), between the end of the stage that printed `NEXT: GENERATE` and the start of `finish`;
+- `started_utc`, `ended_utc` of the conversation (ISO 8601 with `Z`, to the second), between the end of the stage that printed `NEXT: GENERATE` and the start of `finish`. If your platform shows minutes only, round the start up and the end down, so both lie inside that window;
 - `prompt_sha256`: `sha256sum $JOBS/<case id>/run/GENERATOR_PROMPT.md`, the text you pasted;
 - `single_user_message`: `true` when the prompt was the only user message (no follow-up, no attachment);
 - `features`: `memory`, `custom_instructions`, `web`, `connectors`, `file_uploads`, `other_agents`, each `true` or `false`; `tools_enabled`: the tools the conversation had;
 - `final_message`: the generator's final message, verbatim;
-- `transcript_status`: `exported` with `transcript_sha256` (the sha256 of the exported transcript file, which you may also give to `finish --transcript`), or `not_available` with `transcript_not_available_reason`.
+- `transcript_status`: `exported` with `transcript_sha256` (the sha256 of the exported transcript file, which you then give to `finish --transcript`), or `not_available` with `transcript_not_available_reason`.
 
-State `transcript_status` exactly as it is. Whether an attested record without a transcript counts as qualification evidence is an owner decision that is still open; the runner records the status (and flags `not_available` as `isolation_evidence: attested_not_audited`), and the release lists the statuses it accepts.
+No field may be a template placeholder such as `<...>` (`GENERATION_RECORD_INVALID`).
+
+State `transcript_status` exactly as it is. **Owner decision O40 (2026-11-06):** the runner freezes the generation record for each qualification run; the transcript is added if the platform can export one, otherwise it is marked `not_available`. Qualification accepts either, and the report states how many runs had transcripts. So:
+- `exported` in a qualification job needs `finish --transcript <the exported file>`: the runner freezes it as `response/GENERATOR_TRANSCRIPT.<ext>` and checks its sha256 (`TRANSCRIPT_REQUIRED` without it, nothing consumed);
+- `isolation_evidence` follows the frozen file: `transcript_exported` only when a transcript was frozen, otherwise `attested_not_audited` (an everyday job's `exported` without `--transcript` is recorded as `transcript_claimed_but_not_frozen`);
+- every record states `qualification_transcript_rule: "O40 2026-11-06: exported or not_available, both accepted; count reported"`, and the ledger's freeze entry carries each run's transcript status and whether its file was frozen, for the count.
 
 ## Stage 4: finish
 
@@ -132,6 +140,8 @@ $R finish --job-dir $JOBS/<case id> --response $JOBS/<case id>/run/A/output/resp
    --generator-model "<the generating conversation's model>" \
    --generation-record $JOBS/<case id>/run/GENERATION_RECORD.json --operator-model "$ME"
 ```
+
+With `transcript_status: exported`, add `--transcript /abs/<the exported transcript file>` (required for qualification jobs).
 
 `finish` first re-checks the export environment, the release you gave at `prepare` (it must still say the same status and be the same file, or name this job's `release_version` in `accepts_jobs_from_release_versions`), and the generation record. It then freezes the generation record and the response: read-only copies in `response/`, with their sha256 recorded, before anything reads them. Then:
 1. The generation folder must hold exactly its pinned inputs (no added, changed or linked file; the package copy equal to its manifest), and `output/` only `response.json` and `scratch/`; every file of `PACKET_PINS.json` must be unchanged.
@@ -147,7 +157,7 @@ $R finish --job-dir $JOBS/<case id> --response $JOBS/<case id>/run/A/output/resp
 |---|---|
 | `NEXT: VISUAL_REVIEW prompt=<P> folder=<F>` | Stage 5. |
 | `NEXT: STOP_<reason>` | Record and tell the owner. Never retry, never patch by hand. Typical reasons: `STOP_RUN_INPUTS_CHANGED`, `STOP_RUN_OUTPUT_UNEXPECTED`, `STOP_PACKET_CHANGED`, `STOP_ROUTE_CHECK_FAILED`, `STOP_NOT_CARRIED`, `STOP_WRITER_REFUSED`, `STOP_SAVED_QA_NOT_EVIDENCE_GRADE` (`qa/QA_EVIDENCE.json` lists the failed conditions), `STOP_VISUAL_QA_RENDER_FAILED`, `STOP_INTERRUPTED`. Any refusal after the response was frozen is also a stop (`NEXT: STOP_<code>`, recorded). |
-| `REFUSED: <code>` | Nothing was consumed: the response was not frozen. For example, `CHECKER_NODE_NOT_ADMITTED` (your node binary changed), `RELEASE_NOT_LIVE` (the release was withdrawn or replaced), `JOB_TITLE_MISMATCH`, `GENERATION_RECORD_*` or `JOB_BUSY`. Fix the cause, or tell the owner, and run the same command again. `STAGE_ALREADY_COMPLETED` means finish already ran: never run it again. `STAGE_OUTPUT_EXISTS` means a frozen output exists without its record entry: tell the owner. |
+| `REFUSED: <code>` | Nothing was consumed: the response was not frozen. For example, `CHECKER_NODE_NOT_ADMITTED` (your node binary changed), `RELEASE_NOT_LIVE` (the release was withdrawn or replaced), `JOB_TITLE_MISMATCH`, `GENERATION_RECORD_*`, `TRANSCRIPT_REQUIRED` or `JOB_BUSY`. Fix the cause, or tell the owner, and run the same command again. `STAGE_ALREADY_COMPLETED` means finish already ran: never run it again. `STAGE_OUTPUT_EXISTS` means a frozen output exists without its record entry: tell the owner. |
 
 ## Stage 5: visual review (after `NEXT: VISUAL_REVIEW`)
 
@@ -197,7 +207,7 @@ Qualification jobs differ in the following ways.
 - `admissions`: the admitted qualification admission files, each `{"path": "/abs/ADMISSION.json", "sha256": "..."}` (non-empty); `--admission` must be one of these paths, with these bytes;
 - `ledger`: the absolute path of the qualification ledger, outside every jobs root and outside `$CPS` (for example `$Q/LEDGER.jsonl`; its folder must exist);
 - `jobs_file`: the absolute path of `qualification/JOBS.json`;
-- `accepted_transcript_status`: optional, the generation-record transcript statuses the owner accepts (default both, `exported` and `not_available`).
+- `accepted_transcript_status`: optional; when given it must list exactly `exported` and `not_available` (O40: qualification accepts both). Any other list is refused (`QUALIFICATION_RELEASE_FIELDS`).
 
 **The admission** is frozen once, with `research/guideline046_007/harness/freeze_admission.py`, and listed in the release, **before the first qualification `prepare` of the ledger**. `prepare` refuses an admission the release does not list by path and sha256 (`ADMISSION_NOT_RELEASED`) and one frozen after the ledger's first entry (`ADMISSION_FROZEN_AFTER_FIRST_PREPARE`). The admission pins, by sha256:
 - the package manifest and the route `package/tools/cps046b_route.py`;
@@ -220,20 +230,38 @@ python3 -I -B $CPS/research/guideline046_007/harness/freeze_admission.py --confi
 **`prepare --qualification`** takes `--admission <ADMISSION.json> --reader A|B` and refuses:
 - a case not in `JOBS.json`, or marked `nonattempt` there or in the ledger;
 - a second run of the same case and reader (`QUALIFICATION_RUN_EXISTS` while the first is not frozen);
-- run B before run A of the case is frozen (`QUALIFICATION_READER_A_NOT_FROZEN`).
+- run B before run A of the case is frozen (`QUALIFICATION_READER_A_NOT_FROZEN`);
+- run B while run A ended in a technical interruption or stop whose one restart is unused (`QUALIFICATION_READER_A_RESTART_UNUSED`): restart run A first (rule 1: run A in full before run B).
 
 **Run A and run B use separate job roots:** `--jobs-root $Q/A --reader A`, and later `--jobs-root $Q/B --reader B`.
 
-**Restart.** A technical interruption at `prepare`, before any reader or generator response (for example `STOP_RENDER_VIEWS_FAILED`, `STOP_RUNNER_ERROR` or `STOP_INTERRUPTED` during `prepare`), may be restarted **once**:
-1. freeze the interrupted folder as it is;
-2. prepare again under a new jobs root (for example `$Q/A_restart1`);
-3. tell the owner, naming both folders.
+**Restart (protocol rule 3).** A technical interruption before any scope reader or generator response is written may be restarted **once** per case and reader.
 
-The new record's `restart_of` and the ledger name the earlier folder. The runner refuses any other restart (`QUALIFICATION_RESTART_NOT_ALLOWED`: a stage after `prepare` ran, `prepare` ended with `GENERATE`, `SCOPE_READER` or `OWNER_DECISION`, or run B of the case has started) and a second one (`QUALIFICATION_RESTART_USED`).
+*The scope reader or generator conversation broke* (after `NEXT: SCOPE_READER` or `NEXT: GENERATE`, before it wrote its file: the platform failed, the conversation was lost, it ended without writing). Record it first, then freeze:
+```bash
+$R interrupt --job-dir $Q/A/<case id> --reason TECHNICAL_CONVERSATION_BROKE \
+   --started-utc 2026-11-06T09:00:05Z --ended-utc 2026-11-06T09:12:40Z \
+   --conversation-id "<the broken conversation's id or link, if it has one>" --operator-model "$ME"
+$R freeze --job-dir $Q/A/<case id> --operator-model "$ME"
+```
+- `interrupt` is allowed only when the last completed stage printed `NEXT: GENERATE` or `NEXT: SCOPE_READER` and no scope reader or generator response is frozen (`INTERRUPT_NOT_ALLOWED` otherwise; never after `finish` or `scope-finish` froze a file). So on a large workbook, once `scope-finish` has frozen the reader's file, a broken generator conversation is not restartable: freeze the folder and tell the owner. It is for qualification jobs only (`INTERRUPT_QUALIFICATION_ONLY`).
+- `--reason` is `TECHNICAL_<CODE>` in capitals (`TECHNICAL_CONVERSATION_BROKE`, `TECHNICAL_PLATFORM_ERROR`, ...). The times are the broken conversation's, to the second, between the end of the stage that printed `NEXT:` and now (`INTERRUPTION_TIMES`); round the start up and the end down. `--conversation-id` is your attestation, recorded as given.
+- It records a completed `TECHNICAL_INTERRUPTION` (`NEXT: STOP_TECHNICAL_INTERRUPTION`, exit 3) with the conversation id, the times and a listing of the conversation's output folder, mirrored in the ledger. After it only `freeze` runs in that folder (`JOB_INTERRUPTED`).
+- Use it only for a technical break, never because you dislike a result. If the conversation wrote its file, run `scope-finish` or `finish` as usual.
+
+*A technical stop before any response* (`NEXT: STOP_<reason>` at `prepare`, such as `STOP_RENDER_VIEWS_FAILED` or `STOP_RUNNER_ERROR`, or `NEXT: STOP_INTERRUPTED` of a stage killed before it froze a response): freeze the folder as it is.
+
+Then:
+1. prepare again under a new jobs root (for example `$Q/A_restart1`);
+2. tell the owner, naming both folders.
+
+The new record's `restart_of` and the ledger name the earlier folder. The runner allows the restart only when the earlier run is frozen, froze no scope reader or generator response (no `freeze_response`, and its `FROZEN.json` lists neither `scope/SCOPE_READER_RESPONSE.json` nor anything in `response/`), and ended in the recorded interruption, an `INTERRUPTED` stage or a technical `STOP_` before any response. It refuses every other restart (`QUALIFICATION_RESTART_NOT_ALLOWED`: a response was frozen; the run ended in `OWNER_DECISION`; it was frozen at `NEXT: GENERATE` or `NEXT: SCOPE_READER` without `interrupt`, which makes it a failed run; or run B of the case has started) and a second one (`QUALIFICATION_RESTART_USED`).
 
 **`PACKET_PINS.json`.** Before it prints `NEXT: GENERATE`, the runner pins every in-job product (builder config, full and scoped packets with their views, scope files, decision, receipt, frozen reader response, generator prompt and run pins) in a read-only `PACKET_PINS.json`, and writes its sha256 to the ledger. `finish` stops (`STOP_PACKET_CHANGED`) if any of them changed.
 
-**`finish --qualification`** requires `--generator-model` (equal to the record's `model`) and `--generation-record` (Stage 3). Without them it refuses, with nothing consumed.
+**`finish --qualification`** requires `--generator-model` (equal to the record's `model`) and `--generation-record` (Stage 3), and `--transcript` when the record says `exported` (O40). Without them it refuses, with nothing consumed.
+
+**`scope-finish --qualification`** requires `--reader-prompt-sha256` (Stage 2).
 
 **No per-user options** apply. The runner takes none, and the record says so.
 
@@ -244,16 +272,20 @@ $R verify-frozen --job-dir $Q/A/<case id>
 ```
 `freeze` appends the last record entry, writes the `FROZEN.json` sha256 to the ledger, then writes `FROZEN.json` (every file and folder with its sha256) and removes write permission from every file and every folder, the job folder last. After that every subcommand is refused (`JOB_FROZEN`, which also reports whether the folder still matches `FROZEN.json`). Never touch the folder again. If `freeze` prints `NEXT: STOP_FREEZE_INCOMPLETE`, run `freeze` again: it completes `FROZEN.json` with the same bytes.
 
-`verify-frozen` recomputes every sha256 against `FROZEN.json`, the record chain and the ledger's freeze entry, and writes nothing. It prints `NEXT: DONE` (exit 0) or `NEXT: STOP_FROZEN_FOLDER_CHANGED` (exit 3) with the counts of unlisted, changed and missing entries. Run it on every folder before you write `ALL_FROZEN.json`.
+`verify-frozen` recomputes every sha256 against `FROZEN.json`, the record chain and the ledger's freeze entry, and writes nothing (it opens the ledger read-only). It prints `NEXT: DONE` (exit 0) or `NEXT: STOP_FROZEN_FOLDER_CHANGED` (exit 3) with the counts of unlisted, changed and missing entries. Run it on every folder before you write `ALL_FROZEN.json`.
 
 **No delivery.** `deliver-check` refuses qualification jobs.
 
-**Nonattempts** (rule 6) are recorded in the ledger, not run:
+**Nonattempts** (rule 6) are the cases `JOBS.json` marks `"nonattempt": true`. They are frozen at once, not run:
 ```bash
 $R nonattempt --release $RT/RELEASE.json --admission /abs/ADMISSION.json --case <case id> --reader A \
-   --reason NONATTEMPT_SOURCE_UNAVAILABLE --operator-model "$ME"
+   --jobs-root $Q/A --operator-model "$ME"
+$R verify-frozen --job-dir $Q/A/<case id>
 ```
-It refuses a case not in `JOBS.json` and a case and reader that already have a run or a nonattempt. Freeze anything else the protocol asks for a nonattempt as it says.
+- It refuses a case `JOBS.json` does not list (`QUALIFICATION_CASE_NOT_IN_JOBS`) or does not mark as a nonattempt (`QUALIFICATION_CASE_NOT_NONATTEMPT`), and a case and reader that already have a run or a nonattempt. A refusal appends nothing and creates nothing.
+- The reason is the one `JOBS.json` gives (protocol rule 6's `NONATTEMPT_SOURCE_UNAVAILABLE` when it gives none). `--reason` is optional; if given, it must equal it (`NONATTEMPT_REASON_MISMATCH`).
+- It writes the nonattempt folder `<jobs root>/<case id>/`: `input/` (the release, the admission and `JOBS.json`), `RUN_RECORD.json` with `"status": "NONATTEMPT_SOURCE_UNAVAILABLE"` (the reason) and the `nonattempt` entry, and `FROZEN.json`. The folder is read-only, and the `FROZEN.json` sha256 is in the ledger. Without `--jobs-root` the folder is `<ledger folder>/nonattempts_<reader>/<case id>/`.
+- List it in `ALL_FROZEN.json` like any run folder.
 
 ## Release fields the runner reads
 
@@ -281,7 +313,7 @@ It refuses a case not in `JOBS.json` and a case and reader that already have a r
 | `tables.company_name_sha256` | optional: the sha256 of the UTF-8 company name a job must use |
 | `qualification.admissions` | qualification: the admitted admission files, `[{path, sha256}]` (non-empty) |
 | `qualification.ledger`, `qualification.jobs_file` | qualification: the ledger and `JOBS.json` (absolute paths) |
-| `qualification.accepted_transcript_status` | qualification, optional: accepted generation-record transcript statuses (default both) |
+| `qualification.accepted_transcript_status` | qualification, optional: if given, exactly `exported` and `not_available` (O40) |
 | `pinned_files_sha256` | map of repository-relative path to sha256, checked by every subcommand. It must cover `deploy/run/cps_job.py`, `deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md` and every harness and source-prep file above (in qualification the admission may cover them instead). |
 
 ## The job folder
@@ -295,13 +327,13 @@ It refuses a case not in `JOBS.json` and a case and reader that already have a r
 | `scope/` | `tool/` (the scope proposal, and the digest when the stage applies; read-only); `reader/input/` (read-only), `reader/output/`; `SCOPE_READER_PROMPT.md`; `SCOPE_READER_RESPONSE.json` (frozen); `decision/`; `scoped_packet/` |
 | `run/` | `A/` (or `B/`), the bounded generation folder from `prepare_run.py` (its `input/` read-only); `GENERATOR_PROMPT.md`; `GENERATION_RECORD.json` (yours) |
 | `PACKET_PINS.json` | every in-job product pinned before `NEXT: GENERATE` (read-only) |
-| `response/` | `GENERATION_RECORD.json` and `response.json` (frozen), `ROUTE_CHECK.json` |
+| `response/` | `GENERATION_RECORD.json`, `GENERATOR_TRANSCRIPT.<ext>` (when exported) and `response.json` (frozen), `ROUTE_CHECK.json` |
 | `carrier/` | `convert/`: `carrier.json`, `ADAPTER_RECEIPT.json`, `CENSUS_LEDGER.json` |
 | `export/` | `writer/`: `<name>(未填).xlsx` (the delivered workbook), `INTERNAL_QA_WORKBOOK.xlsx`, `EXPECTED_SAVED_VALUES.json`, `WRITER_RECEIPT.json` |
 | `qa/` | `SAVED_QA.json`; `visual_deliverable/`, `visual_internal/`; `VISUAL_PAGES.json`; `QA_EVIDENCE.json`; `VISUAL_REVIEW_PROMPT.md`; `visual_review/`; `visual_review_attempts/` (refused reviews); `VISUAL_REVIEW.json` (frozen); `VISUAL_RECORD.json`; `DELIVERY_CHECK.json` |
 | `logs/` | every tool's stdout and stderr, and the traceback of a `RUNNER_ERROR` (private; never paste them anywhere) |
 | `RUN_RECORD.json` | the record (below) |
-| `.cps_job.lock`, `.STAGE_IN_PROGRESS.json` | the job lock; the marker of a stage that is consuming (never touch them) |
+| `.STAGE_IN_PROGRESS.json` | the marker of a stage that is consuming (never touch it). The job lock is a lock on the folder itself, not a file. |
 | `FROZEN.json` | after `freeze` |
 
 `RUN_RECORD.json` (`cps.job-run-record.v2`) holds:
@@ -335,6 +367,8 @@ A completed stage, failures and interruptions included, is never run again in th
 ## Never
 
 - Re-run a completed stage, or re-prepare into an existing folder or under another jobs root to get a different result.
+- Record a technical interruption for anything but a technical break.
+- Move or rename a job folder, a jobs root or the ledger.
 - Run two commands on one job at the same time, interrupt `finish`, or re-issue a command whose shell timed out.
 - Edit a response, a reader file, a review, a generation record, a workbook, the record, the ledger or any file in a job folder.
 - Open and re-save a workbook.

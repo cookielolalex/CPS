@@ -24,7 +24,7 @@ Cells the renderer lists in `possibly_cut_cells` (no-wrap text or numbers that m
 6. E, F, L, M, N and Q are centred, and C is left-aligned;
 7. G and H (`單價`, `複價`) are not shaded;
 8. each cell listed above under `possibly_cut_cells` that lies on this page is noted: whether its text shows in full on the page (its value is checked through saved QA, not in the PNG). Use `n/a` on a page that holds none of the listed cells. When cells are listed, item 8 cannot be `n/a` on every page;
-9. body text is black and legible.
+9. body text is black and legible, and no value is cut at a column edge or by a filled neighbour (a cut value fails this item);
 
 ## B. `INTERNAL_QA_WORKBOOK.xlsx` (the internal four-sheet workbook; review the pages listed)
 

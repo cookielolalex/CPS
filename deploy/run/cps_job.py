@@ -15,15 +15,19 @@ Subcommands (RUN_JOB_COMMANDS.md has the exact commands and what to do at each N
                 [--generation-record D/run/GENERATION_RECORD.json [--transcript FILE]]   (qualification: model and record required)
   visual-record --job-dir D --review D/qa/visual_review/VISUAL_REVIEW.json [--reviewer-conversation-id TEXT]
   deliver-check --job-dir D
+  interrupt     --job-dir D --reason TECHNICAL_<CODE> --started-utc T --ended-utc T [--conversation-id TEXT]
+                (qualification, protocol rule 3: the scope reader or generator conversation broke before its file)
   freeze        --job-dir D            (FROZEN.json; then every file and folder of the job is read-only)
   verify-frozen --job-dir D            (recomputes FROZEN.json; never writes)
-  nonattempt    --release RELEASE.json --admission ADMISSION.json --case ID --reader A|B --reason CODE   (qualification ledger)
+  nonattempt    --release RELEASE.json --admission ADMISSION.json --case ID --reader A|B [--jobs-root DIR] [--reason CODE]
+                (qualification rule 6: a JOBS.json nonattempt, frozen at once as <jobs-root>/<case id>)
 
-Every subcommand holds an exclusive lock on <job>/.cps_job.lock (a second command is refused, JOB_BUSY) and verifies the
-hash chain of <job>/RUN_RECORD.json before anything else (RUN_RECORD_CHAIN_BROKEN). Each subcommand appends one entry
-(two for finish) and never rewrites earlier entries; a stage that completed (with any result, a recorded failure or an
-interruption included) is never run again in the same job folder. A qualification job is also mirrored, entry by entry,
-in the qualification ledger the release names (outside every job folder), which allows one run per case and reader.
+Every subcommand holds an exclusive lock on the job folder itself (flock of the folder; a second command is refused,
+JOB_BUSY; the tools a stage runs hold it too) and verifies the hash chain of <job>/RUN_RECORD.json before anything else
+(RUN_RECORD_CHAIN_BROKEN). Each subcommand appends one entry (two for finish) and never rewrites earlier entries; a stage
+that completed (with any result, a recorded failure or an interruption included) is never run again in the same job
+folder. A qualification job is also mirrored, entry by entry, in the qualification ledger the release names (outside
+every job folder), which allows one run per case and reader, and one restart after a technical interruption.
 The last line printed is the next step: NEXT: SCOPE_READER, GENERATE, OWNER_DECISION, VISUAL_REVIEW, DELIVER_CHECK,
 FREEZE, DELIVER, DONE or STOP_<reason>.
 Exit codes: 0 continue with the NEXT step; 3 the job stopped (NEXT: STOP_<reason> or OWNER_DECISION, recorded);
@@ -33,7 +37,7 @@ import argparse, atexit, datetime, fcntl, hashlib, json, os, re, shutil, stat, s
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-VERSION = 'cps-job-runner.v2'
+VERSION = 'cps-job-runner.v3'
 HERE = Path(__file__).resolve().parent
 RECORD_SCHEMA = 'cps.job-run-record.v2'
 RELEASE_SCHEMA = 'cps.release.v1'
@@ -51,6 +55,10 @@ FROZEN_SCHEMA = 'cps.job-frozen.v2'
 STATUS_FOR_MODE = {True: 'RELEASED_FOR_QUALIFICATION', False: 'RELEASED_FOR_USE'}
 CASE_ID_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', re.ASCII)
 REASON_RE = re.compile(r'[A-Z][A-Z0-9_]{2,63}', re.ASCII)
+TECHNICAL_RE = re.compile(r'TECHNICAL_[A-Z0-9_]{2,54}', re.ASCII)
+NONATTEMPT_DEFAULT_REASON = 'NONATTEMPT_SOURCE_UNAVAILABLE'         # protocol rule 6: the status of a nonattempt record
+# D3 (owner decision O40, 2026-11-06): the rule every generation record states
+O40_RULE = 'O40 2026-11-06: exported or not_available, both accepted; count reported'
 COMMIT_RE = re.compile(r'[0-9a-f]{40}([0-9a-f]{24})?', re.ASCII)
 LAYOUT = ('input', 'packet', 'scope', 'run', 'response', 'carrier', 'export', 'qa', 'logs')
 CONDITION3_TOOLS = ('research/export/saved_qa.py', 'research/export/writer_portable.py',
@@ -74,7 +82,9 @@ OPENPYXL_VERSION = '3.1.5'
 FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents')
 TRANSCRIPT_STATUSES = ('exported', 'not_available')
 EXTERNAL_TOOLS = (('soffice', '--version'), ('pdftoppm', '-v'), ('pdfinfo', '-v'), ('pdftotext', '-v'), ('node', '--version'))
-LOCK_NAME, MARKER_NAME = '.cps_job.lock', '.STAGE_IN_PROGRESS.json'
+MARKER_NAME = '.STAGE_IN_PROGRESS.json'
+# D1: a scope reader or generator response frozen in a job folder (a run that froze one is never restarted)
+RESPONSE_WITNESSES = ('scope/SCOPE_READER_RESPONSE.json', 'response/response.json', 'response/GENERATION_RECORD.json')
 # R2: a stage's frozen outputs; one that exists while the stage has no completed entry refuses the stage
 STAGE_WITNESSES = {'scope-finish': ('scope/SCOPE_READER_RESPONSE.json', 'scope/decision'),
                    'finish': ('response/response.json', 'response/GENERATION_RECORD.json', 'carrier/convert'),
@@ -267,6 +277,16 @@ def nonblank(x):
     return isinstance(x, str) and bool(x.strip())
 
 
+def placeholder(x):
+    """DN14: a value copied from a template placeholder such as "<only if your platform shows it>"."""
+    return isinstance(x, str) and x.strip().startswith('<')
+
+
+def attested(x):
+    """A non-blank attested value that is not a template placeholder."""
+    return nonblank(x) and not placeholder(x)
+
+
 _NOPYC = []
 
 
@@ -332,10 +352,14 @@ class Release:
                 'package_manifest_sha256': self.manifest_sha}
 
     def require_qualification_fields(self):
-        """R11/R12: a qualification release names the ledger and the jobs list (absolute paths outside every job folder)."""
+        """R11/R12: a qualification release names the ledger and the jobs list (absolute paths outside every job folder).
+        D3 (O40): qualification accepts both transcript statuses, so accepted_transcript_status, when given, lists exactly
+        exported and not_available."""
         bad = [k for k, v in (('qualification.ledger', self.ledger), ('qualification.jobs_file', self.jobs_file))
                if v is None or not v.is_absolute()]
-        if self.accepted_transcripts is None or not set(self.accepted_transcripts) <= set(TRANSCRIPT_STATUSES) or not self.accepted_transcripts:
+        acc = self.accepted_transcripts
+        if (acc is None or not all(isinstance(x, str) for x in acc) or len(acc) != len(TRANSCRIPT_STATUSES)
+                or set(acc) != set(TRANSCRIPT_STATUSES)):
             bad.append('qualification.accepted_transcript_status')
         if bad:
             raise Refused('QUALIFICATION_RELEASE_FIELDS', {'fields': bad})
@@ -596,6 +620,9 @@ def export_preflight(rel, st):
     st.facts['writer_dir_condition4'] = check_writer_dir(rel, adm)
     st.facts['openpyxl'] = check_openpyxl()
     st.facts['external_tools'] = external_tools()
+    st.facts['python'] = {'executable': sys.executable, 'realpath': os.path.realpath(sys.executable),
+                          'version': sys.version.split()[0], 'implementation': sys.implementation.name}       # DN9
+    st.facts['tool_env_names'] = sorted(tool_env(rel))     # DN9, N9: the names (never the values) of the tool environment
     return adm, adm_sha, node, tools
 
 
@@ -633,22 +660,29 @@ def self_sha(e, dump):
 
 class Ledger:
     """The qualification ledger (R11): one JSON object per line, each with seq and the sha256 of every byte before it,
-    appended only, at the path the release names, outside every job folder. Held under an exclusive lock while open."""
-    def __init__(self, path):
+    appended only, at the path the release names, outside every job folder. Held under an exclusive lock while open.
+    DN6: only prepare and nonattempt (create=True) may create it; every other command refuses a missing ledger
+    (QUALIFICATION_LEDGER_MISSING), and verify-frozen opens it read-only (readonly=True, a shared lock)."""
+    def __init__(self, path, create=True, readonly=False):
         self.path = Path(path)
+        self.create, self.readonly = create and not readonly, readonly
         self.fd, self.entries, self.raw = None, [], b''
 
     def __enter__(self):
         if not self.path.is_absolute() or not self.path.parent.is_dir():
             raise Refused('QUALIFICATION_LEDGER_PATH', 'an absolute path in an existing folder')
+        flags = os.O_RDONLY if self.readonly else os.O_RDWR | os.O_APPEND
         try:
-            self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o644)
+            self.fd = os.open(self.path, flags | (os.O_CREAT if self.create else 0), 0o644)
+        except FileNotFoundError:
+            raise Refused('QUALIFICATION_LEDGER_MISSING', 'the qualification ledger the release names does not exist; '
+                          'never move, rename or delete it: tell the owner')
         except OSError as e:
             raise Refused('QUALIFICATION_LEDGER_UNAVAILABLE', {'errno': e.errno})
         deadline = time.time() + 60
         while True:
             try:
-                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(self.fd, (fcntl.LOCK_SH if self.readonly else fcntl.LOCK_EX) | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
                 if time.time() > deadline:
@@ -691,6 +725,8 @@ class Ledger:
         return None
 
     def append(self, entry):
+        if self.readonly:
+            raise Refused('QUALIFICATION_LEDGER_READ_ONLY')
         e = dict(entry, ledger=LEDGER_SCHEMA, seq=len(self.entries) + 1, previous_ledger_sha256=sha_bytes(self.raw), utc=utc())
         e['entry_sha256'] = self_sha(e, ledger_line)
         b = ledger_line(e)
@@ -706,37 +742,73 @@ class Ledger:
         return [e for e in self.entries if e.get('type') == kind and all(e.get(k) == v for k, v in match.items())]
 
 
-def ledger_record_entry(jd, s):
+def ledger_record_entry(jd, s, record_sha=None):
     return {'type': 'record', 'job_dir': str(jd.dir), 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'], 'seq': s['seq'],
             'stage': s['stage'], 'result': s['result'], 'next': s['next'], 'completed': s['completed'],
-            'run_record_sha256': sha_bytes(jd.raw)}
+            'run_record_sha256': record_sha or sha_bytes(jd.raw)}
 
 
-def ledger_check_record(led, jd):
+def ledger_check_record(led, jd, catch_up=True):
     """The record must be the one the ledger last recorded for this folder (a truncated, edited or replaced record is
-    refused). A record one entry ahead (the ledger write after it failed) is caught up."""
+    refused). DN5: a record whose verified chain extends the last recorded record (the ledger writes after it failed) is
+    caught up, one ledger entry per missing record entry, each with the sha256 of the record after that entry. The folder's
+    first ledger entry is its prepare, or its nonattempt (D2)."""
     key = str(jd.dir)
-    prep = led.of('prepare', job_dir=key)
+    prep = led.of('prepare', job_dir=key) + led.of('nonattempt', job_dir=key)
     if len(prep) != 1:
         raise Refused('QUALIFICATION_JOB_NOT_IN_LEDGER', 'the ledger has no prepare entry for this job folder')
     known = [prep[0]['run_record_sha256']] + [e['run_record_sha256'] for e in led.of('record', job_dir=key)]
     if sha_bytes(jd.raw) == known[-1]:
         return
     st = jd.rec['stages']
-    if st and st[-1].get('previous_record_sha256') == known[-1]:
-        led.append(ledger_record_entry(jd, st[-1]))
-        return
-    raise Refused('RUN_RECORD_NOT_IN_LEDGER', 'the record differs from the last one the qualification ledger recorded')
+    start = next((i for i, s in enumerate(st) if s.get('previous_record_sha256') == known[-1]), None)
+    if start is None or not catch_up:
+        raise Refused('RUN_RECORD_NOT_IN_LEDGER', 'the record differs from the last one the qualification ledger recorded')
+    for i in range(start, len(st)):             # the chain was verified at load: these are the record's exact earlier bytes
+        led.append(ledger_record_entry(jd, st[i], sha_bytes(dumps(dict(jd.rec, stages=st[:i + 1])))))
 
 
-def ledger_completed(led, job_dir):
-    return [(e['stage'], e['next']) for e in led.of('record', job_dir=job_dir) if e['completed']]
+def ledger_admission_order(led, adm):
+    """R12: the admission was frozen before the ledger's first entry."""
+    if led.entries:
+        first, frozen = parse_utc(led.entries[0].get('utc')), parse_utc(adm.get('frozen_utc'))
+        if first is None or frozen is None or frozen >= first:
+            raise Refused('ADMISSION_FROZEN_AFTER_FIRST_PREPARE', 'the admission must be frozen before the first qualification prepare')
+
+
+def restart_problem(led, prev):
+    """D1 (protocol rule 3): why the frozen run in folder prev may not be restarted, or None. A run may be restarted when it
+    froze no scope reader or generator response (no freeze_response entry in the ledger; none of RESPONSE_WITNESSES in
+    its FROZEN.json, whose sha256 is the ledger's freeze entry) and its last completed stage before freeze ended in a
+    stop: a recorded technical interruption (NEXT: STOP_TECHNICAL_INTERRUPTION), an INTERRUPTED stage, or a technical
+    STOP_ reached before any response."""
+    fz = led.of('freeze', job_dir=prev)
+    if not fz:
+        return 'the earlier run is not frozen'
+    recs = led.of('record', job_dir=prev)
+    if any(e.get('stage') == 'freeze_response' for e in recs):
+        return 'the earlier run froze a generator response'
+    done = [(e['stage'], e['next']) for e in recs if e['completed'] and e['stage'] != 'freeze']
+    if not done or not str(done[-1][1]).startswith('STOP_'):
+        return ('the earlier run did not end in a recorded technical interruption, an interrupted stage or a technical stop '
+                'before any response (a run frozen at NEXT: GENERATE or SCOPE_READER without interrupt is a failed run)')
+    try:
+        raw = (Path(prev) / 'FROZEN.json').read_bytes()
+        listed = {f.get('path') for f in strict_json(raw, 'FROZEN.json').get('files') or [] if isinstance(f, dict)}
+    except (OSError, Refused, AttributeError):
+        return "the earlier folder's FROZEN.json cannot be read"
+    if sha_bytes(raw) != fz[-1].get('frozen_sha256'):
+        return "the earlier folder's FROZEN.json is not the one the ledger recorded"
+    if listed & set(RESPONSE_WITNESSES):
+        return 'the earlier run froze a scope reader or generator response'
+    return None
 
 
 def ledger_admit_prepare(led, jobs, case, reader, job_dir, adm):
     """R11 at prepare --qualification: a JOBS.json case, no recorded nonattempt, the admission frozen before the first
-    prepare of the ledger, one run per case and reader, a restart once and only after a technical stop at prepare
-    (before any reader or generator response), and reader B only after reader A of the case is frozen."""
+    prepare of the ledger, one run per case and reader, a restart once and only after a technical interruption or stop
+    before any reader or generator response (D1, restart_problem), and reader B only after reader A of the case is frozen
+    and, DN7, only once A's one restart is used or A cannot be restarted."""
     c = jobs.get(case)
     if c is None:
         raise Refused('QUALIFICATION_CASE_NOT_IN_JOBS', 'the case is not listed in the pinned JOBS.json')
@@ -744,10 +816,7 @@ def ledger_admit_prepare(led, jobs, case, reader, job_dir, adm):
         raise Refused('QUALIFICATION_CASE_IS_NONATTEMPT', 'JOBS.json marks the case as a nonattempt')
     if led.of('nonattempt', case_id=case, reader=reader):
         raise Refused('QUALIFICATION_NONATTEMPT_RECORDED', 'the ledger records a nonattempt for this case and reader')
-    if led.entries:
-        first, frozen = parse_utc(led.entries[0].get('utc')), parse_utc(adm.get('frozen_utc'))
-        if first is None or frozen is None or frozen >= first:
-            raise Refused('ADMISSION_FROZEN_AFTER_FIRST_PREPARE', 'the admission must be frozen before the first qualification prepare')
+    ledger_admission_order(led, adm)
     if any(e.get('job_dir') == job_dir for e in led.entries):
         raise Refused('QUALIFICATION_JOB_DIR_REUSED')
     mine = led.of('prepare', case_id=case, reader=reader)
@@ -758,10 +827,10 @@ def ledger_admit_prepare(led, jobs, case, reader, job_dir, adm):
         prev = mine[0]['job_dir']
         if not led.of('freeze', job_dir=prev):
             raise Refused('QUALIFICATION_RUN_EXISTS', 'this case and reader already have a run that is not frozen')
-        done = [(s, n) for s, n in ledger_completed(led, prev) if s != 'freeze']
-        if any(s != 'prepare' for s, _ in done) or not done or not str(done[-1][1]).startswith('STOP_'):
-            raise Refused('QUALIFICATION_RESTART_NOT_ALLOWED', 'a restart is allowed once, only after a technical stop at '
-                          'prepare, before any scope reader or generator response')
+        why = restart_problem(led, prev)
+        if why:
+            raise Refused('QUALIFICATION_RESTART_NOT_ALLOWED', 'a restart is allowed once, only after a recorded technical '
+                          'interruption or a technical stop before any scope reader or generator response: ' + why)
         if reader == 'A' and led.of('prepare', case_id=case, reader='B'):
             raise Refused('QUALIFICATION_RESTART_NOT_ALLOWED', 'run B of this case has started')
         restart_of = prev
@@ -769,11 +838,15 @@ def ledger_admit_prepare(led, jobs, case, reader, job_dir, adm):
         a = led.of('prepare', case_id=case, reader='A')
         if not a or not led.of('freeze', job_dir=a[-1]['job_dir']):
             raise Refused('QUALIFICATION_READER_A_NOT_FROZEN', 'run B starts only after run A of the case is frozen')
+        if len(a) == 1 and restart_problem(led, a[0]['job_dir']) is None:
+            raise Refused('QUALIFICATION_READER_A_RESTART_UNUSED', 'run A of this case ended in a technical interruption or '
+                          'stop whose one restart is unused: restart run A first (protocol rule 1: run A in full before run B)')
     return restart_of
 
 
 def load_jobs(rel, adm):
-    """The pinned qualification jobs list (cps.qualification-jobs.v1): cases[{case_id, order, nonattempt[, reason]}]."""
+    """The pinned qualification jobs list (cps.qualification-jobs.v1): cases[{case_id, order, nonattempt[, reason]}].
+    Returns (cases by id, sha256, raw bytes). A reason, when given, is an upper-case code (D2)."""
     if rel.jobs_file is None or not rel.jobs_file.is_file():
         raise Refused('QUALIFICATION_JOBS_FILE_MISSING')
     raw = rel.jobs_file.read_bytes()
@@ -786,10 +859,12 @@ def load_jobs(rel, adm):
     out = {}
     for c in d['cases']:
         if (not isinstance(c, dict) or not isinstance(c.get('case_id'), str) or not CASE_ID_RE.fullmatch(c['case_id'])
-                or c['case_id'] in out or not isinstance(c.get('nonattempt', False), bool)):
-            raise Refused('QUALIFICATION_JOBS_SCHEMA', 'each case: {case_id, order, nonattempt}, case ids unique')
+                or c['case_id'] in out or not isinstance(c.get('nonattempt', False), bool)
+                or ('reason' in c and not (isinstance(c['reason'], str) and REASON_RE.fullmatch(c['reason'])))):
+            raise Refused('QUALIFICATION_JOBS_SCHEMA', 'each case: {case_id, order, nonattempt[, reason]}, case ids unique, '
+                          'a reason an upper-case code')
         out[c['case_id']] = c
-    return out, sha_bytes(raw)
+    return out, sha_bytes(raw), raw
 
 
 # ------------------------------------------------------------------ job folder and record
@@ -828,21 +903,26 @@ class Job:
             return str(p)
 
     def lock(self, wait=False):
-        """R4: one exclusive lock per job folder, held until this command exits."""
-        if not self.dir.is_dir():
+        """R4: one exclusive lock per job folder, held until this command and every tool it started have exited. DN3: the
+        lock is a flock of the job folder itself (no lock file that could be deleted); DN4: Stage.run passes the locked
+        descriptor to each tool, so a tool that outlives a killed runner keeps the folder locked."""
+        if not self.dir.is_dir() or self.dir.is_symlink():
             raise Refused('NO_RUN_RECORD', 'run prepare first; --job-dir is <jobs-root>/<case id>')
         try:
-            fd = os.open(self.p(LOCK_NAME), os.O_RDONLY | os.O_CREAT, 0o444)
+            fd = os.open(self.dir, os.O_RDONLY | os.O_DIRECTORY)
         except OSError as e:
             raise Refused('JOB_LOCK_UNAVAILABLE', {'errno': e.errno})
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
         except BlockingIOError:
             os.close(fd)
-            raise Refused('JOB_BUSY', 'another cps_job.py command is running in this job folder: wait until it ends; never re-issue it')
+            raise Refused('JOB_BUSY', 'another cps_job.py command, or a tool it started, is running in this job folder: wait '
+                          'until it ends; never re-issue it')
         self.lock_fd = fd
 
-    def load(self):
+    def load(self, readonly=False):
+        """The verified record; in qualification also checked against the ledger (readonly: verify-frozen, which opens
+        the ledger read-only and never catches it up)."""
         if not self.record_path.is_file():
             raise Refused('NO_RUN_RECORD', 'run prepare first; --job-dir is <jobs-root>/<case id>')
         raw = self.record_path.read_bytes()
@@ -861,8 +941,8 @@ class Job:
             if rel.ledger is None:
                 raise Refused('QUALIFICATION_RELEASE_FIELDS', {'fields': ['qualification.ledger']})
             self.ledger_path = rel.ledger
-            with Ledger(self.ledger_path) as led:
-                ledger_check_record(led, self)
+            with Ledger(self.ledger_path, create=False, readonly=readonly) as led:
+                ledger_check_record(led, self, catch_up=not readonly)
         return rec
 
     def create(self, rec):
@@ -894,7 +974,7 @@ class Job:
         self.rec, self.raw = new, raw
         if self.ledger_path is not None:
             try:
-                with Ledger(self.ledger_path) as led:
+                with Ledger(self.ledger_path, create=False) as led:
                     led.append(ledger_record_entry(self, entry))
             except (Refused, OSError) as e:                 # the next command catches the ledger up, or refuses
                 self.ledger_error = getattr(e, 'code', type(e).__name__)
@@ -988,7 +1068,7 @@ def reconcile(jd):
     if m is not None:
         stage, how = str(m.get('stage') or 'unknown'), 'stage marker'
     elif not jd.rec['stages']:
-        stage, how = 'prepare', 'record without any entry'
+        stage, how = ('nonattempt' if jd.rec.get('nonattempt') else 'prepare'), 'record without any entry'
     else:
         fr = jd.done('freeze_response')
         if fr and not [s for s in jd.stages('finish') if s['seq'] > fr[-1]['seq']]:
@@ -1023,14 +1103,17 @@ class Stage:
         return self.pin(self.outputs, label, path)
 
     def run(self, label, script, args, env=None, python_flags=('-I', '-B'), cwd=None, timeout=3600):
-        """Run one tool; stdout and stderr go to logs/ (never printed). Returns (exit code, stdout bytes, stderr bytes)."""
+        """Run one tool; stdout and stderr go to logs/ (never printed). Returns (exit code, stdout bytes, stderr bytes).
+        DN4: the tool inherits the job lock's descriptor, so the folder stays locked while the tool runs, even when this
+        runner is killed (a later command is refused JOB_BUSY until the tool has ended)."""
         script = Path(script)
         self.tools[self.job.rel(script) if str(script).startswith(str(self.job.dir)) else str(script)] = sha_file(script)
         self.counter += 1
         base = f'{self.seq:02d}_{self.name}_{self.counter:02d}_{label}'
         argv = py(*python_flags) + [str(script), *[str(a) for a in args]]
+        keep = (self.job.lock_fd,) if self.job.lock_fd is not None else ()
         try:
-            p = subprocess.run(argv, capture_output=True, env=env, cwd=cwd, timeout=timeout)
+            p = subprocess.run(argv, capture_output=True, env=env, cwd=cwd, timeout=timeout, pass_fds=keep)
             code, out, err = p.returncode, p.stdout, p.stderr
         except subprocess.TimeoutExpired as e:
             code, out, err = 'TIMEOUT', e.stdout or b'', e.stderr or b''
@@ -1114,15 +1197,18 @@ def check_title_with_writer(rel, title):
 
 
 def check_title_shape(t, case):
-    """N6: no invisible format character (Unicode category Cf: U+200B, U+202E, U+FEFF ...), and the title starts with
-    exactly the case id (the next character is not another digit)."""
+    """N6, DN10: no invisible format character or line or paragraph separator (Unicode categories Cf, Zl, Zp: U+200B,
+    U+202E, U+FEFF, U+2028, U+2029 ...), and the title starts with exactly the case id in ASCII digits (not fullwidth
+    digits), the next character not another digit."""
     if not isinstance(t, str):
         raise Refused('JOB_TITLE_INVALID', 'the title is a string')
-    if any(unicodedata.category(ch) == 'Cf' for ch in t):
-        raise Refused('JOB_TITLE_FORMAT_CHARACTER', 'the title holds an invisible format character (Unicode category Cf)')
+    if any(unicodedata.category(ch) in ('Cf', 'Zl', 'Zp') for ch in t):
+        raise Refused('JOB_TITLE_FORMAT_CHARACTER', 'the title holds an invisible format character or a line or paragraph '
+                      'separator (Unicode category Cf, Zl or Zp)')
     norm = ''.join(ch for ch in nfkc(t) if not ch.isspace())
-    if not norm.startswith(case) or (len(norm) > len(case) and norm[len(case)].isdigit()):
-        raise Refused('JOB_TITLE_INVALID', 'the project folder title starts with exactly the case id')
+    if (not t.startswith(case) or not norm.startswith(case)
+            or (len(norm) > len(case) and norm[len(case)].isdigit()) or (len(t) > len(case) and t[len(case)].isdigit())):
+        raise Refused('JOB_TITLE_INVALID', 'the project folder title starts with exactly the case id, in ASCII digits')
 
 
 def parse_admission(admission_raw):
@@ -1280,7 +1366,7 @@ def write_packet_pins(st, jd):
     write_new(p, dumps(doc))
     sha = st.pin_out('packet_pins', p)
     if jd.ledger_path is not None:
-        with Ledger(jd.ledger_path) as led:
+        with Ledger(jd.ledger_path, create=False) as led:
             led.append({'type': 'packet_pins', 'job_dir': str(jd.dir), 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'],
                         'stage': st.name, 'packet_pins_sha256': sha})
     st.facts['packet_pins'] = {'sha256': sha, 'files': len(files), 'in_ledger': jd.ledger_path is not None}
@@ -1351,7 +1437,7 @@ def cmd_prepare(a):
     if a.qualification:
         if inside(rel.ledger, jobs_root):
             raise Refused('QUALIFICATION_LEDGER_PATH', 'the ledger lies outside the jobs root and every job folder')
-        jobs, jobs_sha = load_jobs(rel, facts['admission_doc'])
+        jobs, jobs_sha, _ = load_jobs(rel, facts['admission_doc'])
         facts['admission']['jobs_sha256'] = jobs_sha
     jd = Job(jobs_root / case)
     if jd.dir.exists():
@@ -1510,9 +1596,16 @@ def cmd_scope_finish(a):
     return run_stage(jd, st, lambda: scope_finish_body(st, jd, a), preflight=lambda: scope_finish_pre(st, jd, a))
 
 
+def require_not_interrupted(jd):
+    """D1: after a recorded technical interruption only freeze runs in the folder (the one restart is a new prepare)."""
+    if jd.done('interrupt'):
+        raise Refused('JOB_INTERRUPTED', 'a technical interruption is recorded: freeze the folder; a restart is a new prepare')
+
+
 def scope_finish_pre(st, jd, a):
     jd.require_not_frozen()
     jd.require_stage_open('scope-finish')
+    require_not_interrupted(jd)
     prep = jd.done('prepare')
     if not prep or not str(prep[-1]['next']).startswith('SCOPE_READER'):
         raise Refused('SCOPE_STAGE_NOT_OPEN', 'prepare did not end with NEXT: SCOPE_READER')
@@ -1525,8 +1618,15 @@ def scope_finish_pre(st, jd, a):
     expected = jd.p('scope', 'reader', 'output', 'SCOPE_READER_RESPONSE.json')
     if os.path.realpath(resp) != str(expected) or not regular(expected):
         raise Refused('READER_RESPONSE_PATH', 'the reader writes scope/reader/output/SCOPE_READER_RESPONSE.json')
-    if a.reader_conversation_id is not None and not nonblank(a.reader_conversation_id):
-        raise Refused('READER_CONVERSATION_ID_BLANK')
+    if a.reader_conversation_id is not None and not attested(a.reader_conversation_id):
+        raise Refused('READER_CONVERSATION_ID_BLANK', 'a non-blank id or link, not a template placeholder')
+    # DN1: the operator states the sha256 of the prompt it gave the reader (as the generation record does for the
+    # generator; the reader's JSON has no such key in scope_agree.py); required in qualification
+    want = (prep[-1]['outputs'].get('scope_reader_prompt') or {}).get('sha256')
+    if a.reader_prompt_sha256 is None and jd.rec['qualification']:
+        raise Refused('READER_PROMPT_SHA256_REQUIRED', 'qualification: --reader-prompt-sha256 (sha256sum scope/SCOPE_READER_PROMPT.md)')
+    if a.reader_prompt_sha256 is not None and a.reader_prompt_sha256 != want:
+        raise Refused('READER_PROMPT_SHA256_MISMATCH', '--reader-prompt-sha256 is not the sha256 of the prompt prepare wrote')
     return {'rel': rel, 'raw': resp.read_bytes(), 'prep': prep[-1]}
 
 
@@ -1539,7 +1639,8 @@ def scope_inputs_changed(jd, prep):
             codes.append('CHANGED_' + root.upper().replace('/', '_'))
     if not prep['facts'].get('pinned_trees'):
         codes.append('NO_PREPARE_PINS')
-    for label in ('scope_proposal', 'scope_digest', 'scope_rules_excerpt', 'full_inventory', 'builder_config'):
+    for label in ('scope_proposal', 'scope_digest', 'scope_rules_excerpt', 'full_inventory', 'builder_config',
+                  'scope_reader_prompt'):                    # DN1: the reader prompt too (scope/ itself stays writable)
         o = prep['outputs'].get(label)
         if o is None or not regular(jd.p(o['path'])) or sha_file(jd.p(o['path'])) != o['sha256']:
             codes.append('CHANGED_' + label.upper())
@@ -1587,6 +1688,7 @@ def scope_finish_body(st, jd, a):
     st.inputs['reader_response_original'] = {'path': str(a.reader_response), 'sha256': sha_bytes(raw), 'bytes': len(raw)}
     st.pin_in('reader_response', frozen)
     st.facts['reader_conversation_id_attested_by_operator'] = a.reader_conversation_id
+    st.facts['reader_prompt_sha256_attested_by_operator'] = a.reader_prompt_sha256
     codes = scope_inputs_changed(jd, prep)
     if codes:
         st.codes += codes
@@ -1682,7 +1784,7 @@ def generation_record_problems(g, case, reader):
         p.append('case_id')
     if g.get('reader') != reader:
         p.append('reader')
-    p += [k for k in ('platform', 'model', 'effort', 'conversation_id') if not nonblank(g.get(k))]
+    p += [k for k in ('platform', 'model', 'effort', 'conversation_id') if not attested(g.get(k))]   # DN14: no placeholder
     p += [k for k in ('started_utc', 'ended_utc') if parse_utc(g.get(k)) is None]
     if not is_sha(g.get('prompt_sha256')):
         p.append('prompt_sha256')
@@ -1710,8 +1812,9 @@ def generation_record_problems(g, case, reader):
 
 def check_generation_record(st, jd, a, gen, rel):
     """R13: required for qualification, recorded when given. The prompt hash equals run/GENERATOR_PROMPT.md, and the
-    conversation lies between the end of the stage that printed NEXT: GENERATE and the start of this finish. The
-    transcript status is recorded as stated; the release says which statuses it accepts (default both)."""
+    conversation lies between the end of the stage that printed NEXT: GENERATE and the start of this finish. D3 (owner
+    decision O40): qualification accepts both transcript statuses; a qualification record that says exported must come
+    with the transcript file (--transcript, frozen and hash-checked), and isolation_evidence follows the frozen file."""
     q = jd.rec['qualification']
     if q and not nonblank(a.generator_model):
         raise Refused('GENERATOR_MODEL_REQUIRED', 'qualification: --generator-model')
@@ -1741,6 +1844,8 @@ def check_generation_record(st, jd, a, gen, rel):
     accepted = rel.accepted_transcripts if q else list(TRANSCRIPT_STATUSES)
     if g['transcript_status'] not in (accepted or []):
         raise Refused('TRANSCRIPT_STATUS_NOT_ACCEPTED', {'status': g['transcript_status'], 'accepted': accepted})
+    if q and g['transcript_status'] == 'exported' and a.transcript is None:
+        raise Refused('TRANSCRIPT_REQUIRED', 'qualification: transcript_status exported needs --transcript <the exported file>')
     transcript = None
     if a.transcript is not None:
         tp = Path(a.transcript)
@@ -1752,22 +1857,24 @@ def check_generation_record(st, jd, a, gen, rel):
         if sha_bytes(traw) != g['transcript_sha256']:
             raise Refused('TRANSCRIPT_SHA256_MISMATCH')
         transcript = (traw, ''.join(ch for ch in tp.suffix if ch.isascii() and (ch.isalnum() or ch == '.'))[:10])
-    exported = g['transcript_status'] == 'exported'
+    exported, frozen_file = g['transcript_status'] == 'exported', transcript is not None
     facts = {'sha256': sha_bytes(raw), 'platform': g['platform'], 'model': g['model'], 'effort': g['effort'],
-             'transcript_status': g['transcript_status'], 'transcript_file_frozen': transcript is not None,
+             'transcript_status': g['transcript_status'], 'transcript_file_frozen': frozen_file,
              'transcript_not_available_flagged': not exported,
-             'isolation_evidence': 'transcript_exported' if exported else 'attested_not_audited',
-             'transcript_audit': 'not_run_by_the_runner' if exported else 'not_available',
+             'transcript_claimed_but_not_frozen': exported and not frozen_file,
+             'isolation_evidence': 'transcript_exported' if frozen_file else 'attested_not_audited',      # D3: the file, not the claim
+             'transcript_audit': ('not_run_by_the_runner' if frozen_file else 'no_transcript_frozen' if exported else 'not_available'),
              'single_user_message': g['single_user_message'], 'features_enabled': sorted(k for k, v in g['features'].items() if v),
              'tools_enabled': len(g['tools_enabled']), 'prompt_sha256_matches_generator_prompt': True, 'times_within_bounds': True,
              'generation_seconds': round((t1 - t0).total_seconds(), 1), 'window_seconds': round((hi - lo).total_seconds(), 1),
-             'owner_decision_open': 'whether an attested record without a transcript is qualification evidence'}
+             'qualification_transcript_rule': O40_RULE}
     return {'raw': raw, 'facts': facts, 'transcript': transcript}
 
 
 def finish_pre(st, jd, a):
     jd.require_not_frozen()
     jd.require_stage_open('finish', also=('freeze_response',))
+    require_not_interrupted(jd)
     gen = generation_stage(jd)
     if gen is None:
         raise Refused('GENERATION_NOT_PREPARED', 'no stage ended with NEXT: GENERATE')
@@ -1852,7 +1959,7 @@ def packet_pins_problems(jd, gen):
     if o is None or not regular(p) or sha_file(p) != o['sha256']:
         return ['PACKET_PINS_CHANGED']
     if jd.ledger_path is not None:
-        with Ledger(jd.ledger_path) as led:
+        with Ledger(jd.ledger_path, create=False) as led:
             if not led.of('packet_pins', job_dir=str(jd.dir), packet_pins_sha256=o['sha256']):
                 return ['PACKET_PINS_NOT_IN_LEDGER']
     doc = read_json(p, 'PACKET_PINS.json')
@@ -2235,8 +2342,8 @@ def visual_record_pre(st, jd, a):
     raw = expected.read_bytes()
     st.attempt_raw = raw
     st.inputs['review_original'] = {'path': str(p), 'sha256': sha_bytes(raw), 'bytes': len(raw)}
-    if a.reviewer_conversation_id is not None and not nonblank(a.reviewer_conversation_id):
-        raise Refused('REVIEWER_CONVERSATION_ID_REQUIRED', 'a non-empty --reviewer-conversation-id')
+    if a.reviewer_conversation_id is not None and not attested(a.reviewer_conversation_id):
+        raise Refused('REVIEWER_CONVERSATION_ID_REQUIRED', 'a non-empty --reviewer-conversation-id, not a template placeholder')
     pages = read_json(jd.pinned_file('qa/VISUAL_PAGES.json', fin['outputs']['visual_pages']['sha256']), 'VISUAL_PAGES.json')
     saved = read_json(jd.pinned_file('qa/SAVED_QA.json', fin['outputs']['saved_qa']['sha256']), 'SAVED_QA.json')
     mans = {}
@@ -2273,9 +2380,9 @@ def check_review(review, pages, conversation_id=None):
     rv = rv if isinstance(rv, dict) else {}
     if rv.get('kind') != REVIEWER_KIND:
         problems.append('reviewer.kind')
-    problems += ['reviewer.' + k for k in ('model', 'effort') if not nonblank(rv.get(k))]
+    problems += ['reviewer.' + k for k in ('model', 'effort') if not attested(rv.get(k))]
     conv = rv.get('conversation_id')
-    if conv is not None and not nonblank(conv):
+    if conv is not None and not attested(conv):                 # DN14: a copied "<only if your platform shows it>" too
         problems.append('reviewer.conversation_id')
     elif conv is None and conversation_id is None:
         problems.append('reviewer.conversation_id')
@@ -2503,7 +2610,15 @@ def frozen_doc(jd):
             'retry_permitted': False, 'repair_permitted': False}
 
 
-def finish_freeze(jd, completing=False):
+def transcript_summary(jd):
+    """D3 (O40, "the report states how many runs had transcripts"): the frozen generation record's transcript status and
+    whether the transcript file was frozen, carried in the ledger's freeze entry; None when no record was frozen."""
+    fr = jd.done('freeze_response')
+    g = (fr[-1]['facts'].get('generation_record') if fr else None) or None
+    return None if g is None else {'transcript_status': g.get('transcript_status'), 'transcript_file_frozen': g.get('transcript_file_frozen')}
+
+
+def finish_freeze(jd, completing=False, extra=None):
     """R3: FROZEN.json (deterministic: a later freeze recomputes the same bytes), its sha256 in the ledger (qualification)
     before the file is written, then every file and folder read-only, bottom-up, the job folder last."""
     try:
@@ -2511,14 +2626,15 @@ def finish_freeze(jd, completing=False):
         b = dumps(doc)
         fsha = sha_bytes(b)
         if jd.ledger_path is not None:
-            with Ledger(jd.ledger_path) as led:
+            with Ledger(jd.ledger_path, create=False) as led:
                 prior = led.of('freeze', job_dir=str(jd.dir))
                 if prior and prior[-1]['frozen_sha256'] != fsha:
                     raise Refused('FROZEN_LEDGER_MISMATCH', 'the folder differs from the one the ledger recorded as frozen')
                 if not prior:
                     led.append({'type': 'freeze', 'job_dir': str(jd.dir), 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'],
                                 'frozen_sha256': fsha, 'final_stage': jd.done('freeze')[-1]['facts'].get('final_stage'),
-                                'run_record_sha256': doc['run_record_sha256'], 'files': len(doc['files'])})
+                                'run_record_sha256': doc['run_record_sha256'], 'files': len(doc['files']),
+                                'status': jd.rec.get('status'), 'transcript': transcript_summary(jd)})
         tmp = jd.p('.FROZEN.json.tmp')
         if tmp.exists():
             tmp.unlink()
@@ -2532,6 +2648,7 @@ def finish_freeze(jd, completing=False):
         return EXIT_STOP
     out = {'stage': 'freeze', 'result': 'FROZEN', 'codes': [], 'run_record_sha256': doc['run_record_sha256'],
            'frozen_sha256': fsha, 'files': len(doc['files']), 'values_printed': False}
+    out.update(extra or {})
     if completing:
         out['completed_frozen_json_of_the_recorded_freeze'] = True
     print(json.dumps(out, ensure_ascii=False))
@@ -2571,7 +2688,7 @@ def cmd_verify_frozen(a):
     if not jd.p('FROZEN.json').is_file():
         raise Refused('NOT_FROZEN', 'the job folder has no FROZEN.json')
     try:
-        jd.load()
+        jd.load(readonly=True)                              # DN6: never creates, catches up or writes the ledger
         chain = 'verified'
     except Refused as r:
         chain = r.code
@@ -2581,7 +2698,7 @@ def cmd_verify_frozen(a):
     fz = v['fz'] or {}
     if fz.get('qualification'):
         try:
-            with Ledger(Path(str(fz.get('ledger')))) as led:
+            with Ledger(Path(str(fz.get('ledger'))), create=False, readonly=True) as led:
                 e = led.of('freeze', job_dir=str(jd.dir))
                 ledger_ok = bool(e) and e[-1]['frozen_sha256'] == fsha
         except Refused:
@@ -2597,15 +2714,77 @@ def cmd_verify_frozen(a):
     return EXIT_CONTINUE if ok else EXIT_STOP
 
 
-# ------------------------------------------------------------------ nonattempt (qualification rule 6, R11)
+# ------------------------------------------------------------------ interrupt (qualification rule 3, D1)
+def cmd_interrupt(a):
+    jd = open_job(a.job_dir)
+    st = Stage(jd, 'interrupt', a)
+    return run_stage(jd, st, lambda: interrupt_body(st, jd, a), preflight=lambda: interrupt_pre(st, jd, a))
+
+
+def interrupt_pre(st, jd, a):
+    """D1 (protocol rule 3): allowed only in qualification, when the last completed stage printed NEXT: GENERATE or
+    NEXT: SCOPE_READER and no scope reader or generator response is frozen (no freeze_response entry, none of
+    RESPONSE_WITNESSES in the folder); the operator attests the broken conversation's id (optional) and times."""
+    jd.require_not_frozen()
+    jd.require_stage_open('interrupt')
+    if not jd.rec['qualification']:
+        raise Refused('INTERRUPT_QUALIFICATION_ONLY', 'a technical interruption is recorded for qualification jobs (protocol rule 3)')
+    done = [s for s in jd.rec['stages'] if s['completed']]
+    last = done[-1] if done else None
+    if last is None or last['next'] not in ('GENERATE', 'SCOPE_READER'):
+        raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'the last completed stage did not print NEXT: GENERATE or NEXT: SCOPE_READER',
+                                                'last_completed_stage': (last or {}).get('stage'), 'next': (last or {}).get('next')})
+    frozen = [w for w in RESPONSE_WITNESSES if os.path.lexists(jd.p(w))]
+    if jd.stages('freeze_response') or frozen:
+        raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'a scope reader or generator response is frozen', 'frozen': frozen})
+    if not isinstance(a.reason, str) or not TECHNICAL_RE.fullmatch(a.reason):
+        raise Refused('INTERRUPT_REASON', 'an upper-case code TECHNICAL_<CODE>, for example TECHNICAL_CONVERSATION_BROKE')
+    if a.conversation_id is not None and not attested(a.conversation_id):
+        raise Refused('INTERRUPT_CONVERSATION_ID', 'a non-blank conversation id or link, not a template placeholder')
+    t0, t1, lo, hi = parse_utc(a.started_utc), parse_utc(a.ended_utc), parse_utc(last['ended_utc']), parse_utc(st.started)
+    if t0 is None or t1 is None or not (lo <= t0 <= t1 <= hi):
+        raise Refused('INTERRUPTION_TIMES', '--started-utc and --ended-utc (ISO 8601 with Z) lie between the end of the stage '
+                      'that printed NEXT: ' + last['next'] + ' and the start of this command')
+    rel = jd.release()
+    check_release_static(rel, True, st, jd.admission())
+    return {'last': last, 'window': (lo, hi), 'times': (t0, t1)}
+
+
+def interrupt_body(st, jd, a):
+    last, (lo, hi), (t0, t1) = st.pre['last'], st.pre['window'], st.pre['times']
+    role = 'scope_reader' if last['next'] == 'SCOPE_READER' else 'generator'
+    out_dir = jd.p('scope', 'reader', 'output') if role == 'scope_reader' else \
+        jd.p((last['facts'].get('generation') or {}).get('run_dir') or ('run/' + jd.rec['reader']), 'output')
+    t = tree(out_dir)
+    listing = {k: v['sha256'] for k, v in sorted(t['files'].items())} if t else None
+    st.facts['interruption'] = {
+        'protocol_rule': 3, 'reason': a.reason, 'conversation_role': role,
+        'after_stage': {'stage': last['stage'], 'seq': last['seq'], 'next': last['next']},
+        'conversation_id_attested_by_operator': a.conversation_id, 'started_utc': a.started_utc, 'ended_utc': a.ended_utc,
+        'times_within_bounds': True, 'conversation_seconds': round((t1 - t0).total_seconds(), 1),
+        'window_seconds': round((hi - lo).total_seconds(), 1), 'response_frozen': False,
+        'output_folder': jd.rel(out_dir), 'output_files': listing,
+        'response_file_present': bool(listing) and ('response.json' in listing or 'SCOPE_READER_RESPONSE.json' in listing),
+        'note': 'attested by the operator: the runner cannot see the conversation; freeze the folder, then one restart is allowed'}
+    raise Outcome('TECHNICAL_INTERRUPTION', 'STOP_TECHNICAL_INTERRUPTION', [a.reason])
+
+
+# ------------------------------------------------------------------ nonattempt (qualification rule 6, R11, D2)
 def cmd_nonattempt(a):
+    """D2: only a case the pinned JOBS.json marks nonattempt; the reason is JOBS.json's (protocol rule 6's
+    NONATTEMPT_SOURCE_UNAVAILABLE when it names none), and --reason, when given, must equal it. The runner writes and
+    freezes at once a nonattempt folder <jobs-root>/<case id>: input/ (the release, the admission and JOBS.json), a
+    RUN_RECORD.json whose status is the reason, and FROZEN.json, its sha256 in the ledger (ALL_FROZEN.json lists it like
+    any run folder)."""
     for k in ('release', 'admission'):
         if not Path(getattr(a, k)).is_absolute():
             raise Refused('ABSOLUTE_PATH_REQUIRED', {'argument': '--' + k})
+    if a.jobs_root is not None and not Path(a.jobs_root).is_absolute():
+        raise Refused('ABSOLUTE_PATH_REQUIRED', {'argument': '--jobs-root'})
     if a.reader not in ('A', 'B'):
         raise Refused('READER', 'A or B')
-    if not isinstance(a.reason, str) or not REASON_RE.fullmatch(a.reason):
-        raise Refused('NONATTEMPT_REASON', 'an upper-case code such as NONATTEMPT_SOURCE_UNAVAILABLE')
+    if a.reason is not None and not REASON_RE.fullmatch(a.reason):
+        raise Refused('NONATTEMPT_REASON', 'an upper-case code such as NONATTEMPT_SOURCE_UNAVAILABLE, or omit --reason')
     rel_raw = Path(a.release).read_bytes()
     rel = Release(rel_raw, a.release)
     adm_raw = Path(a.admission).read_bytes()
@@ -2614,22 +2793,84 @@ def cmd_nonattempt(a):
     check_release_static(rel, True, probe, adm)
     if not rel.admission_listed(a.admission, adm_raw):
         raise Refused('ADMISSION_NOT_RELEASED', 'the release qualification.admissions must list this admission file by path and sha256')
+    frozen_at = parse_utc(adm.get('frozen_utc'))
+    if frozen_at is None:
+        raise Refused('ADMISSION_FROZEN_UTC')
+    if frozen_at >= datetime.datetime.now(datetime.timezone.utc):
+        raise Refused('ADMISSION_NOT_FROZEN_BEFORE_PREPARE')
     rel.require_qualification_fields()
-    jobs, _ = load_jobs(rel, adm)
-    if a.case not in jobs:
-        raise Refused('QUALIFICATION_CASE_NOT_IN_JOBS')
-    with Ledger(rel.ledger) as led:
+    jobs, jobs_sha, jobs_raw = load_jobs(rel, adm)
+    c = jobs.get(a.case)
+    if c is None:
+        raise Refused('QUALIFICATION_CASE_NOT_IN_JOBS', 'the case is not listed in the pinned JOBS.json')
+    if c.get('nonattempt') is not True:
+        raise Refused('QUALIFICATION_CASE_NOT_NONATTEMPT', 'the pinned JOBS.json does not mark this case nonattempt: run it')
+    reason = c.get('reason') or NONATTEMPT_DEFAULT_REASON
+    source = 'JOBS.json' if c.get('reason') else 'protocol rule 6 (JOBS.json names no reason)'
+    if a.reason is not None and a.reason != reason:
+        raise Refused('NONATTEMPT_REASON_MISMATCH', '--reason differs from the reason JOBS.json gives; omit --reason')
+    jobs_root = Path(a.jobs_root).resolve() if a.jobs_root else rel.ledger.parent / ('nonattempts_' + a.reader)
+    if any(ch.isspace() for ch in str(jobs_root)):
+        raise Refused('JOBS_ROOT_WHITESPACE', 'printed paths must not contain whitespace')
+    if inside(jobs_root, rel.root):
+        raise Refused('JOBS_ROOT_IN_REPOSITORY', 'the jobs root must be outside repository.root')
+    for label, pth in (('--admission', a.admission), ('qualification.ledger', rel.ledger), ('qualification.jobs_file', rel.jobs_file)):
+        if inside(pth, rel.root):
+            raise Refused('JOB_INPUT_IN_REPOSITORY', {'input': label})
+    if inside(rel.ledger, jobs_root):
+        raise Refused('QUALIFICATION_LEDGER_PATH', 'the ledger lies outside the jobs root and every job folder')
+    jd = Job(jobs_root / a.case)
+    if jd.dir.exists():
+        raise Refused('JOB_DIR_EXISTS', 'a job folder is used once')
+    rec = {'schema': RECORD_SCHEMA, 'runner': {'version': VERSION, 'sha256': sha_file(__file__)}, 'case_id': a.case,
+           'reader': a.reader, 'qualification': True, 'created_utc': utc(), 'status': reason,
+           'nonattempt': {'protocol_rule': 6, 'reason': reason, 'reason_source': source, 'jobs_sha256': jobs_sha,
+                          'jobs_order': c.get('order')},
+           'release': dict(rel.summary(), path=os.path.abspath(a.release)), 'job_inputs': None,
+           'deliverable_file_name_sha256': None, 'admission': {'sha256': sha_bytes(adm_raw), 'frozen_utc': adm.get('frozen_utc')},
+           'restart_of': None, 'ledger': str(rel.ledger), 'user_options': 'none: the runner takes no per-user options',
+           'operator_model': a.operator_model, 'stages': []}
+    with Ledger(rel.ledger, create=True) as led:
         if led.of('prepare', case_id=a.case, reader=a.reader):
             raise Refused('QUALIFICATION_RUN_EXISTS', 'this case and reader already have a run')
         if led.of('nonattempt', case_id=a.case, reader=a.reader):
             raise Refused('QUALIFICATION_NONATTEMPT_RECORDED')
-        e = led.append({'type': 'nonattempt', 'case_id': a.case, 'reader': a.reader, 'reason': a.reason,
-                        'admission_sha256': sha_bytes(adm_raw), 'release_sha256': rel.sha, 'operator_model': a.operator_model})
-        lsha = sha_bytes(led.raw)
-    print(json.dumps({'stage': 'nonattempt', 'result': 'NONATTEMPT_RECORDED', 'ledger_seq': e['seq'], 'ledger_sha256': lsha,
-                      'values_printed': False}))
-    print('NEXT: DONE')
-    return EXIT_CONTINUE
+        if any(e.get('job_dir') == str(jd.dir) for e in led.entries):
+            raise Refused('QUALIFICATION_JOB_DIR_REUSED')
+        ledger_admission_order(led, adm)
+        jobs_root.mkdir(parents=True, exist_ok=True)
+        make_nonattempt_folder(jd, rel_raw, adm_raw, jobs_raw, rec)
+        e = led.append({'type': 'nonattempt', 'case_id': a.case, 'reader': a.reader, 'reason': reason, 'reason_source': source,
+                        'jobs_root': str(jobs_root), 'job_dir': str(jd.dir), 'admission_sha256': sha_bytes(adm_raw),
+                        'release_sha256': rel.sha, 'jobs_sha256': jobs_sha, 'operator_model': a.operator_model,
+                        'run_record_sha256': sha_bytes(jd.raw)})
+    jd.ledger_path = rel.ledger
+    st = Stage(jd, 'nonattempt', a)
+    st.facts.update(probe.facts)
+    st.tools.update(probe.tools)
+    for label, rp in (('release', 'RELEASE.json'), ('admission', 'ADMISSION.json'), ('jobs', 'JOBS.json')):
+        st.pin_in(label, jd.p('input', rp))
+    st.facts['nonattempt'] = dict(rec['nonattempt'], ledger_seq=e['seq'])
+    jd.append(st.entry(reason, 'FREEZE', True))
+    fz = Stage(jd, 'freeze', a)
+    fz.facts = {'final_stage': {'stage': 'nonattempt', 'result': reason},
+                'note': 'a nonattempt is frozen at once (protocol rule 6); never touch the folder again'}
+    jd.append(fz.entry('FROZEN', 'DONE', True))
+    return finish_freeze(jd, extra={'stage': 'nonattempt', 'result': 'NONATTEMPT_FROZEN', 'status': reason,
+                                    'nonattempt_ledger_seq': e['seq']})
+
+
+def make_nonattempt_folder(jd, rel_raw, adm_raw, jobs_raw, rec):
+    try:
+        jd.dir.mkdir()
+    except FileExistsError:
+        raise Refused('JOB_DIR_EXISTS', 'a job folder is used once')
+    jd.lock(wait=True)
+    jd.p('input').mkdir()
+    write_new(jd.p('input', 'RELEASE.json'), rel_raw)
+    write_new(jd.p('input', 'ADMISSION.json'), adm_raw)
+    write_new(jd.p('input', 'JOBS.json'), jobs_raw)
+    jd.create(rec)
 
 
 # ------------------------------------------------------------------ stage wrapper and CLI
@@ -2664,12 +2905,24 @@ def run_stage(jd, st, body, preflight=None, on_refused=None):
     except Exception as e:                                  # noqa: BLE001 - recorded; the job stops (no retry)
         result, nxt, completed = 'RUNNER_ERROR', 'STOP_RUNNER_ERROR', True
         st.codes.append(type(e).__name__)
-        try:                                                # N12: the traceback is kept in logs/ (never printed)
-            tb = jd.p('logs', f'{st.seq:02d}_{st.name}_RUNNER_ERROR.traceback.txt')
-            write_new(tb, traceback.format_exc())
-            st.pin_out('runner_error_traceback', tb)
-        except OSError:
-            pass
+        if not jd.frozen():
+            try:                                            # N12: the traceback is kept in logs/ (never printed)
+                tb = jd.p('logs', f'{st.seq:02d}_{st.name}_RUNNER_ERROR.traceback.txt')
+                write_new(tb, traceback.format_exc())
+                st.pin_out('runner_error_traceback', tb)
+            except OSError:
+                pass
+        if not consumed:                                    # DN2: nothing was consumed: a refusal, not a completed stop
+            r = Refused('RUNNER_ERROR', {'error': type(e).__name__, 'note': 'an unexpected error before the stage began '
+                                         'consuming; the traceback is in logs/; fix the cause or tell the owner, then run '
+                                         'the same command again'})
+            st.codes.insert(0, r.code)
+            if not jd.frozen():
+                try:
+                    jd.append(st.entry('REFUSED', None, False))
+                except (Refused, OSError):
+                    pass
+            return refused(r)
     try:
         jd.append(st.entry(result, nxt.split(' ')[0], completed))
     except (Refused, OSError) as e:                         # the marker stays: the next command records INTERRUPTED
@@ -2711,6 +2964,8 @@ def main(argv=None):
     p.add_argument('--job-dir', required=True)
     p.add_argument('--reader-response', required=True)
     p.add_argument('--reader-conversation-id', help='optional: the scope reader conversation, attested by the operator')
+    p.add_argument('--reader-prompt-sha256', help='the sha256 of scope/SCOPE_READER_PROMPT.md, the prompt given to the reader '
+                   '(attested by the operator; required for qualification)')
     p.add_argument('--operator-model')
     p = sub.add_parser('finish', help='freeze the generation record and the response; route check and convert; export; saved QA; visual QA')
     p.add_argument('--job-dir', required=True)
@@ -2729,24 +2984,33 @@ def main(argv=None):
     p = sub.add_parser('deliver-check', help='condition 9 at delivery; prints the one file to deliver')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--operator-model')
+    p = sub.add_parser('interrupt', help='qualification: record a technical interruption of the scope reader or generator '
+                       'conversation before its file was written (protocol rule 3)')
+    p.add_argument('--job-dir', required=True)
+    p.add_argument('--reason', required=True, help='TECHNICAL_<CODE>, for example TECHNICAL_CONVERSATION_BROKE')
+    p.add_argument('--started-utc', required=True, help='when the broken conversation started (ISO 8601 with Z)')
+    p.add_argument('--ended-utc', required=True, help='when it broke (ISO 8601 with Z)')
+    p.add_argument('--conversation-id', help='the broken conversation id or link, attested by the operator')
+    p.add_argument('--operator-model')
     p = sub.add_parser('freeze', help='write FROZEN.json and make every file and folder of the job read-only')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--operator-model')
     p = sub.add_parser('verify-frozen', help='recompute FROZEN.json against the folder (writes nothing)')
     p.add_argument('--job-dir', required=True)
-    p = sub.add_parser('nonattempt', help='qualification: record a nonattempt of a case and reader in the ledger')
+    p = sub.add_parser('nonattempt', help='qualification: freeze a JOBS.json nonattempt of a case and reader at once')
     p.add_argument('--release', required=True)
     p.add_argument('--admission', required=True)
     p.add_argument('--case', required=True)
     p.add_argument('--reader', required=True)
-    p.add_argument('--reason', required=True)
+    p.add_argument('--jobs-root', help='the jobs root of this reader (default: <ledger folder>/nonattempts_<reader>)')
+    p.add_argument('--reason', help='optional: must equal the reason JOBS.json gives')
     p.add_argument('--operator-model')
     a = ap.parse_args(argv)
     if hasattr(a, 'job_dir') and not Path(a.job_dir).is_absolute():
         return refused(Refused('ABSOLUTE_PATH_REQUIRED', {'argument': '--job-dir'}))
     fn = {'prepare': cmd_prepare, 'scope-finish': cmd_scope_finish, 'finish': cmd_finish, 'visual-record': cmd_visual_record,
-          'deliver-check': cmd_deliver_check, 'freeze': cmd_freeze, 'verify-frozen': cmd_verify_frozen,
-          'nonattempt': cmd_nonattempt}[a.cmd]
+          'deliver-check': cmd_deliver_check, 'interrupt': cmd_interrupt, 'freeze': cmd_freeze,
+          'verify-frozen': cmd_verify_frozen, 'nonattempt': cmd_nonattempt}[a.cmd]
     try:
         return fn(a)
     except Refused as r:                    # refused before a job folder could record it
