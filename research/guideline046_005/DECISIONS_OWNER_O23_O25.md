@@ -182,3 +182,40 @@ The creator's own files show the same effect, and she sets widths per job. Acros
 - **Transcripts.** The transcript is added and pinned when the Dot can export one; otherwise it is marked `not_available`. Qualification accepts either.
 - **Reporting.** The qualification report states how many runs had transcripts.
 - **Scope.** The decision is about the evidence of isolation. It does not change the isolation rules themselves.
+
+## O41–O42 (2026-11-06): a static CPS folder, per-user preferences, and qualification on 046g
+
+**Owner's instruction (verbatim):** "This CPS is meant to be the static project folder, the survey and any future instructions are designed to be standing personal preferences inside dots folder different for each user. Make the necessary final file edits and make these instructions clear in the docs. CPS will only return to you for system failures or bugs."
+
+**O41. Question to the owner:** how should a user's standing preferences reach the files they receive?
+**Owner answer:** "Dot personalizes a copy (Recommended)".
+
+**Effect.**
+- **The CPS folder is static.** The Drive folder "CPS" holds the released system: rules, tools, runbooks and release status. It is the same for every user. Only the maintainer changes it, through a new release. The Dot only adds files where a document says so: `setup/`, `qualification/`, `reports/` and the phase-1 example images.
+- **CPS output is the same for everyone.** Every job produces one standard 未填 file, checked by saved QA and visual QA, and kept unchanged in the job record.
+- **Preferences belong to each user.** Each user's survey answers and later standing instructions are kept in their own profile folder in the Dots folder, outside CPS (`CPS_PREFERENCES.md`). They are never CPS rules, never sent to the maintainer, and never applied to another user.
+- **The personal copy.** For an everyday job, after the delivery check names the standard file, the Dot copies it and applies the requesting user's standing preferences.
+  - A change may only use values from the standard file, the job inputs or the preference text.
+  - Every change is logged in `PERSONALIZATION_LOG.json` (`cps.personal-copy-log.v1`), with the standard file's sha256 and the profile's sha256, and checked cell by cell against the standard file.
+  - The user receives the personal copy.
+- **Qualification measures only the standard file.** No preferences, personal copies or survey answers enter a qualification job.
+- **No survey-driven rule change.** Survey answers no longer feed a new rule candidate. `PLAN_046h.md` is superseded as a survey plan (see its header). A later candidate is built only to fix a reported system failure or bug.
+
+**O42. Question to the owner:** with preferences outside CPS, should qualification still run before everyday use, and on which rules?
+**Owner answer:** "Keep qualification (Recommended)".
+
+**Effect.**
+- **What qualification runs.** The frozen rules 046g, the admitted writer v2.8.2 (ADMISSION_WRITER_V28.json) and runner v4 (ADMISSION_RUNNER_V4.json), on the Dot's admitted VM. The bar is unchanged (O12, O31).
+- **Scoring.** The maintainer scores the frozen runs once, in a separate evaluation role, with the frozen evaluator v4 and gate aggregator v2. `RELEASED_FOR_USE` is set only on a pass.
+- **After that, the maintainer is involved only for failures or bugs.** The Dot's documents name the only hand-backs:
+  - A, the setup report, once;
+  - B, qualification generation complete, once;
+  - C, a system failure or a bug, any time, with evidence uploaded to `reports/`.
+- **What counts as a bug** is defined in the Dot's `07_MAINTAINER_HANDBACK.md`:
+  - a runner stop it cannot explain;
+  - a stage failure on a normal job;
+  - a standard file wrong against its source;
+  - a broken tool;
+  - a document that does not match the system.
+  A difference from what a user prefers is not a bug. It stays a standing preference.
+- **Not changed.** The exclusions, WT-A5 closure, the 38 reserved projects, the deployment thresholds and every frozen output.

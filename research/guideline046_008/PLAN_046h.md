@@ -1,5 +1,7 @@
 # Plan for candidate 046h (draft, 2026-11-06)
 
+> **Superseded as a survey plan (2026-11-06, owner decisions O41 and O42).** Survey answers and later instructions are each user's standing preferences. The Dot applies them to that user's personal copy of the standard file. They do not change CPS rules. Qualification runs on the frozen 046g. No survey-driven 046h will be built. A later candidate is built only to fix a reported system failure or bug. The plan below is kept as written, as a record. Its section B findings are kept as a backlog for that case. See `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O41–O42.
+
 046h is the next candidate after frozen 046g. Its purpose is to fold in the creator's survey answers (the Dot's hand-back, `04_handback/HANDBACK.md`) and the generic findings of the 046g development trial (`docs/handoff/RESULTS_046G_DEVTRIAL.md`).
 
 It is the candidate that qualification will run. So it is built, reviewed and frozen once, after the survey, and its route tests and harness are re-run before the qualification release.

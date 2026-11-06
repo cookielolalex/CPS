@@ -1,3 +1,18 @@
+# Status addendum — 2026-11-06 (later): static CPS folder and personal preferences (O41, O42)
+
+- **Owner's instruction.** The CPS folder is the static project folder. The survey answers and any later instructions are standing personal preferences, kept in the Dots folder and different for each user. CPS returns to the maintainer only for system failures or bugs.
+- **O41: the Dot personalizes a copy.** CPS produces and checks one standard file per job, the same for every user. The Dot copies it, applies the requesting user's standing preferences, logs every change (`cps.personal-copy-log.v1`) and sends the copy. The standard file stays in the job record. Preferences never change CPS and are never sent to the maintainer.
+- **O42: qualification is kept, on the frozen 046g** with writer v2.8.2 and runner v4. The maintainer scores it once and sets `RELEASED_FOR_USE` only on a pass. After that the maintainer is involved only for failures or bugs (hand-back case C, evidence in `reports/`).
+- **046h.** No survey-driven 046h. `research/guideline046_008/PLAN_046h.md` is marked superseded as a survey plan; its section B is kept as a backlog for a bug-fix candidate.
+- **Dot documents rewritten** in the Drive folder "CPS". New `09_PERSONAL_COPY.md`. Each user's profile is `<user profile folder>/CPS_PREFERENCES.md`, outside CPS. The empty `OPTIONS.json` mechanism and `04_handback/` are superseded. Model summary: [DEPLOYMENT_MODEL.md](DEPLOYMENT_MODEL.md).
+- **Next.**
+  1. The Dot's Phase 1 setup report.
+  2. Admit the VM node and stage the qualification jobs.
+  3. Publish `RELEASED_FOR_QUALIFICATION`.
+  4. After the Dot's hand-back B, score once.
+
+---
+
 # Status addendum — 2026-11-06: dev trial, writer v2.8.2 and runner admitted, Dot setup ready
 
 - **Dot setup.** The Dot's VM has no root and has Node 24. `deploy/setup_vm_user.sh` (commit `01eaf23`) installs everything under `~/cps-tools`, and was tested as an unprivileged user. The Drive folder "CPS" (in "Dots Folder") has the new `cps_runtime/RUN_PHASE1.md`. The owner relays the Phase 1 rerun; the survey is on hold until CPS can run right after it.

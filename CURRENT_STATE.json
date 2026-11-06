@@ -442,7 +442,30 @@
  },
  "owner_decisions_2026_11_06": {
   "O39": "delivered columns widen to fit; O38 widths are minimums; default font 新細明體 11 (owner-confirmed)",
-  "O40": "attested generation record accepted for qualification; transcript when exportable; count reported"
+  "O40": "attested generation record accepted for qualification; transcript when exportable; count reported",
+  "O41": "static CPS folder; each user's survey answers and later instructions are standing preferences in their own profile folder in the Dots folder; the Dot applies them to a logged personal copy of the standard file; never CPS rules, never sent to the maintainer",
+  "O42": "keep qualification on frozen 046g with writer v2.8.2 and runner v4; maintainer scores once; RELEASED_FOR_USE only on a pass; afterwards the maintainer is involved only for system failures or bugs"
  },
- "next_candidate_plan": "research/guideline046_008/PLAN_046h.md"
+ "next_candidate_plan": {
+  "path": "research/guideline046_008/PLAN_046h.md",
+  "status": "SUPERSEDED_AS_SURVEY_PLAN (O41, O42): no survey-driven 046h; a later candidate only to fix a reported system failure or bug; section B kept as backlog"
+ },
+ "deployment_model": {
+  "doc": "docs/handoff/DEPLOYMENT_MODEL.md",
+  "decisions": [
+   "O36",
+   "O37",
+   "O41",
+   "O42"
+  ],
+  "cps_folder": "static release folder in Drive (Dots Folder/CPS); the Dot only adds files in setup/, qualification/, reports/ and the phase-1 example images",
+  "preferences": "per user, outside CPS: <user profile folder>/CPS_PREFERENCES.md; applied only to that user's personal copy (cps.personal-copy-log.v1)",
+  "qualification": "standard file only; no preferences",
+  "maintainer_handbacks": [
+   "A setup report (once)",
+   "B qualification generation complete (once)",
+   "C system failure or bug (any time; evidence in reports/)"
+  ],
+  "release_status": "SETUP_ONLY (Drive cps_runtime/RELEASE.json); next RELEASED_FOR_QUALIFICATION after the Dot's setup report, then RELEASED_FOR_USE only on a recorded pass"
+ }
 }
