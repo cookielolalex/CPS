@@ -30,7 +30,7 @@ JOB_BUSY; the tools a stage runs hold it too) and verifies the hash chain of <jo
 that completed (with any result, a recorded failure or an interruption included) is never run again in the same job
 folder. A qualification job is also mirrored, entry by entry, in the qualification ledger the release names (outside
 every job folder), which allows one run per case and reader, and one restart after a technical interruption.
-Visual QA (writer admission ADMISSION_WRITER_V28.json, visual_qa v4.4): the delivered workbook is rendered without --dpi,
+Visual QA (writer admission ADMISSION_WRITER_V28.json, admitted; visual_qa v4.5): the delivered workbook is rendered without --dpi,
 and the reviewer prompt lists every tile of every delivered page; every page image and tile is re-checked at visual-record.
 The last line printed is the next step: NEXT: SCOPE_READER, GENERATE, OWNER_DECISION, VISUAL_REVIEW, DELIVER_CHECK,
 FREEZE, DELIVER, DONE or STOP_<reason>.
@@ -91,6 +91,9 @@ EXTERNAL_TOOLS = (('soffice', '--version'), ('pdftoppm', '-v'), ('pdfinfo', '-v'
 MARKER_NAME = '.STAGE_IN_PROGRESS.json'
 # D1: a scope reader or generator response frozen in a job folder (a run that froze one is never restarted)
 RESPONSE_WITNESSES = ('scope/SCOPE_READER_RESPONSE.json', 'response/response.json', 'response/GENERATION_RECORD.json')
+# E1: a response file the broken conversation wrote (a run whose FROZEN.json lists one is never restarted either)
+WRITTEN_RESPONSES = ('scope/reader/output/SCOPE_READER_RESPONSE.json', 'run/A/output/response.json', 'run/B/output/response.json',
+                     'interrupted/generator_output/response.json')
 # R2: a stage's frozen outputs; one that exists while the stage has no completed entry refuses the stage
 STAGE_WITNESSES = {'scope-finish': ('scope/SCOPE_READER_RESPONSE.json', 'scope/decision'),
                    'finish': ('response/response.json', 'response/GENERATION_RECORD.json', 'carrier/convert'),
@@ -331,7 +334,9 @@ class Release:
         np_ = get(d, 'source_prep', 'node_path', required=False, kind=str)
         self.node_path = self.path(np_) if np_ else None
         self.writer_admission = self.path(get(d, 'writer', 'admission', kind=str))
-        self.writer_admission_sha = get(d, 'writer', 'admission_sha256', required=False, kind=str)
+        self.writer_admission_sha = get(d, 'writer', 'admission_sha256', kind=str)      # E2: required in every release
+        if not is_sha(self.writer_admission_sha):
+            raise Refused('RELEASE_FIELD_TYPE', {'field': 'writer.admission_sha256'})
         self.writer_dir = self.path(get(d, 'writer', 'writer_dir', kind=str))
         self.admitted_nodes = get(d, 'admitted_checker_node_sha256', kind=list)
         self.clean_path = get(d, 'saved_qa_clean_path', required=False, kind=str) or '/usr/bin:/bin'
@@ -491,17 +496,44 @@ def check_package(rel, st):
 
 
 def load_writer_admission(rel):
+    """The writer admission the release names, by its required pin (E2), its schema and its status ADMITTED."""
     if not rel.writer_admission.is_file():
         raise Refused('WRITER_ADMISSION_MISSING')
     raw = rel.writer_admission.read_bytes()
-    if rel.writer_admission_sha and sha_bytes(raw) != rel.writer_admission_sha:
+    if sha_bytes(raw) != rel.writer_admission_sha:
         raise Refused('WRITER_ADMISSION_SHA256_MISMATCH')
     adm = strict_json(raw, 'writer admission')
     if adm.get('schema') != WRITER_ADMISSION_SCHEMA:
         raise Refused('WRITER_ADMISSION_SCHEMA')
-    if adm.get('status') != 'ADMITTED':        # integration: a provisional admission, or one that records no status, is refused
+    if adm.get('status') != 'ADMITTED':        # a provisional admission, or one that records no status, is refused
         raise Refused('WRITER_ADMISSION_NOT_ADMITTED', {'status': adm.get('status')})
     return adm, sha_bytes(raw)
+
+
+def writer_admission_live(rel, qual_adm=None):
+    """E2: re-read the writer admission the release names, as R9 re-reads the live release: at visual-record and
+    deliver-check (and finish) it must still say status ADMITTED and have the release's pinned sha256 (in qualification
+    also the qualification admission's pin of it), so an admission withdrawn or edited after finish stops the job, with
+    nothing consumed."""
+    try:
+        raw = rel.writer_admission.read_bytes()
+        d = strict_json(raw, 'writer admission')
+    except (OSError, Refused):
+        raise Refused('WRITER_ADMISSION_MISSING', 'the writer admission the release names cannot be read as JSON')
+    d = d if isinstance(d, dict) else {}
+    facts = {'path': str(rel.writer_admission), 'sha256': sha_bytes(raw), 'release_pin': rel.writer_admission_sha,
+             'status': d.get('status') if isinstance(d.get('status'), str) else None}
+    if d.get('status') != 'ADMITTED':
+        raise Refused('WRITER_ADMISSION_NOT_ADMITTED', {'status': facts['status']})
+    if facts['sha256'] != rel.writer_admission_sha:
+        raise Refused('WRITER_ADMISSION_SHA256_MISMATCH', 'the writer admission differs from writer.admission_sha256')
+    if qual_adm is not None:
+        label = rel.label(rel.writer_admission)
+        pin = ((qual_adm.get('pins') or {}).get(label) or {}).get('sha256')
+        if pin != facts['sha256']:
+            raise Refused('ADMISSION_MISSING_PINS', {'mismatched': [label]})
+        facts['qualification_admission_pin'] = True
+    return facts
 
 
 def checker_node(rel, adm):
@@ -562,6 +594,14 @@ def check_writer_dir(rel, adm):
     if bad:
         raise Refused('WRITER_DIR_NOT_PINNED', {'files': bad})
     return out
+
+
+def lxml_version(adm):
+    """EN6: the lxml the tools import with this python3 (recorded, with the version the writer admission lists)."""
+    p = subprocess.run(py('-I', '-B') + ['-c', 'import lxml; print(lxml.__version__)'], capture_output=True, timeout=120)
+    v = p.stdout.decode('ascii', 'replace').strip() if p.returncode == 0 else None
+    want = (adm.get('environment') or {}).get('lxml') if isinstance(adm, dict) else None
+    return {'version': v or None, 'admission_environment': want, 'matches_admission': v == want if want else None}
 
 
 def check_openpyxl():
@@ -627,6 +667,7 @@ def export_preflight(rel, st):
     st.facts['export_tools_condition3'] = {k: v['match'] for k, v in tools.items() if v['required']}
     st.facts['writer_dir_condition4'] = check_writer_dir(rel, adm)
     st.facts['openpyxl'] = check_openpyxl()
+    st.facts['lxml'] = lxml_version(adm)                     # EN6: recorded with openpyxl (V28 environment), not enforced
     st.facts['external_tools'] = external_tools()
     st.facts['python'] = {'executable': sys.executable, 'realpath': os.path.realpath(sys.executable),
                           'version': sys.version.split()[0], 'implementation': sys.implementation.name}       # DN9
@@ -795,7 +836,8 @@ def restart_problem(led, prev):
     froze no scope reader or generator response (no freeze_response entry in the ledger; none of RESPONSE_WITNESSES in
     its FROZEN.json, whose sha256 is the ledger's freeze entry) and its last completed stage before freeze ended in a
     stop: a recorded technical interruption (NEXT: STOP_TECHNICAL_INTERRUPTION), an INTERRUPTED stage, or a technical
-    STOP_ reached before any response."""
+    STOP_ reached before any response. E1: a FROZEN.json that lists a written response file (WRITTEN_RESPONSES) is not
+    restartable either."""
     fz = led.of('freeze', job_dir=prev)
     if not fz:
         return 'the earlier run is not frozen'
@@ -817,6 +859,8 @@ def restart_problem(led, prev):
         return "the earlier folder's FROZEN.json is not the one the ledger recorded"
     if listed & set(RESPONSE_WITNESSES):
         return 'the earlier run froze a scope reader or generator response'
+    if listed & set(WRITTEN_RESPONSES):                      # E1: written, even if never submitted
+        return 'the earlier run\'s conversation wrote its response file (rule 3 restarts only before the response is written)'
     return None
 
 
@@ -1910,6 +1954,7 @@ def finish_pre(st, jd, a):
     check_release_static(rel, jd.rec['qualification'], st, jd.admission())
     st.facts['live_release'] = check_live_release(jd)
     adm, adm_sha, node, tools = export_preflight(rel, st)
+    st.facts['writer_admission_live'] = writer_admission_live(rel, jd.admission())           # E2
     title_rec = jd.pinned_file('input/JOB_TITLE.json', jd.rec['job_inputs']['job_title_sha256'])
     title = read_json(title_rec, 'JOB_TITLE.json')['job_title']
     if a.job_title is not None and a.job_title != title:
@@ -2147,7 +2192,7 @@ def finish_body(st, jd, a):
         st.facts['visual_qa_dpi'][key] = {'dpi_argument_given': False, 'dpi': (man or {}).get('dpi'), 'dpi_rule': (man or {}).get('dpi_rule')}
         ev.add('8.render_' + key, f'visual QA of the {key} workbook: manifest saved_xlsx.sha256 equals SAVED_QA.json '
                + ('deliverable_xlsx.sha256' if key == 'deliverable' else 'xlsx.sha256') + ', unchanged after render, complete render'
-               + ('; every page has its tiles (visual_qa v4.4, F3)' if key == 'deliverable' else ''),
+               + ('; every page has its tiles (visual_qa v4.5, F3)' if key == 'deliverable' else ''),
                {'exit': code, 'manifest_saved_xlsx_sha256': sx.get('sha256'), 'saved_qa_sha256': saved_sha,
                 'complete_render': (man or {}).get('complete_render'), 'pages': (man or {}).get('pages'),
                 **({'tiles': tiles_summary(man), 'tile_problems': tp} if key == 'deliverable' else {})}, ok and not tp)
@@ -2275,7 +2320,7 @@ def tile_file_ok(name):
 
 
 def deliverable_tile_problems(man):
-    """F3 (visual_qa v4.4): the delivered workbook's manifest has a tiles block, every page has a non-empty tiles list of
+    """F3 (visual_qa v4.5): the delivered workbook's manifest has a tiles block, every page has a non-empty tiles list of
     complete entries, and the block's count is their total."""
     if man is None:
         return []
@@ -2303,7 +2348,8 @@ def legibility_bound_exceeded(man):
 
 def tiles_summary(man):
     tb = (man or {}).get('tiles')
-    return {k: tb.get(k) for k in ('count', 'total_width', 'legibility_bound_exceeded')} if isinstance(tb, dict) else None
+    return ({k: tb.get(k) for k in ('count', 'total_width', 'glyph_px_min_page_median', 'legibility_bound_exceeded')}
+            if isinstance(tb, dict) else None)
 
 
 def select_pages(jd, vis):
@@ -2430,6 +2476,7 @@ def visual_record_pre(st, jd, a):
         raise Refused('VISUAL_REVIEW_NOT_OPEN', 'finish did not end with NEXT: VISUAL_REVIEW')
     rel = jd.release()
     check_release_static(rel, jd.rec['qualification'], st, jd.admission())
+    st.facts['writer_admission_live'] = writer_admission_live(rel, jd.admission())           # E2: still admitted and pinned
     p = Path(a.review)
     if not p.is_absolute() or not p.is_file():
         raise Refused('REVIEW_REQUIRED', 'an absolute path to VISUAL_REVIEW.json')
@@ -2630,6 +2677,7 @@ def deliver_pre(st, jd):
         raise Refused('VISUAL_REVIEW_NOT_PASSED')
     check_release_static(rel, False, st, None)
     st.facts['live_release'] = check_live_release(jd)          # R9: a withdrawn release never delivers
+    st.facts['writer_admission_live'] = writer_admission_live(rel)   # E2: nor does a withdrawn or edited writer admission
     fin = finish_entry(jd)
     saved = read_json(jd.pinned_file('qa/SAVED_QA.json', fin['outputs']['saved_qa']['sha256']), 'SAVED_QA.json')
     evd = read_json(jd.pinned_file('qa/QA_EVIDENCE.json', fin['outputs']['qa_evidence']['sha256']), 'QA_EVIDENCE.json')
@@ -2822,8 +2870,29 @@ def cmd_verify_frozen(a):
 # ------------------------------------------------------------------ interrupt (qualification rule 3, D1)
 def cmd_interrupt(a):
     jd = open_job(a.job_dir)
+    w = written_response(jd) if jd.rec['qualification'] and not jd.frozen() else None
+    if w is not None:                                       # E1: refused with nothing appended (record and ledger unchanged)
+        return refused(Refused('RESPONSE_WRITTEN', {'file': w, 'note': 'protocol rule 3 restarts only an interruption before the '
+                                                    'response is written: go on with the written file (scope-finish or finish)'}))
     st = Stage(jd, 'interrupt', a)
     return run_stage(jd, st, lambda: interrupt_body(st, jd, a), preflight=lambda: interrupt_pre(st, jd, a))
+
+
+def written_response(jd):
+    """E1 (protocol rule 3: "before the response is written"): the file the broken conversation would have written, when it
+    exists, for the conversation the last completed stage started: scope/reader/output/SCOPE_READER_RESPONSE.json after
+    NEXT: SCOPE_READER, run/<reader>/output/response.json after NEXT: GENERATE. A partly written or unreadable file is a
+    written file. None otherwise."""
+    done = [x for x in jd.rec['stages'] if x['completed']]
+    nxt = done[-1]['next'] if done else None
+    if nxt == 'SCOPE_READER':
+        rel_path = 'scope/reader/output/SCOPE_READER_RESPONSE.json'
+    elif nxt == 'GENERATE':
+        gen = generation_stage(jd)
+        rel_path = ((gen or {}).get('facts', {}).get('generation') or {}).get('response_path') or f'run/{jd.rec["reader"]}/output/response.json'
+    else:
+        return None
+    return rel_path if os.path.lexists(jd.p(rel_path)) else None
 
 
 def restart_used_here(jd):

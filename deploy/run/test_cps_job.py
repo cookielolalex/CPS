@@ -9,7 +9,8 @@ admissions, ledgers, generation records and release files, then runs the runner'
 finish, visual-record, deliver-check, scope-finish, interrupt, freeze, verify-frozen and nonattempt, with the negative
 cases (one test or more for each finding R1-R13 and each fixed note of the 2026-11-06 review, for each finding D1-D3
 and each fixed note DN1-DN14 of the 2026-11-06 delta review, and for the export v2.8.2 integration: V28, the in-place
-restart of protocol rule 3, the delivered tiles of visual_qa v4.4, F2 and the O40 record). No private data is read or written.
+restart of protocol rule 3, the delivered tiles of visual_qa v4.5, F2 and the O40 record; E1, E2, EN1, EN4 and EN6 of the
+final delta review). No private data is read or written.
 
 Usage: python3 -I -B deploy/run/test_cps_job.py --work /abs/NEW_DIR
          [--writer-dir /abs/deploy/writer_route/writer] [--node /opt/node22/bin/node] [--node-sha256 HEX] [--node-path DIR]
@@ -276,7 +277,10 @@ def setup(t):
         {'case_id': '9990044', 'order': 9, 'nonattempt': True, 'reason': 'NONATTEMPT_SOURCE_UNAVAILABLE'},
         {'case_id': '9990045', 'order': 10, 'nonattempt': True},
         # the in-place restart of protocol rule 3 after an agreed scope (a large invented workbook)
-        {'case_id': '9990046', 'order': 11, 'nonattempt': False}]}
+        {'case_id': '9990046', 'order': 11, 'nonattempt': False},
+        # E1: a written generator response, a written scope reader file, a response written after the interruption
+        {'case_id': '9990047', 'order': 12, 'nonattempt': False}, {'case_id': '9990048', 'order': 13, 'nonattempt': False},
+        {'case_id': '9990049', 'order': 14, 'nonattempt': False}]}
     t.jobs_path = w / 'qualification' / 'JOBS.json'
     t.jobs_path.write_text(json.dumps(jobs, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
 
@@ -452,6 +456,11 @@ def test_real_job(t):
             lambda: pr['facts']['deps_bundle']['openpyxl'] == {'version': '3.1.5', 'from_bundle': True}
             and set(pr['facts']['external_tools']) == {'soffice', 'pdftoppm', 'pdfinfo', 'pdftotext', 'node'},
             lambda: json.dumps(pr['facts'].get('deps_bundle')))
+    lx = subprocess.run([sys.executable, '-I', '-c', 'import lxml; print(lxml.__version__)'], capture_output=True, text=True).stdout.strip()
+    adm_env = json.loads((REPO / WRITER_ADMISSION).read_text(encoding='utf-8'))['environment']['lxml']
+    t.check('EN6: prepare records lxml with openpyxl (the version this python3 imports, and the one the writer admission lists)',
+            lambda: pr['facts']['lxml'] == {'version': lx, 'admission_environment': adm_env, 'matches_admission': lx == adm_env}
+            and pr['facts']['openpyxl'] == '3.1.5', lambda: json.dumps(pr['facts'].get('lxml')))
     t.check('DN9: prepare records the interpreter (path, realpath, version) and the names, never the values, of the tool environment',
             lambda: pr['facts']['python']['version'] == sys.version.split()[0] and pr['facts']['python']['realpath'] == os.path.realpath(sys.executable)
             and 'PATH' in pr['facts']['tool_env_names'] and all(isinstance(k, str) for k in pr['facts']['tool_env_names'])
@@ -557,7 +566,12 @@ def test_node_and_tamper(t):
     """9990002: a checker node whose binary changed after prepare is refused at finish (nothing consumed); after it is
     restored, finish runs; R6 (reviewer kind and conversation id), N2 (refused attempts kept) and N3 (fixed review path);
     a tampered delivered file fails deliver-check."""
-    code, out, last, jd = prepare(t, '9990002')
+    acopy = t.work / 'adm_copy_9990002' / 'ADMISSION_WRITER_V28.json'      # E2: a pinned copy the test can withdraw
+    acopy.parent.mkdir()
+    acopy.write_bytes((REPO / WRITER_ADMISSION).read_bytes())
+    rel_e2 = write_release(t, 'RELEASE_9990002.json', dict(t.release, writer=dict(t.release['writer'], admission=str(acopy),
+                                                                                    admission_sha256=sha_file(acopy))))
+    code, out, last, jd = prepare(t, '9990002', release=rel_e2)
     resp = stand_in_response(t, jd, '9990002')
     link = t.work / 'nodelink' / 'node'
     link.unlink()
@@ -598,11 +612,27 @@ def test_node_and_tamper(t):
     code, _, last = t.runner('visual-record', '--job-dir', jd, '--review', full)
     t.check('R6: a fresh-context review with no conversation id (review or --reviewer-conversation-id) is refused',
             lambda: code == 4 and last == 'REFUSED: REVIEWER_CONVERSATION_ID_REQUIRED', last)
+    good_adm = acopy.read_bytes()
+    acopy.write_bytes(good_adm.replace(b'"decision": "', b'"decision": "INVENTED EDIT. ', 1))
+    code, _, last = t.runner('visual-record', '--job-dir', jd, '--review', full, '--reviewer-conversation-id', 'invented-operator-attested-id')
+    acopy.write_bytes(good_adm)
+    t.check('E2: visual-record re-reads the writer admission: one edited after finish is refused WRITER_ADMISSION_SHA256_MISMATCH, '
+            'not completed, nothing frozen', lambda: code == 4 and last == 'REFUSED: WRITER_ADMISSION_SHA256_MISMATCH'
+            and not stages(jd, 'visual-record')[-1]['completed'] and not (jd / 'qa' / 'VISUAL_REVIEW.json').exists(), last)
     code, _, last = t.runner('visual-record', '--job-dir', jd, '--review', full, '--reviewer-conversation-id', 'invented-operator-attested-id')
     vrec = json.loads((jd / 'qa' / 'VISUAL_RECORD.json').read_text(encoding='utf-8')) if (jd / 'qa' / 'VISUAL_RECORD.json').is_file() else {}
     t.check('R6: with the operator-attested --reviewer-conversation-id the review is recorded PASS, NEXT: DELIVER_CHECK',
             lambda: code == 0 and last == 'NEXT: DELIVER_CHECK' and vrec.get('reviewer_conversation_id') == 'invented-operator-attested-id'
             and vrec.get('reviewer_conversation_id_source', '').startswith('operator'), last)
+    wd = json.loads(good_adm.decode('utf-8'))
+    wd['status'] = 'WITHDRAWN'
+    acopy.write_text(json.dumps(wd, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    code, _, last = t.runner('deliver-check', '--job-dir', jd)
+    acopy.write_bytes(good_adm)
+    t.check('E2: a writer admission whose status is changed to WITHDRAWN after visual-record stops deliver-check '
+            '(WRITER_ADMISSION_NOT_ADMITTED, not completed, no DELIVERY_CHECK.json)', lambda: code == 4
+            and last == 'REFUSED: WRITER_ADMISSION_NOT_ADMITTED' and not stages(jd, 'deliver-check')[-1]['completed']
+            and not (jd / 'qa' / 'DELIVERY_CHECK.json').exists(), last)
     saved = json.loads((jd / 'qa' / 'SAVED_QA.json').read_text(encoding='utf-8'))
     f = jd / 'export' / 'writer' / saved['deliverable_xlsx']['file']
     force_write(f, f.read_bytes() + b'\0')
@@ -657,6 +687,22 @@ def test_prepare_refusals(t):
     code, _, last, jd = prepare(t, '9990020', release=bad)
     t.check('integration: a writer admission whose status is not ADMITTED (a provisional one) is refused WRITER_ADMISSION_NOT_ADMITTED, '
             'no job folder', lambda: code == 4 and last == 'REFUSED: WRITER_ADMISSION_NOT_ADMITTED' and not jd.exists(), last)
+    nopin = write_release(t, 'RELEASE_NO_ADMISSION_PIN.json', dict(rel, writer={k: v for k, v in rel['writer'].items() if k != 'admission_sha256'}))
+    code, out, last, jd = prepare(t, '9990027', release=nopin)
+    t.check('E2: a release without writer.admission_sha256 is refused RELEASE_FIELD_MISSING, no job folder', lambda: code == 4
+            and last == 'REFUSED: RELEASE_FIELD_MISSING' and last_json(out).get('detail', {}).get('field') == 'writer.admission_sha256'
+            and not jd.exists(), last)
+    edited = json.loads((REPO / WRITER_ADMISSION).read_text(encoding='utf-8'))
+    edited.update(status='ADMITTED', decision='INVENTED: a provisional record whose status was edited to ADMITTED')
+    edited_p = t.work / 'ADMISSION_WRITER_EDITED_COPY.json'
+    edited_p.write_text(json.dumps(edited, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    code, out, last, jd = prepare(t, '9990028', release=write_release(t, 'RELEASE_EDITED_ADMISSION_NOPIN.json', dict(
+        rel, writer={**{k: v for k, v in rel['writer'].items() if k != 'admission_sha256'}, 'admission': str(edited_p)})))
+    code2, _, last2, jd2 = prepare(t, '9990029', release=write_release(t, 'RELEASE_EDITED_ADMISSION_PIN.json', dict(
+        rel, writer=dict(rel['writer'], admission=str(edited_p)))))
+    t.check('E2: a copied writer admission with its status edited to ADMITTED is refused: without a pin RELEASE_FIELD_MISSING, with the '
+            'admitted file\'s pin WRITER_ADMISSION_SHA256_MISMATCH; no job folder', lambda: code == 4 and last == 'REFUSED: RELEASE_FIELD_MISSING'
+            and code2 == 4 and last2 == 'REFUSED: WRITER_ADMISSION_SHA256_MISMATCH' and not jd.exists() and not jd2.exists(), lambda: f'{last} / {last2}')
     inside_repo = REPO / 'deploy' / 'run' / '_invented_jobs_root_must_not_be_created'
     jp, tp = job_files(t, '9990019')
     code, _, last = t.runner('prepare', '--release', t.release_path, '--job', jp, '--job-title-file', tp, '--jobs-root', inside_repo)
@@ -1831,6 +1877,13 @@ def test_int_inplace(t):
     out_dir = jd / 'run' / 'A' / 'output'
     safe(lambda: (out_dir / 'scratch').mkdir())
     safe(lambda: (out_dir / 'scratch' / 'partial.txt').write_text('invented scratch of the broken conversation\n', encoding='utf-8'))
+    resp_w = safe(lambda: stand_in_response(t, jd, case))
+    rec_b, led_b = safe(lambda: (jd / 'RUN_RECORD.json').read_bytes()), safe(lambda: L.read_bytes())
+    code, _, last = interrupt(t, jd, reason='TECHNICAL_PLATFORM_ERROR')
+    t.check('E1: in place, after an agreed scope, interrupt is refused RESPONSE_WRITTEN once the generator wrote response.json; nothing '
+            'appended, nothing set aside', lambda: code == 4 and last == 'REFUSED: RESPONSE_WRITTEN'
+            and (jd / 'RUN_RECORD.json').read_bytes() == rec_b and L.read_bytes() == led_b and not (jd / 'interrupted').exists(), last)
+    safe(lambda: resp_w.unlink())                           # test only: the scenario below is a conversation that wrote no response
     code, out, last = interrupt(t, jd, reason='TECHNICAL_PLATFORM_ERROR')
     it = safe(lambda: [s for s in stages(jd, 'interrupt') if s['completed']][-1], {})
     aside = jd / 'interrupted' / 'generator_output'
@@ -1986,6 +2039,91 @@ def test_docs_int(t):
             and 'recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`' in doc)
 
 
+def test_e1_written(t):
+    """E1 (protocol rule 3, "before the response is written"): once the broken conversation wrote its file, interrupt is
+    refused with nothing appended and the file goes through finish or scope-finish; a run whose FROZEN.json lists a written
+    file is not restarted."""
+    L = t.work / 'qualification' / 'LEDGER_e1.jsonl'
+    cases = {c: job_files(t, c, source=t.paths['large'] if c == '9990048' else None) for c in ('9990047', '9990048', '9990049')}
+    adms = {c: admission(t, c, *cases[c]) for c in cases}
+    rq = qual_release(t, 'RELEASE_QUAL_E1.json', list(adms.values()), L)
+    # 9990047: the generator wrote its response, then the operator calls it a technical break
+    code, _, last = qprepare(t, rq, *cases['9990047'], 'qe_A', 'A', adms['9990047'])
+    jd = t.work / 'qe_A' / '9990047'
+    resp = safe(lambda: stand_in_response(t, jd, '9990047', break_it=True))
+    rec_b, led_b = safe(lambda: (jd / 'RUN_RECORD.json').read_bytes()), safe(lambda: L.read_bytes())
+    code, out, last = interrupt(t, jd)
+    t.check('E1: after NEXT: GENERATE, interrupt is refused RESPONSE_WRITTEN once the generator wrote run/<reader>/output/response.json, '
+            'with nothing appended (record and ledger unchanged)', lambda: code == 4 and last == 'REFUSED: RESPONSE_WRITTEN'
+            and last_json(out).get('detail', {}).get('file') == 'run/A/output/response.json'
+            and (jd / 'RUN_RECORD.json').read_bytes() == rec_b and L.read_bytes() == led_b, last)
+    g = safe(lambda: generation_record(jd, '9990047'))
+    code, _, last = t.runner('finish', '--job-dir', jd, '--response', resp, '--generator-model', 'stand-in (invented test)',
+                             '--generation-record', g)
+    t.check('E1: the operator goes on with the written response: finish records it as the run\'s result (here a failed route check)',
+            lambda: code == 3 and last == 'NEXT: STOP_ROUTE_CHECK_FAILED' and stages(jd, 'freeze_response')[-1]['completed'], last)
+    # 9990048: the scope reader wrote a disagreeing file
+    code, _, last = qprepare(t, rq, *cases['9990048'], 'qe_A', 'A', adms['9990048'])
+    jd = t.work / 'qe_A' / '9990048'
+    rr = safe(lambda: scope_reader_response(jd, '9990048', end=t.large_end_row - 1))
+    rec_b, led_b = safe(lambda: (jd / 'RUN_RECORD.json').read_bytes()), safe(lambda: L.read_bytes())
+    code, out, last = interrupt(t, jd)
+    t.check('E1: after NEXT: SCOPE_READER, interrupt is refused RESPONSE_WRITTEN once the reader wrote '
+            'scope/reader/output/SCOPE_READER_RESPONSE.json (a disagreeing one), nothing appended', lambda: code == 4
+            and last == 'REFUSED: RESPONSE_WRITTEN' and last_json(out).get('detail', {}).get('file') == 'scope/reader/output/SCOPE_READER_RESPONSE.json'
+            and (jd / 'RUN_RECORD.json').read_bytes() == rec_b and L.read_bytes() == led_b, last)
+    psha = safe(lambda: sha_file(jd / 'scope' / 'SCOPE_READER_PROMPT.md'), '0' * 64)
+    code, _, last = t.runner('scope-finish', '--job-dir', jd, '--reader-response', rr, '--reader-prompt-sha256', psha)
+    t.check('E1: the operator goes on with the written reader file: scope-finish records the disagreement (NEXT: OWNER_DECISION)',
+            lambda: code == 3 and last == 'NEXT: OWNER_DECISION', last)
+    # 9990049: the interruption was recorded, then the conversation's response appeared before freeze
+    code, _, last = qprepare(t, rq, *cases['9990049'], 'qe_A', 'A', adms['9990049'])
+    jd = t.work / 'qe_A' / '9990049'
+    code, _, last = interrupt(t, jd)
+    first = (code, last)
+    safe(lambda: stand_in_response(t, jd, '9990049'))
+    code, _, last = t.runner('freeze', '--job-dir', jd)
+    code, _, last = qprepare(t, rq, *cases['9990049'], 'qe_A_restart1', 'A', adms['9990049'])
+    t.check('E1: a run whose FROZEN.json lists a written response file is not restarted (QUALIFICATION_RESTART_NOT_ALLOWED), even after '
+            'a recorded interruption; no folder', lambda: first == (3, 'NEXT: STOP_TECHNICAL_INTERRUPTION') and code == 4
+            and last == 'REFUSED: QUALIFICATION_RESTART_NOT_ALLOWED' and not (t.work / 'qe_A_restart1' / '9990049').exists(), last)
+    # the restart rule on invented ledgers: each written response path
+    cj = load_runner()
+    u = t.work / 'unit_e1'
+    u.mkdir()
+    got = {}
+    for k, path in enumerate(('scope/reader/output/SCOPE_READER_RESPONSE.json', 'run/A/output/response.json', 'run/B/output/response.json',
+                              'interrupted/generator_output/response.json')):
+        d = u / f'prev{k}'
+        d.mkdir()
+        fz = cj.dumps({'schema': 'cps.job-frozen.v2', 'files': [{'path': path, 'bytes': 1, 'sha256': '0' * 64}]})
+        (d / 'FROZEN.json').write_bytes(fz)
+        es = [{'type': 'record', 'job_dir': str(d), 'stage': st_, 'next': nx, 'completed': True}
+              for st_, nx in (('prepare', 'SCOPE_READER' if 'scope' in path else 'GENERATE'), ('interrupt', 'STOP_TECHNICAL_INTERRUPTION'))]
+        es.append({'type': 'freeze', 'job_dir': str(d), 'frozen_sha256': sha(fz)})
+        got[path] = safe(lambda: cj.restart_problem(fake_ledger(cj, u / 'L.jsonl', es), str(d)))
+    t.check('E1 (unit): the restart rule refuses a run whose FROZEN.json lists scope/reader/output/SCOPE_READER_RESPONSE.json, '
+            'run/A|B/output/response.json or interrupted/generator_output/response.json', lambda: len(got) == 4
+            and all(v and 'wrote its response file' in v for v in got.values()), lambda: json.dumps(got))
+
+
+def test_docs_final(t):
+    """EN1 (no stale text), EN4 (persistent JOB_BUSY) and the E1 and E2 instructions in the command sheet."""
+    doc = (HERE / 'RUN_JOB_COMMANDS.md').read_text(encoding='utf-8')
+    texts = {n: (HERE / n).read_text(encoding='utf-8') for n in ('cps_job.py', 'RUN_JOB_COMMANDS.md', 'VISUAL_REVIEW_PROMPT_TEMPLATE.md',
+                                                             'RELEASE.example.json')}
+    t.check('EN1: deploy/run names visual_qa v4.5 and the admitted V28: no text names visual_qa v4.4 or a provisional V28',
+            lambda: all('v4.' + '4' not in x and 'PROVISIONAL_NOT_' + 'ADMITTED' not in x for x in texts.values())
+            and 'visual_qa v4.5' in doc and '`research/export/visual_qa.py` v4.5' in texts['VISUAL_REVIEW_PROMPT_TEMPLATE.md']
+            and 'admitted 2026-11-06' in doc)
+    t.check('EN4: RUN_JOB_COMMANDS says what to do when JOB_BUSY persists: tell the owner, never delete anything',
+            lambda: 'If `JOB_BUSY` persists' in doc and 'tell the owner' in doc and 'Never delete, move or kill anything' in doc)
+    t.check('E1/E2: RUN_JOB_COMMANDS says that a written file has no restart (RESPONSE_WRITTEN: go on with scope-finish or finish) and that '
+            'writer.admission_sha256 is required and re-checked at visual-record and deliver-check',
+            lambda: '**Once the conversation has written its file, there is no restart.**' in doc and 'RESPONSE_WRITTEN' in doc
+            and '**both required**' in doc and 'again at `visual-record` and `deliver-check`' in doc)
+
+
 def test_no_private_values_printed(t):
     leaks = []
     for out in t.outputs:
@@ -2017,7 +2155,7 @@ def main():
                test_real_job, test_node_and_tamper, test_route_check_failure, test_stage_output_exists, test_qualification,
                test_qualification_ledger, test_visual_fail_blocks_delivery, test_large, test_r1_scope_inputs,
                test_r4_lock_and_interruption, test_r5_run_folder, test_units_delta, test_docs_delta, test_delta_qualification,
-               test_units_int, test_docs_int, test_int_inplace, test_no_private_values_printed):
+               test_units_int, test_docs_int, test_int_inplace, test_e1_written, test_docs_final, test_no_private_values_printed):
         try:
             fn(t)
         except Exception:                                  # noqa: BLE001

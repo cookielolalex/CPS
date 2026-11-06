@@ -10,7 +10,7 @@ Rules for this review:
 
 Visual-QA manifest sha256: `{DELIVERED_MANIFEST_SHA256}` (copy it into your JSON; do not open the manifest).
 
-Each delivered page is listed with its tiles: crops of the page at the same resolution, at most 1900 x 1900 px each, overlapping by at least 120 px (`research/export/visual_qa.py` v4.4). A viewer that shrinks large images shows the whole page reduced, so the page PNG is only the overview. **Read every tile of every page, at full size**, and judge each item of the page from its tiles; record the result per page, as below.
+Each delivered page is listed with its tiles: crops of the page at the same resolution, at most 1900 x 1900 px each, overlapping by at least 120 px (`research/export/visual_qa.py` v4.5). A viewer that shrinks large images shows the whole page reduced, so the page PNG is only the overview. **Read every tile of every page, at full size**, and judge each item of the page from its tiles; record the result per page, as below.
 
 {DELIVERED_PAGES}
 
