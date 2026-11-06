@@ -185,9 +185,9 @@ DELIVERY_HEADER_HEIGHT, DELIVERY_ROW_HEIGHT = 23.25, 20.45
 FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
 # v2.8.2 (delta review of v2.8.1, F1): a non-ASCII character that is not East Asian wide or full-width (ambiguous, neutral,
 # half-width: Ⅷ ① ‰ ℃ × ± Φ …) counts 27. Measured over every Big5 character and the printable ASCII in both LibreOffice
-# environments, the widest is Ⅷ 2.53 units (maintainer); CJK and full-width forms stay at 24 (widest 1.71). Characters outside
-# Big5 measured wider than their count (a recorded limitation): ⸻ 5.07, ⸺ 3.38, ‱ 2.97, long arrows U+27F5–27FF up to 2.96,
-# ⩶ 2.89, emoji up to 2.75 (DejaVu Sans), ⌨ 2.47, ⋘ ⋙ 2.44, ⬳ 2.41.
+# environments, the widest is Ⅷ 2.53 units (maintainer); CJK and full-width forms stay at 24 (widest ヴ 1.73). Characters outside
+# Big5 measured wider than their count (a recorded limitation): ⸻ 5.07, ⸺ 3.38, ‱ 2.97, some long arrows U+27F5–27FF (up to
+# 2.96), ⩶ 2.89, emoji (East Asian wide, count 2.4) up to 2.75 (DejaVu Sans).
 FIT_TENTHS_NON_ASCII_OTHER = 27
 FIT_BROAD = 'MWmw@%'
 DELIVERY_MAX_WIDTH_TENTHS = 2550

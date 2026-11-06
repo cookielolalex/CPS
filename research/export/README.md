@@ -14,7 +14,7 @@
 
 **Writer v2.7 / saved_qa v6.1 / visual_qa v4.1: ADMITTED 2026-11-05 under `ADMISSION_WRITER_V27.json`** (review ADMIT_AFTER_LISTED_FIXES, then delta review ADMIT; it supersedes `ADMISSION_WRITER_V25.json` for new runs). The paragraph below is the build note. **Writer v2.7 / saved_qa v6 / visual_qa v4 (2026-11-05, owner decision O38).** The owner approved one-sheet previews in the creator's own 未填 format (O38). With `--job-title` the delivered workbook `<name>.xlsx` is now one sheet `<name>` in that format: 新細明體 12; grey `#C0C0C0` header with thin borders; gridlines shown; only the header row frozen; no wrapping; E F L M N Q centred, C left; her column widths and row heights. The v2.6 four-sheet workbook (main sheet `<name>`, `來源與審查`, `組成參考`, `組成連結`) is written beside it as `INTERNAL_QA_WORKBOOK.xlsx`, with the same bytes as v2.6. It serves saved QA and internal review and is never delivered. saved_qa v6 checks the delivered workbook as well: its own pinned package, its cells against the main sheet with three readers, its format and its rerun bytes. visual_qa v4 prints gridlines where the sheet shows them and lists no-wrap cells whose text may be cut. Untitled outputs are unchanged. See "Owner decision O38 (v2.7)". v2.7 includes v2.6, which was never admitted; both are admitted only after an independent reviewer confirms them and records the admission outside this README.
 
-**Writer v2.8.2 / saved_qa v6.4 / visual_qa v4.4 (2026-11-06, owner decision O39; NOT ADMITTED).** Two independent reviews: of v2.8, ADMIT_AFTER_LISTED_FIXES (R1–R2 and notes, applied in v2.8.1); and of v2.8.1, ADMIT_AFTER_LISTED_FIXES (F1–F7, applied in v2.8.2: the other non-ASCII count 27, the coverage scope and the limitation outside Big5, tiles for the reviewer, documentation). A delta review follows. The paragraph below describes v2.8. The admitted state is still writer v2.7 / saved_qa v6.1 / visual_qa v4.1 under `ADMISSION_WRITER_V27.json`. In the 046g development trial, two delivered workbooks failed visual review because values were cut at the column edge (the O38 widths are fixed; the creator's own files overflow too, and she sets widths per job). The owner chose "widen to fit" (O39): the O38 widths are minimums, and a column is widened when a value in it would be cut. The delivered workbook's default font (fonts[0]) becomes 新細明體 11, as in her files. Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json`, and visual QA's `possibly_cut_cells` uses the same conservative estimate. `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their v2.7 bytes. See "Owner decision O39 (v2.8)". v2.8 is not admitted until an independent reviewer confirms it and records the admission outside this README.
+**Writer v2.8.2 / saved_qa v6.4 / visual_qa v4.5 (2026-11-06, owner decision O39; NOT ADMITTED).** Second delta review of v2.8.2 / v4.4: ADMIT_AFTER_LISTED_FIXES G1 (a measured legibility flag), notes G2–G4, applied in visual_qa v4.5 (the writer gets a comment correction only). Two independent reviews: of v2.8, ADMIT_AFTER_LISTED_FIXES (R1–R2 and notes, applied in v2.8.1); and of v2.8.1, ADMIT_AFTER_LISTED_FIXES (F1–F7, applied in v2.8.2: the other non-ASCII count 27, the coverage scope and the limitation outside Big5, tiles for the reviewer, documentation). A delta review follows. The paragraph below describes v2.8. The admitted state is still writer v2.7 / saved_qa v6.1 / visual_qa v4.1 under `ADMISSION_WRITER_V27.json`. In the 046g development trial, two delivered workbooks failed visual review because values were cut at the column edge (the O38 widths are fixed; the creator's own files overflow too, and she sets widths per job). The owner chose "widen to fit" (O39): the O38 widths are minimums, and a column is widened when a value in it would be cut. The delivered workbook's default font (fonts[0]) becomes 新細明體 11, as in her files. Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json`, and visual QA's `possibly_cut_cells` uses the same conservative estimate. `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their v2.7 bytes. See "Owner decision O39 (v2.8)". v2.8 is not admitted until an independent reviewer confirms it and records the admission outside this README.
 
 This directory holds code and invented test fixtures only. Do not commit case carriers, outputs, renders or reports made from case data. Write those outside the repository.
 
@@ -273,8 +273,8 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
   | Widest measured per class | Dot toolchain (as user cpstest) | Maintainer environment | Count | Smallest spare |
   |---|---|---|---|---|
   | one column unit | 7.00 pt | 7.10 pt | | |
-  | East Asian wide or full-width | 1.71 (CJK) | 1.69 (CJK) | 2.4 | 0.69 |
-  | other non-ASCII, in Big5 | ‰ 2.30 | Ⅷ 2.53, ① 2.35 | 2.7 | 0.17 |
+  | East Asian wide or full-width, in Big5 | 1.71 (CJK) | ヴ 1.73 (CJK 1.69) | 2.4 | 0.67 |
+  | other non-ASCII, in Big5 | Ⅷ 2.26 | Ⅷ 2.53, ① 2.35 | 2.7 | 0.17 |
   | other ASCII | `# + < = > ^ ~` 1.43 | `+ < > ~` 1.12 | 1.5 | 0.07 |
   | capitals other than M W | O, Q 1.35 | O, Q 1.29 | 1.8 | 0.45 |
   | `M W m w @ %` | `@` 1.71 | W 1.66 | 2.2 | 0.49 |
@@ -283,22 +283,18 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
   - **The LibreOffice unit is the digit width of the font that stands in for 新細明體:** DejaVu Sans on the Dot, Inter in the maintainer environment. Wide symbols are drawn by fallback fonts (Ⅷ by Inter in the maintainer environment). A font change in the toolchain needs a new measurement.
   - **Earlier figures.** In v2.7's configuration (Calibri default) the maintainer unit was 5.55 pt. That is why the trial cut there.
   - **Pad.** The pad of 10 adds 1 unit per value, so a value is cut only when its per-character excess adds up to more than 1 unit.
-- **Limitation (outside Big5).** These characters were measured wider than their count:
+- **Limitation (outside Big5).** These characters were measured wider than their count with v2.8.2's counts (2.7 for other non-ASCII, 2.4 for East Asian wide):
 
-  | Character | Maintainer | Dot |
-  |---|---|---|
-  | ⸻ | 5.07 | 4.21 |
-  | ⸺ | 3.38 | 2.87 |
-  | ‱ | 2.85 | 2.97 |
-  | long arrows U+27F5–27FF | up to 2.96 | up to 2.46 |
-  | ⩶ | 2.89 | |
-  | emoji | | up to 2.75 |
-  | ⌨ | | 2.47 |
-  | ⋘ ⋙ | 2.41 | 2.44 |
-  | Ǆ | 2.41 | 2.43 |
-  | Ǳ | | 2.43 |
-  | ⬳ | 2.41 | |
-  | ⌦ ⌫ | | 2.42 |
+  | Character | Maintainer | Dot | Count |
+  |---|---|---|---|
+  | ⸻ | 5.07 | 4.21 | 2.7 |
+  | ⸺ | 3.38 | 2.87 | 2.7 |
+  | ‱ | 2.85 | 2.97 | 2.7 |
+  | some long arrows U+27F5–27FF | up to 2.96 | | 2.7 |
+  | ⩶ | 2.89 | | 2.7 |
+  | emoji (East Asian wide) | | up to 2.75 | 2.4 |
+
+  Characters measured above the v2.8.1 count but within 2.7 are covered now. Examples: ‰ 2.30, which is not in Big5; ⌨; ⋘ ⋙; Ǆ Ǳ; ⬳; ⌦ ⌫.
 
   A run of such characters long enough to use up the pad may be cut. None of them is in Big5, the creator's character set. The PNG review (checklist item 9) remains the independent check.
 - **Headers.** With these counts, the fixed headers 需要日期 (O) and 合約價 (Q) need 10.6 and 8.2. So every deliverable has O 10.6 and Q 8.2 instead of 10.3 and 8.1. The other 15 headers fit their O38 widths.
@@ -325,8 +321,12 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
   - **v4.4 tiles (delta review of v2.8.1, F3).** A reviewer whose image viewer shrinks every image to 2,000 px wide sees a whole A3 page reduced, so the dpi alone does not help.
     - Each page of the delivered workbook is therefore also cut into row-major tiles of at most 1,900 × 1,900 px, overlapping by at least 120 px. They are rendered from the PDF at the page dpi, with the printed gridlines.
     - The manifest lists them under each image (`tiles`: file, sha256, position, size) and in `tiles` (count, total width, `legibility_bound_exceeded`).
-    - Shown at full size, a tile's CJK body glyphs are about 15 px at a total A:Q width up to about 990 units (dpi below the cap), and at least 9.2 px up to 1,650 units. That is the v2.7 render as the reviewer saw it on the Dot.
-    - Above 1,650 units, which needs about six columns at the 255 cap, the manifest sets `legibility_bound_exceeded`.
+    - Shown at full size, a tile's CJK body glyphs are about 15 px at a total A:Q width up to about 990 units (dpi below the cap).
+    - **v4.5 (second delta review, G1).** Above about 1,275 units, which needs about four columns at the 255 cap, LibreOffice halves its fit-width scale, and the glyphs drop to about 5.8 px. So the legibility flag is measured, not inferred from the width.
+      - The rule: the smallest per-page median height of the CJK words in the PDF text layer must be at least 9.2 px at the render dpi. That is the v2.7 render as the reviewer saw it on the Dot. The figure is `tiles.glyph_px_min_page_median`.
+      - Without pdftotext, the flag falls back to a total width above 1,270.
+      - A flagged sheet cannot pass visual QA.
+    - A width above 255 counts as 255 (G3).
   - **F5.** A non-finite or unparsable width counts as the default width.
 - **Tests (section l).**
   - The constants are equal in the writer, saved QA and visual QA.
@@ -341,7 +341,7 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
     - the classes of the counts (`l_o39_fit_classes_v282`, with Ⅷ ① ‰ ℃ × é and half-width forms);
     - the tile layout (`l_visual_tile_boxes_cover_overlap_and_bound`);
     - every branch of the dpi rule, including a non-finite width and the cap (`l_visual_auto_dpi_branches`);
-    - with visual tests, a render without `--dpi` whose tiles match their hashes, are at most 1,900 px and show CJK glyphs of at least 9.2 px (`d_visual_qa_deliverable_tiles_and_glyph_size_*`, on a titled output and on a widened copy).
+    - with visual tests, a render without `--dpi` whose tiles match their hashes and are at most 1,900 px (`d_visual_qa_deliverable_tiles_and_glyph_size_*`). Its CJK glyphs are at least 9.2 px and unflagged on a titled output and on a widened copy, and v4.5 also checks a copy of about 1,456 units, inside the halved-scale range, which must be flagged.
 - **Not changed.** Values (a unit with trailing spaces stays verbatim under R57; its column is widened), every other O38 property, the internal workbook and the untitled outputs.
 
 ## What it reproduces
@@ -618,7 +618,9 @@ What the tests prove:
   - Visual helpers: printed gridlines are added only to sheets that show them; `possibly_cut_cells` lists the 16,000-character cells of the titled `v05_long_text` deliverable and nothing in its internal workbook (whose cells wrap), and `possibly_clipped_cells` checks no deliverable cell.
   - With visual tests, (d) also renders two deliverables: one sheet, printed gridlines, at least 1,000 `#C0C0C0` pixels and at most 50 `#29445D` pixels per page, and for `v05_long_text` at least two `possibly_cut_cells`. The L05 tamper is rendered as a control: at least 1,000 `#29445D` pixels.
 
-Latest run (2026-11-06, writer v2.8.2 / saved_qa v6.4 / visual_qa v4.4, after the delta review of v2.8.1; not admitted): writer_portable.py `92d46b87…17bc`, saved_qa.py `80dd2887…4e28`, visual_qa.py `97ec8cd2…d0f3`, tests/run_export_tests.py `8ea562a6…8d07`, tests/make_tamper_fixtures.py `6282f79d…503d`. Against the public copy `deploy/writer_route/writer`: 599 of 599 passed with visual tests (including the tile and glyph-size tests), and 577 of 577 without.
+Latest run (2026-11-06, writer v2.8.2 (comment corrected) / saved_qa v6.4 / visual_qa v4.5, after the second delta review; not admitted): writer_portable.py `72b7016d…389b`, saved_qa.py `80dd2887…4e28`, visual_qa.py `68814f14…8ac0`, tests/run_export_tests.py `fa6a0951…e684`, tests/make_tamper_fixtures.py `6282f79d…503d`. Against the public copy: 600 of 600 passed with visual tests. In the tile tests, the measured CJK glyphs are 19.06 px (`v05_long`, 751.6 units) and 18.64 px (widened copy, 734.8), both not flagged, and 7.35 px on the 1,522.9-unit copy, which is flagged.
+
+Run of v2.8.2 / v4.4 (2026-11-06, writer v2.8.2 / saved_qa v6.4 / visual_qa v4.4, after the delta review of v2.8.1; not admitted): writer_portable.py `92d46b87…17bc`, saved_qa.py `80dd2887…4e28`, visual_qa.py `97ec8cd2…d0f3`, tests/run_export_tests.py `8ea562a6…8d07`, tests/make_tamper_fixtures.py `6282f79d…503d`. Against the public copy `deploy/writer_route/writer`: 599 of 599 passed with visual tests (including the tile and glyph-size tests), and 577 of 577 without.
 
 Run of v2.8.1 (2026-11-06, writer v2.8.1 / saved_qa v6.3 / visual_qa v4.3, after the review of v2.8; not admitted): writer_portable.py `c700aed6…8ccf`, saved_qa.py `6fb0df26…0530`, visual_qa.py `94fe33a5…4b17`, tests/run_export_tests.py `356183a5…cff7`, tests/make_tamper_fixtures.py `35a5bdd2…0f5b`. Against the public copy `deploy/writer_route/writer`: 594 of 594 passed with visual tests, and 574 of 574 without. 19 deliverable tampers.
 

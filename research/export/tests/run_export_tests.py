@@ -1489,8 +1489,9 @@ def main():
                                       data.decode('utf-8')).encode('utf-8')
                     zo.writestr(info, data)
         dsrc = src_t / dvs['xlsx_file']
-        x_inf, x_cap, x_wide = work / 'dpi_inf.xlsx', work / 'dpi_cap.xlsx', work / 'dpi_wide.xlsx'
-        _cols_copy(dsrc, x_inf, lambda j, w: 'inf' if j == 1 else ('nan' if j == 2 else w))
+        x_inf, x_cap, x_wide, x_huge = work / 'dpi_inf.xlsx', work / 'dpi_cap.xlsx', work / 'dpi_wide.xlsx', work / 'dpi_huge.xlsx'
+        _cols_copy(dsrc, x_huge, lambda j, w: '255' if j <= 5 else w)     # v4.5 (G1): about 1456 units, inside the halved-scale range
+        _cols_copy(dsrc, x_inf, lambda j, w: 'inf' if j == 1 else ('nan' if j == 2 else ('1e308' if j == 3 else w)))
         _cols_copy(dsrc, x_cap, lambda j, w: '255')
         _cols_copy(dsrc, x_wide, lambda j, w: '120' if j <= 4 else w)
         try:
@@ -1693,7 +1694,7 @@ def main():
             record('d_manifest_states_render_limits', 'General format' in lim and 'row taller than one printed page is clipped' in lim
                    and 'complete_render means that every PDF page was rendered' in lim and 'Never re-save' in lim
                    and m1.get('possibly_clipped_cells', {}).get('count') == 0 and '[[sheet name]] marker' in (m1.get('page_sheet_mapping_basis') or '')
-                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.4'
+                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.5'
                    and not any('printOptions' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c)
                    and m1.get('main_sheet') == '未填研究草稿' and m1.get('sheet_order') == wp.SHEET_ORDER,
                    {'limitations': m1.get('limitations'), 'basis': m1.get('page_sheet_mapping_basis')})
@@ -1735,7 +1736,7 @@ def main():
             mp_ = mt_.get('page_sheet_mapping') or {}
             record(f'd_visual_qa_titled_{tag}', code == 0 and mt_.get('complete_render') is True and mp_ and all(mp_.values())
                    and set(mp_.values()) == set(mt_.get('sheet_order') or []) and mt_.get('main_sheet') == dv['main_sheet']
-                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.4'
+                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.5'
                    and {i['sheet'] for i in mt_['images']} == set(mt_['sheet_order']) and mt_['saved_xlsx']['unchanged_after_render'],
                    {'stderr': err[-300:], 'mapping': list(mp_.values())[:6], 'main_sheet': mt_.get('main_sheet')})
         dv_s = sq.derive_deliverable(T_SPECIAL)
@@ -1778,7 +1779,8 @@ def main():
         # v4.4 (F3): without --dpi the delivered workbook is rendered at the auto dpi and tiled; as the reviewer's viewer shows
         # them (at most 2000 px wide, so a tile of at most 1900 px at full size) the CJK body glyphs are at least 9.2 px
         for tag, xl in (('v05_long', titled.get('v05_long', work / 'missing') / sq.derive_deliverable(T1)['xlsx_file']),
-                        ('wide', x_wide if 'x_wide' in dir() else work / 'missing')):
+                        ('wide', x_wide if 'x_wide' in dir() else work / 'missing'),
+                        ('huge', x_huge if 'x_huge' in dir() else work / 'missing')):
             code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', xl, '--dest', vis / f'tiles_{tag}'])
             md_ = json.loads((vis / f'tiles_{tag}' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
             tiles_ok, glyph_px = bool(md_.get('images')), None
@@ -1793,9 +1795,11 @@ def main():
                 hs = sorted(float(y1) - float(y0) for y0, y1, w_ in re.findall(r'<word xMin="[^"]*" yMin="([^"]*)" xMax="[^"]*" yMax="([^"]*)">([^<]*)</word>', bb)
                             if any(0x4e00 <= ord(c_) <= 0x9fff for c_ in w_))
                 glyph_px = round(hs[len(hs) // 2] * md_['dpi'] / 72, 2) if hs else None
+            flag_want = tag == 'huge'
             record(f'd_visual_qa_deliverable_tiles_and_glyph_size_{tag}', code == 0 and tiles_ok and md_.get('tiles', {}).get('count', 0) >= len(md_.get('images', []))
-                   and md_.get('dpi_rule', '').startswith('auto: delivered') and glyph_px is not None and glyph_px >= 9.2
-                   and md_['tiles']['legibility_bound_exceeded'] is False,
+                   and md_.get('dpi_rule', '').startswith('auto: delivered') and glyph_px is not None
+                   and (glyph_px < 9.2) == flag_want and md_['tiles']['legibility_bound_exceeded'] is flag_want
+                   and isinstance(md_['tiles'].get('glyph_px_min_page_median'), float) and md_['tiles']['legibility_rule'].startswith('v4.5 (G1): measured'),
                    {'stderr': err[-300:], 'dpi': md_.get('dpi'), 'tiles': (md_.get('tiles') or {}).get('count'), 'glyph_px': glyph_px})
         record('d_visual_qa_deliverable_header_colour_control', dl_px.get('L05_control') and max(p_[1] for p_ in dl_px['L05_control']) >= 1000, dl_px.get('L05_control'))
 

@@ -50,8 +50,14 @@ v4.4 (delta review of v2.8.1): counts of writer v2.8.2 (27 per non-ASCII charact
 F1). The dpi cap is 600. A reviewer's viewer that shrinks images to 2000 px shows a whole page reduced whatever the dpi, so each
 page of the delivered workbook is also cut into row-major tiles of at most 1900 x 1900 px, overlapping by at least 120 px,
 rendered from the PDF at the page dpi (manifest images[].tiles and tiles). At full size a tile shows CJK body glyphs of about
-15 px up to a total A:Q width of about 990 and at least 9.2 px (the v2.7 render as seen on the Dot) up to 1650; above that the
-manifest sets tiles.legibility_bound_exceeded (F3). A non-finite width counts as the default width (F5).
+15 px up to a total A:Q width of about 990; tiles.legibility_bound_exceeded flags a sheet whose glyphs are smaller than 9.2 px
+(the v2.7 render as seen on the Dot) (F3; v4.4 inferred it from a width of 1650, v4.5 measures it). A non-finite width counts as the default width (F5).
+v4.5 (second delta review of v2.8.x): LibreOffice halves its fit-width scale above a total A:Q width of about 1275, so the
+legibility flag is measured, not inferred from the width: the smallest per-page median height of the CJK words (all words when
+a page has none) in the PDF text layer, in px at the render dpi, must be at least 9.2 (G1); without pdftotext the flag falls back
+to a total width above 1270. A width above 255 counts as 255 (G3). Width estimate scope (writer v2.8.2): the counts cover every
+Big5 character and the printable ASCII as measured in both LibreOffice environments; a few characters outside Big5 are wider
+than their count (README, O39), and the PNG review is their check.
 
 What the render does not show (v2, review S4; also in the manifest limitations): numbers display in the
 General format, so the stored binary64 precision is not visible; a row taller than a printed page is
@@ -66,7 +72,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-visual-qa.v4.4'
+VERSION = 'cps-export-visual-qa.v4.5'
 HEADER_MARKER = '[[{}]]'                 # page header text: [[sheet name]] (review N1)
 EXCEL_MAX_ROW_HEIGHT_PT = 409.0          # Excel row-height limit; also far below one A3 page in LibreOffice
 LINE_HEIGHT_PT = 15.0                    # approximate line height of 11 pt text with the CJK fallback font
@@ -407,7 +413,8 @@ O38_MIN_WIDTHS = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4
 O38_TOTAL_WIDTH = round(sum(O38_MIN_WIDTHS), 6)   # v4.3: 330.8, the sum of the O38 minimum widths A:Q
 AUTO_DPI_BASE, AUTO_DPI_DELIVERABLE, AUTO_DPI_MAX = 150, 200, 600     # v4.4 (F3): cap 600 (v4.3: 400)
 TILE_MAX_PX, TILE_OVERLAP_PX = 1900, 120      # v4.4 (F3): tiles of a delivered page, at most 1900 px each way, overlapping
-LEGIBLE_TOTAL_WIDTH_MAX = 1650.0             # v4.4 (F3): above this total A:Q width the 600-dpi cap shrinks CJK glyphs below 9.2 px
+LEGIBLE_GLYPH_PX_MIN = 9.2                    # v4.5 (G1): the CJK body glyph height a tile must show, in px
+LEGIBLE_TOTAL_WIDTH_MAX = 1270.0             # v4.5 (G1): fallback bound without pdftotext (LibreOffice halves its scale above ~1275)
 
 
 def delivered_shape(xlsx, mode):
@@ -431,6 +438,7 @@ def delivered_shape(xlsx, mode):
             continue
         if not math.isfinite(w) or w < 0:
             w = DEFAULT_COLUMN_WIDTH
+        w = min(w, 255.0)                          # v4.5 (G3): Excel's maximum; a larger width cannot be shown
         for k in range(max(1, lo), min(hi, 17) + 1):
             widths.setdefault(k, w)                # the first <col> that covers a column, as LibreOffice
     return True, sum(widths.get(k, DEFAULT_COLUMN_WIDTH) for k in range(1, 18))
@@ -444,6 +452,23 @@ def auto_dpi(xlsx, mode):
         return AUTO_DPI_BASE, f'auto: 150 ({info})'
     dpi = min(AUTO_DPI_MAX, max(AUTO_DPI_DELIVERABLE, math.ceil(AUTO_DPI_DELIVERABLE * info / O38_TOTAL_WIDTH)))
     return dpi, f'auto: delivered one-sheet workbook, total A:Q width {round(info, 2)} -> {dpi} dpi (200 x total / 330.8, 200..600)'
+
+
+def measured_glyph_px(pdf, dpi, timeout=600):
+    """v4.5 (G1): the smallest per-page median word-box height of the CJK words (all words on a page without CJK) in the PDF
+    text layer, in px at dpi; None when pdftotext gives no words."""
+    code, text, _ = run(['pdftotext', '-bbox', str(pdf), '-'], timeout)
+    if code != 0:
+        return None
+    meds = []
+    for page in re.findall(r'<page\b.*?</page>', text, re.S):
+        words = re.findall(r'<word xMin="[^"]*" yMin="([^"]*)" xMax="[^"]*" yMax="([^"]*)">([^<]*)</word>', page)
+        cjk = [float(b) - float(a) for a, b, w_ in words if any(0x3400 <= ord(c) <= 0x9fff or 0xf900 <= ord(c) <= 0xfaff or ord(c) >= 0x20000
+                                                                for c in w_)]
+        hs = sorted(cjk or [float(b) - float(a) for a, b, w_ in words])
+        if hs:
+            meds.append(hs[len(hs) // 2])
+    return round(min(meds) * dpi / 72.0, 2) if meds else None
 
 
 def tile_boxes(w, h, tmax=TILE_MAX_PX, ov=TILE_OVERLAP_PX):
@@ -523,6 +548,7 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
         images = []
         render_cmds = []
         tiles_by_page = {}
+        glyph_px = None
         if have_pdftoppm:
             ranges = []
             for n in (selected if selected is not None else []):
@@ -560,6 +586,7 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
                         shutil.copyfile(out_png, dest / tname)
                         page_tiles.append({'file': tname, 'x': tx, 'y': ty, 'width_px': tw, 'height_px': th})
                     tiles_by_page[n] = page_tiles
+                glyph_px = measured_glyph_px(pdf, dpi, timeout) if have_pdftotext else None
         else:
             c3, o3, e3 = run([soffice, '--headless', '--norestore', '-env:UserInstallation=' + profile.as_uri(),
                               '--convert-to', 'png', '--outdir', str(work), str(copy)], timeout, env)
@@ -600,7 +627,11 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
         'saved_xlsx': {'path': str(xlsx), 'sha256': sha256(before), 'unchanged_after_render': True},
         'mode': mode, 'dpi': dpi, 'dpi_rule': dpi_rule,
         'tiles': ({'max_px': TILE_MAX_PX, 'overlap_px': TILE_OVERLAP_PX, 'count': sum(len(v) for v in tiles_by_page.values()),
-                   'total_width': round(shape_info, 2), 'legibility_bound_exceeded': shape_info > LEGIBLE_TOTAL_WIDTH_MAX,
+                   'total_width': round(shape_info, 2), 'glyph_px_min_page_median': glyph_px,
+                   'legibility_bound_exceeded': (glyph_px < LEGIBLE_GLYPH_PX_MIN) if glyph_px is not None else shape_info > LEGIBLE_TOTAL_WIDTH_MAX,
+                   'legibility_rule': ('v4.5 (G1): measured; the smallest per-page median CJK word height in the PDF text layer must be '
+                                       'at least 9.2 px at the render dpi' if glyph_px is not None else
+                                       'v4.5 (G1): fallback without a text layer: total A:Q width above 1270'),
                    'rule': 'v4.4 (F3): each page of the delivered workbook is also cut into row-major tiles of at most 1900 x 1900 px, '
                            'overlapping by at least 120 px, rendered from the PDF at the page dpi; a reviewer whose viewer shrinks '
                            'images to 2000 px sees each tile at full size'} if tiles_by_page else None),
