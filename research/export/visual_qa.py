@@ -16,7 +16,7 @@ Modes
                        pagination; wide sheets split across pages).
 
 Usage
-  python3 -I -B visual_qa.py --xlsx /abs/research-draft.xlsx --dest /abs/new-dir [--mode fit-width|exact] [--dpi 150]
+  python3 -I -B visual_qa.py --xlsx /abs/research-draft.xlsx --dest /abs/new-dir [--mode fit-width|exact] [--dpi N (default auto)]
       [--sheets name1,name2] [--sheet NAME ...]   (PNG only for those sheets; rendered.pdf keeps every page)
 
 v3 (writer v2.6, owner decision O33): the main sheet may be named <name> from the job title instead of 未填研究草稿. Pages
@@ -38,8 +38,14 @@ show fewer digits, an exponent form such as 1E+06, or ####), with kind "number" 
 v4.2 (writer v2.8, owner decision O39): possibly_cut_cells estimates text width with the writer's conservative O39 rule
 (fit_tenths: in tenths of a column-width unit, 23 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital,
 14 per other ASCII character, plus 10; times font size / 12 pt) for strings and for number text alike. The v4.1 estimate
-(2 units per wide character, times size / 11) missed values that the maintainer renderer cut (a column unit is 5.55 pt there,
-7.0 pt on the Dot toolchain). A deliverable widened by writer v2.8 lists no cell unless a value exceeds Excel's 255 limit.
+(2 units per wide character, times size / 11) missed values that the maintainer renderer cut with the v2.7 Calibri default
+font (a column unit is 5.55 pt there). On a deliverable widened by the writer it lists only cells that hold a line feed and
+values beyond Excel's 255 limit: it applies the writer's own rule, so it is not an independent check of the widths; the PNG
+review is (checklist item 9).
+v4.3 (review of v2.8): the counts follow writer v2.8.1 (24 per non-ASCII, 15 per other ASCII character). --dpi defaults to
+auto: 150 dpi, except for a one-sheet workbook whose view shows gridlines (the delivered workbook) in fit-width mode, which is
+rendered at 200 dpi times its total A:Q width over the O38 total 330.8, rounded up, at most 400 dpi, so widened columns do
+not shrink the text below the v2.7 render (N5). The manifest records the dpi and the rule.
 
 What the render does not show (v2, review S4; also in the manifest limitations): numbers display in the
 General format, so the stored binary64 precision is not visible; a row taller than a printed page is
@@ -54,7 +60,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-visual-qa.v4.2'
+VERSION = 'cps-export-visual-qa.v4.3'
 HEADER_MARKER = '[[{}]]'                 # page header text: [[sheet name]] (review N1)
 EXCEL_MAX_ROW_HEIGHT_PT = 409.0          # Excel row-height limit; also far below one A3 page in LibreOffice
 LINE_HEIGHT_PT = 15.0                    # approximate line height of 11 pt text with the CJK fallback font
@@ -203,7 +209,7 @@ def map_pages(text, names, pages=None):
 
 
 # ------------------------------------------------------------------ cells that may be clipped (review S4)
-FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 23, 22, 18, 14, 10
+FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
 FIT_BROAD = 'MWmw@%'
 
 
@@ -282,8 +288,8 @@ def _col_no(ref):
 
 
 def possibly_cut_cells(xlsx):
-    """v4 (O38): no-wrap string cells whose text may not show in full. Flagged when the estimated text width (wide East Asian
-    characters 2 units, scaled by font size / 11 pt) exceeds the column width, or when the text holds a line feed (not shown
+    """v4 (O38): no-wrap string cells whose text may not show in full. v4.2/v4.3: flagged when the O39 estimated text width
+    (fit_tenths_text, scaled by font size / 12 pt) exceeds the column width, or when the text holds a line feed (not shown
     as a new line without wrapping). neighbours_filled says whether the cells beside it hold anything: Excel lets text run into
     empty neighbours (both sides for centred text) and cuts it at a filled one. Heuristic; the stored values are checked by
     saved_qa.py."""
@@ -390,9 +396,44 @@ def possibly_clipped_cells(xlsx):
 
 
 # ------------------------------------------------------------------ rendering
-def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='pdftoppm', timeout=900, tmp_root=None, sheets=None):
+O38_MIN_WIDTHS = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
+O38_TOTAL_WIDTH = round(sum(O38_MIN_WIDTHS), 6)   # v4.3: 330.8, the sum of the O38 minimum widths A:Q
+AUTO_DPI_BASE, AUTO_DPI_DELIVERABLE, AUTO_DPI_MAX = 150, 200, 400
+
+
+def auto_dpi(xlsx, mode):
+    """v4.3 (review of v2.8, N5): 150 dpi, except for a one-sheet workbook whose view shows gridlines (the delivered workbook)
+    in fit-width mode: 200 dpi times its total A:Q column width over the O38 total, rounded up, at most 400."""
+    if mode != 'fit-width':
+        return AUTO_DPI_BASE, 'auto: 150 (not fit-width)'
+    with zipfile.ZipFile(xlsx) as z:
+        parts = sheet_parts(z)
+        if len(parts) != 1:
+            return AUTO_DPI_BASE, 'auto: 150 (not a one-sheet workbook)'
+        xml = z.read(parts[0][1]).decode('utf-8')
+    if not shows_gridlines(xml):
+        return AUTO_DPI_BASE, 'auto: 150 (gridlines off)'
+    widths = {}
+    for m_ in re.finditer(r'<col\b([^>]*)/?>', xml):
+        a = dict(re.findall(r'(\w+)="([^"]*)"', m_.group(1)))
+        try:
+            lo, hi, w = int(a.get('min', 1)), int(a.get('max', 1)), float(a.get('width', DEFAULT_COLUMN_WIDTH))
+        except ValueError:
+            continue
+        for k in range(max(1, lo), min(hi, 17) + 1):
+            widths.setdefault(k, w)                # the first <col> that covers a column, as LibreOffice
+    total = sum(widths.get(k, DEFAULT_COLUMN_WIDTH) for k in range(1, 18))
+    dpi = min(AUTO_DPI_MAX, max(AUTO_DPI_DELIVERABLE, math.ceil(AUTO_DPI_DELIVERABLE * total / O38_TOTAL_WIDTH)))
+    return dpi, f'auto: delivered one-sheet workbook, total A:Q width {round(total, 2)} -> {dpi} dpi (200 x total / 330.8, 200..400)'
+
+
+def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='pdftoppm', timeout=900, tmp_root=None, sheets=None):
     if not xlsx.is_file():
         raise RenderError('XLSX_MISSING')
+    if dpi is None:
+        dpi, dpi_rule = auto_dpi(xlsx, mode)
+    else:
+        dpi_rule = 'given (--dpi)'
     if dest.exists():
         raise RenderError('DEST_EXISTS')
     before = xlsx.read_bytes()
@@ -497,7 +538,7 @@ def render(xlsx, dest, mode='fit-width', dpi=150, soffice='soffice', pdftoppm='p
         'visual_inspection_complete': False,
         'reviewer_task': 'An independent reviewer inspects every PNG (all sheets, all rows, all 17 columns of the main and components sheets) and records the judgement separately.',
         'saved_xlsx': {'path': str(xlsx), 'sha256': sha256(before), 'unchanged_after_render': True},
-        'mode': mode, 'dpi': dpi,
+        'mode': mode, 'dpi': dpi, 'dpi_rule': dpi_rule,
         'render_copy': {'sha256': sha256(copy_bytes), 'identical_to_saved': copy_bytes == before,
                         'sheetData_identical_to_saved': True, 'modifications': changes},
         'pdf': {'file': 'rendered.pdf', 'sha256': sha256(pdf_bytes), 'pages': pages,
@@ -548,7 +589,7 @@ def main(argv=None):
     ap.add_argument('--xlsx', required=True)
     ap.add_argument('--dest', required=True)
     ap.add_argument('--mode', choices=('fit-width', 'exact'), default='fit-width')
-    ap.add_argument('--dpi', type=int, default=150)
+    ap.add_argument('--dpi', type=int, default=None, help='v4.3: default auto (150; the delivered workbook 200..400 by its width)')
     ap.add_argument('--soffice', default='soffice')
     ap.add_argument('--pdftoppm', default='pdftoppm')
     ap.add_argument('--timeout', type=int, default=900)

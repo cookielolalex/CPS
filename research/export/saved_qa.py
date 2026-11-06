@@ -76,6 +76,11 @@ the larger of its O38 minimum and the widest value of the column in the main she
 included) by fit_tenths (saved QA's own copy of the writer's rule and of js_number), capped at 255: the <cols> check (W1) and
 the formatting width check compare with it. The deliverable's styles.xml pin changes (fonts[0], the default font, is
 新細明體 11 as in the creator's files). Nothing else changes.
+v6.3 (review of v2.8): the counts follow writer v2.8.1 (24 per non-ASCII, 15 per other ASCII character; R1). Every <col>
+width text must be exactly what openpyxl writes for the expected width ('%.16g'), not merely within 1e-9 (N1). The widths
+are computed inside the deliverable section's guard; a main-sheet value of a type the writer never writes counts 0 for the
+width, and its value check fails as before (N2). Without provenance, the receipt's deliverable_xlsx.column_widths must equal the
+recomputed widths (finding integrity; N8).
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
@@ -91,7 +96,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v6.2'
+VERSION = 'cps-export-saved-qa.v6.3'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -205,7 +210,7 @@ DELIVERY = {'font': '新細明體', 'size': 12, 'header_fill': 'FFC0C0C0', 'bord
             'centred': 'EFLMNQ', 'left': 'C', 'header_height': 23.25, 'row_height': 20.45, 'freeze': 'A2',
             'min_widths': [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]}
 # v6.2 (O39): saved QA's own copy of the writer's width rule (writer_portable O39_RULE, fit_tenths, delivery_widths).
-FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 23, 22, 18, 14, 10
+FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
 FIT_BROAD = 'MWmw@%'
 DELIVERY_MAX_WIDTH_TENTHS = 2550
 
@@ -238,10 +243,17 @@ def js_number(x):
 
 
 def fit_tenths(v):
-    """v6.2 (O39): the estimated display width of one value, in tenths of a column-width unit."""
-    if v is None or isinstance(v, bool):
+    """v6.2 (O39): the estimated display width of one value, in tenths of a column-width unit. v6.3 (N2): a value of a type the
+    writer never writes (object, array, an integer beyond binary64) counts 0; its value check fails elsewhere."""
+    if v is None or isinstance(v, bool) or not isinstance(v, (str, int, float)):
         return 0
-    text = v if isinstance(v, str) else js_number(v)
+    if isinstance(v, str):
+        text = v
+    else:
+        try:
+            text = js_number(v)
+        except (OverflowError, ValueError):
+            return 0
     if text == '':
         return 0
     t = 0
@@ -288,8 +300,8 @@ def cols_ok(cols, want):
     for j, (c, w) in enumerate(zip(cols, want), start=1):
         a = c.attrib
         if tag_name(c) != 'col' or set(a) != {'min', 'max', 'width', 'customWidth'} or a['min'] != str(j) or a['max'] != str(j) \
-                or a['customWidth'] != '1' or not WIDTH_TEXT_RE.fullmatch(a['width']) or abs(float(a['width']) - w) > 1e-9:
-            return False
+                or a['customWidth'] != '1' or not WIDTH_TEXT_RE.fullmatch(a['width']) or a['width'] != '%.16g' % w:
+            return False         # v6.3 (N1): the exact text openpyxl writes for the expected width
     return True
 
 
@@ -1306,7 +1318,11 @@ def check_deliverable(path, exp_rows, main_sheet, F, formatting):
     xb = path.read_bytes()
     sec.update(checked=True, sha256=sha256(xb), bytes=len(xb))
     main_rows = exp_rows.get(SHEETS[0]) if exp_rows else None
-    widths = deliverable_widths(main_rows) if isinstance(main_rows, list) else None     # v6.2 (O39)
+    widths = None
+    try:
+        widths = deliverable_widths(main_rows) if isinstance(main_rows, list) else None     # v6.2 (O39); v6.3: inside the guard
+    except Exception as e:                      # noqa: BLE001
+        T.add('reader_error', {'reader': 'deliverable_widths', 'error': repr(e)[:300]})
     sec['expected_column_widths'] = widths
     try:
         sec['structure'] = check_structure(path, T, main_sheet, 'deliverable', widths)
@@ -1500,6 +1516,16 @@ def run_qa(out_dir, formatting=True, carrier=None, writer_dir=None, node='node',
             F.add('integrity', {'check': 'xlsx sha256 differs from WRITER_RECEIPT.json'})
         if dbytes is not None and (receipt.get('deliverable_xlsx') or {}).get('sha256') != sha256(dbytes):
             F.add('integrity', {'check': 'deliverable xlsx sha256 differs from WRITER_RECEIPT.json deliverable_xlsx', 'workbook': 'deliverable'})
+        if dbytes is not None:                   # v6.3 (review of v2.8, N8): the receipt's widths claim, without provenance too
+            try:
+                main_e = json.loads(ebytes.decode('utf-8'))['sheets'][0]['values']
+                want_w = deliverable_widths(main_e) if isinstance(main_e, list) else None
+            except Exception:                    # noqa: BLE001 - a malformed EXPECTED file is a finding elsewhere
+                want_w = None
+            got_w = (receipt.get('deliverable_xlsx') or {}).get('column_widths')
+            if want_w is not None and got_w != want_w:
+                F.add('integrity', {'check': 'WRITER_RECEIPT.json deliverable_xlsx.column_widths differs from the widths recomputed from '
+                                             'EXPECTED_SAVED_VALUES.json (O39)', 'workbook': 'deliverable'})
         if (receipt.get('expected_saved_values') or {}).get('sha256') != sha256(ebytes):
             F.add('integrity', {'check': 'EXPECTED_SAVED_VALUES.json sha256 differs from WRITER_RECEIPT.json'})
 

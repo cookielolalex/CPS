@@ -150,11 +150,31 @@ The creator's own files show the same effect, and she sets widths per job. Acros
 
 **Effect (writer v2.8, saved_qa v6.2, visual_qa v4.2).**
 - **Width rule.** Each column's width is the larger of its O38 width and the widest value in it, header included, capped at Excel's 255. The value estimate is counted in tenths of a column-width unit: 23 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital, 14 per other ASCII character, plus 10.
-- **Calibration.** The estimate is conservative for the three renderers measured on invented calibration workbooks:
-  - Excel with 新細明體 12 and a 7-pixel default digit: a CJK character is about 2.29 units.
-  - The Dot's LibreOffice toolchain: one unit is 7.0 pt, so a 12-pt CJK character is 1.71 units.
-  - The maintainer environment, where the trial was rendered: one unit is 5.55 pt, so a CJK character is 2.16 units.
-- **Default font.** The workbook default font (fonts[0], the Normal style) is 新細明體 11, as in all 46 of her files. Excel converts column-width units to pixels with this font's digit width, so the delivered columns get her pixel widths.
+- **Calibration (corrected after the independent review of v2.8, R1/R2; counts of writer v2.8.1).**
+  - The counts are 24 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital and 15 per other ASCII character, plus 10.
+  - Each count covers the widest character of its class measured in the v2.8 configuration on invented workbooks. The Dot toolchain (unit 7.00 pt): ‰ 2.30, `#` 1.43. The maintainer environment (unit 7.10 pt): ① 2.35.
+  - Excel is computed for full-width characters only: 2.29 units with a 7-pixel default digit, the less favourable assumption.
+  - The fixed headers 需要日期 and 合約價 widen O and Q slightly (10.6, 8.2) in every deliverable.
+- **Default font.** The workbook default font (fonts[0], the Normal style) is 新細明體 11, as in all 46 of her files. Excel converts column-width units to pixels with this font's digit width, so the delivered columns get her pixel widths. This was the maintainer's addition. The owner confirmed it on 2026-11-06 ("Keep 新細明體 11 (Recommended)"), after being told the columns may look up to about 14% wider in Excel than in the approved previews, matching her own files more closely.
 - **Checks.** Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json` with its own copy of the rule. Visual QA's `possibly_cut_cells` uses the same estimate.
 - **What does not change.** Every other O38 property. `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their bytes.
 - **Not changed by O39.** The values themselves. A unit with trailing spaces stays verbatim under R57; its column is widened. Whether such outer spaces should be trimmed is a 046h backlog item.
+
+## O40 (2026-11-06): evidence of generator isolation in qualification
+
+**Question to the owner.** Each qualification run must be shown to have seen only the allowed inputs: the rule package and that job's packet. Earlier audits used each generator's full transcript. The Dot starts those generator conversations itself and may not be able to export full transcripts. What should count as evidence for each run?
+
+**Owner answer:** "Attested record (Recommended)".
+
+**Effect.**
+- **The record.** For every qualification run the runner freezes a generation record:
+  - the model;
+  - the conversation id or share link;
+  - the start and end times;
+  - the prompt sha256;
+  - the tools or features enabled;
+  - the final message;
+  - `transcript_status`.
+- **Transcripts.** The transcript is added and pinned when the Dot can export one; otherwise it is marked `not_available`. Qualification accepts either.
+- **Reporting.** The qualification report states how many runs had transcripts.
+- **Scope.** The decision is about the evidence of isolation. It does not change the isolation rules themselves.

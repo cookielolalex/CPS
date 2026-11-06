@@ -79,7 +79,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.8'
+VERSION = 'cps-export-writer-portable.v2.8.1'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -174,11 +174,15 @@ DELIVERY_CENTRED, DELIVERY_LEFT = 'EFLMNQ', 'C'
 DELIVERY_HEADER_HEIGHT, DELIVERY_ROW_HEIGHT = 23.25, 20.45
 # Owner decision O39 (writer v2.8, 2026-11-06): DELIVERY_WIDTHS are minimums. A column is widened when a value in it would be
 # cut: its width is the larger of the minimum and the widest fit_tenths(value) of the column (header included), in tenths of a
-# column-width unit, at most 255 (Excel's limit). fit_tenths counts 23 per non-ASCII character, 22 per M W m w @ %, 18 per other
-# ASCII capital, 14 per other ASCII character, plus 10; line breaks count nothing; a number counts its stored text
-# (js_number). The counts are conservative for Excel with 新細明體 12 (a CJK character 2.29 units with a 7-pixel default digit)
-# and for the LibreOffice renderers measured (CJK 1.71 units on the Dot toolchain, 2.16 in the maintainer environment).
-FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 23, 22, 18, 14, 10
+# column-width unit, at most 255 (Excel's limit). fit_tenths counts 24 per non-ASCII character, 22 per M W m w @ %, 18 per other
+# ASCII capital, 15 per other ASCII character, plus 10; line breaks count nothing; a number counts its stored text (js_number).
+# v2.8.1 (review of v2.8, R1/R2): each count covers the widest character of its class measured in the v2.8 configuration
+# (fonts[0] 新細明體 11, cells 新細明體 12) on invented calibration workbooks: Dot toolchain (unit 7.00 pt; CJK 1.71 units,
+# widest non-ASCII ‰ 2.30, widest other ASCII # + < > ^ ~ 1.43, W 1.69), maintainer environment (unit 7.10 pt; CJK 1.69,
+# widest non-ASCII ① 2.35, other ASCII 1.12, W 1.66); Excel computed for full-width characters only (16 px at 12 pt: 2.29
+# units with a 7-pixel default digit, the less favourable assumption; 2.0 with 8 px). The LibreOffice unit is the digit width of
+# the font standing in for 新細明體 (DejaVu Sans on the Dot, Inter here): a toolchain font change needs a new measurement.
+FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
 FIT_BROAD = 'MWmw@%'
 DELIVERY_MAX_WIDTH_TENTHS = 2550
 O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one sheet <name>: the main-sheet values of '
@@ -188,9 +192,9 @@ O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one 
             'no border, number format General; no cell wraps; widths A..Q 16.1 23.1 21.3 81.9 6.9 8.3 12.9 13 12.3 13 21.4 11 24.1 34.1 '
             '10.3 13 8.1; gridlines shown; only row 1 frozen (pane at A2); no tab colour. The four-sheet workbook (v2.6 bytes) is '
             'INTERNAL_QA_WORKBOOK.xlsx. Without --job-title no deliverable is written (v2.6 outputs).')
-O39_RULE = ('O39 (v2.8): the O38 widths are minimums. Each column\'s width is the larger of its O38 width and the widest value in '
-            'it (header included) by fit_tenths: in tenths of a column-width unit, 23 per non-ASCII character, 22 per M W m w @ %, '
-            '18 per other ASCII capital, 14 per other ASCII character, plus 10 (line breaks count nothing; a number counts its '
+O39_RULE = ('O39 (v2.8, counts v2.8.1): the O38 widths are minimums. Each column\'s width is the larger of its O38 width and the '
+            'widest value in it (header included) by fit_tenths: in tenths of a column-width unit, 24 per non-ASCII character, 22 '
+            'per M W m w @ %, 18 per other ASCII capital, 15 per other ASCII character, plus 10 (line breaks count nothing; a number counts its '
             'stored JavaScript Number::toString text), capped at 255. The workbook default font (fonts[0]) is 新細明體 11, as in '
             'the creator\'s files. Every other O38 property is unchanged.')
 CASE_ID_RE = re.compile(r'[0-9]{7}')           # the leading 7-digit case id (ASCII digits after NFKC)

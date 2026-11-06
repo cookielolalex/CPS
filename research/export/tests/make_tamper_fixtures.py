@@ -355,13 +355,14 @@ def update_receipt(d):
 
 def o39_width(main_rows, j):
     """Writer v2.8 (O39) width of deliverable column j (0-based) for MAIN_ROWS: the tests' own copy of the rule (23 per non-ASCII
-    character, 22 per M W m w @ %, 18 per other ASCII capital, 14 per other ASCII character, plus 10; at least the O38 width)."""
+    character, 22 per M W m w @ %, 18 per other ASCII capital, 15 per other ASCII character, plus 10; at least the O38 width;
+    counts of writer v2.8.1)."""
     mins = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
 
     def fit(v):
         if not isinstance(v, str) or v == '':
             return 0 if not isinstance(v, (int, float)) or isinstance(v, bool) else None
-        return sum(0 if ch in '\r\n' else 23 if ord(ch) > 0x7e else 22 if ch in 'MWmw@%' else 18 if 'A' <= ch <= 'Z' else 14
+        return sum(0 if ch in '\r\n' else 24 if ord(ch) > 0x7e else 22 if ch in 'MWmw@%' else 18 if 'A' <= ch <= 'Z' else 15
                    for ch in v) + 10
     need = [fit(r[j]) for r in main_rows if j < len(r)]
     assert None not in need, 'o39_width: numbers are not used by the tampers'
@@ -586,7 +587,7 @@ def deliverable_v27_fixed_widths(x):
         assert m, pat
         if abs(float(m.group(1)) - w) > 1e-9:
             changed += 1
-        y = y[:m.start()] + '<col width="%s" customWidth="1" min="%d" max="%d"/>' % (repr(w), j, j) + y[m.end():]
+        y = y[:m.start()] + '<col width="%s" customWidth="1" min="%d" max="%d"/>' % ('%.16g' % w, j, j) + y[m.end():]
     assert changed >= 1, 'the source deliverable needs at least one widened column'
     return y
 
@@ -624,6 +625,11 @@ DELIVERABLE_TAMPERS = {
                                     '<col width="81.90000000000001" customWidth="1" hidden="1" min="4" max="4"/>')},
                           ['hidden_attribute', 'worksheet_structure', 'formatting'], [], False),
     'L17_v27_fixed_widths': ({S1: deliverable_v27_fixed_widths}, ['worksheet_structure', 'formatting'], [], False),
+    # review of v2.8: N1, a width text that parses within 1e-9 but is not openpyxl's text; N8, the receipt's widths claim edited
+    'L18_width_text_look_alike': ({S1: sub1(r'(<col width=")([^"]*)(" customWidth="1" min="1" max="1"/>)',
+                                            lambda m: m.group(1) + m.group(2) + ('0000000001' if '.' in m.group(2) else '.0000000001') + m.group(3))},
+                                  ['worksheet_structure'], [], False),
+    'L19_receipt_column_widths_edited': ({}, [], ['integrity'], False),
 }
 
 
@@ -651,7 +657,7 @@ def make_deliverable_tampers(src, dest):
             main_new = json.loads((d / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8'))['sheets'][0]['values']
             c_width = o39_width(main_new, 2)                        # v2.8 (O39): column C's width follows the new value
             write_tampered(src / dn, d / dn, {S1: lambda x: sub1(r'(<col width=")[^"]*(" customWidth="1" min="3" max="3"/>)',
-                                                                 lambda m: m.group(1) + repr(c_width) + m.group(2))(
+                                                                 lambda m: m.group(1) + '%.16g' % c_width + m.group(2))(
                                                   sub1(r'(<c r="C2" [^>]*><is><t[^>]*>)[^<]*(</t></is></c>)',
                                                        lambda m: m.group(1) + ''.join(c if ord(c) < 128 else '&#%d;' % ord(c) for c in
                                                                                       main_new[1][2]) + m.group(2))(x))})
@@ -661,8 +667,18 @@ def make_deliverable_tampers(src, dest):
             r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
             r['deliverable_xlsx'] = None
             (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        elif name.startswith('L19_'):
+            (d / dn).write_bytes((src / dn).read_bytes())
+            update_receipt(d)
+            r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+            r['deliverable_xlsx']['column_widths'] = [1.0] * 17
+            (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         elif not name.startswith('L09_'):
             update_receipt(d)
+        if name.startswith('L15_'):                                 # v2.8.1: the receipt's widths claim follows column C too
+            r = json.loads((d / 'WRITER_RECEIPT.json').read_text(encoding='utf-8'))
+            r['deliverable_xlsx']['column_widths'][2] = c_width
+            (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         index.append({'name': name, 'dir': str(d), 'group': 'deliverable', 'deliverable_findings': tagged, 'other_findings': untagged,
                       'passes_without_provenance': passes, 'provenance_finding': 'provenance', 'deliverable_file': dn})
     (dest / 'TAMPERS.json').write_text(json.dumps({'invented': True, 'source_output': str(src), 'tampers': index},

@@ -1170,7 +1170,7 @@ def main():
                   and rc['deliverable_xlsx']['file'] == dv['xlsx_file'] and rc['deliverable_xlsx']['sheet'] == dv['main_sheet']
                   and rc['deliverable_xlsx']['format'] == sq.DELIVERY_FORMAT == wp.DELIVERY_FORMAT
                   and rc['deliverable_xlsx']['sha256'] == sha((od / dv['xlsx_file']).read_bytes()) and rp_.get('deliverable_xlsx') is None
-                  and rc['deliverable']['job_title'] == title and rc['writer'] == 'cps-export-writer-portable.v2.8'
+                  and rc['deliverable']['job_title'] == title and rc['writer'] == 'cps-export-writer-portable.v2.8.1'
                   and wp.DELIVERABLE_LIMITATION in rc['limitations'] and wp.DELIVERABLE_LIMITATION not in rp_['limitations']
                   and all(rc[k] == rp_[k] for k in ('matrices_sha256', 'sheets', 'cross_check', 'expected_saved_values', 'relaxations', 'mode'))
                   and wp.NAMING_LIMITATION in rc['limitations'] and wp.NAMING_LIMITATION not in rp_['limitations'])
@@ -1286,9 +1286,9 @@ def main():
            (wp.FIT_TENTHS_NON_ASCII, wp.FIT_TENTHS_BROAD, wp.FIT_TENTHS_CAPITAL, wp.FIT_TENTHS_OTHER, wp.FIT_TENTHS_PAD, wp.FIT_BROAD)
            == (sq.FIT_TENTHS_NON_ASCII, sq.FIT_TENTHS_BROAD, sq.FIT_TENTHS_CAPITAL, sq.FIT_TENTHS_OTHER, sq.FIT_TENTHS_PAD, sq.FIT_BROAD)
            == (vq_l.FIT_TENTHS_NON_ASCII, vq_l.FIT_TENTHS_BROAD, vq_l.FIT_TENTHS_CAPITAL, vq_l.FIT_TENTHS_OTHER, vq_l.FIT_TENTHS_PAD, vq_l.FIT_BROAD)
-           == (23, 22, 18, 14, 10, 'MWmw@%') and wp.DELIVERY_MAX_WIDTH_TENTHS == sq.DELIVERY_MAX_WIDTH_TENTHS == 2550
+           == (24, 22, 18, 15, 10, 'MWmw@%') and wp.DELIVERY_MAX_WIDTH_TENTHS == sq.DELIVERY_MAX_WIDTH_TENTHS == 2550
            and (wp.DELIVERY_DEFAULT_FONT, wp.DELIVERY_DEFAULT_FONT_SIZE) == ('新細明體', 11)
-           and all(x in wp.O39_RULE for x in ('23 per non-ASCII', '22 per M W m w @ %', '18 per other ASCII capital', '14 per other ASCII',
+           and all(x in wp.O39_RULE for x in ('24 per non-ASCII', '22 per M W m w @ %', '18 per other ASCII capital', '15 per other ASCII',
                                               'plus 10', '255', '新細明體 11')))
     o39_samples = ['', '中' * 10, 'W', 'A', 'a', '0', ' ', '\n', 'a\r\nb', 'NFB-3P 50A', '式' + ' ' * 8, 'Φ50', '１２', '\t', '𠀋', 'é', '～',
                    'm@%w', 'x' * 3000, 0, 1, -2.5, 12.5, 1e21, 1e-7, 123456789.25, 0.30000000000000004, None, True]
@@ -1297,7 +1297,7 @@ def main():
     fit_v = [vq_l.fit_tenths_text(v if isinstance(v, str) else wp.js_number(v)) for v in o39_samples if isinstance(v, (str, int, float)) and not isinstance(v, bool) and v is not None]
     fit_w2 = [wp.fit_tenths(v) for v in o39_samples if isinstance(v, (str, int, float)) and not isinstance(v, bool) and v is not None]
     record('l_o39_fit_rule_values', fit_w == fit_s and fit_v == fit_w2
-           and fit_w[:9] == [0, 240, 32, 28, 24, 24, 24, 10, 38] and wp.fit_tenths(12.5) == 66 and wp.fit_tenths(1e21) == 10 + 14 * 5
+           and fit_w[:9] == [0, 250, 32, 28, 25, 25, 25, 10, 40] and wp.fit_tenths(12.5) == 70 and wp.fit_tenths(1e21) == 10 + 15 * 5
            and wp.fit_tenths(None) == 0 and wp.fit_tenths(True) == 0 and sq.js_number(1e-7) == wp.js_number(1e-7) == '1e-7'
            and all(sq.js_number(v) == wp.js_number(v) for v in (0, 1, -2.5, 1e21, 1e-7, 123456789.25, 0.30000000000000004, 5e-324, 2 ** 53 + 1.0)),
            {'writer': fit_w, 'saved_qa': fit_s})
@@ -1305,8 +1305,10 @@ def main():
     w_min = wp.delivery_widths([hdr_row])
     w_long = wp.delivery_widths([hdr_row, [None] * 13 + ['甲' * 30, None, None, None]])
     w_cap = wp.delivery_widths([hdr_row, ['乙' * 200] + [None] * 16])
-    record('l_o39_widths_minimum_widen_and_cap', w_min == wp.DELIVERY_WIDTHS and w_long[:13] == wp.DELIVERY_WIDTHS[:13]
-           and w_long[13] == 70.0 and w_long[14:] == wp.DELIVERY_WIDTHS[14:] and w_cap[0] == 255.0 and w_cap[1:] == wp.DELIVERY_WIDTHS[1:]
+    # v2.8.1: with 24 per CJK character the fixed headers 需要日期 (O) and 合約價 (Q) need 10.6 and 8.2, so every deliverable has them
+    hdr_w = wp.DELIVERY_WIDTHS[:14] + [10.6, 13.0, 8.2]
+    record('l_o39_widths_minimum_widen_and_cap', w_min == hdr_w and w_long[:13] == hdr_w[:13]
+           and w_long[13] == 73.0 and w_long[14:] == hdr_w[14:] and w_cap[0] == 255.0 and w_cap[1:] == hdr_w[1:]
            and sq.deliverable_widths([hdr_row, [None] * 13 + ['甲' * 30, None, None, None]]) == w_long
            and all(abs(x * 10 - round(x * 10)) < 1e-9 for x in w_long), {'min': w_min, 'long': w_long, 'cap0': w_cap[0]})
     # two more titled outputs: long strings and 407 items
@@ -1346,7 +1348,13 @@ def main():
                     fmt_bad.append(cell.coordinate)
         widths = [round(wsd.column_dimensions[_gcl(j)].width, 6) for j in range(1, 18)]
         heights = {wsd.row_dimensions[r_].height for r_ in range(2, len(main) + 1)}
-        need = [max([wp.fit_tenths(row_[j]) for row_ in main if j < len(row_)] or [0]) for j in range(17)]
+        def _fit_indep(v):                       # review of v2.8, N9: the tests' own copy of the O39 counts
+            if v is None or isinstance(v, bool):
+                return 0
+            t_ = v if isinstance(v, str) else wp.js_number(v)
+            return 0 if t_ == '' else 10 + sum(0 if ch in '\r\n' else 24 if ord(ch) > 0x7e else 22 if ch in 'MWmw@%'
+                                               else 18 if 'A' <= ch <= 'Z' else 15 for ch in t_)
+        need = [max([_fit_indep(row_[j]) for row_ in main if j < len(row_)] or [0]) for j in range(17)]
         o39_ok = all(abs(w_ - min(max(round(m_ * 10), n_), 2550) / 10) < 1e-9 for w_, m_, n_ in zip(widths, wp.DELIVERY_WIDTHS, need))
         with zipfile.ZipFile(od / dv['xlsx_file']) as z:
             st_xml = z.read('xl/styles.xml').decode('utf-8')
@@ -1369,7 +1377,7 @@ def main():
     ldt = work / 'tampers_deliverable'
     code, out, err = run(PY + [HERE / 'make_tamper_fixtures.py', 'deliverable', titled.get('fid_special', work / 'missing'), ldt])
     ltamp = json.loads((ldt / 'TAMPERS.json').read_text(encoding='utf-8'))['tampers'] if code == 0 else []
-    record('l_deliverable_tamper_counts', code == 0 and [t['name'][:3] for t in ltamp] == [f'L{k:02d}' for k in range(1, 18)], err[-300:])
+    record('l_deliverable_tamper_counts', code == 0 and [t['name'][:3] for t in ltamp] == [f'L{k:02d}' for k in range(1, 20)], err[-300:])
     for t in ltamp:
         d = Path(t['dir'])
         c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
@@ -1385,13 +1393,13 @@ def main():
         else:
             no_prov = (c1 == 1 and q1.get('status') == 'SAVED_QA_FAILED' and set(t['deliverable_findings']) | set(t['other_findings']) <= set(f1)
                        and tagged_ok)
-        # L14: the bytes are the writer's, so the rerun finds no byte difference; the dropped deliverable_xlsx is a receipt claim
+        # L14, L19: the bytes are the writer's, so the rerun finds no byte difference; the edited deliverable_xlsx is a receipt claim
         prov = (c2 == 1 and q2.get('status') == 'SAVED_QA_FAILED'
                 and (('receipt_claim_mismatch' in f2 and pv.get('deliverable_xlsx_byte_identical') is True
                       and 'deliverable_xlsx' in pv.get('receipt_claims', {}).get('mismatched_fields', []))
-                     if t['name'].startswith('L14') else 'provenance' in f2)
+                     if t['name'][:3] in ('L14', 'L19') else 'provenance' in f2)
                 and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False
-                and (t['name'][:3] in ('L07', 'L14') or pv.get('deliverable_xlsx_byte_identical') is False or t['name'].startswith('L15')))
+                and (t['name'][:3] in ('L07', 'L14', 'L19') or pv.get('deliverable_xlsx_byte_identical') is False or t['name'].startswith('L15')))
         record(f"l_deliverable_tamper_{t['name']}", no_prov and prov and 'Traceback' not in e1 + e2,
                {'no_prov': [q1.get('status'), sorted(f1)], 'prov': [q2.get('status'), sorted(f2), pv.get('result'),
                                                                     pv.get('deliverable_xlsx_byte_identical')], 'stderr': (e1 + e2)[-300:]})
@@ -1452,6 +1460,19 @@ def main():
         q1, q2 = qa_report(d / 'SAVED_QA.json'), qa_report(d / 'SAVED_QA_PROVENANCE.json')
         record('l_symlinked_deliverable_refused', c1 == 1 and c2 == 1 and 'integrity' in q1.get('findings', {}) and 'integrity' in q2.get('findings', {})
                and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False, [sorted(q1.get('findings', {})), sorted(q2.get('findings', {}))])
+        # review of v2.8, N2: a main-sheet value of a type the writer never writes (an object) does not skip the deliverable checks
+        d = wdir / 'N2_object_value_in_expected'
+        shutil.copytree(src_t, d)
+        ev = json.loads((d / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8'))
+        ev['sheets'][0]['values'][1][2] = {'x': 1}
+        (d / 'EXPECTED_SAVED_VALUES.json').write_text(json.dumps(ev, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+        mt.update_receipt(d)
+        c1, o1, e1 = run(PY + [EXPORT / 'saved_qa.py', '--output-dir', d])
+        q1 = qa_report(d / 'SAVED_QA.json')
+        dsec = q1.get('deliverable_xlsx') or {}
+        record('l_o39_malformed_expected_value_keeps_deliverable_checks', c1 == 1 and q1.get('status') == 'SAVED_QA_FAILED'
+               and dsec.get('checked') is True and isinstance(dsec.get('structure'), dict) and isinstance(dsec.get('expected_column_widths'), list)
+               and 'Traceback' not in e1, {'findings': sorted(q1.get('findings', {})), 'section_keys': sorted(dsec)[:20]})
         # visual_qa v4.1: N1 numbers wider than the column are listed; N6 the first <col> covering a column gives its width.
         # v4.2 (O39): the writer's deliverable is widened, so nothing is listed; the W1a tamper (a leading 0.5-wide <col>) lists numbers.
         cut_f = vq_l.possibly_cut_cells(src_t / dvs['xlsx_file'])
@@ -1460,7 +1481,7 @@ def main():
         record('l_visual_numbers_wider_than_column_listed', {'F2', 'P7'} <= nums and cut_w['no_wrap_number_cells_checked'] > 10
                and all(x['kind'] in ('string', 'number') for x in cut_w['first']), sorted(nums)[:10])
         record('l_visual_o39_widened_deliverable_lists_only_line_feeds', cut_f['no_wrap_string_cells_checked'] > 10
-               and cut_f['count'] == len(cut_f['first']) and all(x['kind'] == 'string' and x['line_feeds'] > 0 and x['estimated_width'] <= x['column_width']
+               and cut_f['count'] >= 1 and cut_f['count'] == len(cut_f['first']) and all(x['kind'] == 'string' and x['line_feeds'] > 0 and x['estimated_width'] <= x['column_width']
                                                                  for x in cut_f['first']),
                {'count': cut_f['count'], 'first': cut_f['first'][:3]})
         record('l_visual_first_col_wins', cut_w['count'] > cut_f['count'] and all(x['column_width'] == 0.5 for x in cut_w['first']),
@@ -1623,7 +1644,7 @@ def main():
             record('d_manifest_states_render_limits', 'General format' in lim and 'row taller than one printed page is clipped' in lim
                    and 'complete_render means that every PDF page was rendered' in lim and 'Never re-save' in lim
                    and m1.get('possibly_clipped_cells', {}).get('count') == 0 and '[[sheet name]] marker' in (m1.get('page_sheet_mapping_basis') or '')
-                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.2'
+                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.3'
                    and not any('printOptions' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c)
                    and m1.get('main_sheet') == '未填研究草稿' and m1.get('sheet_order') == wp.SHEET_ORDER,
                    {'limitations': m1.get('limitations'), 'basis': m1.get('page_sheet_mapping_basis')})
@@ -1665,7 +1686,7 @@ def main():
             mp_ = mt_.get('page_sheet_mapping') or {}
             record(f'd_visual_qa_titled_{tag}', code == 0 and mt_.get('complete_render') is True and mp_ and all(mp_.values())
                    and set(mp_.values()) == set(mt_.get('sheet_order') or []) and mt_.get('main_sheet') == dv['main_sheet']
-                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.2'
+                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.3'
                    and {i['sheet'] for i in mt_['images']} == set(mt_['sheet_order']) and mt_['saved_xlsx']['unchanged_after_render'],
                    {'stderr': err[-300:], 'mapping': list(mp_.values())[:6], 'main_sheet': mt_.get('main_sheet')})
         dv_s = sq.derive_deliverable(T_SPECIAL)
