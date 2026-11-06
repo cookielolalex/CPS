@@ -75,7 +75,7 @@ $R prepare --release $RT/RELEASE.json --job /abs/JOB.json --job-title-file /abs/
 ```
 
 It does the following:
-- checks the release (status, repository commit and clean tree, the pins of every executed file, package manifest and every package file, the export tools against `ADMISSION_WRITER_V28.json`, the checker node, the writer folder, openpyxl, the deps bundle);
+- checks the release (status, repository commit and clean tree, the pins of every executed file, package manifest and every package file, the export tools against `ADMISSION_WRITER_V28.json` (whose `status` must be `ADMITTED`: a provisional admission is refused, `WRITER_ADMISSION_NOT_ADMITTED`), the checker node, the writer folder, openpyxl, the deps bundle);
 - checks the job inputs and the company tables;
 - records the release path you gave (later stages re-read it: see Stage 4 and Stage 6);
 - creates `$JOBS/<case id>/` and copies the release, `JOB.json`, `JOB_TITLE.json` and the source into `input/` (read-only);

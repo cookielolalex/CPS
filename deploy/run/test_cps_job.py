@@ -648,6 +648,15 @@ def test_prepare_refusals(t):
     code, _, last, jd = prepare(t, '9990018', release=bad)
     t.check('R10: a release without repository.commit is refused RELEASE_COMMIT_REQUIRED', lambda: code == 4
             and last == 'REFUSED: RELEASE_COMMIT_REQUIRED' and not jd.exists(), last)
+    prov = json.loads((REPO / WRITER_ADMISSION).read_text(encoding='utf-8'))
+    prov['status'] = 'PROVISIONAL_NOT_ADMITTED'
+    prov_p = t.work / 'ADMISSION_WRITER_PROVISIONAL.json'
+    prov_p.write_text(json.dumps(prov, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    bad = write_release(t, 'RELEASE_PROVISIONAL_ADMISSION.json',
+                        dict(rel, writer=dict(rel['writer'], admission=str(prov_p), admission_sha256=sha_file(prov_p))))
+    code, _, last, jd = prepare(t, '9990020', release=bad)
+    t.check('integration: a writer admission whose status is not ADMITTED (a provisional one) is refused WRITER_ADMISSION_NOT_ADMITTED, '
+            'no job folder', lambda: code == 4 and last == 'REFUSED: WRITER_ADMISSION_NOT_ADMITTED' and not jd.exists(), last)
     inside_repo = REPO / 'deploy' / 'run' / '_invented_jobs_root_must_not_be_created'
     jp, tp = job_files(t, '9990019')
     code, _, last = t.runner('prepare', '--release', t.release_path, '--job', jp, '--job-title-file', tp, '--jobs-root', inside_repo)

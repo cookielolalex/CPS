@@ -499,6 +499,8 @@ def load_writer_admission(rel):
     adm = strict_json(raw, 'writer admission')
     if adm.get('schema') != WRITER_ADMISSION_SCHEMA:
         raise Refused('WRITER_ADMISSION_SCHEMA')
+    if adm.get('status') != 'ADMITTED':        # integration: a provisional admission, or one that records no status, is refused
+        raise Refused('WRITER_ADMISSION_NOT_ADMITTED', {'status': adm.get('status')})
     return adm, sha_bytes(raw)
 
 
