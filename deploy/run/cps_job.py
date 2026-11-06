@@ -1,35 +1,41 @@
 #!/usr/bin/env python3
 """CPS operator job runner: one CPS job, stage by stage, with one record (deploy/run/cps_job.py).
 
-Python 3 standard library only. Every CPS tool runs as a subprocess with `python3 -I -B` (the interpreter that runs
-this file; the inventory builder with `-I -S -B`, as the harness README states) and the node on PATH. Paths are
-arguments or come from the release file; relative release paths are taken from the repository root. The runner never
-prints cell text, job-input values or the job title: it prints hashes, counts, codes, the path of the next prompt and,
-at delivery, the path of the one file to deliver. Tool output is kept in the job folder (logs/), never printed.
+Python 3 standard library only. Every CPS tool runs as a subprocess with `python3 -I -B -X pycache_prefix=<empty>` (the
+interpreter that runs this file; the inventory builder with `-I -S -B`, as the harness README states) and the node on
+PATH. Paths are arguments or come from the release file; relative release paths are taken from the repository root. The
+runner never prints cell text, job-input values or the job title: it prints hashes, counts, codes, the path of the next
+prompt and, at delivery, the path of the one file to deliver. Tool output is kept in the job folder (logs/), never printed.
 
 Subcommands (RUN_JOB_COMMANDS.md has the exact commands and what to do at each NEXT):
   prepare       --release RELEASE.json --job JOB.json --job-title-file JOB_TITLE.json --jobs-root DIR
                 [--reader A|B] [--qualification --admission ADMISSION.json] [--operator-model TEXT]
-  scope-finish  --job-dir D --reader-response FILE
-  finish        --job-dir D --response FILE [--job-title TEXT] [--generator-model TEXT]
-  visual-record --job-dir D --review VISUAL_REVIEW.json
+  scope-finish  --job-dir D --reader-response D/scope/reader/output/SCOPE_READER_RESPONSE.json [--reader-conversation-id TEXT]
+  finish        --job-dir D --response D/run/<reader>/output/response.json [--job-title TEXT] [--generator-model TEXT]
+                [--generation-record D/run/GENERATION_RECORD.json [--transcript FILE]]   (qualification: model and record required)
+  visual-record --job-dir D --review D/qa/visual_review/VISUAL_REVIEW.json [--reviewer-conversation-id TEXT]
   deliver-check --job-dir D
-  freeze        --job-dir D            (qualification protocol step 5: FROZEN.json; then the folder is read-only)
+  freeze        --job-dir D            (FROZEN.json; then every file and folder of the job is read-only)
+  verify-frozen --job-dir D            (recomputes FROZEN.json; never writes)
+  nonattempt    --release RELEASE.json --admission ADMISSION.json --case ID --reader A|B --reason CODE   (qualification ledger)
 
-Each subcommand appends one entry (two for finish) to <job>/RUN_RECORD.json and never rewrites earlier entries; a
-stage that completed (with any result, a recorded failure included) is never run again in the same job folder. The
-last line printed is the next step: NEXT: SCOPE_READER, GENERATE, OWNER_DECISION, VISUAL_REVIEW, DELIVER_CHECK, FREEZE,
-DELIVER, DONE or STOP_<reason>.
+Every subcommand holds an exclusive lock on <job>/.cps_job.lock (a second command is refused, JOB_BUSY) and verifies the
+hash chain of <job>/RUN_RECORD.json before anything else (RUN_RECORD_CHAIN_BROKEN). Each subcommand appends one entry
+(two for finish) and never rewrites earlier entries; a stage that completed (with any result, a recorded failure or an
+interruption included) is never run again in the same job folder. A qualification job is also mirrored, entry by entry,
+in the qualification ledger the release names (outside every job folder), which allows one run per case and reader.
+The last line printed is the next step: NEXT: SCOPE_READER, GENERATE, OWNER_DECISION, VISUAL_REVIEW, DELIVER_CHECK,
+FREEZE, DELIVER, DONE or STOP_<reason>.
 Exit codes: 0 continue with the NEXT step; 3 the job stopped (NEXT: STOP_<reason> or OWNER_DECISION, recorded);
 4 refused (nothing consumed; the record notes the refusal when the job folder exists); 2 usage.
 """
-import argparse, datetime, hashlib, json, os, re, shutil, stat, subprocess, sys, unicodedata
+import argparse, atexit, datetime, fcntl, hashlib, json, os, re, shutil, stat, subprocess, sys, tempfile, time, traceback, unicodedata
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-VERSION = 'cps-job-runner.v1'
+VERSION = 'cps-job-runner.v2'
 HERE = Path(__file__).resolve().parent
-RECORD_SCHEMA = 'cps.job-run-record.v1'
+RECORD_SCHEMA = 'cps.job-run-record.v2'
 RELEASE_SCHEMA = 'cps.release.v1'
 JOB_SCHEMA = 'cps.job-config.v2'
 TITLE_SCHEMA = 'cps.job-title.v1'
@@ -37,26 +43,53 @@ ADMISSION_SCHEMA = 'cps.admission.046b.v1'
 WRITER_ADMISSION_SCHEMA = 'cps.writer-admission.v1'
 REVIEW_SCHEMA = 'cps.visual-review.v1'
 EVIDENCE_SCHEMA = 'cps.job-qa-evidence.v1'
+GENERATION_RECORD_SCHEMA = 'cps.generation-record.v1'
+LEDGER_SCHEMA = 'cps.qualification-ledger.v1'
+JOBS_SCHEMA = 'cps.qualification-jobs.v1'
+PACKET_PINS_SCHEMA = 'cps.packet-pins.v1'
+FROZEN_SCHEMA = 'cps.job-frozen.v2'
 STATUS_FOR_MODE = {True: 'RELEASED_FOR_QUALIFICATION', False: 'RELEASED_FOR_USE'}
 CASE_ID_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', re.ASCII)
+REASON_RE = re.compile(r'[A-Z][A-Z0-9_]{2,63}', re.ASCII)
+COMMIT_RE = re.compile(r'[0-9a-f]{40}([0-9a-f]{24})?', re.ASCII)
 LAYOUT = ('input', 'packet', 'scope', 'run', 'response', 'carrier', 'export', 'qa', 'logs')
 CONDITION3_TOOLS = ('research/export/saved_qa.py', 'research/export/writer_portable.py',
                     'research/export/writer004_matrices.mjs', 'research/export/visual_qa.py')
 WRITER_FILES = ('writer004.mjs', 'validate_carrier_v4.mjs', 'receipt_bytes.mjs')
+# R10: every other file the runner executes or fills as a template; each must be pinned by the release or the admission
+RUNNER_FILES = ('deploy/run/cps_job.py', 'deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md')
+HARNESS_FILES = ('make_job_config.py', 'scope_tool.py', 'scope_agree.py', 'make_scoped_inventory.py', 'prepare_run.py',
+                 'GENERATOR_PROMPT_TEMPLATE.md', 'SCOPE_READER_PROMPT_TEMPLATE.md')
+SOURCE_PREP_FILES = ('build_inventory_xlsx_v2.py', 'build_inventory_v2.py', 'render_views.py', 'screenshot_views.cjs', 'auto_views.py')
+# R12: evaluation files a qualification admission pins (by repository-relative path), and the jobs list label
+EVALUATION_FILES = ('research/evaluation/compare_target050.py', 'research/evaluation/aggregate_qualification050.py')
+JOBS_LABEL = 'JOBS.json'
 REVIEW_SHEET = '來源與審查'
 COMPOSITION_SHEETS = ('組成參考', '組成連結')
 ITEMS = tuple(str(i) for i in range(1, 10))
 RESULTS = ('pass', 'fail', 'n/a')
+REVIEWER_KIND = 'fresh_context_visual_reviewer'
 SAVED_PASS = 'SAVED_ALL_CELL_VALUE_TYPE_PASS'
 OPENPYXL_VERSION = '3.1.5'
+FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents')
+TRANSCRIPT_STATUSES = ('exported', 'not_available')
+EXTERNAL_TOOLS = (('soffice', '--version'), ('pdftoppm', '-v'), ('pdfinfo', '-v'), ('pdftotext', '-v'), ('node', '--version'))
+LOCK_NAME, MARKER_NAME = '.cps_job.lock', '.STAGE_IN_PROGRESS.json'
+# R2: a stage's frozen outputs; one that exists while the stage has no completed entry refuses the stage
+STAGE_WITNESSES = {'scope-finish': ('scope/SCOPE_READER_RESPONSE.json', 'scope/decision'),
+                   'finish': ('response/response.json', 'response/GENERATION_RECORD.json', 'carrier/convert'),
+                   'visual-record': ('qa/VISUAL_REVIEW.json', 'qa/VISUAL_RECORD.json'),
+                   'deliver-check': ('qa/DELIVERY_CHECK.json',)}
 EXIT_CONTINUE, EXIT_USAGE, EXIT_STOP, EXIT_REFUSED = 0, 2, 3, 4
 CONTINUE_STEPS = ('SCOPE_READER', 'GENERATE', 'VISUAL_REVIEW', 'DELIVER_CHECK', 'FREEZE', 'DELIVER', 'DONE')
 RO = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
+WBITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
 
 
 # ------------------------------------------------------------------ small helpers
 class Refused(Exception):
-    """Refused before anything was consumed: recorded as a not-completed attempt, the stage may run again."""
+    """Refused before anything was consumed: recorded as a not-completed attempt, the stage may run again. Raised after
+    a stage began consuming (a freeze, a tool run), it becomes a completed recorded stop (run_stage)."""
     def __init__(self, code, detail=None):
         super().__init__(code)
         self.code, self.detail = code, detail
@@ -71,6 +104,16 @@ class Outcome(Exception):
 
 def utc():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+
+
+def parse_utc(s):
+    if not isinstance(s, str):
+        return None
+    try:
+        t = datetime.datetime.fromisoformat(s.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return t if t.tzinfo is not None else None
 
 
 def sha_bytes(b):
@@ -123,11 +166,12 @@ def dumps(obj):
 def write_new(p, data, readonly=True):
     """Write a new file (never overwrite); read-only by default."""
     p = Path(p)
+    b = data if isinstance(data, bytes) else data.encode('utf-8')
     with open(p, 'xb') as f:
-        f.write(data if isinstance(data, bytes) else data.encode('utf-8'))
+        f.write(b)
     if readonly:
         p.chmod(RO)
-    return sha_bytes(data if isinstance(data, bytes) else data.encode('utf-8'))
+    return sha_bytes(b)
 
 
 def freeze_copy(src_bytes, dest):
@@ -137,10 +181,65 @@ def freeze_copy(src_bytes, dest):
     return sha_bytes(src_bytes)
 
 
-def make_readonly(root):
-    for p in Path(root).rglob('*'):
-        if p.is_file() and not p.is_symlink():
-            p.chmod(p.stat().st_mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+def make_tree_readonly(root):
+    """Remove every write bit, bottom-up: files, then each folder, the root folder last (symbolic links untouched)."""
+    root = Path(root)
+    if not root.is_dir() or root.is_symlink():
+        return
+    for dp, dns, fns in os.walk(root, topdown=False):
+        for n in fns + dns:
+            p = os.path.join(dp, n)
+            m = os.lstat(p).st_mode
+            if stat.S_ISREG(m) or stat.S_ISDIR(m):
+                os.chmod(p, stat.S_IMODE(m) & ~WBITS)
+    os.chmod(root, stat.S_IMODE(os.lstat(root).st_mode) & ~WBITS)
+
+
+def tree(root):
+    """Every entry under root, never following a symbolic link: {'files': {rel: {bytes, sha256}}, 'dirs': [rel],
+    'other': [rel]} (other: symbolic links, devices, sockets). None when root is not a real folder."""
+    root = Path(root)
+    if root.is_symlink() or not root.is_dir():
+        return None
+    files, dirs, other = {}, [], []
+    for dp, dns, fns in os.walk(root, followlinks=False):
+        for n in dns + fns:
+            p = Path(dp) / n
+            r = p.relative_to(root).as_posix()
+            m = os.lstat(p).st_mode
+            if stat.S_ISDIR(m):
+                dirs.append(r)
+            elif stat.S_ISREG(m):
+                files[r] = {'bytes': os.lstat(p).st_size, 'sha256': sha_file(p)}
+            else:
+                other.append(r)
+    return {'files': files, 'dirs': sorted(dirs), 'other': sorted(other)}
+
+
+def tree_shas(root):
+    t = tree(root)
+    return None if t is None else {k: v['sha256'] for k, v in sorted(t['files'].items())}
+
+
+def regular(p):
+    try:
+        return stat.S_ISREG(os.lstat(p).st_mode)
+    except FileNotFoundError:
+        return False
+
+
+def inside(p, root):
+    try:
+        Path(os.path.realpath(p)).relative_to(os.path.realpath(root))
+        return True
+    except ValueError:
+        return False
+
+
+def safe_path(p):
+    """A path for printing: runner-chosen paths are ASCII; any other path (the delivered workbook's name holds the
+    title) is printed as a hash."""
+    return p if p.isascii() else 'non-ascii-path-sha256:' + sha_bytes(p.encode('utf-8'))[:16]
 
 
 def nfkc(s):
@@ -162,6 +261,26 @@ def get(d, *keys, required=True, kind=None):
 
 def is_sha(x):
     return isinstance(x, str) and len(x) == 64 and all(c in '0123456789abcdef' for c in x)
+
+
+def nonblank(x):
+    return isinstance(x, str) and bool(x.strip())
+
+
+_NOPYC = []
+
+
+def nopyc():
+    """N10: an empty folder for -X pycache_prefix, so no tool ever reads a cached .pyc next to a pinned source file."""
+    if not _NOPYC:
+        d = tempfile.mkdtemp(prefix='cps_job_nopyc_')
+        _NOPYC.append(d)
+        atexit.register(shutil.rmtree, d, True)
+    return _NOPYC[0]
+
+
+def py(*flags):
+    return [sys.executable, *flags, '-X', 'pycache_prefix=' + nopyc()]
 
 
 # ------------------------------------------------------------------ release file
@@ -192,7 +311,15 @@ class Release:
         self.clean_path = get(d, 'saved_qa_clean_path', required=False, kind=str) or '/usr/bin:/bin'
         self.tables = get(d, 'tables', kind=dict)
         self.pinned = get(d, 'pinned_files_sha256', required=False, kind=dict) or {}
-        self.qual_admissions = get(d, 'qualification', 'admission_sha256', required=False, kind=list) or []
+        self.accepts_versions = get(d, 'accepts_jobs_from_release_versions', required=False, kind=list) or []
+        q = d.get('qualification') if isinstance(d.get('qualification'), dict) else {}
+        adms = q.get('admissions') if isinstance(q.get('admissions'), list) else []
+        self.qual_admissions = [(Path(e['path']), e['sha256']) for e in adms if isinstance(e, dict) and isinstance(e.get('path'), str)
+                                and Path(e['path']).is_absolute() and is_sha(e.get('sha256'))]
+        self.ledger = Path(q['ledger']) if isinstance(q.get('ledger'), str) else None
+        self.jobs_file = Path(q['jobs_file']) if isinstance(q.get('jobs_file'), str) else None
+        acc = q.get('accepted_transcript_status', list(TRANSCRIPT_STATUSES))
+        self.accepted_transcripts = acc if isinstance(acc, list) else None
         self.route = self.package / 'tools' / 'cps046b_route.py'
 
     def path(self, value):
@@ -204,26 +331,86 @@ class Release:
                 'repository_commit': get(self.d, 'repository', 'commit', required=False),
                 'package_manifest_sha256': self.manifest_sha}
 
+    def require_qualification_fields(self):
+        """R11/R12: a qualification release names the ledger and the jobs list (absolute paths outside every job folder)."""
+        bad = [k for k, v in (('qualification.ledger', self.ledger), ('qualification.jobs_file', self.jobs_file))
+               if v is None or not v.is_absolute()]
+        if self.accepted_transcripts is None or not set(self.accepted_transcripts) <= set(TRANSCRIPT_STATUSES) or not self.accepted_transcripts:
+            bad.append('qualification.accepted_transcript_status')
+        if bad:
+            raise Refused('QUALIFICATION_RELEASE_FIELDS', {'fields': bad})
 
-def check_release_static(rel, qualification, st):
-    """Checks that hold for every subcommand: status, repository commit, package manifest, pinned files."""
+    def admission_listed(self, path, raw):
+        """R12: the release lists this admission by path and sha256 (qualification.admissions[{path, sha256}])."""
+        return path is not None and any(os.path.realpath(p) == os.path.realpath(path) and sha == sha_bytes(raw)
+                                        for p, sha in self.qual_admissions)
+
+    def label(self, p):
+        """The admission label of a file: its path relative to the repository root (else the absolute path)."""
+        try:
+            return Path(os.path.realpath(p)).relative_to(os.path.realpath(self.root)).as_posix()
+        except ValueError:
+            return str(p)
+
+
+def executed_files(rel):
+    """R10: every file the runner executes or fills as a template, besides the package (manifest), the export tools and
+    the writer folder (writer admission)."""
+    return ([rel.root / f for f in RUNNER_FILES] + [rel.harness / n for n in HARNESS_FILES]
+            + [rel.source_prep / n for n in SOURCE_PREP_FILES])
+
+
+def git(root, *args):
+    try:
+        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return p.stdout.decode('utf-8', 'replace') if p.returncode == 0 else None
+
+
+def check_repository(root, commit):
+    """R10: the release names the commit; repository.root is the top of a git checkout at exactly that commit, with no
+    change to any tracked file. A missing commit, a folder git cannot verify and a dirty tracked tree are refused."""
+    if not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit):
+        raise Refused('RELEASE_COMMIT_REQUIRED', 'repository.commit: the full commit hash the release was made from')
+    top, head = git(root, 'rev-parse', '--show-toplevel'), git(root, 'rev-parse', 'HEAD')
+    if top is None or head is None or os.path.realpath(top.strip()) != os.path.realpath(root):
+        raise Refused('REPOSITORY_NOT_VERIFIABLE', 'repository.root must be the top folder of a git checkout')
+    if head.strip() != commit:
+        raise Refused('REPOSITORY_COMMIT_MISMATCH', {'release_commit': commit, 'head': head.strip()})
+    dirty = git(root, 'status', '--porcelain', '--untracked-files=no')
+    if dirty is None:
+        raise Refused('REPOSITORY_NOT_VERIFIABLE', 'git status failed')
+    if dirty.strip():
+        raise Refused('REPOSITORY_DIRTY', {'changed_tracked_files': len(dirty.strip().splitlines())})
+    return {'commit': commit, 'commit_verified_with_git': True, 'tracked_tree_clean': True}
+
+
+def pycache_entries(dirs):
+    """N10: cached bytecode beside pinned sources (a planted .pyc would run code no pin covers)."""
+    out = []
+    for d in dirs:
+        d = Path(d)
+        if d.is_dir():
+            out += [str(p) for p in d.rglob('*') if (p.name == '__pycache__' and p.is_dir()) or p.suffix in ('.pyc', '.pyo')]
+    return sorted(out)
+
+
+def check_release_static(rel, qualification, st, adm=None):
+    """Checks that hold for every subcommand: status, the runner's own checkout, repository commit and clean tree, the
+    package (manifest, the folder the harness loads), no cached bytecode, and every executed file pinned (R10)."""
     want = STATUS_FOR_MODE[qualification]
     if rel.status != want:
         raise Refused('RELEASE_STATUS', {'status': rel.status, 'required': want})
-    commit = get(rel.d, 'repository', 'commit', required=False)
-    verified = None
-    if commit:
-        try:
-            p = subprocess.run(['git', '-C', str(rel.root), 'rev-parse', 'HEAD'], capture_output=True, timeout=60)
-            head = p.stdout.decode('ascii', 'replace').strip() if p.returncode == 0 else None
-        except (OSError, subprocess.SubprocessError):
-            head = None
-        if head is not None:
-            if head != commit:
-                raise Refused('REPOSITORY_COMMIT_MISMATCH', {'release_commit': commit, 'head': head})
-            verified = True
-    st.facts['repository'] = {'commit': commit, 'commit_verified_with_git': verified}
+    if os.path.realpath(__file__) != os.path.realpath(rel.root / 'deploy/run/cps_job.py'):
+        raise Refused('RUNNER_NOT_IN_RELEASED_REPOSITORY', 'run repository.root/deploy/run/cps_job.py of the release')
+    st.facts['repository'] = check_repository(rel.root, get(rel.d, 'repository', 'commit', required=False))
+    if os.path.realpath(rel.harness.parent / 'package') != os.path.realpath(rel.package):
+        raise Refused('HARNESS_PACKAGE_MISMATCH', 'the harness tools load <harness.path>/../package; package.path must be that folder')
     check_package(rel, st)
+    pyc = pycache_entries([rel.package, rel.harness, rel.source_prep, rel.root / 'research/export', rel.root / 'deploy/run'])
+    if pyc:
+        raise Refused('PYCACHE_PRESENT', {'entries': len(pyc), 'first': [safe_path(p) for p in pyc[:5]]})
     bad = []
     for rp, want_sha in sorted(rel.pinned.items()):
         p = rel.path(rp)
@@ -233,6 +420,24 @@ def check_release_static(rel, qualification, st):
             bad.append(rp)
     if bad:
         raise Refused('PINNED_FILE_MISMATCH', {'files': bad})
+    pinned_real = {os.path.realpath(rel.path(k)) for k in rel.pinned}
+    apins = (adm or {}).get('pins') or {}
+    missing, by = [], {}
+    for p in executed_files(rel):
+        label = rel.label(p)
+        got = sha_file(p) if p.is_file() else None
+        st.tools[label] = got
+        if got is not None and os.path.realpath(p) in pinned_real:
+            by[label] = 'release pinned_files_sha256'
+            continue
+        ap = apins.get(label)
+        if adm is not None and got is not None and isinstance(ap, dict) and ap.get('sha256') == got:
+            by[label] = 'admission'
+            continue
+        missing.append(label)
+    if missing:
+        raise Refused('RELEASE_PINS_INCOMPLETE', {'not_pinned': missing})
+    st.facts['executed_files_pinned'] = by
 
 
 def check_package(rel, st):
@@ -310,10 +515,10 @@ def check_writer_dir(rel, adm):
         p = w / name
         allowed = pins.get(name)
         allowed = set(allowed.values()) if isinstance(allowed, dict) else {allowed}
-        regular = p.exists() and stat.S_ISREG(os.lstat(p).st_mode)
-        got = sha_file(p) if regular else None
-        out[name] = {'sha256': got, 'regular_file': regular, 'match': got in allowed}
-        if not regular or got not in allowed:
+        reg = p.exists() and stat.S_ISREG(os.lstat(p).st_mode)
+        got = sha_file(p) if reg else None
+        out[name] = {'sha256': got, 'regular_file': reg, 'match': got in allowed}
+        if not reg or got not in allowed:
             bad.append(name)
     stub = w.parent / 'node_modules' / '@oai' / 'artifact-tool'
     for name, key in (('index.mjs', 'artifact_tool_stub_index.mjs'), ('package.json', 'artifact_tool_stub_package.json')):
@@ -328,11 +533,55 @@ def check_writer_dir(rel, adm):
 
 
 def check_openpyxl():
-    p = subprocess.run([sys.executable, '-I', '-B', '-c', 'import openpyxl; print(openpyxl.__version__)'], capture_output=True, timeout=120)
+    p = subprocess.run(py('-I', '-B') + ['-c', 'import openpyxl; print(openpyxl.__version__)'], capture_output=True, timeout=120)
     v = p.stdout.decode('ascii', 'replace').strip() if p.returncode == 0 else None
     if v != OPENPYXL_VERSION:
         raise Refused('OPENPYXL_VERSION', {'found': v, 'required': OPENPYXL_VERSION})
     return v
+
+
+BUNDLE_PROBE = '''import json, sys
+sys.path.insert(0, sys.argv[1])
+out = {}
+for name in ('openpyxl', 'xlrd'):
+    try:
+        m = __import__(name)
+        out[name] = {'version': m.__version__, 'file': m.__file__}
+    except Exception:
+        out[name] = None
+print(json.dumps(out))
+'''
+
+
+def bundle_versions(bundle):
+    """N9: the openpyxl and xlrd the builders import from the deps bundle (not the interpreter's own site-packages)."""
+    dep = Path(bundle) / 'private' / 'deps'
+    p = subprocess.run(py('-I', '-S', '-B') + ['-c', BUNDLE_PROBE, str(dep)], capture_output=True, timeout=120)
+    d = last_json_line(p.stdout) if p.returncode == 0 else None
+    d = d if isinstance(d, dict) else {}
+    out = {}
+    for name in ('openpyxl', 'xlrd'):
+        m = d.get(name) or {}
+        f = m.get('file')
+        out[name] = {'version': m.get('version'), 'from_bundle': bool(f) and inside(f, dep)}
+    return out
+
+
+def external_tools():
+    """N9: the path and version of each external program the renderers use, as found on PATH (recorded, not pinned)."""
+    out = {}
+    for name, flag in EXTERNAL_TOOLS:
+        w = shutil.which(name)
+        rec = {'path': w, 'realpath': os.path.realpath(w) if w else None, 'version': None}
+        if w:
+            try:
+                p = subprocess.run([w, flag], capture_output=True, timeout=60)
+                lines = (p.stdout or p.stderr).decode('utf-8', 'replace').strip().splitlines()
+                rec['version'] = lines[0][:200] if lines else None
+            except (OSError, subprocess.SubprocessError):
+                pass
+        out[name] = rec
+    return out
 
 
 def export_preflight(rel, st):
@@ -346,15 +595,227 @@ def export_preflight(rel, st):
     st.facts['export_tools_condition3'] = {k: v['match'] for k, v in tools.items() if v['required']}
     st.facts['writer_dir_condition4'] = check_writer_dir(rel, adm)
     st.facts['openpyxl'] = check_openpyxl()
+    st.facts['external_tools'] = external_tools()
     return adm, adm_sha, node, tools
 
 
+def check_live_release(jd):
+    """R9: the live release file named at prepare still releases this job: same status and the same file, or a release
+    that names this job's release_version in accepts_jobs_from_release_versions."""
+    want = STATUS_FOR_MODE[jd.rec['qualification']]
+    p = jd.rec['release'].get('path')
+    try:
+        raw = Path(p).read_bytes()
+        d = strict_json(raw, 'live release')
+    except (OSError, TypeError, Refused):
+        raise Refused('RELEASE_NOT_LIVE', {'reason': 'the live release file named at prepare cannot be read as JSON'})
+    d = d if isinstance(d, dict) else {}
+    same = sha_bytes(raw) == jd.rec['release']['sha256']
+    acc = d.get('accepts_jobs_from_release_versions')
+    version = jd.rec['release'].get('release_version')
+    accepted = isinstance(acc, list) and version is not None and version in acc
+    if d.get('status') != want or not (same or accepted):
+        raise Refused('RELEASE_NOT_LIVE', {'status': d.get('status'), 'required': want, 'same_release_file': same,
+                                           'this_release_version_accepted': accepted})
+    return {'path': p, 'sha256': sha_bytes(raw), 'status': d.get('status'), 'same_release_file': same,
+            'this_release_version_accepted': accepted}
+
+
+# ------------------------------------------------------------------ qualification ledger (R11)
+def ledger_line(e):
+    return (json.dumps(e, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n').encode('utf-8')
+
+
+def self_sha(e, dump):
+    """The sha256 of an entry without its own entry_sha256 key, so a later edit of the last entry is caught too."""
+    return sha_bytes(dump({k: v for k, v in e.items() if k != 'entry_sha256'}))
+
+
+class Ledger:
+    """The qualification ledger (R11): one JSON object per line, each with seq and the sha256 of every byte before it,
+    appended only, at the path the release names, outside every job folder. Held under an exclusive lock while open."""
+    def __init__(self, path):
+        self.path = Path(path)
+        self.fd, self.entries, self.raw = None, [], b''
+
+    def __enter__(self):
+        if not self.path.is_absolute() or not self.path.parent.is_dir():
+            raise Refused('QUALIFICATION_LEDGER_PATH', 'an absolute path in an existing folder')
+        try:
+            self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o644)
+        except OSError as e:
+            raise Refused('QUALIFICATION_LEDGER_UNAVAILABLE', {'errno': e.errno})
+        deadline = time.time() + 60
+        while True:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.time() > deadline:
+                    os.close(self.fd)
+                    raise Refused('QUALIFICATION_LEDGER_BUSY')
+                time.sleep(0.1)
+        with open(self.path, 'rb') as f:
+            self.raw = f.read()
+        problem = self.chain_problem()
+        if problem:
+            self.__exit__()
+            raise Refused('QUALIFICATION_LEDGER_CHAIN_BROKEN', {'problem': problem})
+        return self
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_UN)
+            finally:
+                os.close(self.fd)
+                self.fd = None
+        return False
+
+    def chain_problem(self):
+        self.entries = []
+        if self.raw and not self.raw.endswith(b'\n'):
+            return 'the last line is incomplete'
+        off = 0
+        for i, line in enumerate(self.raw.split(b'\n')[:-1]):
+            try:
+                e = strict_json(line, 'ledger')
+            except Refused:
+                return f'line {i + 1} is not strict JSON'
+            if (not isinstance(e, dict) or e.get('ledger') != LEDGER_SCHEMA or e.get('seq') != i + 1
+                    or e.get('previous_ledger_sha256') != sha_bytes(self.raw[:off]) or ledger_line(e) != line + b'\n'
+                    or e.get('entry_sha256') != self_sha(e, ledger_line)):
+                return f'line {i + 1} breaks the chain'
+            self.entries.append(e)
+            off += len(line) + 1
+        return None
+
+    def append(self, entry):
+        e = dict(entry, ledger=LEDGER_SCHEMA, seq=len(self.entries) + 1, previous_ledger_sha256=sha_bytes(self.raw), utc=utc())
+        e['entry_sha256'] = self_sha(e, ledger_line)
+        b = ledger_line(e)
+        n = os.write(self.fd, b)
+        if n != len(b):
+            raise Refused('QUALIFICATION_LEDGER_WRITE_SHORT')
+        os.fsync(self.fd)
+        self.raw += b
+        self.entries.append(e)
+        return e
+
+    def of(self, kind, **match):
+        return [e for e in self.entries if e.get('type') == kind and all(e.get(k) == v for k, v in match.items())]
+
+
+def ledger_record_entry(jd, s):
+    return {'type': 'record', 'job_dir': str(jd.dir), 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'], 'seq': s['seq'],
+            'stage': s['stage'], 'result': s['result'], 'next': s['next'], 'completed': s['completed'],
+            'run_record_sha256': sha_bytes(jd.raw)}
+
+
+def ledger_check_record(led, jd):
+    """The record must be the one the ledger last recorded for this folder (a truncated, edited or replaced record is
+    refused). A record one entry ahead (the ledger write after it failed) is caught up."""
+    key = str(jd.dir)
+    prep = led.of('prepare', job_dir=key)
+    if len(prep) != 1:
+        raise Refused('QUALIFICATION_JOB_NOT_IN_LEDGER', 'the ledger has no prepare entry for this job folder')
+    known = [prep[0]['run_record_sha256']] + [e['run_record_sha256'] for e in led.of('record', job_dir=key)]
+    if sha_bytes(jd.raw) == known[-1]:
+        return
+    st = jd.rec['stages']
+    if st and st[-1].get('previous_record_sha256') == known[-1]:
+        led.append(ledger_record_entry(jd, st[-1]))
+        return
+    raise Refused('RUN_RECORD_NOT_IN_LEDGER', 'the record differs from the last one the qualification ledger recorded')
+
+
+def ledger_completed(led, job_dir):
+    return [(e['stage'], e['next']) for e in led.of('record', job_dir=job_dir) if e['completed']]
+
+
+def ledger_admit_prepare(led, jobs, case, reader, job_dir, adm):
+    """R11 at prepare --qualification: a JOBS.json case, no recorded nonattempt, the admission frozen before the first
+    prepare of the ledger, one run per case and reader, a restart once and only after a technical stop at prepare
+    (before any reader or generator response), and reader B only after reader A of the case is frozen."""
+    c = jobs.get(case)
+    if c is None:
+        raise Refused('QUALIFICATION_CASE_NOT_IN_JOBS', 'the case is not listed in the pinned JOBS.json')
+    if c.get('nonattempt'):
+        raise Refused('QUALIFICATION_CASE_IS_NONATTEMPT', 'JOBS.json marks the case as a nonattempt')
+    if led.of('nonattempt', case_id=case, reader=reader):
+        raise Refused('QUALIFICATION_NONATTEMPT_RECORDED', 'the ledger records a nonattempt for this case and reader')
+    if led.entries:
+        first, frozen = parse_utc(led.entries[0].get('utc')), parse_utc(adm.get('frozen_utc'))
+        if first is None or frozen is None or frozen >= first:
+            raise Refused('ADMISSION_FROZEN_AFTER_FIRST_PREPARE', 'the admission must be frozen before the first qualification prepare')
+    if any(e.get('job_dir') == job_dir for e in led.entries):
+        raise Refused('QUALIFICATION_JOB_DIR_REUSED')
+    mine = led.of('prepare', case_id=case, reader=reader)
+    restart_of = None
+    if mine:
+        if len(mine) > 1:
+            raise Refused('QUALIFICATION_RESTART_USED', 'this case and reader were already restarted once')
+        prev = mine[0]['job_dir']
+        if not led.of('freeze', job_dir=prev):
+            raise Refused('QUALIFICATION_RUN_EXISTS', 'this case and reader already have a run that is not frozen')
+        done = [(s, n) for s, n in ledger_completed(led, prev) if s != 'freeze']
+        if any(s != 'prepare' for s, _ in done) or not done or not str(done[-1][1]).startswith('STOP_'):
+            raise Refused('QUALIFICATION_RESTART_NOT_ALLOWED', 'a restart is allowed once, only after a technical stop at '
+                          'prepare, before any scope reader or generator response')
+        if reader == 'A' and led.of('prepare', case_id=case, reader='B'):
+            raise Refused('QUALIFICATION_RESTART_NOT_ALLOWED', 'run B of this case has started')
+        restart_of = prev
+    if reader == 'B':
+        a = led.of('prepare', case_id=case, reader='A')
+        if not a or not led.of('freeze', job_dir=a[-1]['job_dir']):
+            raise Refused('QUALIFICATION_READER_A_NOT_FROZEN', 'run B starts only after run A of the case is frozen')
+    return restart_of
+
+
+def load_jobs(rel, adm):
+    """The pinned qualification jobs list (cps.qualification-jobs.v1): cases[{case_id, order, nonattempt[, reason]}]."""
+    if rel.jobs_file is None or not rel.jobs_file.is_file():
+        raise Refused('QUALIFICATION_JOBS_FILE_MISSING')
+    raw = rel.jobs_file.read_bytes()
+    pin = (adm.get('pins') or {}).get(JOBS_LABEL)
+    if not isinstance(pin, dict) or pin.get('sha256') != sha_bytes(raw):
+        raise Refused('ADMISSION_MISSING_PINS', {'mismatched': [JOBS_LABEL]})
+    d = strict_json(raw, 'JOBS.json')
+    if not isinstance(d, dict) or d.get('schema') != JOBS_SCHEMA or not isinstance(d.get('cases'), list):
+        raise Refused('QUALIFICATION_JOBS_SCHEMA', {'expected': JOBS_SCHEMA})
+    out = {}
+    for c in d['cases']:
+        if (not isinstance(c, dict) or not isinstance(c.get('case_id'), str) or not CASE_ID_RE.fullmatch(c['case_id'])
+                or c['case_id'] in out or not isinstance(c.get('nonattempt', False), bool)):
+            raise Refused('QUALIFICATION_JOBS_SCHEMA', 'each case: {case_id, order, nonattempt}, case ids unique')
+        out[c['case_id']] = c
+    return out, sha_bytes(raw)
+
+
 # ------------------------------------------------------------------ job folder and record
+def chain_problem(rec, raw):
+    """R2: the bytes are the runner's own serialization, seq runs 1..n, entry i chains to the exact bytes of the record
+    with entries 1..i-1 (the header included), and each entry carries the sha256 of its own content (entry_sha256)."""
+    stages = rec.get('stages')
+    if not isinstance(stages, list):
+        return 'no stages list'
+    if raw != dumps(rec):
+        return 'the bytes are not the runner serialization'
+    for i, s in enumerate(stages):
+        if not isinstance(s, dict) or s.get('seq') != i + 1:
+            return f'entry {i + 1}: seq'
+        if s.get('previous_record_sha256') != sha_bytes(dumps(dict(rec, stages=stages[:i]))):
+            return f'entry {i + 1}: previous_record_sha256'
+        if s.get('entry_sha256') != self_sha(s, dumps):
+            return f'entry {i + 1}: entry_sha256'
+    return None
+
+
 class Job:
     def __init__(self, d):
         self.dir = Path(d).resolve()
         self.record_path = self.dir / 'RUN_RECORD.json'
-        self.rec, self.raw = None, None
+        self.rec, self.raw, self.lock_fd, self.ledger_path, self.ledger_error = None, None, None, None, None
 
     def p(self, *parts):
         return self.dir.joinpath(*parts)
@@ -366,14 +827,42 @@ class Job:
         except ValueError:
             return str(p)
 
+    def lock(self, wait=False):
+        """R4: one exclusive lock per job folder, held until this command exits."""
+        if not self.dir.is_dir():
+            raise Refused('NO_RUN_RECORD', 'run prepare first; --job-dir is <jobs-root>/<case id>')
+        try:
+            fd = os.open(self.p(LOCK_NAME), os.O_RDONLY | os.O_CREAT, 0o444)
+        except OSError as e:
+            raise Refused('JOB_LOCK_UNAVAILABLE', {'errno': e.errno})
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+        except BlockingIOError:
+            os.close(fd)
+            raise Refused('JOB_BUSY', 'another cps_job.py command is running in this job folder: wait until it ends; never re-issue it')
+        self.lock_fd = fd
+
     def load(self):
         if not self.record_path.is_file():
             raise Refused('NO_RUN_RECORD', 'run prepare first; --job-dir is <jobs-root>/<case id>')
-        self.raw = self.record_path.read_bytes()
-        rec = strict_json(self.raw, 'RUN_RECORD.json')
-        if rec.get('schema') != RECORD_SCHEMA:
-            raise Refused('RUN_RECORD_SCHEMA')
-        self.rec = rec
+        raw = self.record_path.read_bytes()
+        try:
+            rec = strict_json(raw, 'RUN_RECORD.json')
+        except Refused:
+            raise Refused('RUN_RECORD_CHAIN_BROKEN', {'problem': 'not strict JSON'})
+        if not isinstance(rec, dict) or rec.get('schema') != RECORD_SCHEMA:
+            raise Refused('RUN_RECORD_SCHEMA', {'expected': RECORD_SCHEMA})
+        problem = chain_problem(rec, raw)
+        if problem:
+            raise Refused('RUN_RECORD_CHAIN_BROKEN', {'problem': problem})
+        self.rec, self.raw = rec, raw
+        if rec.get('qualification'):
+            rel = self.release()
+            if rel.ledger is None:
+                raise Refused('QUALIFICATION_RELEASE_FIELDS', {'fields': ['qualification.ledger']})
+            self.ledger_path = rel.ledger
+            with Ledger(self.ledger_path) as led:
+                ledger_check_record(led, self)
         return rec
 
     def create(self, rec):
@@ -392,6 +881,7 @@ class Job:
             raise Refused('RUN_RECORD_CHANGED_ON_DISK', 'the record differs from the one this command read; nothing appended')
         old = strict_json(cur, 'RUN_RECORD.json')
         entry = dict(entry, seq=len(old['stages']) + 1, previous_record_sha256=sha_bytes(cur))
+        entry['entry_sha256'] = self_sha(entry, dumps)
         new = dict(old, stages=old['stages'] + [entry])
         raw = dumps(new)
         if strict_json(raw, 'RUN_RECORD.json')['stages'][:-1] != old['stages']:
@@ -402,28 +892,115 @@ class Job:
         write_new(tmp, raw)
         os.replace(tmp, self.record_path)
         self.rec, self.raw = new, raw
+        if self.ledger_path is not None:
+            try:
+                with Ledger(self.ledger_path) as led:
+                    led.append(ledger_record_entry(self, entry))
+            except (Refused, OSError) as e:                 # the next command catches the ledger up, or refuses
+                self.ledger_error = getattr(e, 'code', type(e).__name__)
 
     def release(self):
-        """Later stages use the release copy frozen at prepare, so the release cannot change mid-job."""
+        """Later stages use the release copy frozen at prepare, so the release cannot change mid-job (the live file is
+        checked separately, check_live_release)."""
         raw = self.p('input', 'RELEASE.json').read_bytes()
         if sha_bytes(raw) != self.rec['release']['sha256']:
             raise Refused('RELEASE_COPY_CHANGED')
         return Release(raw, 'input/RELEASE.json')
 
-    def require_not_frozen(self):
-        if self.done('freeze') or self.p('FROZEN.json').exists():
-            raise Refused('JOB_FROZEN', 'the job folder is frozen; nothing more may run in it')
+    def admission(self):
+        if not self.rec['qualification']:
+            return None
+        raw = self.p('input', 'ADMISSION.json').read_bytes()
+        if sha_bytes(raw) != (self.rec.get('admission') or {}).get('sha256'):
+            raise Refused('ADMISSION_COPY_CHANGED')
+        return strict_json(raw, 'admission')
 
-    def require_not_done(self, *names):
-        for n in names:
+    def frozen(self):
+        return bool(self.done('freeze')) or self.p('FROZEN.json').exists()
+
+    def require_not_frozen(self, reapply_modes=False):
+        if self.frozen():
+            detail = {'note': 'the job folder is frozen; nothing more may run in it'}
+            if self.p('FROZEN.json').is_file():
+                v = verify_frozen(self)
+                detail.update(frozen_folder_intact=v['intact'], unlisted=len(v['unlisted']), changed=len(v['changed']),
+                              missing=len(v['missing']))
+                if reapply_modes and v['intact']:
+                    make_tree_readonly(self.dir)
+            raise Refused('JOB_FROZEN', detail)
+
+    def require_stage_open(self, name, also=()):
+        for n in (name,) + tuple(also):
             if self.done(n):
                 raise Refused('STAGE_ALREADY_COMPLETED', {'stage': n, 'result': self.done(n)[-1]['result']})
+        for w in STAGE_WITNESSES.get(name, ()):
+            if os.path.lexists(self.p(w)):
+                raise Refused('STAGE_OUTPUT_EXISTS', {'stage': name, 'path': w, 'note': 'a frozen output of this stage exists '
+                              'without its completing record entry; tell the owner'})
 
     def pinned_file(self, rel_path, sha):
         p = self.p(rel_path)
-        if not p.is_file() or sha_file(p) != sha:
-            raise Refused('JOB_FILE_CHANGED', {'file': rel_path})
+        if not regular(p) or sha_file(p) != sha:
+            raise Refused('JOB_FILE_CHANGED', {'file': safe_path(rel_path)})
         return p
+
+    def mark(self, st):
+        """R4: the stage starts consuming. The marker is removed once the stage's entry is appended; a marker found by a
+        later command means the stage was interrupted (reconcile)."""
+        p = self.p(MARKER_NAME)
+        if os.path.lexists(p):
+            p.unlink()
+        write_new(p, dumps({'stage': st.name, 'started_utc': st.started, 'seq_base': len(self.rec['stages']), 'pid': os.getpid()}),
+                  readonly=False)
+
+    def unmark(self):
+        try:
+            self.p(MARKER_NAME).unlink()
+        except FileNotFoundError:
+            pass
+
+
+def open_job(job_dir):
+    """Every subcommand on an existing job: the lock, the verified record (and ledger), then any interruption recorded."""
+    jd = Job(job_dir)
+    jd.lock()
+    jd.load()
+    if not jd.frozen():
+        reconcile(jd)
+    return jd
+
+
+def reconcile(jd):
+    """R4: a stage that began consuming and left no entry (a marker without the stage's entry, a freeze_response
+    without a finish entry, a record without any prepare entry) is recorded as INTERRUPTED (completed, never run again)."""
+    marker, m = jd.p(MARKER_NAME), None
+    if os.path.lexists(marker):
+        try:
+            m = strict_json(marker.read_bytes(), 'marker')
+        except (Refused, OSError):
+            m = {}
+        m = m if isinstance(m, dict) else {}
+        base = m.get('seq_base') if isinstance(m.get('seq_base'), int) else 0
+        if any(s['stage'] == m.get('stage') and s['completed'] for s in jd.rec['stages'][base:]):
+            jd.unmark()                                     # the stage's own entry was appended: a stale marker
+            return
+    stage, how = None, None
+    if m is not None:
+        stage, how = str(m.get('stage') or 'unknown'), 'stage marker'
+    elif not jd.rec['stages']:
+        stage, how = 'prepare', 'record without any entry'
+    else:
+        fr = jd.done('freeze_response')
+        if fr and not [s for s in jd.stages('finish') if s['seq'] > fr[-1]['seq']]:
+            stage, how = 'finish', 'freeze_response without a finish entry'
+    if stage is None:
+        return
+    st = Stage(jd, stage, None)
+    st.started = (m or {}).get('started_utc') or st.started
+    st.codes = ['STAGE_INTERRUPTED']
+    st.facts = {'interrupted': {'detected_by': how, 'marker': m}}
+    jd.append(st.entry('INTERRUPTED', 'STOP_INTERRUPTED', True))
+    jd.unmark()
 
 
 class Stage:
@@ -451,7 +1028,7 @@ class Stage:
         self.tools[self.job.rel(script) if str(script).startswith(str(self.job.dir)) else str(script)] = sha_file(script)
         self.counter += 1
         base = f'{self.seq:02d}_{self.name}_{self.counter:02d}_{label}'
-        argv = [sys.executable, *python_flags, str(script), *[str(a) for a in args]]
+        argv = py(*python_flags) + [str(script), *[str(a) for a in args]]
         try:
             p = subprocess.run(argv, capture_output=True, env=env, cwd=cwd, timeout=timeout)
             code, out, err = p.returncode, p.stdout, p.stderr
@@ -512,13 +1089,13 @@ def clean_env(rel):
 
 
 # ------------------------------------------------------------------ job inputs
-TITLE_PROBE = '''import importlib.util, json, sys
+TITLE_PROBE = '''import hashlib, importlib.util, json, sys
 spec = importlib.util.spec_from_file_location('cps_writer_title_probe', sys.argv[1])
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 try:
-    m.deliverable_record(sys.stdin.buffer.read().decode('utf-8'))
-    print(json.dumps({'ok': True}))
+    r = m.deliverable_record(sys.stdin.buffer.read().decode('utf-8'))
+    print(json.dumps({'ok': True, 'xlsx_file_sha256': hashlib.sha256(r['xlsx_file'].encode('utf-8')).hexdigest()}))
 except m.Refused as e:
     print(json.dumps({'ok': False, 'code': e.code, 'reason': (e.detail or {}).get('reason') if isinstance(e.detail, dict) else None}))
 '''
@@ -526,15 +1103,81 @@ except m.Refused as e:
 
 def check_title_with_writer(rel, title):
     """The writer's own O33 naming rule (deliverable_record), run before anything is generated: a title the writer would
-    refuse at finish is refused here. The title goes on stdin, never on a command line."""
+    refuse at finish is refused here. The title goes on stdin, never on a command line. Returns the sha256 of the
+    delivered file name the writer derives (N7)."""
     w = rel.root / 'research/export/writer_portable.py'
-    p = subprocess.run([sys.executable, '-I', '-B', '-c', TITLE_PROBE, str(w)], input=title.encode('utf-8'), capture_output=True, timeout=120)
+    p = subprocess.run(py('-I', '-B') + ['-c', TITLE_PROBE, str(w)], input=title.encode('utf-8'), capture_output=True, timeout=120)
     d = last_json_line(p.stdout) or {}
     if p.returncode != 0 or d.get('ok') is not True:
         raise Refused('JOB_TITLE_REFUSED_BY_WRITER', {'reason': d.get('reason')})
+    return d.get('xlsx_file_sha256')
 
 
-def job_inputs(job_raw, title_raw, rel, qualification, admission_raw):
+def check_title_shape(t, case):
+    """N6: no invisible format character (Unicode category Cf: U+200B, U+202E, U+FEFF ...), and the title starts with
+    exactly the case id (the next character is not another digit)."""
+    if not isinstance(t, str):
+        raise Refused('JOB_TITLE_INVALID', 'the title is a string')
+    if any(unicodedata.category(ch) == 'Cf' for ch in t):
+        raise Refused('JOB_TITLE_FORMAT_CHARACTER', 'the title holds an invisible format character (Unicode category Cf)')
+    norm = ''.join(ch for ch in nfkc(t) if not ch.isspace())
+    if not norm.startswith(case) or (len(norm) > len(case) and norm[len(case)].isdigit()):
+        raise Refused('JOB_TITLE_INVALID', 'the project folder title starts with exactly the case id')
+
+
+def parse_admission(admission_raw):
+    adm = strict_json(admission_raw, 'admission')
+    if not isinstance(adm, dict) or adm.get('schema') != ADMISSION_SCHEMA or not isinstance(adm.get('pins'), dict):
+        raise Refused('ADMISSION_SCHEMA', {'expected': ADMISSION_SCHEMA})
+    return adm
+
+
+def admission_required_files(rel):
+    """R12 (review 4(d) item 1): the files a qualification admission pins by label (the repository-relative path)."""
+    out = [(rel.label(p), p) for p in executed_files(rel)]
+    out.append((rel.label(rel.writer_admission), rel.writer_admission))
+    out += [(f, rel.root / f) for f in EVALUATION_FILES]
+    out.append((JOBS_LABEL, rel.jobs_file))
+    return out
+
+
+def check_admission(rel, admission_raw, facts, case, tables, admission_path=None):
+    """R12: the admission is listed in the release by path and sha256, frozen before this prepare, and pins every job
+    input and every tool, the evaluator, the aggregator and JOBS.json, each against the bytes the runner uses."""
+    adm = parse_admission(admission_raw)
+    a_sha = sha_bytes(admission_raw)
+    if not rel.admission_listed(admission_path, admission_raw):
+        raise Refused('ADMISSION_NOT_RELEASED', 'the release qualification.admissions must list this admission file by path and sha256')
+    frozen = parse_utc(adm.get('frozen_utc'))
+    if frozen is None:
+        raise Refused('ADMISSION_FROZEN_UTC')
+    if frozen >= datetime.datetime.now(datetime.timezone.utc):
+        raise Refused('ADMISSION_NOT_FROZEN_BEFORE_PREPARE')
+    pins = adm['pins']
+    pinned = {v.get('sha256') for v in pins.values() if isinstance(v, dict)}
+    tpin = pins.get('job_title_' + case)
+    if not isinstance(tpin, dict) or tpin.get('sha256') != facts['job_title_sha256']:
+        raise Refused('ADMISSION_JOB_TITLE_PIN', {'label': 'job_title_' + case})
+    rel.require_qualification_fields()
+    need = {'package manifest': rel.manifest_sha, 'route': sha_file(rel.route), 'JOB.json': facts['job_json_sha256'],
+            'source': facts['source_sha256'], **{'table ' + k: v for k, v in tables.items()}}
+    missing = sorted(k for k, v in need.items() if v not in pinned)
+    mismatched = []
+    for label, p in admission_required_files(rel):
+        pin = pins.get(label)
+        got = sha_file(p) if p is not None and p.is_file() else None
+        if not isinstance(pin, dict) or not is_sha(pin.get('sha256')):
+            missing.append(label)
+        elif pin['sha256'] != got:
+            mismatched.append(label)
+    if missing or mismatched:
+        raise Refused('ADMISSION_MISSING_PINS', {'missing': missing, 'mismatched': mismatched})
+    facts['admission'] = {'sha256': a_sha, 'frozen_utc': adm['frozen_utc'], 'pins': len(pins),
+                          'checked_pins': sorted(need) + ['job_title_' + case] + [lb for lb, _ in admission_required_files(rel)]}
+    return adm
+
+
+def job_inputs(job_raw, title_raw, rel, qualification, admission_raw, admission_path=None):
     job = strict_json(job_raw, 'JOB.json')
     if not isinstance(job, dict) or job.get('schema') != JOB_SCHEMA:
         raise Refused('JOB_SCHEMA', {'expected': JOB_SCHEMA})
@@ -551,11 +1194,9 @@ def job_inputs(job_raw, title_raw, rel, qualification, admission_raw):
         raise Refused('JOB_TITLE_FILE_SHAPE', {'expected_keys': ['schema', 'case_id', 'job_title'], 'schema': TITLE_SCHEMA})
     if title['case_id'] != case:
         raise Refused('JOB_TITLE_CASE_ID_MISMATCH')
-    t = title['job_title']
-    if not isinstance(t, str) or not ''.join(ch for ch in nfkc(t) if not (ch.isspace() or ch == '\ufeff')).startswith(case):
-        raise Refused('JOB_TITLE_INVALID', 'the project folder title starts with the case id')
+    check_title_shape(title['job_title'], case)
     # company tables: the job must use exactly the released, hash-pinned tables (never edited)
-    tables = {}
+    tables, table_paths = {}, {}
     for key, tkey in (('glossary_path', 'glossary'), ('brand_table_path', 'brand_table')):
         spec = rel.tables.get(tkey)
         if key not in job:
@@ -568,40 +1209,19 @@ def job_inputs(job_raw, title_raw, rel, qualification, admission_raw):
         h = sha_file(jp)
         if h != spec['sha256']:
             raise Refused('TABLE_SHA256_MISMATCH', {'table': tkey})
-        tables[tkey] = h
+        tables[tkey], table_paths[tkey] = h, jp
     cn_sha = rel.tables.get('company_name_sha256')
     if cn_sha is not None:
         if not isinstance(job.get('company_name'), str) or sha_bytes(job['company_name'].encode('utf-8')) != cn_sha:
             raise Refused('COMPANY_NAME_NOT_RELEASED')
     facts = {'case_id': case, 'source_kind_sha256': sha_bytes(str(job.get('source_kind')).encode('utf-8')),
              'job_json_sha256': sha_bytes(job_raw), 'job_title_sha256': sha_bytes(title_raw), 'source_sha256': sha_file(src),
-             'source_bytes': src.stat().st_size, 'source_extension': src.suffix.lower(), 'tables_sha256': tables}
+             'source_bytes': src.stat().st_size, 'source_extension': src.suffix.lower(), 'tables_sha256': tables,
+             'table_paths': table_paths}
     if qualification:
         if admission_raw is None:
             raise Refused('QUALIFICATION_NEEDS_ADMISSION')
-        adm = strict_json(admission_raw, 'admission')
-        if not isinstance(adm, dict) or adm.get('schema') != ADMISSION_SCHEMA or not isinstance(adm.get('pins'), dict):
-            raise Refused('ADMISSION_SCHEMA', {'expected': ADMISSION_SCHEMA})
-        a_sha = sha_bytes(admission_raw)
-        if rel.qual_admissions and a_sha not in rel.qual_admissions:
-            raise Refused('ADMISSION_NOT_RELEASED')
-        try:
-            frozen = datetime.datetime.fromisoformat(str(adm.get('frozen_utc')).replace('Z', '+00:00'))
-        except ValueError:
-            raise Refused('ADMISSION_FROZEN_UTC')
-        if frozen.tzinfo is None or frozen >= datetime.datetime.now(datetime.timezone.utc):
-            raise Refused('ADMISSION_NOT_FROZEN_BEFORE_PREPARE')
-        pinned = {v.get('sha256') for v in adm['pins'].values() if isinstance(v, dict)}
-        tpin = adm['pins'].get('job_title_' + case)
-        if not isinstance(tpin, dict) or tpin.get('sha256') != facts['job_title_sha256']:
-            raise Refused('ADMISSION_JOB_TITLE_PIN', {'label': 'job_title_' + case})
-        need = {'package manifest': rel.manifest_sha, 'route': sha_file(rel.route), 'JOB.json': facts['job_json_sha256'],
-                'source': facts['source_sha256'], **{'table ' + k: v for k, v in tables.items()}}
-        missing = sorted(k for k, v in need.items() if v not in pinned)
-        if missing:
-            raise Refused('ADMISSION_MISSING_PINS', {'missing': missing})
-        facts['admission'] = {'sha256': a_sha, 'frozen_utc': adm['frozen_utc'], 'pins': len(adm['pins']),
-                              'checked_pins': sorted(need) + ['job_title_' + case]}
+        facts['admission_doc'] = check_admission(rel, admission_raw, facts, case, tables, admission_path)
     return job, title, src, facts
 
 
@@ -622,6 +1242,50 @@ def check_inventory(st, rel, inv_path, label, want_scope):
     return res
 
 
+def builder_config_problems(cfg, facts):
+    """N14: the builder config made from JOB.json names exactly the pinned source, job file and released tables (the
+    builder refuses a source whose bytes differ from the config's original.sha256)."""
+    rs = cfg.get('resource_files_sha256') or {}
+    out = []
+    if (cfg.get('original') or {}).get('sha256') != facts['source_sha256']:
+        out.append('BUILDER_CONFIG_SOURCE_SHA256')
+    if cfg.get('job_config_sha256') != facts['job_json_sha256']:
+        out.append('BUILDER_CONFIG_JOB_SHA256')
+    for k in ('glossary', 'brand_table'):
+        if rs.get(k) != facts['tables_sha256'].get(k):
+            out.append('BUILDER_CONFIG_TABLE_SHA256_' + k.upper())
+    return out
+
+
+def write_packet_pins(st, jd):
+    """R12 (review 4(d) item 2): every in-job product the generation depends on, pinned in a read-only PACKET_PINS.json
+    before NEXT: GENERATE; in qualification its sha256 goes to the ledger, outside the job folder."""
+    files = {}
+    for root in ('packet', 'scope/tool', 'scope/reader/input', 'scope/decision', 'scope/scoped_packet'):
+        t = tree(jd.p(root))
+        for k, v in sorted((t or {'files': {}})['files'].items()):
+            files[root + '/' + k] = v
+    for one in ('scope/SCOPE_READER_PROMPT.md', 'scope/SCOPE_READER_RESPONSE.json', 'run/GENERATOR_PROMPT.md',
+                f'run/{jd.rec["reader"]}/RUN_INPUT_PINS.json'):
+        p = jd.p(one)
+        if regular(p):
+            files[one] = {'bytes': p.stat().st_size, 'sha256': sha_file(p)}
+    keys = ('check_inventory_full', 'content_cells_literal_or_cached', 'scope_tool', 'scope_decision', 'scoped_verify',
+            'check_inventory_scoped', 'generation')
+    prep = jd.done('prepare')[-1]['facts'] if st.name != 'prepare' and jd.done('prepare') else {}
+    doc = {'schema': PACKET_PINS_SCHEMA, 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'], 'stage': st.name,
+           'written_utc': utc(), 'files': files,
+           'facts': {k: st.facts.get(k, prep.get(k)) for k in keys if k in st.facts or k in prep}}
+    p = jd.p('PACKET_PINS.json')
+    write_new(p, dumps(doc))
+    sha = st.pin_out('packet_pins', p)
+    if jd.ledger_path is not None:
+        with Ledger(jd.ledger_path) as led:
+            led.append({'type': 'packet_pins', 'job_dir': str(jd.dir), 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'],
+                        'stage': st.name, 'packet_pins_sha256': sha})
+    st.facts['packet_pins'] = {'sha256': sha, 'files': len(files), 'in_ledger': jd.ledger_path is not None}
+
+
 def prepare_generation(st, job, rel, packet_dir, reader, case):
     run_dir = job.p('run', reader)
     code, out, err = st.run('prepare_run', rel.harness / 'prepare_run.py',
@@ -637,10 +1301,13 @@ def prepare_generation(st, job, rel, packet_dir, reader, case):
     st.tools[str(rel.harness / 'GENERATOR_PROMPT_TEMPLATE.md')] = sha_file(rel.harness / 'GENERATOR_PROMPT_TEMPLATE.md')
     prompt = job.p('run', 'GENERATOR_PROMPT.md')
     write_new(prompt, tpl.replace('{RUN}', str(run_dir)))
+    make_tree_readonly(run_dir / 'input')                    # R5: the generator's input folders too
+    (run_dir / 'RUN_INPUT_PINS.json').chmod(RO)
     st.pin_out('run_input_pins', run_dir / 'RUN_INPUT_PINS.json')
     st.pin_out('generator_prompt', prompt)
     st.facts['generation'] = {'run_dir': job.rel(run_dir), 'reader': reader, 'packet_inventory_sha256': packet_sha,
                               'inputs_pinned': len(pins['inputs']), 'response_path': job.rel(run_dir / 'output' / 'response.json')}
+    write_packet_pins(st, job)
     return f'GENERATE prompt={prompt} folder={run_dir}'
 
 
@@ -653,6 +1320,8 @@ def cmd_prepare(a):
         raise Refused('QUALIFICATION_NEEDS_ADMISSION')
     if a.admission and not a.qualification:
         raise Refused('ADMISSION_ONLY_WITH_QUALIFICATION')
+    if a.admission and not Path(a.admission).is_absolute():
+        raise Refused('ABSOLUTE_PATH_REQUIRED', {'argument': '--admission'})
     if a.reader not in ('A', 'B'):
         raise Refused('READER', 'A or B')
     jobs_root = Path(a.jobs_root).resolve()
@@ -660,26 +1329,45 @@ def cmd_prepare(a):
         raise Refused('JOBS_ROOT_WHITESPACE', 'printed paths must not contain whitespace')
     rel_raw = Path(a.release).read_bytes()
     rel = Release(rel_raw, a.release)
+    if inside(jobs_root, rel.root):                           # N11: private copies never sit in the public checkout
+        raise Refused('JOBS_ROOT_IN_REPOSITORY', 'the jobs root must be outside repository.root')
     job_raw, title_raw = Path(a.job).read_bytes(), Path(a.job_title_file).read_bytes()
     adm_raw = Path(a.admission).read_bytes() if a.admission else None
+    adm0 = parse_admission(adm_raw) if adm_raw is not None else None
     probe = Stage(Job(jobs_root / '_'), 'prepare', a)        # collects facts before the folder exists
-    check_release_static(rel, a.qualification, probe)
+    check_release_static(rel, a.qualification, probe, adm0)
     export_preflight(rel, probe)                             # fail early: a job never waits on an unadmitted node
-    job, title, src, facts = job_inputs(job_raw, title_raw, rel, a.qualification, adm_raw)
-    check_title_with_writer(rel, title['job_title'])
+    job, title, src, facts = job_inputs(job_raw, title_raw, rel, a.qualification, adm_raw, a.admission)
+    name_sha = check_title_with_writer(rel, title['job_title'])
     case = facts['case_id']
+    privates = [('--job', a.job), ('--job-title-file', a.job_title_file), ('source_path', src), ('--admission', a.admission)]
+    privates += [('table ' + k, p) for k, p in facts['table_paths'].items()]
+    if a.qualification:
+        privates += [('qualification.ledger', rel.ledger), ('qualification.jobs_file', rel.jobs_file)]
+    for label, p in privates:
+        if p is not None and inside(p, rel.root):
+            raise Refused('JOB_INPUT_IN_REPOSITORY', {'input': label})
+    jobs = None
+    if a.qualification:
+        if inside(rel.ledger, jobs_root):
+            raise Refused('QUALIFICATION_LEDGER_PATH', 'the ledger lies outside the jobs root and every job folder')
+        jobs, jobs_sha = load_jobs(rel, facts['admission_doc'])
+        facts['admission']['jobs_sha256'] = jobs_sha
     jd = Job(jobs_root / case)
     if jd.dir.exists():
         raise Refused('JOB_DIR_EXISTS', 'a job folder is used once; never re-prepare into it')
-    for name in ('make_job_config.py', 'scope_tool.py', 'scope_agree.py', 'make_scoped_inventory.py', 'prepare_run.py',
-                 'GENERATOR_PROMPT_TEMPLATE.md', 'SCOPE_READER_PROMPT_TEMPLATE.md'):
+    for name in HARNESS_FILES:
         if not (rel.harness / name).is_file():
             raise Refused('HARNESS_FILE_MISSING', {'file': name})
-    for name in ('build_inventory_xlsx_v2.py', 'build_inventory_v2.py', 'render_views.py', 'screenshot_views.cjs', 'auto_views.py'):
+    for name in SOURCE_PREP_FILES:
         if not (rel.source_prep / name).is_file():
             raise Refused('SOURCE_PREP_FILE_MISSING', {'file': name})
     if not (rel.deps_bundle / 'private' / 'deps').is_dir():
         raise Refused('DEPS_BUNDLE_MISSING', 'source_prep.deps_bundle must hold private/deps (openpyxl 3.1.5, xlrd 2.0.2)')
+    bv = bundle_versions(rel.deps_bundle)
+    if bv['openpyxl']['version'] != OPENPYXL_VERSION or not bv['openpyxl']['from_bundle']:
+        raise Refused('DEPS_BUNDLE_OPENPYXL_VERSION', {'found': bv['openpyxl']['version'], 'required': OPENPYXL_VERSION})
+    probe.facts['deps_bundle'] = bv
     # make_job_config validates the job inputs before the job folder exists (a refusal leaves nothing behind)
     vdir = jobs_root / ('.validate_' + case + '_' + str(os.getpid()))
     jobs_root.mkdir(parents=True, exist_ok=True)
@@ -687,14 +1375,48 @@ def cmd_prepare(a):
     try:
         vjob = vdir / 'JOB.json'
         write_new(vjob, job_raw)
-        p = subprocess.run([sys.executable, '-I', '-B', str(rel.harness / 'make_job_config.py'), '--job', str(vjob),
-                            '--out', str(vdir / 'BUILDER_CONFIG.json')], capture_output=True, timeout=600, env=tool_env(rel))
+        p = subprocess.run(py('-I', '-B') + [str(rel.harness / 'make_job_config.py'), '--job', str(vjob),
+                           '--out', str(vdir / 'BUILDER_CONFIG.json')], capture_output=True, timeout=600, env=tool_env(rel))
         if p.returncode != 0:
             raise Refused('JOB_CONFIG_REFUSED', {'make_job_config_code': refusal_code(p.stderr)})
     finally:
         shutil.rmtree(vdir, ignore_errors=True)
-    # the job folder
-    jd.dir.mkdir()
+    rec = {'schema': RECORD_SCHEMA, 'runner': {'version': VERSION, 'sha256': sha_file(__file__)}, 'case_id': case,
+           'reader': a.reader, 'qualification': bool(a.qualification), 'created_utc': utc(),
+           'release': dict(rel.summary(), path=os.path.abspath(a.release)),
+           'job_inputs': {k: facts[k] for k in ('job_json_sha256', 'job_title_sha256', 'source_sha256', 'source_bytes',
+                                                'source_extension', 'source_kind_sha256', 'tables_sha256')},
+           'deliverable_file_name_sha256': name_sha, 'admission': facts.get('admission'), 'restart_of': None,
+           'ledger': str(rel.ledger) if a.qualification else None,
+           'user_options': 'none: the runner takes no per-user options', 'operator_model': a.operator_model, 'stages': []}
+    if a.qualification:
+        with Ledger(rel.ledger) as led:
+            rec['restart_of'] = ledger_admit_prepare(led, jobs, case, a.reader, str(jd.dir), facts['admission_doc'])
+            make_job_folder(jd, rel_raw, job_raw, title_raw, src, facts, adm_raw, rec)
+            led.append({'type': 'prepare', 'case_id': case, 'reader': a.reader, 'jobs_root': str(jobs_root), 'job_dir': str(jd.dir),
+                        'admission_sha256': facts['admission']['sha256'], 'release_sha256': rel.sha,
+                        'restart_of': rec['restart_of'], 'run_record_sha256': sha_bytes(jd.raw)})
+        jd.ledger_path = rel.ledger
+    else:
+        make_job_folder(jd, rel_raw, job_raw, title_raw, src, facts, adm_raw, rec)
+    st = Stage(jd, 'prepare', a)
+    st.facts.update(probe.facts)
+    st.tools.update(probe.tools)
+    st.facts['restart_of'] = rec['restart_of']
+    for label, rp in (('release', 'RELEASE.json'), ('job_json', 'JOB.json'), ('job_title', 'JOB_TITLE.json'),
+                      ('source', 'source' + facts['source_extension'])):
+        st.pin_in(label, jd.p('input', rp))
+    if adm_raw is not None:
+        st.pin_in('admission', jd.p('input', 'ADMISSION.json'))
+    return run_stage(jd, st, lambda: prepare_body(st, jd, rel, case, a.reader, facts))
+
+
+def make_job_folder(jd, rel_raw, job_raw, title_raw, src, facts, adm_raw, rec):
+    try:
+        jd.dir.mkdir()
+    except FileExistsError:
+        raise Refused('JOB_DIR_EXISTS', 'a job folder is used once; never re-prepare into it')
+    jd.lock(wait=True)
     for d in LAYOUT:
         jd.p(d).mkdir()
     write_new(jd.p('input', 'RELEASE.json'), rel_raw)
@@ -703,32 +1425,28 @@ def cmd_prepare(a):
     write_new(jd.p('input', 'source' + facts['source_extension']), src.read_bytes())
     if adm_raw is not None:
         write_new(jd.p('input', 'ADMISSION.json'), adm_raw)
-    rec = {'schema': RECORD_SCHEMA, 'runner': {'version': VERSION, 'sha256': sha_file(__file__)}, 'case_id': case,
-           'reader': a.reader, 'qualification': bool(a.qualification), 'created_utc': utc(), 'release': rel.summary(),
-           'job_inputs': {k: facts[k] for k in ('job_json_sha256', 'job_title_sha256', 'source_sha256', 'source_bytes',
-                                                'source_extension', 'source_kind_sha256', 'tables_sha256')},
-           'admission': facts.get('admission'), 'user_options': 'none: the runner takes no per-user options',
-           'operator_model': a.operator_model, 'stages': []}
     jd.create(rec)
-    st = Stage(jd, 'prepare', a)
-    st.facts.update(probe.facts)
-    st.tools.update(probe.tools)
-    for label, rp in (('release', 'RELEASE.json'), ('job_json', 'JOB.json'), ('job_title', 'JOB_TITLE.json'),
-                      ('source', 'source' + facts['source_extension'])):
-        st.pin_in(label, jd.p('input', rp))
-    if adm_raw is not None:
-        st.pin_in('admission', jd.p('input', 'ADMISSION.json'))
-    return run_stage(jd, st, lambda: prepare_body(st, jd, rel, case, a.reader))
 
 
-def prepare_body(st, jd, rel, case, reader):
+def seal_prepare(jd):
+    """R1: the packet and the scope tool's files are read-only once prepare has pinned them (scope-finish re-verifies)."""
+    for root in ('packet', 'scope/tool', 'scope/reader/input'):
+        make_tree_readonly(jd.p(root))
+
+
+def prepare_body(st, jd, rel, case, reader, facts):
     env = tool_env(rel)
     cfg = jd.p('packet', 'BUILDER_CONFIG.json')
     code, _, _ = st.run('make_job_config', rel.harness / 'make_job_config.py', ['--job', jd.p('input', 'JOB.json'), '--out', cfg], env=env)
     if code != 0:
         raise Outcome('JOB_CONFIG_REFUSED', 'STOP_JOB_CONFIG_REFUSED')
     st.pin_out('builder_config', cfg)
-    builder = rel.source_prep / Path(read_json(cfg, 'builder config')['builder']).name
+    cfg_doc = read_json(cfg, 'builder config')
+    bad = builder_config_problems(cfg_doc, facts)
+    if bad:
+        st.codes += bad
+        raise Outcome('BUILDER_CONFIG_MISMATCH', 'STOP_BUILDER_CONFIG_MISMATCH')
+    builder = rel.source_prep / Path(cfg_doc['builder']).name
     full = jd.p('packet', 'full')
     code, _, _ = st.run('build_inventory', builder, ['--bundle', rel.deps_bundle, '--config', cfg, '--out', full],
                         env=env, python_flags=('-I', '-S', '-B'))
@@ -751,17 +1469,22 @@ def prepare_body(st, jd, rel, case, reader):
         raise Outcome('SCOPE_TOOL_REFUSED', 'STOP_SCOPE_TOOL_REFUSED')
     proposal = read_json(jd.p('scope', 'tool', 'SCOPE_PROPOSAL.json'), 'scope proposal')
     st.pin_out('scope_proposal', jd.p('scope', 'tool', 'SCOPE_PROPOSAL.json'))
+    for name, label in (('SCOPE_DIGEST.json', 'scope_digest'), ('SCOPE_RULES_EXCERPT.md', 'scope_rules_excerpt')):
+        if jd.p('scope', 'tool', name).is_file():
+            st.pin_out(label, jd.p('scope', 'tool', name))
     status = proposal['status']
     st.facts['scope_tool'] = {'status': status, 'content_cells_literal_or_cached': proposal['content_cells_literal_or_cached'],
                               'threshold': proposal['rule']['threshold'], 'holds': [h['code'] for h in proposal['holds']],
                               'flags': [f['code'] for f in proposal['flags']], 'bill_sheet_index': proposal['bill']['sheet_index'],
                               'end_row': proposal['bill']['end_row']}
+    st.facts['pinned_trees'] = {'packet': tree_shas(jd.p('packet')), 'scope/tool': tree_shas(jd.p('scope', 'tool'))}
     if proposal['content_cells_literal_or_cached'] != count or (status == 'NOT_APPLIED') != (count <= proposal['rule']['threshold']):
         raise Outcome('SCOPE_COUNT_INCONSISTENT', 'STOP_SCOPE_COUNT_INCONSISTENT')
     if status == 'HOLD':
         st.codes += [h['code'] for h in proposal['holds']]
         raise Outcome('SCOPE_TOOL_HOLD', 'OWNER_DECISION')
     if status == 'NOT_APPLIED':
+        seal_prepare(jd)
         return 'PREPARED_NOT_SCOPED', prepare_generation(st, jd, rel, full, reader, case)
     # PROPOSED: the scope reader sees exactly the digest and the rules excerpt (read-only) in a new conversation
     sr = jd.p('scope', 'reader')
@@ -776,48 +1499,107 @@ def prepare_body(st, jd, rel, case, reader):
     prompt = jd.p('scope', 'SCOPE_READER_PROMPT.md')
     write_new(prompt, tpl_path.read_text(encoding='utf-8').replace('{SCOPE_RUN}', str(sr)))
     st.pin_out('scope_reader_prompt', prompt)
+    seal_prepare(jd)
     return 'SCOPE_PROPOSED', f'SCOPE_READER prompt={prompt} folder={sr}'
 
 
 # ------------------------------------------------------------------ scope-finish
 def cmd_scope_finish(a):
-    jd = Job(a.job_dir)
-    jd.load()
+    jd = open_job(a.job_dir)
     st = Stage(jd, 'scope-finish', a)
     return run_stage(jd, st, lambda: scope_finish_body(st, jd, a), preflight=lambda: scope_finish_pre(st, jd, a))
 
 
 def scope_finish_pre(st, jd, a):
     jd.require_not_frozen()
-    jd.require_not_done('scope-finish')
+    jd.require_stage_open('scope-finish')
     prep = jd.done('prepare')
     if not prep or not str(prep[-1]['next']).startswith('SCOPE_READER'):
         raise Refused('SCOPE_STAGE_NOT_OPEN', 'prepare did not end with NEXT: SCOPE_READER')
     rel = jd.release()
-    check_release_static(rel, jd.rec['qualification'], st)
+    check_release_static(rel, jd.rec['qualification'], st, jd.admission())
+    st.facts['live_release'] = check_live_release(jd)
     resp = Path(a.reader_response)
     if not resp.is_absolute() or not resp.is_file():
         raise Refused('READER_RESPONSE_REQUIRED', 'an absolute path to the reader JSON')
     expected = jd.p('scope', 'reader', 'output', 'SCOPE_READER_RESPONSE.json')
-    if jd.rec['qualification'] and os.path.realpath(resp) != str(expected):
-        raise Refused('READER_RESPONSE_PATH', 'qualification: the reader writes scope/reader/output/SCOPE_READER_RESPONSE.json')
-    return rel
+    if os.path.realpath(resp) != str(expected) or not regular(expected):
+        raise Refused('READER_RESPONSE_PATH', 'the reader writes scope/reader/output/SCOPE_READER_RESPONSE.json')
+    if a.reader_conversation_id is not None and not nonblank(a.reader_conversation_id):
+        raise Refused('READER_CONVERSATION_ID_BLANK')
+    return {'rel': rel, 'raw': resp.read_bytes(), 'prep': prep[-1]}
+
+
+def scope_inputs_changed(jd, prep):
+    """R1: the scope tool's files, the full packet and the proposal's facts, against the prepare pins."""
+    codes = []
+    for root, want in (prep['facts'].get('pinned_trees') or {}).items():
+        t = tree(jd.p(root))
+        if t is None or t['other'] or {k: v['sha256'] for k, v in t['files'].items()} != want:
+            codes.append('CHANGED_' + root.upper().replace('/', '_'))
+    if not prep['facts'].get('pinned_trees'):
+        codes.append('NO_PREPARE_PINS')
+    for label in ('scope_proposal', 'scope_digest', 'scope_rules_excerpt', 'full_inventory', 'builder_config'):
+        o = prep['outputs'].get(label)
+        if o is None or not regular(jd.p(o['path'])) or sha_file(jd.p(o['path'])) != o['sha256']:
+            codes.append('CHANGED_' + label.upper())
+    if not codes:
+        proposal = read_json(jd.p('scope', 'tool', 'SCOPE_PROPOSAL.json'), 'scope proposal')
+        f = prep['facts']['scope_tool']
+        if (proposal.get('status'), proposal['bill'].get('sheet_index'), proposal['bill'].get('end_row')) != \
+                (f['status'], f['bill_sheet_index'], f['end_row']):
+            codes.append('SCOPE_PROPOSAL_FACTS_CHANGED')
+    return codes
+
+
+def scope_reader_folder_problems(jd, prep):
+    """R5 at scope-finish: the reader's folder holds exactly input/ (the two pinned files) and output/ (its response)."""
+    sr = jd.p('scope', 'reader')
+    inputs, outputs = [], []
+    if sorted(os.listdir(sr)) != ['input', 'output']:
+        inputs.append('SCOPE_READER_FOLDER_UNEXPECTED_ENTRIES')
+    t = tree(sr / 'input')
+    want = {n: prep['outputs'].get('scope_reader_' + n, {}).get('sha256') for n in ('SCOPE_DIGEST.json', 'SCOPE_RULES_EXCERPT.md')}
+    if t is None or t['dirs'] or t['other'] or {k: v['sha256'] for k, v in t['files'].items()} != want:
+        inputs.append('SCOPE_READER_INPUT_NOT_THE_PINNED_FILES')
+    o = tree(sr / 'output')
+    if o is None or o['dirs'] or o['other'] or sorted(o['files']) != ['SCOPE_READER_RESPONSE.json']:
+        outputs.append('SCOPE_READER_OUTPUT_UNEXPECTED_ENTRIES')
+    return inputs, outputs
+
+
+def scoped_route_status(receipt, ver):
+    """N1: the receipt's and --verify's own route check of the scoped inventory, besides --verify's status."""
+    r = (receipt or {}).get('route_check_inventory') or {}
+    v = (ver or {}).get('route_check_inventory') or {}
+    out = {'verify_status': (ver or {}).get('status'), 'receipt_route_check_inventory': r.get('status'),
+           'verify_route_check_inventory': v.get('status'), 'receipt_route_violations': r.get('violations'),
+           'verify_route_violations': v.get('violations')}
+    out['pass'] = out['verify_status'] == 'PASS' and r.get('status') == 'PASS' and v.get('status') == 'PASS'
+    return out
 
 
 def scope_finish_body(st, jd, a):
-    rel = st.pre
+    rel, raw, prep = st.pre['rel'], st.pre['raw'], st.pre['prep']
     env = tool_env(rel)
-    raw = Path(a.reader_response).read_bytes()          # frozen before any tool reads it
-    frozen = jd.p('scope', 'SCOPE_READER_RESPONSE.json')
+    frozen = jd.p('scope', 'SCOPE_READER_RESPONSE.json')     # frozen before any tool reads it
     freeze_copy(raw, frozen)
     st.inputs['reader_response_original'] = {'path': str(a.reader_response), 'sha256': sha_bytes(raw), 'bytes': len(raw)}
     st.pin_in('reader_response', frozen)
-    for name in ('SCOPE_DIGEST.json', 'SCOPE_RULES_EXCERPT.md'):
-        if sha_file(jd.p('scope', 'reader', 'input', name)) != sha_file(jd.p('scope', 'tool', name)):
+    st.facts['reader_conversation_id_attested_by_operator'] = a.reader_conversation_id
+    codes = scope_inputs_changed(jd, prep)
+    if codes:
+        st.codes += codes
+        raise Outcome('SCOPE_INPUTS_CHANGED', 'STOP_SCOPE_INPUTS_CHANGED')
+    inputs, outputs = scope_reader_folder_problems(jd, prep)
+    if inputs or outputs:
+        st.codes += inputs + outputs
+        if inputs:
             raise Outcome('SCOPE_READER_INPUT_CHANGED', 'STOP_SCOPE_READER_INPUT_CHANGED')
+        raise Outcome('SCOPE_READER_OUTPUT_UNEXPECTED', 'STOP_SCOPE_READER_OUTPUT_UNEXPECTED')
     dec_dir = jd.p('scope', 'decision')
     code, out, err = st.run('scope_agree', rel.harness / 'scope_agree.py',
-                            ['--proposal', jd.p('scope', 'tool', 'SCOPE_PROPOSAL.json'), '--digest', jd.p('scope', 'reader', 'input', 'SCOPE_DIGEST.json'),
+                            ['--proposal', jd.p('scope', 'tool', 'SCOPE_PROPOSAL.json'), '--digest', jd.p('scope', 'tool', 'SCOPE_DIGEST.json'),
                              '--reader', frozen, '--out-dir', dec_dir], env=env)
     if code == 3:
         st.pin_out('scope_hold', dec_dir / 'SCOPE_HOLD.json')
@@ -851,17 +1633,23 @@ def scope_finish_body(st, jd, a):
                             ['--verify', '--full', full, '--decision', decision, '--scoped', scoped,
                              '--expect-scoped-sha256', receipt['scoped_inventory_sha256']], env=env)
     ver = parse_stdout(out)
-    st.facts['scoped_verify'] = {'status': ver.get('status'), 'problem_count': ver.get('problem_count'), 'stats': ver.get('stats')}
+    rs = scoped_route_status(receipt, ver)
+    st.facts['scoped_verify'] = {'status': ver.get('status'), 'problem_count': ver.get('problem_count'), 'stats': ver.get('stats'),
+                                 'route_check': rs, 'in_scope_content_cells': (ver.get('stats') or {}).get('content_cells_scoped')}
     if code != 0 or ver.get('status') != 'PASS':
         raise Outcome('SCOPED_VERIFY_FAILED', 'STOP_SCOPED_VERIFY_FAILED')
+    if not rs['pass']:
+        st.codes += sorted(set((rs['receipt_route_violations'] or []) + (rs['verify_route_violations'] or []))) or ['ROUTE_CHECK_NOT_PASS']
+        raise Outcome('SCOPED_ROUTE_CHECK_FAILED', 'STOP_SCOPED_ROUTE_CHECK_FAILED')
     check_inventory(st, rel, scoped, 'check_inventory_scoped', 'applied')
+    make_tree_readonly(jd.p('scope', 'decision'))
+    make_tree_readonly(scoped_dir)
     return 'SCOPE_AGREED', prepare_generation(st, jd, rel, scoped_dir, jd.rec['reader'], jd.rec['case_id'])
 
 
 # ------------------------------------------------------------------ finish
 def cmd_finish(a):
-    jd = Job(a.job_dir)
-    jd.load()
+    jd = open_job(a.job_dir)
     st = Stage(jd, 'finish', a)
     return run_stage(jd, st, lambda: finish_body(st, jd, a), preflight=lambda: finish_pre(st, jd, a))
 
@@ -874,14 +1662,118 @@ def generation_stage(jd):
     return None
 
 
+GEN_KEYS = {'schema', 'case_id', 'reader', 'platform', 'model', 'effort', 'conversation_id', 'started_utc', 'ended_utc',
+            'prompt_sha256', 'single_user_message', 'features', 'tools_enabled', 'final_message', 'transcript_status',
+            'transcript_sha256', 'transcript_not_available_reason', 'notes'}
+GEN_OPTIONAL = {'transcript_sha256', 'transcript_not_available_reason', 'notes'}
+
+
+def generation_record_problems(g, case, reader):
+    """R13: the shape of GENERATION_RECORD.json (cps.generation-record.v1; RUN_JOB_COMMANDS.md)."""
+    if not isinstance(g, dict):
+        return ['not an object']
+    p = []
+    if set(g) - GEN_KEYS:
+        p.append(f'{len(set(g) - GEN_KEYS)} unknown keys')
+    p += [f'missing {k}' for k in sorted(GEN_KEYS - GEN_OPTIONAL - set(g))]
+    if g.get('schema') != GENERATION_RECORD_SCHEMA:
+        p.append('schema')
+    if g.get('case_id') != case:
+        p.append('case_id')
+    if g.get('reader') != reader:
+        p.append('reader')
+    p += [k for k in ('platform', 'model', 'effort', 'conversation_id') if not nonblank(g.get(k))]
+    p += [k for k in ('started_utc', 'ended_utc') if parse_utc(g.get(k)) is None]
+    if not is_sha(g.get('prompt_sha256')):
+        p.append('prompt_sha256')
+    if not isinstance(g.get('single_user_message'), bool):
+        p.append('single_user_message')
+    f = g.get('features')
+    if not isinstance(f, dict) or set(f) != set(FEATURES) or not all(isinstance(v, bool) for v in f.values()):
+        p.append('features {' + ', '.join(FEATURES) + '}')
+    t = g.get('tools_enabled')
+    if not isinstance(t, list) or not all(isinstance(x, str) for x in t):
+        p.append('tools_enabled')
+    if not isinstance(g.get('final_message'), str):
+        p.append('final_message')
+    ts = g.get('transcript_status')
+    if ts not in TRANSCRIPT_STATUSES:
+        p.append('transcript_status')
+    if ts == 'exported' and not is_sha(g.get('transcript_sha256')):
+        p.append('transcript_sha256')
+    if ts == 'not_available' and (not nonblank(g.get('transcript_not_available_reason')) or g.get('transcript_sha256') is not None):
+        p.append('transcript_not_available_reason')
+    if 'notes' in g and not isinstance(g['notes'], str):
+        p.append('notes')
+    return p
+
+
+def check_generation_record(st, jd, a, gen, rel):
+    """R13: required for qualification, recorded when given. The prompt hash equals run/GENERATOR_PROMPT.md, and the
+    conversation lies between the end of the stage that printed NEXT: GENERATE and the start of this finish. The
+    transcript status is recorded as stated; the release says which statuses it accepts (default both)."""
+    q = jd.rec['qualification']
+    if q and not nonblank(a.generator_model):
+        raise Refused('GENERATOR_MODEL_REQUIRED', 'qualification: --generator-model')
+    if a.generation_record is None:
+        if q:
+            raise Refused('GENERATION_RECORD_REQUIRED', 'qualification: --generation-record run/GENERATION_RECORD.json')
+        if a.transcript is not None:
+            raise Refused('TRANSCRIPT_WITHOUT_RECORD')
+        return None
+    p, expected = Path(a.generation_record), jd.p('run', 'GENERATION_RECORD.json')
+    if not p.is_absolute() or os.path.realpath(p) != str(expected) or not regular(expected):
+        raise Refused('GENERATION_RECORD_PATH', 'the generation record is run/GENERATION_RECORD.json of this job')
+    raw = expected.read_bytes()
+    st.inputs['generation_record_original'] = {'path': str(p), 'sha256': sha_bytes(raw), 'bytes': len(raw)}
+    g = strict_json(raw, 'generation record')
+    bad = generation_record_problems(g, jd.rec['case_id'], jd.rec['reader'])
+    if bad:
+        raise Refused('GENERATION_RECORD_INVALID', {'fields': bad})
+    if g['prompt_sha256'] != gen['outputs']['generator_prompt']['sha256']:
+        raise Refused('GENERATION_RECORD_PROMPT_MISMATCH', 'prompt_sha256 is not the sha256 of run/GENERATOR_PROMPT.md')
+    t0, t1, lo, hi = parse_utc(g['started_utc']), parse_utc(g['ended_utc']), parse_utc(gen['ended_utc']), parse_utc(st.started)
+    if not (lo <= t0 <= t1 <= hi):
+        raise Refused('GENERATION_RECORD_TIMES', 'started_utc and ended_utc lie between the end of the stage that printed '
+                      'NEXT: GENERATE and the start of this finish')
+    if a.generator_model is not None and a.generator_model != g['model']:
+        raise Refused('GENERATOR_MODEL_MISMATCH', '--generator-model differs from the record model')
+    accepted = rel.accepted_transcripts if q else list(TRANSCRIPT_STATUSES)
+    if g['transcript_status'] not in (accepted or []):
+        raise Refused('TRANSCRIPT_STATUS_NOT_ACCEPTED', {'status': g['transcript_status'], 'accepted': accepted})
+    transcript = None
+    if a.transcript is not None:
+        tp = Path(a.transcript)
+        if not tp.is_absolute() or not regular(tp):
+            raise Refused('TRANSCRIPT_REQUIRED', 'an absolute path to the exported transcript')
+        if g['transcript_status'] != 'exported':
+            raise Refused('TRANSCRIPT_NOT_EXPORTED', 'transcript_status is not exported')
+        traw = tp.read_bytes()
+        if sha_bytes(traw) != g['transcript_sha256']:
+            raise Refused('TRANSCRIPT_SHA256_MISMATCH')
+        transcript = (traw, ''.join(ch for ch in tp.suffix if ch.isascii() and (ch.isalnum() or ch == '.'))[:10])
+    exported = g['transcript_status'] == 'exported'
+    facts = {'sha256': sha_bytes(raw), 'platform': g['platform'], 'model': g['model'], 'effort': g['effort'],
+             'transcript_status': g['transcript_status'], 'transcript_file_frozen': transcript is not None,
+             'transcript_not_available_flagged': not exported,
+             'isolation_evidence': 'transcript_exported' if exported else 'attested_not_audited',
+             'transcript_audit': 'not_run_by_the_runner' if exported else 'not_available',
+             'single_user_message': g['single_user_message'], 'features_enabled': sorted(k for k, v in g['features'].items() if v),
+             'tools_enabled': len(g['tools_enabled']), 'prompt_sha256_matches_generator_prompt': True, 'times_within_bounds': True,
+             'generation_seconds': round((t1 - t0).total_seconds(), 1), 'window_seconds': round((hi - lo).total_seconds(), 1),
+             'owner_decision_open': 'whether an attested record without a transcript is qualification evidence'}
+    return {'raw': raw, 'facts': facts, 'transcript': transcript}
+
+
 def finish_pre(st, jd, a):
     jd.require_not_frozen()
-    jd.require_not_done('freeze_response', 'finish')
+    jd.require_stage_open('finish', also=('freeze_response',))
     gen = generation_stage(jd)
     if gen is None:
         raise Refused('GENERATION_NOT_PREPARED', 'no stage ended with NEXT: GENERATE')
     rel = jd.release()
-    check_release_static(rel, jd.rec['qualification'], st)
+    check_release_static(rel, jd.rec['qualification'], st, jd.admission())
+    st.facts['live_release'] = check_live_release(jd)
     adm, adm_sha, node, tools = export_preflight(rel, st)
     title_rec = jd.pinned_file('input/JOB_TITLE.json', jd.rec['job_inputs']['job_title_sha256'])
     title = read_json(title_rec, 'JOB_TITLE.json')['job_title']
@@ -891,33 +1783,123 @@ def finish_pre(st, jd, a):
     if not resp.is_absolute() or not resp.is_file():
         raise Refused('RESPONSE_REQUIRED', 'an absolute path to the response file')
     expected = jd.p(gen['facts']['generation']['response_path'])
-    st.facts['response_from_run_output'] = os.path.realpath(resp) == str(expected)
-    if jd.rec['qualification'] and not st.facts['response_from_run_output']:
-        raise Refused('RESPONSE_PATH', 'qualification: the response is run/<reader>/output/response.json')
-    return {'rel': rel, 'adm': adm, 'adm_sha': adm_sha, 'node': node, 'title': title, 'gen': gen}
+    if os.path.realpath(resp) != str(expected) or not regular(expected):        # N5: real jobs too
+        raise Refused('RESPONSE_PATH', 'the response is run/<reader>/output/response.json')
+    st.facts['response_from_run_output'] = True
+    gr = check_generation_record(st, jd, a, gen, rel)
+    return {'rel': rel, 'adm': adm, 'adm_sha': adm_sha, 'node': node, 'title': title, 'gen': gen, 'gr': gr}
+
+
+def run_folder_problems(jd, rel, gen):
+    """R5: the generation folder holds exactly RUN_INPUT_PINS.json (its prepare pin), input/ (exactly the pinned files and
+    their folders, no symbolic link; the package copy equal to PACKAGE_MANIFEST.json) and output/ (response.json and
+    optionally scratch/). Returns (input codes, output codes, output listing)."""
+    run_dir = jd.p(gen['facts']['generation']['run_dir'])
+    pp = run_dir / 'RUN_INPUT_PINS.json'
+    if not regular(pp) or sha_file(pp) != gen['outputs']['run_input_pins']['sha256']:
+        return ['RUN_INPUT_PINS_CHANGED'], [], None
+    pins = read_json(pp, 'RUN_INPUT_PINS.json')
+    want = {x['path']: x['sha256'] for x in pins['inputs']}
+    codes = []
+    if sorted(os.listdir(run_dir)) != sorted(['input', 'output', 'RUN_INPUT_PINS.json']):
+        codes.append('RUN_FOLDER_UNEXPECTED_ENTRIES')
+    t = tree(run_dir / 'input') or {'files': {}, 'dirs': [], 'other': ['input']}
+    have = {'input/' + k: v['sha256'] for k, v in t['files'].items()}
+    if set(have) != set(want):
+        codes.append('RUN_INPUT_FILES_NOT_THE_PINNED_SET')
+    if any(have[k] != want[k] for k in set(have) & set(want)):
+        codes.append('RUN_INPUT_FILE_CHANGED')
+    want_dirs = set()
+    for k in want:
+        parts = k.split('/')[1:-1]
+        want_dirs |= {'/'.join(parts[:i]) for i in range(1, len(parts) + 1)}
+    if set(t['dirs']) != want_dirs:
+        codes.append('RUN_INPUT_FOLDERS_NOT_THE_PINNED_SET')
+    if t['other']:
+        codes.append('RUN_INPUT_SYMLINK_OR_SPECIAL_FILE')
+    man = run_dir / 'input' / 'package' / 'PACKAGE_MANIFEST.json'
+    if not regular(man) or sha_file(man) != rel.manifest_sha:
+        codes.append('PACKAGE_COPY_MANIFEST_CHANGED')
+    else:
+        listed = {f['path']: f['sha256'] for f in read_json(man, 'package manifest').get('files', [])}
+        copy = {k[len('package/'):]: v['sha256'] for k, v in t['files'].items() if k.startswith('package/')}
+        copy.pop('PACKAGE_MANIFEST.json', None)
+        if copy != listed:
+            codes.append('PACKAGE_COPY_NOT_THE_MANIFEST')
+    if codes:
+        return codes, [], None
+    o = tree(run_dir / 'output')
+    if o is None:
+        return [], ['RUN_OUTPUT_NOT_A_FOLDER'], None
+    ocodes = []
+    top = {k.split('/')[0] for k in list(o['files']) + o['dirs'] + o['other']}
+    if top - {'response.json', 'scratch'}:
+        ocodes.append('RUN_OUTPUT_UNEXPECTED_ENTRIES')
+    if 'scratch' in top and 'scratch' not in o['dirs']:
+        ocodes.append('RUN_OUTPUT_SCRATCH_NOT_A_FOLDER')
+    if o['other']:
+        ocodes.append('RUN_OUTPUT_SYMLINK_OR_SPECIAL_FILE')
+    if 'response.json' not in o['files']:
+        ocodes.append('RUN_OUTPUT_NO_RESPONSE')
+    return [], ocodes, o['files']
+
+
+def packet_pins_problems(jd, gen):
+    """R12: PACKET_PINS.json is the one pinned before NEXT: GENERATE (and, in qualification, the one in the ledger), and
+    every file it lists is unchanged."""
+    o = gen['outputs'].get('packet_pins')
+    p = jd.p('PACKET_PINS.json')
+    if o is None or not regular(p) or sha_file(p) != o['sha256']:
+        return ['PACKET_PINS_CHANGED']
+    if jd.ledger_path is not None:
+        with Ledger(jd.ledger_path) as led:
+            if not led.of('packet_pins', job_dir=str(jd.dir), packet_pins_sha256=o['sha256']):
+                return ['PACKET_PINS_NOT_IN_LEDGER']
+    doc = read_json(p, 'PACKET_PINS.json')
+    changed = [k for k, v in doc['files'].items() if not regular(jd.p(k)) or sha_file(jd.p(k)) != v['sha256']]
+    return [f'{len(changed)} PACKET_PINS files changed'] if changed else []
 
 
 def finish_body(st, jd, a):
     pre = st.pre
-    rel, adm, node, title, gen = pre['rel'], pre['adm'], pre['node'], pre['title'], pre['gen']
-    # 1. freeze the response bytes before anything reads them
+    rel, adm, node, title, gen, gr = pre['rel'], pre['adm'], pre['node'], pre['title'], pre['gen'], pre['gr']
+    # 1. freeze the generation record and the response bytes before anything reads them
+    fr = Stage(jd, 'freeze_response', a)
+    if gr is not None:
+        freeze_copy(gr['raw'], jd.p('response', 'GENERATION_RECORD.json'))
+        fr.pin_out('generation_record', jd.p('response', 'GENERATION_RECORD.json'))
+        st.pin_in('generation_record', jd.p('response', 'GENERATION_RECORD.json'))
+        if gr['transcript'] is not None:
+            tdest = jd.p('response', 'GENERATOR_TRANSCRIPT' + gr['transcript'][1])
+            freeze_copy(gr['transcript'][0], tdest)
+            fr.pin_out('generator_transcript', tdest)
     raw = Path(a.response).read_bytes()
     frozen = jd.p('response', 'response.json')
     freeze_copy(raw, frozen)
-    fr = Stage(jd, 'freeze_response', a)
     fr.inputs['response_original'] = {'path': str(a.response), 'sha256': sha_bytes(raw), 'bytes': len(raw)}
     fr.pin_out('response', frozen)
-    fr.facts = {'generator_model': a.generator_model, 'response_from_run_output': st.facts['response_from_run_output']}
+    fr.facts = {'generator_model': a.generator_model, 'response_from_run_output': True,
+                'generation_record': gr['facts'] if gr is not None else None}
     jd.append(fr.entry('RESPONSE_FROZEN', 'FINISH', True))
     st.pin_in('response', frozen)
     resp_sha = sha_file(frozen)
     st.facts['generator_model'] = a.generator_model
+    st.facts['generation_record'] = gr['facts'] if gr is not None else None
+    # R5 and R12: the generation folder and every in-job product exactly as pinned before NEXT: GENERATE
+    icodes, ocodes, listing = run_folder_problems(jd, rel, gen)
+    st.facts['run_inputs_unchanged'] = not icodes
+    st.facts['run_output_files'] = listing
+    if icodes:
+        st.codes += icodes
+        raise Outcome('RUN_INPUTS_CHANGED', 'STOP_RUN_INPUTS_CHANGED')
+    if ocodes:
+        st.codes += ocodes
+        raise Outcome('RUN_OUTPUT_UNEXPECTED', 'STOP_RUN_OUTPUT_UNEXPECTED')
+    pcodes = packet_pins_problems(jd, gen)
+    if pcodes:
+        st.codes += pcodes
+        raise Outcome('PACKET_CHANGED', 'STOP_PACKET_CHANGED')
     run_dir = jd.p(gen['facts']['generation']['run_dir'])
-    pins = read_json(run_dir / 'RUN_INPUT_PINS.json', 'RUN_INPUT_PINS.json')
-    changed = [x['path'] for x in pins['inputs'] if not (run_dir / x['path']).is_file() or sha_file(run_dir / x['path']) != x['sha256']]
-    st.facts['run_inputs_unchanged'] = not changed
-    if changed:
-        raise Outcome('RUN_INPUTS_CHANGED', 'STOP_RUN_INPUTS_CHANGED', [f'{len(changed)} input files changed'])
     inv = run_dir / 'input' / 'packet' / 'SOURCE_INVENTORY.json'
     if sha_file(inv) != gen['facts']['generation']['packet_inventory_sha256']:
         raise Outcome('PACKET_CHANGED', 'STOP_PACKET_CHANGED')
@@ -954,7 +1936,7 @@ def finish_body(st, jd, a):
     if (receipt.get('carrier_sha256') != carrier_sha or receipt.get('response_sha256') != resp_sha or receipt.get('inventory_sha256') != sha_file(inv)
             or receipt.get('policy_checks') != 'applied' or mode not in ('v1', 'v2')):
         raise Outcome('CONVERT_RECEIPT_MISMATCH', 'STOP_CONVERT_RECEIPT_MISMATCH')
-    make_readonly(conv)
+    make_tree_readonly(conv)
     # 3. the admitted writer, in the mode the convert receipt names (condition 6), titled from the pinned title file
     out_dir = jd.p('export', 'writer')
     writer = rel.root / 'research/export/writer_portable.py'
@@ -965,7 +1947,7 @@ def finish_body(st, jd, a):
         raise Outcome('WRITER_REFUSED', 'STOP_WRITER_REFUSED')
     rraw = (out_dir / 'WRITER_RECEIPT.json').read_bytes()
     st.pin_out('writer_receipt', out_dir / 'WRITER_RECEIPT.json')
-    make_readonly(out_dir)
+    make_tree_readonly(out_dir)
     dup = has_duplicate_keys(rraw)
     wr = json.loads(rraw.decode('utf-8'))
     deliv = wr.get('deliverable') or {}
@@ -1020,7 +2002,7 @@ def finish_body(st, jd, a):
         man_p = dest / 'VISUAL_QA_MANIFEST.json'
         man = read_json(man_p, 'visual manifest') if code == 0 and man_p.is_file() else None
         if man is not None:
-            make_readonly(dest)
+            make_tree_readonly(dest)
             st.pin_out('visual_manifest_' + key, man_p)
         sx = (man or {}).get('saved_xlsx') or {}
         ok = man is not None and sx.get('sha256') == saved_sha and sx.get('unchanged_after_render') is True and man.get('complete_render') is True
@@ -1213,10 +2195,10 @@ def write_review_prompt(jd, pages):
 
 # ------------------------------------------------------------------ visual-record
 def cmd_visual_record(a):
-    jd = Job(a.job_dir)
-    jd.load()
+    jd = open_job(a.job_dir)
     st = Stage(jd, 'visual-record', a)
-    return run_stage(jd, st, lambda: visual_record_body(st, jd, a), preflight=lambda: visual_record_pre(st, jd, a))
+    return run_stage(jd, st, lambda: visual_record_body(st, jd, a), preflight=lambda: visual_record_pre(st, jd, a),
+                     on_refused=lambda: save_review_attempt(st, jd))
 
 
 def finish_entry(jd):
@@ -1224,43 +2206,88 @@ def finish_entry(jd):
     return d[-1] if d else None
 
 
+def save_review_attempt(st, jd):
+    """N2: a refused review keeps its bytes: qa/visual_review_attempts/<seq>.json (read-only), pinned in the refused entry."""
+    raw = getattr(st, 'attempt_raw', None)
+    if raw is None:
+        return
+    d = jd.p('qa', 'visual_review_attempts')
+    d.mkdir(exist_ok=True)
+    p = d / f'{st.seq:02d}.json'
+    write_new(p, raw)
+    st.pin_in('review_attempt', p)
+
+
 def visual_record_pre(st, jd, a):
     jd.require_not_frozen()
-    jd.require_not_done('visual-record')
+    jd.require_stage_open('visual-record')
     fin = finish_entry(jd)
     if fin is None or not str(fin['next']).startswith('VISUAL_REVIEW'):
         raise Refused('VISUAL_REVIEW_NOT_OPEN', 'finish did not end with NEXT: VISUAL_REVIEW')
+    rel = jd.release()
+    check_release_static(rel, jd.rec['qualification'], st, jd.admission())
     p = Path(a.review)
     if not p.is_absolute() or not p.is_file():
         raise Refused('REVIEW_REQUIRED', 'an absolute path to VISUAL_REVIEW.json')
-    raw = p.read_bytes()
+    expected = jd.p('qa', 'visual_review', 'VISUAL_REVIEW.json')
+    if os.path.realpath(p) != str(expected) or not regular(expected):           # N3: one fixed location
+        raise Refused('REVIEW_PATH', 'the reviewer writes qa/visual_review/VISUAL_REVIEW.json')
+    raw = expected.read_bytes()
+    st.attempt_raw = raw
     st.inputs['review_original'] = {'path': str(p), 'sha256': sha_bytes(raw), 'bytes': len(raw)}
+    if a.reviewer_conversation_id is not None and not nonblank(a.reviewer_conversation_id):
+        raise Refused('REVIEWER_CONVERSATION_ID_REQUIRED', 'a non-empty --reviewer-conversation-id')
     pages = read_json(jd.pinned_file('qa/VISUAL_PAGES.json', fin['outputs']['visual_pages']['sha256']), 'VISUAL_PAGES.json')
     saved = read_json(jd.pinned_file('qa/SAVED_QA.json', fin['outputs']['saved_qa']['sha256']), 'SAVED_QA.json')
+    mans = {}
     # each manifest unchanged since finish, and its saved_xlsx.sha256 equal to the matching SAVED_QA.json hash
     for key, want in (('deliverable', saved['deliverable_xlsx']['sha256']), ('internal', saved['xlsx']['sha256'])):
         o = fin['outputs']['visual_manifest_' + key]
-        man = read_json(jd.pinned_file(o['path'], o['sha256']), 'visual manifest')
+        mp = jd.pinned_file(o['path'], o['sha256'])
+        man = read_json(mp, 'visual manifest')
         if man['saved_xlsx']['sha256'] != want:
             raise Refused('MANIFEST_SAVED_XLSX_MISMATCH', {'workbook': key})
+        mans[key] = (man, mp)
     review = strict_json(raw, 'visual review')
-    problems, fails = check_review(review, pages)
+    problems, fails = check_review(review, pages, a.reviewer_conversation_id)
     reviewer_fail = isinstance(review, dict) and review.get('overall') == 'FAIL'
     if problems and not fails and not reviewer_fail:
+        if any(x in problems for x in ('reviewer.kind', 'reviewer.model', 'reviewer.effort')):
+            raise Refused('REVIEW_NOT_FRESH_CONTEXT', {'required': {'reviewer.kind': REVIEWER_KIND, 'reviewer.model': 'non-empty',
+                                                                    'reviewer.effort': 'non-empty'}})
+        if any(x.startswith('reviewer.conversation_id') for x in problems):
+            raise Refused('REVIEWER_CONVERSATION_ID_REQUIRED', 'reviewer.conversation_id in the review, or --reviewer-conversation-id '
+                          '(the operator attests the review ran in that new conversation); both, when given, must be equal')
         raise Refused('REVIEW_INCOMPLETE', {'problems': problems[:20], 'problem_count': len(problems)})
-    return {'raw': raw, 'problems': problems, 'fails': fails, 'review': review, 'pages': pages}
+    return {'raw': raw, 'problems': problems, 'fails': fails, 'review': review, 'pages': pages, 'manifests': mans}
 
 
-def check_review(review, pages):
-    """Every selected page and every checklist item present, results pass/fail/n/a, n/a only where an item does not apply."""
+def check_review(review, pages, conversation_id=None):
+    """Every selected page and every checklist item present, results pass/fail/n/a, n/a only where an item does not
+    apply; a fresh-context reviewer (R6) with a conversation id; every listed cut cell judged, and item 8 not n/a on every
+    delivered page when cut cells exist (R7); a non-empty failures list is a failure (N4)."""
     problems, fails = [], []
     if not isinstance(review, dict) or review.get('schema') != REVIEW_SCHEMA:
         return ['schema'], fails
     rv = review.get('reviewer')
-    if not isinstance(rv, dict) or not all(isinstance(rv.get(k), str) and rv.get(k).strip() for k in ('kind', 'model')):
-        problems.append('reviewer {kind, model, effort}')
+    rv = rv if isinstance(rv, dict) else {}
+    if rv.get('kind') != REVIEWER_KIND:
+        problems.append('reviewer.kind')
+    problems += ['reviewer.' + k for k in ('model', 'effort') if not nonblank(rv.get(k))]
+    conv = rv.get('conversation_id')
+    if conv is not None and not nonblank(conv):
+        problems.append('reviewer.conversation_id')
+    elif conv is None and conversation_id is None:
+        problems.append('reviewer.conversation_id')
+    elif conv is not None and conversation_id is not None and conv != conversation_id:
+        problems.append('reviewer.conversation_id differs from --reviewer-conversation-id')
     if review.get('overall') not in ('PASS', 'FAIL'):
         problems.append('overall')
+    fl = review.get('failures')
+    if not isinstance(fl, list) or not all(isinstance(x, str) for x in fl):
+        problems.append('failures')
+    elif fl:
+        fails += [f'reviewer failures list: {len(fl)} entries']
     for key in ('deliverable', 'internal'):
         wb, sel = review.get(key), pages['workbooks'][key]
         if not isinstance(wb, dict) or not isinstance(wb.get('pages'), dict):
@@ -1271,6 +2298,7 @@ def check_review(review, pages):
         for pg in wb['pages']:
             if pg not in sel['pages']:
                 problems.append(f'{key}: page {pg} is not a rendered page')
+        item8 = []
         for pg in sel['selected']:
             items = wb['pages'].get(str(pg))
             if not isinstance(items, dict):
@@ -1287,9 +2315,29 @@ def check_review(review, pages):
                     fails.append(f'{key} page {pg} item {it}')
                 if r == 'n/a' and not na_allowed(key, role, it):
                     problems.append(f'{key}: page {pg} item {it} n/a not allowed')
+                if it == '8':
+                    item8.append(r)
             extra = sorted(set(items) - set(ITEMS))
             if extra:
                 problems.append(f'{key}: page {pg} unknown items')
+        if key == 'deliverable':
+            cut = sel.get('possibly_cut_cells') or {}
+            if (cut.get('count') or 0) > 0 and item8 and all(r == 'n/a' for r in item8):
+                problems.append('deliverable: item 8 is n/a on every page although possibly_cut_cells lists cells')
+            listed = sorted({c.get('cell') for c in cut.get('cells') or [] if c.get('cell')})
+            cc = wb.get('cut_cells', {} if not listed else None)
+            if not isinstance(cc, dict):
+                problems.append('deliverable: cut_cells')
+            else:
+                if sorted(cc) != listed:
+                    problems.append('deliverable: cut_cells keys are not the listed possibly_cut_cells')
+                for cell in listed:
+                    e = cc.get(cell)
+                    r = e.get('result') if isinstance(e, dict) else None
+                    if r not in ('pass', 'fail'):
+                        problems.append(f'deliverable: cut cell {cell}')
+                    elif r == 'fail':
+                        fails.append(f'deliverable cut cell {cell}')
     return problems, fails
 
 
@@ -1303,20 +2351,42 @@ def na_allowed(key, role, item):
     return False
 
 
+def page_image_problems(mans):
+    """R8: every page image both manifests list (the pages the reviewer opened among them), unchanged since finish."""
+    bad = []
+    for key, (man, mp) in mans.items():
+        for img in man.get('images') or []:
+            f = Path(mp).parent / str(img.get('file'))
+            if not regular(f) or os.lstat(f).st_size != img.get('bytes') or sha_file(f) != img.get('sha256'):
+                bad.append(f'{key} page {img.get("page")}')
+    return bad
+
+
 def visual_record_body(st, jd, a):
     pre = st.pre
     frozen = jd.p('qa', 'VISUAL_REVIEW.json')
     freeze_copy(pre['raw'], frozen)
     st.pin_in('visual_review', frozen)
+    bad = page_image_problems(pre['manifests'])
+    st.facts['page_images_match_manifests'] = not bad
+    if bad:
+        st.codes += ['PAGE_IMAGE_CHANGED'] + bad[:20]
+        raise Outcome('VISUAL_PAGES_CHANGED', 'STOP_VISUAL_PAGES_CHANGED')
     review = pre['review'] if isinstance(pre['review'], dict) else {}
     result = 'FAIL' if (pre['fails'] or review.get('overall') == 'FAIL') else 'PASS'
     inconsistent = (review.get('overall') == 'PASS') != (result == 'PASS')
+    rv = review.get('reviewer') if isinstance(review.get('reviewer'), dict) else {}
+    conv = rv.get('conversation_id') or a.reviewer_conversation_id
     rec = {'schema': 'cps.visual-record.v1', 'case_id': jd.rec['case_id'], 'recorded_utc': utc(), 'result': result,
            'review_sha256': sha_bytes(pre['raw']), 'reviewer': review.get('reviewer'), 'reviewer_overall': review.get('overall'),
+           'reviewer_conversation_id': conv,
+           'reviewer_conversation_id_source': 'review' if rv.get('conversation_id') else 'operator (--reviewer-conversation-id)',
+           'fresh_context': 'attested by the operator: the runner cannot see the conversation; it checks the recorded kind, model, '
+                            'effort and conversation id',
            'overall_consistent_with_items': not inconsistent, 'failed_items': pre['fails'], 'structural_problems': pre['problems'],
            'pages_reviewed': {k: len((review.get(k) or {}).get('pages') or {}) for k in ('deliverable', 'internal')},
            'pages_selected': {k: len(v['selected']) for k, v in pre['pages']['workbooks'].items()},
-           'manifests_match_saved_qa': True}
+           'manifests_match_saved_qa': True, 'page_images_match_manifests': True}
     write_new(jd.p('qa', 'VISUAL_RECORD.json'), dumps(rec))
     st.pin_out('visual_record', jd.p('qa', 'VISUAL_RECORD.json'))
     st.facts['visual'] = {k: rec[k] for k in ('result', 'pages_reviewed', 'pages_selected', 'overall_consistent_with_items')}
@@ -1330,15 +2400,14 @@ def visual_record_body(st, jd, a):
 
 # ------------------------------------------------------------------ deliver-check
 def cmd_deliver_check(a):
-    jd = Job(a.job_dir)
-    jd.load()
+    jd = open_job(a.job_dir)
     st = Stage(jd, 'deliver-check', a)
     return run_stage(jd, st, lambda: deliver_body(st, jd), preflight=lambda: deliver_pre(st, jd))
 
 
 def deliver_pre(st, jd):
     jd.require_not_frozen()
-    jd.require_not_done('deliver-check')
+    jd.require_stage_open('deliver-check')
     if jd.rec['qualification']:
         raise Refused('DELIVERY_NOT_FOR_QUALIFICATION', 'qualification outputs are frozen, never delivered')
     rel = jd.release()
@@ -1347,35 +2416,51 @@ def deliver_pre(st, jd):
     vr = jd.done('visual-record')
     if not vr or vr[-1]['result'] != 'VISUAL_REVIEW_PASS':
         raise Refused('VISUAL_REVIEW_NOT_PASSED')
-    return finish_entry(jd)
+    check_release_static(rel, False, st, None)
+    st.facts['live_release'] = check_live_release(jd)          # R9: a withdrawn release never delivers
+    fin = finish_entry(jd)
+    saved = read_json(jd.pinned_file('qa/SAVED_QA.json', fin['outputs']['saved_qa']['sha256']), 'SAVED_QA.json')
+    evd = read_json(jd.pinned_file('qa/QA_EVIDENCE.json', fin['outputs']['qa_evidence']['sha256']), 'QA_EVIDENCE.json')
+    vrec = read_json(jd.pinned_file('qa/VISUAL_RECORD.json', vr[-1]['outputs']['visual_record']['sha256']), 'VISUAL_RECORD.json')
+    return {'fin': fin, 'saved': saved, 'evd': evd, 'vrec': vrec}
 
 
 def delivery_file_checks(f, want):
     """Condition 9: a regular file (not a symbolic link, one hard link) whose sha256 equals the saved-QA hash."""
     try:
         ls = os.lstat(f)
-        regular, link, nlink = stat.S_ISREG(ls.st_mode), stat.S_ISLNK(ls.st_mode), ls.st_nlink
+        reg, link, nlink = stat.S_ISREG(ls.st_mode), stat.S_ISLNK(ls.st_mode), ls.st_nlink
     except FileNotFoundError:
-        regular, link, nlink = False, False, None
-    got = sha_file(f) if regular else None
-    return ({'regular_file': regular, 'not_symlink': not link, 'single_link': nlink == 1, 'sha256_equals_saved_qa': got == want},
+        reg, link, nlink = False, False, None
+    got = sha_file(f) if reg else None
+    return ({'regular_file': reg, 'not_symlink': not link, 'single_link': nlink == 1, 'sha256_equals_saved_qa': got == want},
             got, nlink)
 
 
+def delivery_name_checks(name, expected_name_sha, internal_name):
+    """N7: the delivered file name is a bare name, the one the writer derives from the pinned title (its sha256 recorded
+    at prepare), and not the internal workbook's."""
+    bare = isinstance(name, str) and name not in ('', '.', '..') and not any(c in name for c in '/\\\0')
+    return {'file_name_bare': bare,
+            'file_name_is_the_titled_name': isinstance(name, str) and sha_bytes(name.encode('utf-8')) == expected_name_sha,
+            'file_name_not_internal_workbook': isinstance(name, str) and name != internal_name and name != 'INTERNAL_QA_WORKBOOK.xlsx'}
+
+
 def deliver_body(st, jd):
-    fin = st.pre
-    saved = read_json(jd.pinned_file('qa/SAVED_QA.json', fin['outputs']['saved_qa']['sha256']), 'SAVED_QA.json')
-    evd = read_json(jd.pinned_file('qa/QA_EVIDENCE.json', fin['outputs']['qa_evidence']['sha256']), 'QA_EVIDENCE.json')
-    vr = jd.done('visual-record')[-1]
-    vrec = read_json(jd.pinned_file('qa/VISUAL_RECORD.json', vr['outputs']['visual_record']['sha256']), 'VISUAL_RECORD.json')
+    pre = st.pre
+    saved, evd, vrec = pre['saved'], pre['evd'], pre['vrec']
     want = saved['deliverable_xlsx']['sha256']
-    f = jd.p('export', 'writer', saved['deliverable_xlsx']['file'])
+    name = saved['deliverable_xlsx']['file']
+    names = delivery_name_checks(name, jd.rec.get('deliverable_file_name_sha256'), (saved.get('xlsx') or {}).get('file'))
+    f = jd.p('export', 'writer', name if names['file_name_bare'] else 'INVALID_NAME')
     checks, got, nlink = delivery_file_checks(f, want)
-    checks.update(saved_qa_evidence_grade=evd.get('evidence_grade') is True, visual_review_pass=vrec.get('result') == 'PASS')
+    checks.update(names)
+    checks.update(bytes_differ_from_internal_workbook=got is not None and got != (saved.get('xlsx') or {}).get('sha256'),
+                  saved_qa_evidence_grade=evd.get('evidence_grade') is True, visual_review_pass=vrec.get('result') == 'PASS')
     ok = all(checks.values())
     doc = {'schema': 'cps.delivery-check.v1', 'case_id': jd.rec['case_id'], 'checked_utc': utc(), 'condition': 9,
            'file': str(f), 'sha256': got, 'saved_qa_deliverable_xlsx_sha256': want, 'st_nlink': nlink, 'checks': checks,
-           'result': 'DELIVERABLE' if ok else 'DO_NOT_DELIVER'}
+           'live_release': st.facts.get('live_release'), 'result': 'DELIVERABLE' if ok else 'DO_NOT_DELIVER'}
     write_new(jd.p('qa', 'DELIVERY_CHECK.json'), dumps(doc))
     st.pin_out('delivery_check', jd.p('qa', 'DELIVERY_CHECK.json'))
     st.facts['delivery'] = {'checks': checks, 'sha256': got}
@@ -1385,14 +2470,16 @@ def deliver_body(st, jd):
     return 'DELIVERABLE', f'DELIVER file={f}'
 
 
-# ------------------------------------------------------------------ freeze (qualification protocol step 5)
+# ------------------------------------------------------------------ freeze, verify-frozen
 def cmd_freeze(a):
-    jd = Job(a.job_dir)
-    jd.load()
+    jd = open_job(a.job_dir)
+    last = [s for s in jd.rec['stages'] if s['completed']]
+    if last and last[-1]['stage'] == 'freeze' and last[-1]['result'] == 'FROZEN' and not jd.p('FROZEN.json').exists():
+        return finish_freeze(jd, completing=True)           # N12: an earlier freeze recorded its entry but not FROZEN.json
     st = Stage(jd, 'freeze', a)
 
     def pre():
-        jd.require_not_frozen()
+        jd.require_not_frozen(reapply_modes=True)
         if not jd.rec['stages']:
             raise Refused('NOTHING_TO_FREEZE')
     return run_stage(jd, st, lambda: freeze_body(st, jd), preflight=pre)
@@ -1401,50 +2488,202 @@ def cmd_freeze(a):
 def freeze_body(st, jd):
     last = [s for s in jd.rec['stages'] if s['completed']]
     st.facts['final_stage'] = {'stage': last[-1]['stage'], 'result': last[-1]['result']} if last else None
-    st.facts['note'] = 'FROZEN.json lists every file of the job folder with this record entry included; never touch the folder again'
+    st.facts['note'] = 'FROZEN.json lists every file and folder of the job folder with this record entry included; never touch the folder again'
     return 'FROZEN', 'DONE'
 
 
-def write_frozen(jd):
-    files = []
-    for p in sorted(jd.dir.rglob('*')):
-        if p.is_file() and p.name != 'FROZEN.json':
-            files.append({'path': p.relative_to(jd.dir).as_posix(), 'bytes': p.stat().st_size, 'sha256': sha_file(p)})
-    doc = {'schema': 'cps.job-frozen.v1', 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'], 'frozen_utc': utc(),
-           'run_record_sha256': sha_file(jd.record_path), 'files': files, 'retry_permitted': False, 'repair_permitted': False}
-    write_new(jd.p('FROZEN.json'), dumps(doc))
-    make_readonly(jd.dir)
-    return sha_file(jd.p('FROZEN.json')), len(files)
+def frozen_doc(jd):
+    fz = jd.done('freeze')[-1]
+    t = tree(jd.dir)
+    files = [{'path': k, 'bytes': v['bytes'], 'sha256': v['sha256']} for k, v in sorted(t['files'].items())
+             if k not in ('FROZEN.json', '.FROZEN.json.tmp')]
+    return {'schema': FROZEN_SCHEMA, 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'], 'qualification': jd.rec['qualification'],
+            'ledger': jd.rec.get('ledger'), 'frozen_utc': fz['ended_utc'], 'freeze_seq': fz['seq'],
+            'run_record_sha256': sha_file(jd.record_path), 'files': files, 'directories': t['dirs'], 'other_entries': t['other'],
+            'retry_permitted': False, 'repair_permitted': False}
+
+
+def finish_freeze(jd, completing=False):
+    """R3: FROZEN.json (deterministic: a later freeze recomputes the same bytes), its sha256 in the ledger (qualification)
+    before the file is written, then every file and folder read-only, bottom-up, the job folder last."""
+    try:
+        doc = frozen_doc(jd)
+        b = dumps(doc)
+        fsha = sha_bytes(b)
+        if jd.ledger_path is not None:
+            with Ledger(jd.ledger_path) as led:
+                prior = led.of('freeze', job_dir=str(jd.dir))
+                if prior and prior[-1]['frozen_sha256'] != fsha:
+                    raise Refused('FROZEN_LEDGER_MISMATCH', 'the folder differs from the one the ledger recorded as frozen')
+                if not prior:
+                    led.append({'type': 'freeze', 'job_dir': str(jd.dir), 'case_id': jd.rec['case_id'], 'reader': jd.rec['reader'],
+                                'frozen_sha256': fsha, 'final_stage': jd.done('freeze')[-1]['facts'].get('final_stage'),
+                                'run_record_sha256': doc['run_record_sha256'], 'files': len(doc['files'])})
+        tmp = jd.p('.FROZEN.json.tmp')
+        if tmp.exists():
+            tmp.unlink()
+        write_new(tmp, b)
+        os.replace(tmp, jd.p('FROZEN.json'))
+        make_tree_readonly(jd.dir)
+    except (Refused, OSError) as e:
+        code = getattr(e, 'code', type(e).__name__)
+        print(json.dumps({'stage': 'freeze', 'result': 'FREEZE_INCOMPLETE', 'codes': [code], 'values_printed': False}))
+        print('NEXT: STOP_FREEZE_INCOMPLETE')
+        return EXIT_STOP
+    out = {'stage': 'freeze', 'result': 'FROZEN', 'codes': [], 'run_record_sha256': doc['run_record_sha256'],
+           'frozen_sha256': fsha, 'files': len(doc['files']), 'values_printed': False}
+    if completing:
+        out['completed_frozen_json_of_the_recorded_freeze'] = True
+    print(json.dumps(out, ensure_ascii=False))
+    print('NEXT: DONE')
+    return EXIT_CONTINUE
+
+
+def verify_frozen(jd):
+    """R3: recompute every entry of the job folder against FROZEN.json (unlisted, changed and missing files and folders)."""
+    p = jd.p('FROZEN.json')
+    try:
+        fz = strict_json(p.read_bytes(), 'FROZEN.json')
+    except (OSError, Refused):
+        return {'intact': False, 'unlisted': [], 'changed': [], 'missing': ['FROZEN.json'], 'fz': None, 'writable': 0}
+    t = tree(jd.dir)
+    have = {k: v['sha256'] for k, v in t['files'].items() if k != 'FROZEN.json'}
+    listed = {x['path']: x['sha256'] for x in fz.get('files') or []}
+    unlisted = sorted(set(have) - set(listed)) + sorted(set(t['dirs']) - set(fz.get('directories') or [])) + \
+        sorted(set(t['other']) - set(fz.get('other_entries') or []))
+    changed = sorted(k for k in set(have) & set(listed) if have[k] != listed[k])
+    missing = sorted(set(listed) - set(have)) + sorted(set(fz.get('directories') or []) - set(t['dirs']))
+    entries = [str(jd.dir)]
+    for dp, dns, fns in os.walk(jd.dir):
+        entries += [os.path.join(dp, n) for n in dns + fns]
+    writable = 0
+    for q in entries:
+        m = os.lstat(q).st_mode
+        if (stat.S_ISREG(m) or stat.S_ISDIR(m)) and stat.S_IMODE(m) & WBITS:
+            writable += 1
+    return {'intact': not (unlisted or changed or missing), 'unlisted': unlisted, 'changed': changed, 'missing': missing,
+            'fz': fz, 'writable': writable}
+
+
+def cmd_verify_frozen(a):
+    jd = Job(a.job_dir)
+    jd.lock()
+    if not jd.p('FROZEN.json').is_file():
+        raise Refused('NOT_FROZEN', 'the job folder has no FROZEN.json')
+    try:
+        jd.load()
+        chain = 'verified'
+    except Refused as r:
+        chain = r.code
+    v = verify_frozen(jd)
+    fsha = sha_file(jd.p('FROZEN.json'))
+    ledger_ok = None
+    fz = v['fz'] or {}
+    if fz.get('qualification'):
+        try:
+            with Ledger(Path(str(fz.get('ledger')))) as led:
+                e = led.of('freeze', job_dir=str(jd.dir))
+                ledger_ok = bool(e) and e[-1]['frozen_sha256'] == fsha
+        except Refused:
+            ledger_ok = False
+    record_ok = jd.record_path.is_file() and sha_file(jd.record_path) == fz.get('run_record_sha256')
+    ok = v['intact'] and chain == 'verified' and record_ok and ledger_ok is not False
+    print(json.dumps({'stage': 'verify-frozen', 'result': 'FROZEN_INTACT' if ok else 'FROZEN_FOLDER_CHANGED', 'frozen_sha256': fsha,
+                      'unlisted': len(v['unlisted']), 'changed': len(v['changed']), 'missing': len(v['missing']),
+                      'paths': {k: [safe_path(x) for x in v[k][:20]] for k in ('unlisted', 'changed', 'missing')},
+                      'record_chain': chain, 'record_matches_frozen': record_ok, 'ledger_freeze_entry_matches': ledger_ok,
+                      'writable_entries': v['writable'], 'values_printed': False}, ensure_ascii=False))
+    print('NEXT: DONE' if ok else 'NEXT: STOP_FROZEN_FOLDER_CHANGED')
+    return EXIT_CONTINUE if ok else EXIT_STOP
+
+
+# ------------------------------------------------------------------ nonattempt (qualification rule 6, R11)
+def cmd_nonattempt(a):
+    for k in ('release', 'admission'):
+        if not Path(getattr(a, k)).is_absolute():
+            raise Refused('ABSOLUTE_PATH_REQUIRED', {'argument': '--' + k})
+    if a.reader not in ('A', 'B'):
+        raise Refused('READER', 'A or B')
+    if not isinstance(a.reason, str) or not REASON_RE.fullmatch(a.reason):
+        raise Refused('NONATTEMPT_REASON', 'an upper-case code such as NONATTEMPT_SOURCE_UNAVAILABLE')
+    rel_raw = Path(a.release).read_bytes()
+    rel = Release(rel_raw, a.release)
+    adm_raw = Path(a.admission).read_bytes()
+    adm = parse_admission(adm_raw)
+    probe = Stage(Job(Path(a.release).parent / '_'), 'nonattempt', a)
+    check_release_static(rel, True, probe, adm)
+    if not rel.admission_listed(a.admission, adm_raw):
+        raise Refused('ADMISSION_NOT_RELEASED', 'the release qualification.admissions must list this admission file by path and sha256')
+    rel.require_qualification_fields()
+    jobs, _ = load_jobs(rel, adm)
+    if a.case not in jobs:
+        raise Refused('QUALIFICATION_CASE_NOT_IN_JOBS')
+    with Ledger(rel.ledger) as led:
+        if led.of('prepare', case_id=a.case, reader=a.reader):
+            raise Refused('QUALIFICATION_RUN_EXISTS', 'this case and reader already have a run')
+        if led.of('nonattempt', case_id=a.case, reader=a.reader):
+            raise Refused('QUALIFICATION_NONATTEMPT_RECORDED')
+        e = led.append({'type': 'nonattempt', 'case_id': a.case, 'reader': a.reader, 'reason': a.reason,
+                        'admission_sha256': sha_bytes(adm_raw), 'release_sha256': rel.sha, 'operator_model': a.operator_model})
+        lsha = sha_bytes(led.raw)
+    print(json.dumps({'stage': 'nonattempt', 'result': 'NONATTEMPT_RECORDED', 'ledger_seq': e['seq'], 'ledger_sha256': lsha,
+                      'values_printed': False}))
+    print('NEXT: DONE')
+    return EXIT_CONTINUE
 
 
 # ------------------------------------------------------------------ stage wrapper and CLI
-def run_stage(jd, st, body, preflight=None):
+def run_stage(jd, st, body, preflight=None, on_refused=None):
     st.pre = None
+    consumed = False
     try:
         if preflight is not None:
             st.pre = preflight()
+        jd.mark(st)
+        consumed = True
         result, nxt = body()
         completed = True
     except Refused as r:
         st.codes.append(r.code)
-        if not jd.p('FROZEN.json').exists():                # a frozen folder is never written again
-            try:
-                jd.append(st.entry('REFUSED', None, False))
-            except (Refused, OSError):
-                pass
-        return refused(r)
+        if not consumed:
+            if on_refused is not None:
+                try:
+                    on_refused()
+                except (Refused, OSError):
+                    pass
+            if not jd.frozen():                             # a frozen folder is never written again
+                try:
+                    jd.append(st.entry('REFUSED', None, False))
+                except (Refused, OSError):
+                    pass
+            return refused(r)
+        result, nxt, completed = 'REFUSED_AFTER_CONSUMPTION', 'STOP_' + r.code, True     # R4: a recorded stop
     except Outcome as o:
         result, nxt, completed = o.result, o.next_step, True
         st.codes += o.codes
     except Exception as e:                                  # noqa: BLE001 - recorded; the job stops (no retry)
         result, nxt, completed = 'RUNNER_ERROR', 'STOP_RUNNER_ERROR', True
         st.codes.append(type(e).__name__)
-    jd.append(st.entry(result, nxt.split(' ')[0], completed))
-    extra = {}
+        try:                                                # N12: the traceback is kept in logs/ (never printed)
+            tb = jd.p('logs', f'{st.seq:02d}_{st.name}_RUNNER_ERROR.traceback.txt')
+            write_new(tb, traceback.format_exc())
+            st.pin_out('runner_error_traceback', tb)
+        except OSError:
+            pass
+    try:
+        jd.append(st.entry(result, nxt.split(' ')[0], completed))
+    except (Refused, OSError) as e:                         # the marker stays: the next command records INTERRUPTED
+        print(json.dumps({'stage': st.name, 'result': result, 'record_append_failed': getattr(e, 'code', type(e).__name__),
+                          'values_printed': False}))
+        print('NEXT: STOP_RECORD_CONFLICT')
+        return EXIT_STOP
+    jd.unmark()
     if st.name == 'freeze' and result == 'FROZEN':
-        extra['frozen_sha256'], extra['files'] = write_frozen(jd)
-    print(json.dumps({'stage': st.name, 'result': result, 'codes': st.codes,
-                      'run_record_sha256': sha_file(jd.record_path), **extra, 'values_printed': False}, ensure_ascii=False))
+        return finish_freeze(jd)
+    out = {'stage': st.name, 'result': result, 'codes': st.codes, 'run_record_sha256': sha_file(jd.record_path), 'values_printed': False}
+    if jd.ledger_error:
+        out['ledger_append_failed'] = jd.ledger_error
+    print(json.dumps(out, ensure_ascii=False))
     print('NEXT: ' + nxt)
     return EXIT_CONTINUE if nxt.split(' ')[0] in CONTINUE_STEPS else EXIT_STOP
 
@@ -1466,33 +2705,48 @@ def main(argv=None):
     p.add_argument('--jobs-root', required=True)
     p.add_argument('--reader', default='A', help='A or B (qualification: run A and run B in separate jobs roots)')
     p.add_argument('--qualification', action='store_true')
-    p.add_argument('--admission', help='qualification only: the admission frozen with freeze_admission.py before this prepare')
+    p.add_argument('--admission', help='qualification only: the admission the release lists, frozen before the first qualification prepare')
     p.add_argument('--operator-model')
     p = sub.add_parser('scope-finish', help='agreement of the scope tool and the scope reader; scoped packet; generation run')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--reader-response', required=True)
+    p.add_argument('--reader-conversation-id', help='optional: the scope reader conversation, attested by the operator')
     p.add_argument('--operator-model')
-    p = sub.add_parser('finish', help='freeze the response; route check and convert; export; saved QA; visual QA')
+    p = sub.add_parser('finish', help='freeze the generation record and the response; route check and convert; export; saved QA; visual QA')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--response', required=True)
     p.add_argument('--job-title', help='optional: must equal input/JOB_TITLE.json (the title always comes from that file)')
     p.add_argument('--generator-model')
+    p.add_argument('--generation-record', help='run/GENERATION_RECORD.json (cps.generation-record.v1); required for qualification')
+    p.add_argument('--transcript', help='optional: the exported generator transcript the record names (transcript_status exported)')
     p.add_argument('--operator-model')
     p = sub.add_parser('visual-record', help='record the visual review')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--review', required=True)
+    p.add_argument('--reviewer-conversation-id', help='the visual reviewer conversation id or link, attested by the operator '
+                   '(required unless the review states reviewer.conversation_id)')
     p.add_argument('--operator-model')
     p = sub.add_parser('deliver-check', help='condition 9 at delivery; prints the one file to deliver')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--operator-model')
-    p = sub.add_parser('freeze', help='write FROZEN.json and make the job folder read-only (qualification protocol step 5)')
+    p = sub.add_parser('freeze', help='write FROZEN.json and make every file and folder of the job read-only')
     p.add_argument('--job-dir', required=True)
     p.add_argument('--operator-model')
+    p = sub.add_parser('verify-frozen', help='recompute FROZEN.json against the folder (writes nothing)')
+    p.add_argument('--job-dir', required=True)
+    p = sub.add_parser('nonattempt', help='qualification: record a nonattempt of a case and reader in the ledger')
+    p.add_argument('--release', required=True)
+    p.add_argument('--admission', required=True)
+    p.add_argument('--case', required=True)
+    p.add_argument('--reader', required=True)
+    p.add_argument('--reason', required=True)
+    p.add_argument('--operator-model')
     a = ap.parse_args(argv)
-    if a.cmd != 'prepare' and not Path(a.job_dir).is_absolute():
+    if hasattr(a, 'job_dir') and not Path(a.job_dir).is_absolute():
         return refused(Refused('ABSOLUTE_PATH_REQUIRED', {'argument': '--job-dir'}))
     fn = {'prepare': cmd_prepare, 'scope-finish': cmd_scope_finish, 'finish': cmd_finish, 'visual-record': cmd_visual_record,
-          'deliver-check': cmd_deliver_check, 'freeze': cmd_freeze}[a.cmd]
+          'deliver-check': cmd_deliver_check, 'freeze': cmd_freeze, 'verify-frozen': cmd_verify_frozen,
+          'nonattempt': cmd_nonattempt}[a.cmd]
     try:
         return fn(a)
     except Refused as r:                    # refused before a job folder could record it

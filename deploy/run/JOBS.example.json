@@ -1,0 +1,22 @@
+{
+ "schema": "cps.qualification-jobs.v1",
+ "meaning": "INVENTED EXAMPLE of qualification/JOBS.json as the job runner reads it: the case ids are invented. Only listed cases not marked nonattempt can be prepared; the qualification admission pins this file under the label JOBS.json.",
+ "cases": [
+  {
+   "case_id": "9990101",
+   "order": 1,
+   "nonattempt": false
+  },
+  {
+   "case_id": "9990102",
+   "order": 2,
+   "nonattempt": false
+  },
+  {
+   "case_id": "9990103",
+   "order": 3,
+   "nonattempt": true,
+   "reason": "NONATTEMPT_SOURCE_UNAVAILABLE"
+  }
+ ]
+}

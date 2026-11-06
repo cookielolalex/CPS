@@ -1,0 +1,28 @@
+{
+ "schema": "cps.generation-record.v1",
+ "case_id": "9990101",
+ "reader": "A",
+ "platform": "<the platform the generator conversation ran on>",
+ "model": "<the observed model id as the platform shows it>",
+ "effort": "<the reasoning or effort setting, or unknown>",
+ "conversation_id": "<the conversation id or share link>",
+ "started_utc": "2026-11-06T09:00:00.000Z",
+ "ended_utc": "2026-11-06T09:40:00.000Z",
+ "prompt_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+ "single_user_message": true,
+ "features": {
+  "memory": false,
+  "custom_instructions": false,
+  "web": false,
+  "connectors": false,
+  "file_uploads": false,
+  "other_agents": false
+ },
+ "tools_enabled": [
+  "<each tool the conversation had, for example Read, Write, Bash>"
+ ],
+ "final_message": "<the generator conversation final message, verbatim>",
+ "transcript_status": "not_available",
+ "transcript_not_available_reason": "<why no transcript could be exported>",
+ "notes": "INVENTED EXAMPLE of run/GENERATION_RECORD.json (cps.generation-record.v1). prompt_sha256 is sha256sum of run/GENERATOR_PROMPT.md. With transcript_status exported, give transcript_sha256 (the exported file) instead of transcript_not_available_reason."
+}

@@ -23,7 +23,7 @@ Cells the renderer lists in `possibly_cut_cells` (no-wrap text or numbers that m
 5. no tofu: no boxes or missing-glyph marks in place of characters;
 6. E, F, L, M, N and Q are centred, and C is left-aligned;
 7. G and H (`單價`, `複價`) are not shaded;
-8. each cell listed above under `possibly_cut_cells` that lies on this page is noted: whether its text shows in full on the page (its value is checked through saved QA, not in the PNG). Use `n/a` on a page that holds none of the listed cells;
+8. each cell listed above under `possibly_cut_cells` that lies on this page is noted: whether its text shows in full on the page (its value is checked through saved QA, not in the PNG). Use `n/a` on a page that holds none of the listed cells. When cells are listed, item 8 cannot be `n/a` on every page;
 9. body text is black and legible.
 
 ## B. `INTERNAL_QA_WORKBOOK.xlsx` (the internal four-sheet workbook; review the pages listed)
@@ -50,16 +50,22 @@ Cells the renderer lists in `possibly_clipped_cells` (wrapped text that may exce
 
 `n/a` is accepted only where the item says so; every other item is `pass` or `fail`. Any `fail` fails visual QA.
 
+**Each listed cut cell (A8).** In `deliverable.cut_cells`, give one entry per cell listed above under `possibly_cut_cells`, keyed by its address (for example `"C5"`): `pass` when its text shows in full on its page, `fail` when it does not. Give no other key. When no cell is listed, write `"cut_cells": {}`.
+
 ## Output
 
-Write `{OUT}/VISUAL_REVIEW.json` exactly in this shape (`cps.visual-review.v1`): every listed page of both workbooks, keyed by its page number as a string, each with all nine items `"1"` … `"9"`, and nothing else in a page object. `result` is `pass`, `fail` or `n/a`; `note` is a short string (it may be empty). `overall` is `FAIL` if any item fails, otherwise `PASS`; `failures` lists each failed item as a short string such as `"deliverable page 2 item 6: F not centred"`.
+Write `{OUT}/VISUAL_REVIEW.json` exactly in this shape (`cps.visual-review.v1`): every listed page of both workbooks, keyed by its page number as a string, each with all nine items `"1"` … `"9"`, and nothing else in a page object. `result` is `pass`, `fail` or `n/a`; `note` is a short string (it may be empty). `overall` is `FAIL` if any item or cut cell fails, otherwise `PASS`; `failures` lists each failed item as a short string such as `"deliverable page 2 item 6: F not centred"`, and is empty when `overall` is `PASS`.
+
+`reviewer.kind` is exactly `fresh_context_visual_reviewer`: you are a new conversation that has seen nothing of this job but this prompt and the listed PNGs. `model` is your observed model id and `effort` your reasoning setting (or `unknown`). Add `conversation_id` only when your platform shows you this conversation's id or link; otherwise leave it out, and the operator states it when recording the review.
 
 ```json
 {
  "schema": "cps.visual-review.v1",
- "reviewer": {"kind": "fresh_context_visual_reviewer", "model": "<your observed model id>", "effort": "<your reasoning setting, or unknown>"},
+ "reviewer": {"kind": "fresh_context_visual_reviewer", "model": "<your observed model id>", "effort": "<your reasoning setting, or unknown>",
+              "conversation_id": "<only if your platform shows it>"},
  "deliverable": {"manifest_sha256": "<the delivered manifest sha256 above>",
-                 "pages": {"1": {"1": {"result": "pass", "note": ""}, "2": {"result": "pass", "note": ""}, "...": "...", "9": {"result": "pass", "note": ""}}}},
+                 "pages": {"1": {"1": {"result": "pass", "note": ""}, "2": {"result": "pass", "note": ""}, "...": "...", "9": {"result": "pass", "note": ""}}},
+                 "cut_cells": {"<each listed possibly_cut_cells address>": {"result": "pass", "note": ""}}},
  "internal": {"manifest_sha256": "<the internal manifest sha256 above>",
               "pages": {"1": {"1": {"result": "pass", "note": ""}, "...": "...", "9": {"result": "pass", "note": ""}}}},
  "overall": "PASS",
@@ -67,6 +73,6 @@ Write `{OUT}/VISUAL_REVIEW.json` exactly in this shape (`cps.visual-review.v1`):
 }
 ```
 
-The `"..."` entries above only abbreviate the example; your file lists every item of every listed page. The job runner (`deploy/run/cps_job.py visual-record`) refuses a review that omits a listed page or item, or uses `n/a` where an item applies, unless it records a failure; it records any failure as FAIL.
+The `"..."` entries above only abbreviate the example; your file lists every item of every listed page and every listed cut cell. The job runner (`deploy/run/cps_job.py visual-record`) refuses a review that omits a listed page, item or cut cell, uses `n/a` where an item applies, or names another reviewer kind, unless it records a failure; it records any failure as FAIL.
 
 Your final message reports only: whether you wrote the file, the overall result, the number of pages reviewed per workbook and the number of failed items. Do not paste the JSON or any cell text into the final message.

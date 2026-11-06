@@ -2,7 +2,8 @@
  "schema": "cps.release.v1",
  "status": "RELEASED_FOR_QUALIFICATION",
  "release_version": "EXAMPLE-0000",
- "meaning": "INVENTED EXAMPLE. Every field below is one the job runner reads; the hashes and paths are placeholders, not a release.",
+ "accepts_jobs_from_release_versions": [],
+ "meaning": "INVENTED EXAMPLE. Every field below is one the job runner reads; the hashes and paths are placeholders, not a release. repository.commit is required, and pinned_files_sha256 must cover the runner, its review template and every harness and source-prep file (RUN_JOB_COMMANDS.md, \"Release fields the runner reads\").",
  "repository": {
   "url": "https://github.com/cookielolalex/CPS",
   "branch": "claude/cool-ptolemy-vsfpr5",
@@ -13,7 +14,9 @@
   "path": "research/guideline046_007/package",
   "manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
  },
- "harness": {"path": "research/guideline046_007/harness"},
+ "harness": {
+  "path": "research/guideline046_007/harness"
+ },
  "source_prep": {
   "path": "research/guideline046_003/source_prep",
   "deps_bundle": "/home/dot/cps-deps",
@@ -34,17 +37,45 @@
  ],
  "saved_qa_clean_path": "/usr/bin:/bin",
  "tables": {
-  "glossary": {"path": "/home/dot/cps_runtime/tables/GLOSSARY.json", "sha256": "2222222222222222222222222222222222222222222222222222222222222222"},
-  "brand_table": {"path": "/home/dot/cps_runtime/tables/BRAND_TABLE.json", "sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+  "glossary": {
+   "path": "/home/dot/cps_runtime/tables/GLOSSARY.json",
+   "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "brand_table": {
+   "path": "/home/dot/cps_runtime/tables/BRAND_TABLE.json",
+   "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+  },
   "company_name_sha256": "4444444444444444444444444444444444444444444444444444444444444444"
  },
  "qualification": {
-  "admission_sha256": ["5555555555555555555555555555555555555555555555555555555555555555"]
+  "admissions": [
+   {
+    "path": "/home/dot/cps_qualification/ADMISSION_QUALIFICATION.json",
+    "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+   }
+  ],
+  "ledger": "/home/dot/cps_qualification/LEDGER.jsonl",
+  "jobs_file": "/home/dot/cps_qualification/JOBS.json",
+  "accepted_transcript_status": [
+   "exported",
+   "not_available"
+  ]
  },
  "pinned_files_sha256": {
   "deploy/run/cps_job.py": "6666666666666666666666666666666666666666666666666666666666666666",
   "deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md": "7777777777777777777777777777777777777777777777777777777777777777",
-  "research/guideline046_007/harness/make_job_config.py": "8888888888888888888888888888888888888888888888888888888888888888"
+  "research/guideline046_007/harness/make_job_config.py": "8888888888888888888888888888888888888888888888888888888888888888",
+  "research/guideline046_007/harness/scope_tool.py": "9999999999999999999999999999999999999999999999999999999999999999",
+  "research/guideline046_007/harness/scope_agree.py": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "research/guideline046_007/harness/make_scoped_inventory.py": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "research/guideline046_007/harness/prepare_run.py": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "research/guideline046_007/harness/GENERATOR_PROMPT_TEMPLATE.md": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "research/guideline046_007/harness/SCOPE_READER_PROMPT_TEMPLATE.md": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "research/guideline046_003/source_prep/build_inventory_xlsx_v2.py": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "research/guideline046_003/source_prep/build_inventory_v2.py": "0000000000000000000000000000000000000000000000000000000000000000",
+  "research/guideline046_003/source_prep/render_views.py": "1111111111111111111111111111111111111111111111111111111111111111",
+  "research/guideline046_003/source_prep/screenshot_views.cjs": "2222222222222222222222222222222222222222222222222222222222222222",
+  "research/guideline046_003/source_prep/auto_views.py": "3333333333333333333333333333333333333333333333333333333333333333"
  },
  "run_job_commands": "RUN_JOB_COMMANDS.md",
  "options": "OPTIONS.json"
