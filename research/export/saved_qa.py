@@ -71,6 +71,11 @@ min = max = the column, customWidth="1" and the pinned width (WIDTHS per interna
 LibreOffice uses the first <col> that covers a column, openpyxl the last, and openpyxl gives a column without width its
 default, so a leading wide-range <col> or a dropped one passed the openpyxl width check. The workbooks, EXPECTED_SAVED_VALUES.json
 and WRITER_RECEIPT.json must be regular files in the output directory, not symbolic links (finding integrity).
+v6.2 (writer v2.8, owner decision O39): the deliverable's widths are no longer constants. The expected width of each column is
+the larger of its O38 minimum and the widest value of the column in the main sheet of EXPECTED_SAVED_VALUES.json (header
+included) by fit_tenths (saved QA's own copy of the writer's rule and of js_number), capped at 255: the <cols> check (W1) and
+the formatting width check compare with it. The deliverable's styles.xml pin changes (fonts[0], the default font, is
+新細明體 11 as in the creator's files). Nothing else changes.
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
@@ -81,11 +86,12 @@ Default report: <output-dir>/SAVED_QA.json (created; must not exist). Exit 0 onl
 """
 import argparse, copy, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile, unicodedata, zipfile
 import xml.etree.ElementTree as ET
+from decimal import Decimal
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v6.1'
+VERSION = 'cps-export-saved-qa.v6.2'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -181,7 +187,7 @@ DELIVERABLE_PARTS = tuple(p for p in EXPECTED_PARTS if p not in ('xl/worksheets/
 DELIVERABLE_PINNED_PARTS = dict(PINNED_PARTS, **{
     '[Content_Types].xml': 'ba5af858089dd3357b4e4408a86694ff0a62ec37f21ef57a3a09544dc0ab18c4',
     'xl/_rels/workbook.xml.rels': '26ad8fcc38d41229833e624496df364492772697ad2e5d6696e1738f05ba225f',
-    'xl/styles.xml': '59f01b1510a60a56aaa6fb6654fb998aa80632d30369ae5e76c9a469784fb5f0'})
+    'xl/styles.xml': '3295b4960563f775fba5c6e4ce2883532a68fd47cde13c8beff18c353d03a43b'})
 DELIVERABLE_WORKBOOK_TEMPLATE = ('<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><workbookPr/>'
                                  '<workbookProtection/><bookViews>'
                                  '<workbookView visibility="visible" minimized="0" showHorizontalScroll="1" showVerticalScroll="1" showSheetTabs="1" tabRatio="600" firstSheet="0" activeTab="0" autoFilterDateGrouping="1"/>'
@@ -194,20 +200,83 @@ DELIVERABLE_PINNED_TEMPLATES = {
 }
 # v6 (O38): the deliverable format, checked cell by cell (check_deliverable_formatting); saved QA's own copy of the writer's rule.
 QA_WORKBOOK_NAME = 'INTERNAL_QA_WORKBOOK.xlsx'
-DELIVERY_FORMAT = 'owner_O38_creator_format_v1'
+DELIVERY_FORMAT = 'owner_O38_O39_creator_format_v2'
 DELIVERY = {'font': '新細明體', 'size': 12, 'header_fill': 'FFC0C0C0', 'border_style': 'thin', 'border_color': 'FF000000',
             'centred': 'EFLMNQ', 'left': 'C', 'header_height': 23.25, 'row_height': 20.45, 'freeze': 'A2',
-            'widths': [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]}
+            'min_widths': [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]}
+# v6.2 (O39): saved QA's own copy of the writer's width rule (writer_portable O39_RULE, fit_tenths, delivery_widths).
+FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 23, 22, 18, 14, 10
+FIT_BROAD = 'MWmw@%'
+DELIVERY_MAX_WIDTH_TENTHS = 2550
+
+
+def js_number(x):
+    """ECMAScript Number::toString for a finite number (saved QA's copy of writer_portable.js_number)."""
+    x = float(x)
+    if not math.isfinite(x):
+        return 'null'
+    if x == 0:
+        return '0'
+    if x < 0:
+        return '-' + js_number(-x)
+    _, digits, exp = Decimal(repr(x)).as_tuple()
+    digits = list(digits)
+    while len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        exp += 1
+    t = ''.join(map(str, digits))
+    k = len(t)
+    n = exp + k
+    if k <= n <= 21:
+        return t + '0' * (n - k)
+    if 0 < n <= 21:
+        return t[:n] + '.' + t[n:]
+    if -6 < n <= 0:
+        return '0.' + '0' * (-n) + t
+    e = n - 1
+    return (t if k == 1 else t[0] + '.' + t[1:]) + 'e' + ('+' if e >= 0 else '-') + str(abs(e))
+
+
+def fit_tenths(v):
+    """v6.2 (O39): the estimated display width of one value, in tenths of a column-width unit."""
+    if v is None or isinstance(v, bool):
+        return 0
+    text = v if isinstance(v, str) else js_number(v)
+    if text == '':
+        return 0
+    t = 0
+    for ch in text:
+        if ch in '\r\n':
+            continue
+        if ord(ch) > 0x7e:
+            t += FIT_TENTHS_NON_ASCII
+        elif ch in FIT_BROAD:
+            t += FIT_TENTHS_BROAD
+        elif 'A' <= ch <= 'Z':
+            t += FIT_TENTHS_CAPITAL
+        else:
+            t += FIT_TENTHS_OTHER
+    return t + FIT_TENTHS_PAD
+
+
+def deliverable_widths(main_rows):
+    """v6.2 (O39): the 17 expected deliverable widths for the main sheet rows of EXPECTED_SAVED_VALUES.json."""
+    out = []
+    for j, w in enumerate(DELIVERY['min_widths']):
+        need = max([fit_tenths(r[j]) for r in main_rows if isinstance(r, list) and j < len(r)] or [0])
+        out.append(min(max(round(w * 10), need), DELIVERY_MAX_WIDTH_TENTHS) / 10)
+    return out
 DELIVERY_ROW_HT = {'header': '23.25', 'body': '20.45'}       # the row ht attribute text openpyxl writes
 DELIVERY_PANE = {'ySplit': '1', 'topLeftCell': 'A2', 'activePane': 'bottomLeft', 'state': 'frozen'}
 DELIVERY_SHEET_VIEW_ATTRS = ('tabSelected', 'workbookViewId')  # no showGridLines: gridlines show
 WIDTH_TEXT_RE = re.compile(r'[0-9]+(?:\.[0-9]+)?')
 
 
-def expected_cols(kind, part):
-    """v6.1 (review W1): the pinned widths of a worksheet part, one per column from A; None for a part with no pin."""
+def expected_cols(kind, part, deliv_widths=None):
+    """v6.1 (review W1): the pinned widths of a worksheet part, one per column from A; None for a part with no pin. v6.2 (O39):
+    the deliverable's widths are deliverable_widths of the expected main sheet, passed in as deliv_widths."""
     if kind == 'deliverable':
-        return DELIVERY['widths'] if part == 'xl/worksheets/sheet1.xml' else None
+        return deliv_widths if part == 'xl/worksheets/sheet1.xml' else None
     return {'xl/worksheets/sheet%d.xml' % (i + 1): WIDTHS[name] for i, name in enumerate(SHEETS)}.get(part)
 
 
@@ -480,7 +549,7 @@ def read_raw(path, F):
 
 
 # ------------------------------------------------------------------ structure (review S2)
-def check_structure(path, F, main_sheet=SHEETS[0], kind='qa'):
+def check_structure(path, F, main_sheet=SHEETS[0], kind='qa', deliv_widths=None):
     """The workbook may hold only what the portable writer produces: no hidden content, no extra parts, no view or
     format element that can hide or alter what a cell shows. main_sheet: the derived main sheet name (v5, O33), substituted
     into the pinned workbook.xml template. kind 'qa': the four-sheet workbook; 'deliverable' (v6, O38): the one-sheet
@@ -571,7 +640,7 @@ def check_structure(path, F, main_sheet=SHEETS[0], kind='qa'):
         if any(k not in WORKSHEET_CHILDREN for k in kids) or kids != order or 'sheetData' not in kids:
             bad('worksheet_structure', part=n, problem='worksheet child elements',
                 unexpected=[k for k in kids if k not in WORKSHEET_CHILDREN], actual=kids[:20])
-        if expected_cols(kind, n) is not None and 'cols' not in kids:
+        if expected_cols(kind, n, deliv_widths) is not None and 'cols' not in kids:
             bad('worksheet_structure', part=n, problem='cols missing (v6.1: every column has its pinned width)')
         for el in root:
             tag = tag_name(el)
@@ -605,7 +674,7 @@ def check_structure(path, F, main_sheet=SHEETS[0], kind='qa'):
                 for col in el:
                     if tag_name(col) != 'col' or any(k not in ('min', 'max', 'width', 'customWidth') for k in col.attrib):
                         bad('worksheet_structure', part=n, problem='col', attributes=dict(col.attrib))
-                want_cols = expected_cols(kind, n)
+                want_cols = expected_cols(kind, n, deliv_widths)
                 if want_cols is not None and not cols_ok(list(el), want_cols):
                     bad('worksheet_structure', part=n, problem='cols: exactly one <col> per column, in order, min = max = the column, '
                         'customWidth="1", the pinned width (LibreOffice uses the first <col> covering a column, openpyxl the last; v6.1)',
@@ -1166,7 +1235,7 @@ def check_formatting(wb, expected_rows, F, mapping=None):
     return checked
 
 
-def check_deliverable_formatting(wb, nrows, F, sheet):
+def check_deliverable_formatting(wb, nrows, F, sheet, widths):
     """v6 (O38): the deliverable's format cell by cell on A1:Q<nrows>, the widths, row heights, header-row freeze, gridlines
     shown and no tab colour. F is the deliverable's TaggedFindings."""
     checked = 0
@@ -1204,7 +1273,7 @@ def check_deliverable_formatting(wb, nrows, F, sheet):
             for prop, want, got in props:
                 if got != want:
                     bad(a, prop, want, got)
-    for j, w in enumerate(DELIVERY['widths'], start=1):
+    for j, w in enumerate(widths, start=1):          # v6.2 (O39): deliverable_widths of the expected main sheet
         got = ws.column_dimensions[col_letters(j)].width
         if got is None or abs(got - w) > 1e-9:           # openpyxl writes 81.9 as 81.90000000000001
             bad(col_letters(j), 'column_width', w, got)
@@ -1236,11 +1305,13 @@ def check_deliverable(path, exp_rows, main_sheet, F, formatting):
         return sec
     xb = path.read_bytes()
     sec.update(checked=True, sha256=sha256(xb), bytes=len(xb))
+    main_rows = exp_rows.get(SHEETS[0]) if exp_rows else None
+    widths = deliverable_widths(main_rows) if isinstance(main_rows, list) else None     # v6.2 (O39)
+    sec['expected_column_widths'] = widths
     try:
-        sec['structure'] = check_structure(path, T, main_sheet, 'deliverable')
+        sec['structure'] = check_structure(path, T, main_sheet, 'deliverable', widths)
     except Exception as e:                      # noqa: BLE001
         T.add('reader_error', {'reader': 'structure', 'error': repr(e)[:300]})
-    main_rows = exp_rows.get(SHEETS[0]) if exp_rows else None
     if main_rows is None:
         return sec
     readers, counts, raw, wb_f = {}, {}, None, None
@@ -1315,7 +1386,7 @@ def check_deliverable(path, exp_rows, main_sheet, F, formatting):
     sec['formatting_cells_checked'] = None
     if formatting and wb_f is not None:
         try:
-            sec['formatting_cells_checked'] = check_deliverable_formatting(wb_f[0], len(main_rows), T, main_sheet)
+            sec['formatting_cells_checked'] = check_deliverable_formatting(wb_f[0], len(main_rows), T, main_sheet, widths)
         except Exception as e:                  # noqa: BLE001
             T.add('reader_error', {'reader': 'formatting', 'error': repr(e)[:300]})
     sec['compared_with'] = 'the main sheet of EXPECTED_SAVED_VALUES.json (' + SHEETS[0] + ')'

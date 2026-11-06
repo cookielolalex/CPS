@@ -137,3 +137,24 @@ The interview materials hold historical 未填 rows. They are kept apart from th
 - Visual QA renders the delivered workbook with printed gridlines. It lists no-wrap cells whose text may not show in full (`possibly_cut_cells`).
 - Her second sheet, 原材料清單, is not added. Whether CPS should add it is survey question DOT-09.
 - The writer v2.7 deliverables of the four samples have zero cell, style, width and height differences from the approved previews.
+
+## O39 (2026-11-06): column widths in the delivered workbook
+
+**Finding.** In the 046g development trial, two delivered workbooks were reviewed visually. Both failed: some values were cut at the column edge. In one job the first character of every 使用客戶 cell was cut and one 型號 cell lost its last character; in the other, two 單位 cells were cut (a unit followed by eight spaces, kept verbatim from the source). The stored values were intact (saved QA passed). The cause is the fixed O38 widths.
+
+The creator's own files show the same effect, and she sets widths per job. Across 46 of her 未填 files, text is wider than her column in 403 of 4,782 規格 cells (15 files) and 88 of 2,685 材料名稱 cells (6 files); 使用客戶 is 13 wide in one file and 27.4 in another.
+
+**Question to the owner:** widen to fit, or keep the widths exactly and accept cut text?
+
+**Owner answer:** "Widen to fit (Recommended)": keep the approved widths as the minimum, and widen a column only when a value in it would be cut, just enough to show it in full.
+
+**Effect (writer v2.8, saved_qa v6.2, visual_qa v4.2).**
+- **Width rule.** Each column's width is the larger of its O38 width and the widest value in it, header included, capped at Excel's 255. The value estimate is counted in tenths of a column-width unit: 23 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital, 14 per other ASCII character, plus 10.
+- **Calibration.** The estimate is conservative for the three renderers measured on invented calibration workbooks:
+  - Excel with 新細明體 12 and a 7-pixel default digit: a CJK character is about 2.29 units.
+  - The Dot's LibreOffice toolchain: one unit is 7.0 pt, so a 12-pt CJK character is 1.71 units.
+  - The maintainer environment, where the trial was rendered: one unit is 5.55 pt, so a CJK character is 2.16 units.
+- **Default font.** The workbook default font (fonts[0], the Normal style) is 新細明體 11, as in all 46 of her files. Excel converts column-width units to pixels with this font's digit width, so the delivered columns get her pixel widths.
+- **Checks.** Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json` with its own copy of the rule. Visual QA's `possibly_cut_cells` uses the same estimate.
+- **What does not change.** Every other O38 property. `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their bytes.
+- **Not changed by O39.** The values themselves. A unit with trailing spaces stays verbatim under R57; its column is widened. Whether such outer spaces should be trimmed is a 046h backlog item.

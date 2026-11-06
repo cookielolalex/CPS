@@ -35,6 +35,11 @@ cells that wrap (every cell of the internal workbook, as before).
 v4.1 (review of v2.7, N1 and N6): the column-width map takes the first <col> that covers a column, as LibreOffice does;
 possibly_cut_cells also lists no-wrap number cells whose General-format text is wider than the column (Excel and LibreOffice then
 show fewer digits, an exponent form such as 1E+06, or ####), with kind "number" (string cells have kind "string").
+v4.2 (writer v2.8, owner decision O39): possibly_cut_cells estimates text width with the writer's conservative O39 rule
+(fit_tenths: in tenths of a column-width unit, 23 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital,
+14 per other ASCII character, plus 10; times font size / 12 pt) for strings and for number text alike. The v4.1 estimate
+(2 units per wide character, times size / 11) missed values that the maintainer renderer cut (a column unit is 5.55 pt there,
+7.0 pt on the Dot toolchain). A deliverable widened by writer v2.8 lists no cell unless a value exceeds Excel's 255 limit.
 
 What the render does not show (v2, review S4; also in the manifest limitations): numbers display in the
 General format, so the stored binary64 precision is not visible; a row taller than a printed page is
@@ -49,7 +54,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-visual-qa.v4.1'
+VERSION = 'cps-export-visual-qa.v4.2'
 HEADER_MARKER = '[[{}]]'                 # page header text: [[sheet name]] (review N1)
 EXCEL_MAX_ROW_HEIGHT_PT = 409.0          # Excel row-height limit; also far below one A3 page in LibreOffice
 LINE_HEIGHT_PT = 15.0                    # approximate line height of 11 pt text with the CJK fallback font
@@ -198,6 +203,29 @@ def map_pages(text, names, pages=None):
 
 
 # ------------------------------------------------------------------ cells that may be clipped (review S4)
+FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 23, 22, 18, 14, 10
+FIT_BROAD = 'MWmw@%'
+
+
+def fit_tenths_text(text):
+    """v4.2: visual QA's copy of the writer's O39 width estimate for one cell text at 12 pt (line breaks count nothing)."""
+    if text == '':
+        return 0
+    t = 0
+    for ch in text:
+        if ch in '\r\n':
+            continue
+        if ord(ch) > 0x7e:
+            t += FIT_TENTHS_NON_ASCII
+        elif ch in FIT_BROAD:
+            t += FIT_TENTHS_BROAD
+        elif 'A' <= ch <= 'Z':
+            t += FIT_TENTHS_CAPITAL
+        else:
+            t += FIT_TENTHS_OTHER
+    return t + FIT_TENTHS_PAD
+
+
 def _text_units(line):
     return sum(2 if unicodedata.east_asian_width(ch) in 'WF' else 1 for ch in line)
 
@@ -283,7 +311,7 @@ def possibly_cut_cells(xlsx):
                 col_no, row = _col_no(ref), re.sub(r'^[A-Z]*', '', ref)
                 w = widths.get(col_no, DEFAULT_COLUMN_WIDTH)
                 lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
-                est = max(_text_units(x) for x in lines) * size / 11.0
+                est = fit_tenths_text(text) * size / 12.0 / 10.0          # v4.2: the O39 estimate, in column-width units
                 if est > w or len(lines) > 1:
                     def letters(n):
                         out = ''
@@ -306,15 +334,16 @@ def possibly_cut_cells(xlsx):
                 checked_numbers += 1
                 ref = c.attrib.get('r', '')
                 w = widths.get(_col_no(ref), DEFAULT_COLUMN_WIDTH)
-                est = len(v.text) * size / 11.0
-                if est > max(1.0, w - 1.0):
+                est = fit_tenths_text(v.text) * size / 12.0 / 10.0     # v4.2: the O39 estimate
+                if est > w:
                     flagged.append({'sheet': name, 'cell': ref, 'kind': 'number', 'chars': len(v.text), 'line_feeds': 0, 'column_width': w,
                                     'estimated_width': round(est, 2), 'horizontal': horizontal, 'neighbours_filled': None})
     return {'count': len(flagged), 'first': flagged[:CLIP_LIST_CAP], 'no_wrap_string_cells_checked': checked,
             'no_wrap_number_cells_checked': checked_numbers,
-            'criterion': ('no-wrap string cell whose estimated width > column width (wide East Asian characters = 2 units, times font '
-                          'size / 11 pt), or that holds a line feed; no-wrap number cell whose stored text, times font size / 11 pt, is '
-                          'wider than the column width less 1 (v4.1: shown with fewer digits, as 1E+06, or as ####)'),
+            'criterion': ('v4.2: no-wrap string or number cell whose O39 estimated width (tenths of a unit: 23 per non-ASCII '
+                          'character, 22 per M W m w @ %, 18 per other ASCII capital, 14 per other ASCII character, plus 10; times '
+                          'font size / 12 pt) exceeds the column width, or a string that holds a line feed (a number too wide is '
+                          'shown with fewer digits, as 1E+06, or as ####)'),
             'note': ('Heuristic. In Excel the text of these cells runs into empty neighbours and is cut at a filled one; a line feed '
                      'shows as one line. Check their values in SAVED_QA.json / the saved workbook, not in the PNGs.')}
 

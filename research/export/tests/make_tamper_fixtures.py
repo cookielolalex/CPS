@@ -353,6 +353,21 @@ def update_receipt(d):
     (d / 'WRITER_RECEIPT.json').write_text(json.dumps(r, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
+def o39_width(main_rows, j):
+    """Writer v2.8 (O39) width of deliverable column j (0-based) for MAIN_ROWS: the tests' own copy of the rule (23 per non-ASCII
+    character, 22 per M W m w @ %, 18 per other ASCII capital, 14 per other ASCII character, plus 10; at least the O38 width)."""
+    mins = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
+
+    def fit(v):
+        if not isinstance(v, str) or v == '':
+            return 0 if not isinstance(v, (int, float)) or isinstance(v, bool) else None
+        return sum(0 if ch in '\r\n' else 23 if ord(ch) > 0x7e else 22 if ch in 'MWmw@%' else 18 if 'A' <= ch <= 'Z' else 14
+                   for ch in v) + 10
+    need = [fit(r[j]) for r in main_rows if j < len(r)]
+    assert None not in need, 'o39_width: numbers are not used by the tampers'
+    return min(max(round(mins[j] * 10), max(need or [0])), 2550) / 10
+
+
 def consistent_change(src, d):
     """Change main-sheet C2 consistently in EXPECTED_SAVED_VALUES.json (bytes otherwise unchanged) and in the xlsx."""
     text = (src / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8')
@@ -560,6 +575,22 @@ def deliverable_extra_cell(x):
     return x[:k] + '<c r="R2" t="inlineStr"><is><t>extra</t></is></c>' + x[k:]
 
 
+def deliverable_v27_fixed_widths(x):
+    """v2.8 (O39): every <col> back to its O38 minimum (the v2.7 fixed widths), although some value needs a wider column."""
+    mins = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
+    y = x
+    changed = 0
+    for j, w in enumerate(mins, start=1):
+        pat = r'<col width="([^"]*)" customWidth="1" min="%d" max="%d"/>' % (j, j)
+        m = re.search(pat, y)
+        assert m, pat
+        if abs(float(m.group(1)) - w) > 1e-9:
+            changed += 1
+        y = y[:m.start()] + '<col width="%s" customWidth="1" min="%d" max="%d"/>' % (repr(w), j, j) + y[m.end():]
+    assert changed >= 1, 'the source deliverable needs at least one widened column'
+    return y
+
+
 def deliverable_header_body_style(x):
     y, n = re.subn(r'(<c r="[A-Q]1" s=")1(")', r'\g<1>2\g<2>', x)
     assert n == 17
@@ -592,6 +623,7 @@ DELIVERABLE_TAMPERS = {
     'L16_hidden_column': ({S1: sub1(r'<col width="81.90000000000001" customWidth="1" min="4" max="4"/>',
                                     '<col width="81.90000000000001" customWidth="1" hidden="1" min="4" max="4"/>')},
                           ['hidden_attribute', 'worksheet_structure', 'formatting'], [], False),
+    'L17_v27_fixed_widths': ({S1: deliverable_v27_fixed_widths}, ['worksheet_structure', 'formatting'], [], False),
 }
 
 
@@ -616,10 +648,13 @@ def make_deliverable_tampers(src, dest):
             (d / dn).write_bytes((src / xn).read_bytes())          # the four-sheet workbook under the deliverable's name
         elif name.startswith('L15_'):
             consistent_change(src, d)                               # EXPECTED and the internal workbook
-            write_tampered(src / dn, d / dn, {S1: sub1(r'(<c r="C2" [^>]*><is><t[^>]*>)[^<]*(</t></is></c>)',
-                                                      lambda m: m.group(1) + ''.join(c if ord(c) < 128 else '&#%d;' % ord(c) for c in (
-                                                          json.loads((d / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8'))
-                                                          ['sheets'][0]['values'][1][2])) + m.group(2))})
+            main_new = json.loads((d / 'EXPECTED_SAVED_VALUES.json').read_text(encoding='utf-8'))['sheets'][0]['values']
+            c_width = o39_width(main_new, 2)                        # v2.8 (O39): column C's width follows the new value
+            write_tampered(src / dn, d / dn, {S1: lambda x: sub1(r'(<col width=")[^"]*(" customWidth="1" min="3" max="3"/>)',
+                                                                 lambda m: m.group(1) + repr(c_width) + m.group(2))(
+                                                  sub1(r'(<c r="C2" [^>]*><is><t[^>]*>)[^<]*(</t></is></c>)',
+                                                       lambda m: m.group(1) + ''.join(c if ord(c) < 128 else '&#%d;' % ord(c) for c in
+                                                                                      main_new[1][2]) + m.group(2))(x))})
         else:
             write_tampered(src / dn, d / dn, edits)
         if name.startswith('L14_'):

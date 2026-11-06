@@ -39,6 +39,9 @@ Route
   Q centred, C left, her column widths and row heights). The four-sheet workbook of v2.6 (main sheet <name>, 來源與審查, 組成參考,
   組成連結; same bytes as v2.6) is written as INTERNAL_QA_WORKBOOK.xlsx for saved QA and internal review and is never delivered.
   Without --job-title nothing changes (research-draft.xlsx only).
+  Owner decision O39 (v2.8, 2026-11-06): her O38 widths are minimums; a column is widened when a value in it would be cut
+  (delivery_widths, O39_RULE), and the workbook default font is 新細明體 11 as in her files. Only the deliverable changes:
+  INTERNAL_QA_WORKBOOK.xlsx and the untitled outputs keep their v2.7 bytes.
 
 Mode v2 (candidate 046f carriers made by route v4.2, which keeps the route v4.1 relaxations unchanged;
 FIELD_ROLES R48, R52, R54, R57; O13, O16)
@@ -76,7 +79,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.7'
+VERSION = 'cps-export-writer-portable.v2.8'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -160,12 +163,24 @@ JOB_TITLE_SUFFIX = '(未填)'
 # Owner decision O38 (writer v2.7): the delivered workbook in the creator's format (from her recent 未填 files: header fill,
 # font, alignment, row heights, header-row freeze; column widths = the medians of seven of her files, as in the approved previews).
 QA_WORKBOOK_NAME = 'INTERNAL_QA_WORKBOOK.xlsx'  # with --job-title: the four-sheet workbook (internal, never delivered)
-DELIVERY_FORMAT = 'owner_O38_creator_format_v1'
+DELIVERY_FORMAT = 'owner_O38_O39_creator_format_v2'
 DELIVERY_FONT, DELIVERY_FONT_SIZE = '新細明體', 12
+# v2.8: the workbook default font (fonts[0], the Normal style), as in all 46 of her 未填 files read (新細明體 11). Excel converts
+# column-width units to pixels with the default font's digit width, so this gives her column pixel widths.
+DELIVERY_DEFAULT_FONT, DELIVERY_DEFAULT_FONT_SIZE = '新細明體', 11
 DELIVERY_HEADER_FILL, DELIVERY_BORDER_COLOR = 'C0C0C0', '000000'
 DELIVERY_WIDTHS = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
 DELIVERY_CENTRED, DELIVERY_LEFT = 'EFLMNQ', 'C'
 DELIVERY_HEADER_HEIGHT, DELIVERY_ROW_HEIGHT = 23.25, 20.45
+# Owner decision O39 (writer v2.8, 2026-11-06): DELIVERY_WIDTHS are minimums. A column is widened when a value in it would be
+# cut: its width is the larger of the minimum and the widest fit_tenths(value) of the column (header included), in tenths of a
+# column-width unit, at most 255 (Excel's limit). fit_tenths counts 23 per non-ASCII character, 22 per M W m w @ %, 18 per other
+# ASCII capital, 14 per other ASCII character, plus 10; line breaks count nothing; a number counts its stored text
+# (js_number). The counts are conservative for Excel with 新細明體 12 (a CJK character 2.29 units with a 7-pixel default digit)
+# and for the LibreOffice renderers measured (CJK 1.71 units on the Dot toolchain, 2.16 in the maintainer environment).
+FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 23, 22, 18, 14, 10
+FIT_BROAD = 'MWmw@%'
+DELIVERY_MAX_WIDTH_TENTHS = 2550
 O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one sheet <name>: the main-sheet values of '
             'EXPECTED_SAVED_VALUES.json (A1:Q<n>, the same values and types as the internal workbook\'s main sheet), font 新細明體 12 '
             'on every cell; header row: solid fill #C0C0C0, thin black borders on all four sides, centred horizontally and vertically, '
@@ -173,6 +188,11 @@ O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one 
             'no border, number format General; no cell wraps; widths A..Q 16.1 23.1 21.3 81.9 6.9 8.3 12.9 13 12.3 13 21.4 11 24.1 34.1 '
             '10.3 13 8.1; gridlines shown; only row 1 frozen (pane at A2); no tab colour. The four-sheet workbook (v2.6 bytes) is '
             'INTERNAL_QA_WORKBOOK.xlsx. Without --job-title no deliverable is written (v2.6 outputs).')
+O39_RULE = ('O39 (v2.8): the O38 widths are minimums. Each column\'s width is the larger of its O38 width and the widest value in '
+            'it (header included) by fit_tenths: in tenths of a column-width unit, 23 per non-ASCII character, 22 per M W m w @ %, '
+            '18 per other ASCII capital, 14 per other ASCII character, plus 10 (line breaks count nothing; a number counts its '
+            'stored JavaScript Number::toString text), capped at 255. The workbook default font (fonts[0]) is 新細明體 11, as in '
+            'the creator\'s files. Every other O38 property is unchanged.')
 CASE_ID_RE = re.compile(r'[0-9]{7}')           # the leading 7-digit case id (ASCII digits after NFKC)
 CASE_ID_DIGITS, DASH_WINDOW = 7, 6              # the first '-' among the first 6 characters after the case id
 WINDOWS_FORBIDDEN = '\\/:*?"<>|'              # replaced by '-' in the file name
@@ -235,14 +255,48 @@ def deliverable_record(title=None):
     return rec
 
 
+def fit_tenths(v):
+    """O39 (v2.8): the estimated display width of one cell value, in tenths of a column-width unit (O39_RULE)."""
+    if v is None or isinstance(v, bool):
+        return 0
+    text = v if isinstance(v, str) else js_number(v)
+    if text == '':
+        return 0
+    t = 0
+    for ch in text:
+        if ch in '\r\n':
+            continue
+        if ord(ch) > 0x7e:
+            t += FIT_TENTHS_NON_ASCII
+        elif ch in FIT_BROAD:
+            t += FIT_TENTHS_BROAD
+        elif 'A' <= ch <= 'Z':
+            t += FIT_TENTHS_CAPITAL
+        else:
+            t += FIT_TENTHS_OTHER
+    return t + FIT_TENTHS_PAD
+
+
+def delivery_widths(rows):
+    """O39 (v2.8): the 17 deliverable column widths for the main matrix rows (header row included), each a multiple of 0.1."""
+    out = []
+    for j, w in enumerate(DELIVERY_WIDTHS):
+        need = max([fit_tenths(r[j]) for r in rows if j < len(r)] or [0])
+        out.append(min(max(round(w * 10), need), DELIVERY_MAX_WIDTH_TENTHS) / 10)
+    return out
+
+
 def build_deliverable_workbook(m, main_sheet):
     """O38 (v2.7): the delivered workbook, one sheet in the creator's format (O38_RULE). Values: the main matrix, written by
-    _fill_values exactly as in the internal workbook (strings stay strings, numbers stay numbers, no formulas)."""
+    _fill_values exactly as in the internal workbook (strings stay strings, numbers stay numbers, no formulas). v2.8 (O39):
+    widths from delivery_widths, default font 新細明體 11."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
+    from openpyxl.utils.indexed_list import IndexedList
     rows = m['main']
     wb = Workbook()
+    wb._fonts = IndexedList([Font(name=DELIVERY_DEFAULT_FONT, sz=DELIVERY_DEFAULT_FONT_SIZE)])   # fonts[0]: the Normal style's font
     wb.remove(wb.active)
     ws = wb.create_sheet(main_sheet)
     _fill_values(ws, rows)
@@ -261,7 +315,7 @@ def build_deliverable_workbook(m, main_sheet):
         for j in range(1, 18):
             cell = ws.cell(row=r, column=j)
             cell.font, cell.alignment = font, body_align[j - 1]
-    for x, w in zip(letters, DELIVERY_WIDTHS):
+    for x, w in zip(letters, delivery_widths(rows)):     # O39 (v2.8): the O38 widths as minimums
         ws.column_dimensions[x].width = w
     ws.row_dimensions[1].height = DELIVERY_HEADER_HEIGHT
     for r in range(2, len(rows) + 1):
@@ -1064,14 +1118,15 @@ def build(carrier_path, out_dir, writer_dir, node='node', mode='v1', route_tool=
         receipt = {
             'schema': 'cps.export.writer-receipt.v1', 'status': 'PORTABLE_ASSEMBLED_NOT_ADMITTED', 'writer': VERSION,
             'mode': mode, 'relaxations': relax,
-            'deliverable': dict(deliverable, rules={'o33': O33_RULE, 'o34': O34_RULE, 'o38': O38_RULE}),
+            'deliverable': dict(deliverable, rules={'o33': O33_RULE, 'o34': O34_RULE, 'o38': O38_RULE, 'o39': O39_RULE}),
             'admitted': False, 'required_review': 'Independent review of the portable writer before any CPS use.',
             'input_carrier': {'path': str(carrier_path), 'sha256': carrier_sha, 'bytes': len(raw)},
             'output_xlsx': {'file': deliverable['qa_workbook_file'], 'sha256': sha256(xlsx), 'bytes': len(xlsx),
                             'role': 'the four-sheet workbook: saved QA and internal review' + ('; never delivered (O38)' if dxlsx else '')},
             'deliverable_xlsx': None if dxlsx is None else {
                 'file': deliverable['xlsx_file'], 'sha256': sha256(dxlsx), 'bytes': len(dxlsx), 'sheet': deliverable['main_sheet'],
-                'format': DELIVERY_FORMAT, 'role': 'the delivered 未填 workbook (O38): one sheet, the main-sheet values'},
+                'format': DELIVERY_FORMAT, 'column_widths': delivery_widths(m['main']),
+                'role': 'the delivered 未填 workbook (O38): one sheet, the main-sheet values'},
             'expected_saved_values': {'file': 'EXPECTED_SAVED_VALUES.json', 'sha256': sha256(expected),
                                       'identical_to_writer004_prepareMatrices_output': not relax['applied'],
                                       **({'identical_to_writer004_prepareMatrices_on_placeholder_copy_except_documented_cells': True}

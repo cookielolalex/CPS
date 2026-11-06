@@ -14,6 +14,8 @@
 
 **Writer v2.7 / saved_qa v6.1 / visual_qa v4.1: ADMITTED 2026-11-05 under `ADMISSION_WRITER_V27.json`** (review ADMIT_AFTER_LISTED_FIXES, then delta review ADMIT; it supersedes `ADMISSION_WRITER_V25.json` for new runs). The paragraph below is the build note. **Writer v2.7 / saved_qa v6 / visual_qa v4 (2026-11-05, owner decision O38).** The owner approved one-sheet previews in the creator's own 未填 format (O38). With `--job-title` the delivered workbook `<name>.xlsx` is now one sheet `<name>` in that format: 新細明體 12; grey `#C0C0C0` header with thin borders; gridlines shown; only the header row frozen; no wrapping; E F L M N Q centred, C left; her column widths and row heights. The v2.6 four-sheet workbook (main sheet `<name>`, `來源與審查`, `組成參考`, `組成連結`) is written beside it as `INTERNAL_QA_WORKBOOK.xlsx`, with the same bytes as v2.6. It serves saved QA and internal review and is never delivered. saved_qa v6 checks the delivered workbook as well: its own pinned package, its cells against the main sheet with three readers, its format and its rerun bytes. visual_qa v4 prints gridlines where the sheet shows them and lists no-wrap cells whose text may be cut. Untitled outputs are unchanged. See "Owner decision O38 (v2.7)". v2.7 includes v2.6, which was never admitted; both are admitted only after an independent reviewer confirms them and records the admission outside this README.
 
+**Writer v2.8 / saved_qa v6.2 / visual_qa v4.2 (2026-11-06, owner decision O39; NOT ADMITTED).** The admitted state is still writer v2.7 / saved_qa v6.1 / visual_qa v4.1 under `ADMISSION_WRITER_V27.json`. In the 046g development trial, two delivered workbooks failed visual review because values were cut at the column edge (the O38 widths are fixed; the creator's own files overflow too, and she sets widths per job). The owner chose "widen to fit" (O39): the O38 widths are minimums, and a column is widened when a value in it would be cut. The delivered workbook's default font (fonts[0]) becomes 新細明體 11, as in her files. Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json`, and visual QA's `possibly_cut_cells` uses the same conservative estimate. `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their v2.7 bytes. See "Owner decision O39 (v2.8)". v2.8 is not admitted until an independent reviewer confirms it and records the admission outside this README.
+
 This directory holds code and invented test fixtures only. Do not commit case carriers, outputs, renders or reports made from case data. Write those outside the repository.
 
 ## Files
@@ -245,6 +247,36 @@ The writer v2.7 deliverables of the four owner samples show zero cell, style, wi
 **Delta review (2026-11-05, same reviewer, of saved_qa v6.1 / visual_qa v4.1 at commit `1c9f07e`): ADMIT.** W1 and D1 are closed. The reviewer's 47 deliverable tampers all fail with provenance. Without provenance 37 fail, and the 10 that pass are the N5 edits. 12 new variants fail: a wide-range `<col>` in each internal sheet, exponent width text, a namespaced `<col>` attribute, a second `<cols>`, swapped `<col>`s, and symlinked JSON files and internal workbook. The exception is a hard link to identical bytes outside the output directory (N3r). It is closed by the delivery condition in `ADMISSION_WRITER_V27.json`: the delivered file's sha256 must equal `deliverable_xlsx.sha256` in `SAVED_QA.json`, checked at delivery. v6.1 passes all of the reviewer's 24 genuine v2.7 builds, with and without provenance. The admission record is `ADMISSION_WRITER_V27.json`.
 
 **visual_qa v4.** In fit-width mode a sheet whose view shows gridlines also gets `<printOptions gridLines="1"/>`, so the render shows its cell lines as the screen does. The modification is recorded. The internal workbook's sheets hide gridlines and get none. `possibly_cut_cells` lists no-wrap string cells whose estimated width exceeds the column, or that hold a line feed, with whether their neighbours are filled. `possibly_clipped_cells` now considers only cells that wrap. fc-match is recorded for 新細明體 and PMingLiU too.
+
+## Owner decision O39 (v2.8): widths widened to fit
+
+Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
+
+- **Width rule (writer `delivery_widths`, `fit_tenths`, `O39_RULE`).**
+  - Each of the 17 deliverable columns gets the larger of its O38 width and the widest value in the column, header included, capped at 255 (Excel's limit). Widths are multiples of 0.1.
+  - The value estimate is in tenths of a column-width unit: 23 per non-ASCII character, 22 per `M W m w @ %`, 18 per other ASCII capital, 14 per other ASCII character, plus 10.
+  - Line breaks count nothing. A number counts its stored text (`js_number`).
+- **Why these counts.** Invented calibration workbooks in the deliverable style were rendered by the Dot's no-root LibreOffice toolchain and in the maintainer environment, and measured from the PDF text layer. Excel's figure is computed.
+  - Dot toolchain: one column unit is 7.0 pt, and a 12-pt CJK character is 12.0 pt, so 1.71 units. Latin letters and digits are 0.47–1.69 units.
+  - Maintainer environment: one unit is 5.55 pt, so a CJK character is 2.16 units and `W` is 2.13.
+  - Excel with 新細明體 12 and a 7-pixel default digit: a CJK character is 16/7 = 2.29 units.
+  
+  The counts cover all three, with at least 0.1 unit to spare per wide character. Over-widening only makes a column wider than needed.
+- **Default font.** `fonts[0]` (the Normal style) is 新細明體 11, as in all 46 of the creator's 未填 files read. In LibreOffice it made no difference to the unit size (7.0 pt either way on the Dot toolchain). Excel converts width units to pixels with the default font's digit width.
+- **saved_qa v6.2.**
+  - `deliverable_widths` recomputes the expected widths from the main sheet of `EXPECTED_SAVED_VALUES.json`, with saved QA's own copies of `fit_tenths` and `js_number`.
+  - The `<cols>` check (W1) and the formatting check compare with them. The section records `expected_column_widths`.
+  - The deliverable's `styles.xml` pin is `3295b496…a43b`.
+- **visual_qa v4.2.** `possibly_cut_cells` uses the same estimate, times font size / 12 pt, for strings and numbers. On a v2.8 deliverable it lists only cells holding a line feed, or values beyond the 255 cap.
+- **Tests (section l).**
+  - The constants are equal in the writer, saved QA and visual QA.
+  - The rule's values on invented strings and numbers, the same in all three.
+  - Minimum, widen and cap.
+  - Every titled output's widths and default font.
+  - The widened deliverable lists only line-feed cells.
+  - New tamper L17 (the v2.7 fixed widths) fails with and without provenance.
+  - Tamper L15, a consistent change, also updates column C's width.
+- **Not changed.** Values (a unit with trailing spaces stays verbatim under R57; its column is widened), every other O38 property, the internal workbook and the untitled outputs.
 
 ## What it reproduces
 
@@ -520,7 +552,9 @@ What the tests prove:
   - Visual helpers: printed gridlines are added only to sheets that show them; `possibly_cut_cells` lists the 16,000-character cells of the titled `v05_long_text` deliverable and nothing in its internal workbook (whose cells wrap), and `possibly_clipped_cells` checks no deliverable cell.
   - With visual tests, (d) also renders two deliverables: one sheet, printed gridlines, at least 1,000 `#C0C0C0` pixels and at most 50 `#29445D` pixels per page, and for `v05_long_text` at least two `possibly_cut_cells`. The L05 tamper is rendered as a control: at least 1,000 `#29445D` pixels.
 
-Latest run (2026-11-05, after the v2.7 review fixes): writer_portable.py `7a82da6f…b556`, saved_qa.py v6.1 `4c9ed14b…ddd0`, visual_qa.py v4.1 `969639cd…9237`, tests/run_export_tests.py `f5fb18ee…1160`. With visual tests, against the archived writer004 original, 579 of 579 passed. Without visual tests, against the public copy `deploy/writer_route/writer`, 559 of 559 passed. The delta reviewer's own runs gave the same counts.
+Latest run (2026-11-06, writer v2.8 / saved_qa v6.2 / visual_qa v4.2, owner decision O39; not admitted): writer_portable.py `034884d0…21d7`, saved_qa.py `4fc69544…62e5`, visual_qa.py `b6e2a4f7…6b93`, tests/run_export_tests.py `26d12343…89f6`, tests/make_tamper_fixtures.py `71499b02…07af`. Against the public copy `deploy/writer_route/writer`: 591 of 591 passed with visual tests, and 571 of 571 without. The new tests are `l_o39_*`, `l_deliverable_o39_widths_and_default_font_*`, `l_visual_o39_widened_deliverable_lists_only_line_feeds` and the deliverable tamper L17. 17 deliverable tampers now: L15 also updates column C's width, so that it stays a consistent change.
+
+Previous run (2026-11-05, after the v2.7 review fixes): writer_portable.py `7a82da6f…b556`, saved_qa.py v6.1 `4c9ed14b…ddd0`, visual_qa.py v4.1 `969639cd…9237`, tests/run_export_tests.py `f5fb18ee…1160`. With visual tests, against the archived writer004 original, 579 of 579 passed. Without visual tests, against the public copy `deploy/writer_route/writer`, 559 of 559 passed. The delta reviewer's own runs gave the same counts.
 
 Before the review fixes (2026-11-05, writer v2.7 engineer's run for owner decision O38, not a review). Each suite ran from a fresh work directory, with writer_portable.py `7a82da6f…b556` (`cps-export-writer-portable.v2.7`), saved_qa.py `ef5882de…c0c8` (`cps-export-saved-qa.v6`), visual_qa.py `f71abb5c…0cef` (`cps-export-visual-qa.v4`) and tests/make_tamper_fixtures.py `58fd8af3…65bf`:
 
