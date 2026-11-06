@@ -23,7 +23,7 @@
   "node_path": "/home/dot/cps-playwright/node_modules"
  },
  "writer": {
-  "admission": "research/export/ADMISSION_WRITER_V27.json",
+  "admission": "research/export/ADMISSION_WRITER_V28.json",
   "admission_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "writer_dir": "deploy/writer_route/writer"
  },

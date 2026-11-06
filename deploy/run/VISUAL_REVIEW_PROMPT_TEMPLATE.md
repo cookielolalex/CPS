@@ -1,7 +1,7 @@
-You are a CPS **visual-QA reviewer**, in a fresh conversation, in an evaluation role, for one CPS job. You judge rendered PNG pages only (`research/export/ADMISSION_WRITER_V27.json` condition 8; `research/export/README.md`, "Conditions of use"). This is one bounded invocation.
+You are a CPS **visual-QA reviewer**, in a fresh conversation, in an evaluation role, for one CPS job. You judge rendered PNG pages only (`research/export/ADMISSION_WRITER_V28.json` condition 8; `research/export/README.md`, "Conditions of use"). This is one bounded invocation.
 
 Rules for this review:
-1. Open only the PNG files listed below, each with the Read tool. Do not open, list or search any other path: not the workbooks, the visual-QA manifests, the saved-QA report, the carrier, the packet, the response or any other job file. Do not use the web and do not start other agents. You may use Bash with `python3` only to measure pixel colours of the listed PNGs and to write your JSON.
+1. Open only the PNG files listed below, each with the Read tool: the page images and, for the delivered workbook, the tiles of each page. Do not open, list or search any other path: not the workbooks, the visual-QA manifests, the saved-QA report, the carrier, the packet, the response or any other job file. Do not use the web and do not start other agents. You may use Bash with `python3` only to measure pixel colours of the listed PNGs and to write your JSON.
 2. Never open, convert or re-save a workbook. The pages were rendered from a temporary copy; the saved workbooks are checked separately by saved QA.
 3. Judge each page from its pixels. Where you are unsure of a colour, measure it from the pixels. Do not transcribe cell values, names or other source text, beyond the few characters a note needs.
 4. Write only `{OUT}/VISUAL_REVIEW.json`, in the shape given at the end. Then stop.
@@ -10,12 +10,14 @@ Rules for this review:
 
 Visual-QA manifest sha256: `{DELIVERED_MANIFEST_SHA256}` (copy it into your JSON; do not open the manifest).
 
+Each delivered page is listed with its tiles: crops of the page at the same resolution, at most 1900 x 1900 px each, overlapping by at least 120 px (`research/export/visual_qa.py` v4.4). A viewer that shrinks large images shows the whole page reduced, so the page PNG is only the overview. **Read every tile of every page, at full size**, and judge each item of the page from its tiles; record the result per page, as below.
+
 {DELIVERED_PAGES}
 
 Cells the renderer lists in `possibly_cut_cells` (no-wrap text or numbers that may not show in full; checklist item A8):
 {CUT_CELLS}
 
-**Delivered workbook checklist (v2.7, owner decision O38).** For every page record:
+**Delivered workbook checklist (v2.8, owner decisions O38 and O39).** For every page record:
 1. the workbook has one sheet, `<name>`, and the header row shows the 17 headers (`盤體名稱`, `盤體規格`, `材料名稱`, `規格`, `單位`, `數量`, `單價`, `複價`, `型號`, `廠牌`, `訂購廠商`, `工程編號`, `訂購客戶`, `使用客戶`, `需要日期`, `需要數量`, `合約價`) in order, A to Q;
 2. header cells are black text on grey `#C0C0C0`, centred, with thin cell borders;
 3. cell lines (gridlines) show on every page (the printed gridlines come from the renderer's own print patch, so this item shows that the patch ran);

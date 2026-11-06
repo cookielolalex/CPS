@@ -75,7 +75,7 @@ $R prepare --release $RT/RELEASE.json --job /abs/JOB.json --job-title-file /abs/
 ```
 
 It does the following:
-- checks the release (status, repository commit and clean tree, the pins of every executed file, package manifest and every package file, the export tools against `ADMISSION_WRITER_V27.json`, the checker node, the writer folder, openpyxl, the deps bundle);
+- checks the release (status, repository commit and clean tree, the pins of every executed file, package manifest and every package file, the export tools against `ADMISSION_WRITER_V28.json`, the checker node, the writer folder, openpyxl, the deps bundle);
 - checks the job inputs and the company tables;
 - records the release path you gave (later stages re-read it: see Stage 4 and Stage 6);
 - creates `$JOBS/<case id>/` and copies the release, `JOB.json`, `JOB_TITLE.json` and the source into `input/` (read-only);
@@ -128,10 +128,10 @@ Then write the **generation record** `$JOBS/<case id>/run/GENERATION_RECORD.json
 
 No field may be a template placeholder such as `<...>` (`GENERATION_RECORD_INVALID`).
 
-State `transcript_status` exactly as it is. **Owner decision O40 (2026-11-06):** the runner freezes the generation record for each qualification run; the transcript is added if the platform can export one, otherwise it is marked `not_available`. Qualification accepts either, and the report states how many runs had transcripts. So:
+State `transcript_status` exactly as it is. **Owner decision O40 (2026-11-06; recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, "O40 (2026-11-06): evidence of generator isolation in qualification"):** the runner freezes the generation record for each qualification run; the transcript is added if the platform can export one, otherwise it is marked `not_available`. Qualification accepts either, and the report states how many runs had transcripts. So:
 - `exported` in a qualification job needs `finish --transcript <the exported file>`: the runner freezes it as `response/GENERATOR_TRANSCRIPT.<ext>` and checks its sha256 (`TRANSCRIPT_REQUIRED` without it, nothing consumed);
 - `isolation_evidence` follows the frozen file: `transcript_exported` only when a transcript was frozen, otherwise `attested_not_audited` (an everyday job's `exported` without `--transcript` is recorded as `transcript_claimed_but_not_frozen`);
-- every record states `qualification_transcript_rule: "O40 2026-11-06: exported or not_available, both accepted; count reported"`, and the ledger's freeze entry carries each run's transcript status and whether its file was frozen, for the count.
+- every record states `qualification_transcript_rule: "O40 2026-11-06 (research/guideline046_005/DECISIONS_OWNER_O23_O25.md, \"O40 (2026-11-06): evidence of generator isolation in qualification\"): exported or not_available, both accepted; count reported"`, and the ledger's freeze entry carries each run's transcript status and whether its file was frozen, for the count.
 
 ## Stage 4: finish
 
@@ -150,26 +150,26 @@ With `transcript_status: exported`, add `--transcript /abs/<the exported transcr
 4. The writer, in the mode the convert receipt's `export_mode_required` names (condition 6), titled from `input/JOB_TITLE.json`. `--job-title` is optional; if given, it must equal the file.
 5. The duplicate-key check of `WRITER_RECEIPT.json` (condition 5), and the tool hashes (condition 3).
 6. Saved QA from a clean environment with the pinned checker node (conditions 1, 2, 4, 7).
-7. Visual QA of `<name>(未填).xlsx` and of `INTERNAL_QA_WORKBOOK.xlsx` into separate folders (condition 8).
-8. The page selection, `qa/QA_EVIDENCE.json`, and the visual-review prompt.
+7. Visual QA of `<name>(未填).xlsx` and of `INTERNAL_QA_WORKBOOK.xlsx` into separate folders (condition 8), never with `--dpi`, so visual_qa's automatic dpi rule applies (the delivered sheet by its width; the manifest records `dpi_rule`). visual_qa v4.4 also cuts each delivered page into tiles (`images[].tiles`), at most 1900 x 1900 px each; every delivered page must have them. If the delivered manifest says `tiles.legibility_bound_exceeded` (the sheet is so wide that even 600 dpi shrinks its glyphs), the sheet cannot be judged: `finish` records a visual failure (`qa/VISUAL_RECORD.json` FAIL, code `TILES_LEGIBILITY_BOUND_EXCEEDED`) and prints `NEXT: STOP_VISUAL_REVIEW_FAILED`.
+8. The page selection (with every tile of every delivered page), `qa/QA_EVIDENCE.json`, and the visual-review prompt.
 
 | Last line | What to do |
 |---|---|
 | `NEXT: VISUAL_REVIEW prompt=<P> folder=<F>` | Stage 5. |
-| `NEXT: STOP_<reason>` | Record and tell the owner. Never retry, never patch by hand. Typical reasons: `STOP_RUN_INPUTS_CHANGED`, `STOP_RUN_OUTPUT_UNEXPECTED`, `STOP_PACKET_CHANGED`, `STOP_ROUTE_CHECK_FAILED`, `STOP_NOT_CARRIED`, `STOP_WRITER_REFUSED`, `STOP_SAVED_QA_NOT_EVIDENCE_GRADE` (`qa/QA_EVIDENCE.json` lists the failed conditions), `STOP_VISUAL_QA_RENDER_FAILED`, `STOP_INTERRUPTED`. Any refusal after the response was frozen is also a stop (`NEXT: STOP_<code>`, recorded). |
+| `NEXT: STOP_<reason>` | Record and tell the owner. Never retry, never patch by hand. Typical reasons: `STOP_RUN_INPUTS_CHANGED`, `STOP_RUN_OUTPUT_UNEXPECTED`, `STOP_PACKET_CHANGED`, `STOP_ROUTE_CHECK_FAILED`, `STOP_NOT_CARRIED`, `STOP_WRITER_REFUSED`, `STOP_SAVED_QA_NOT_EVIDENCE_GRADE` (`qa/QA_EVIDENCE.json` lists the failed conditions), `STOP_VISUAL_QA_RENDER_FAILED` (for example a delivered page without tiles), `STOP_VISUAL_REVIEW_FAILED` (the legibility bound), `STOP_INTERRUPTED`. Any refusal after the response was frozen is also a stop (`NEXT: STOP_<code>`, recorded). |
 | `REFUSED: <code>` | Nothing was consumed: the response was not frozen. For example, `CHECKER_NODE_NOT_ADMITTED` (your node binary changed), `RELEASE_NOT_LIVE` (the release was withdrawn or replaced), `JOB_TITLE_MISMATCH`, `GENERATION_RECORD_*`, `TRANSCRIPT_REQUIRED` or `JOB_BUSY`. Fix the cause, or tell the owner, and run the same command again. `STAGE_ALREADY_COMPLETED` means finish already ran: never run it again. `STAGE_OUTPUT_EXISTS` means a frozen output exists without its record entry: tell the owner. |
 
 ## Stage 5: visual review (after `NEXT: VISUAL_REVIEW`)
 
 The visual review is done by a **fresh conversation that you start**. The runner cannot see that conversation; it checks only what is recorded. By recording the review you attest that it ran in a new conversation that saw nothing of this job but the prompt and the listed PNGs.
 
-1. Open a **new conversation**. Give it the full text of `<P>` (`qa/VISUAL_REVIEW_PROMPT.md`). It may open only the PNG files the prompt lists, and it judges PNGs only. It writes `qa/visual_review/VISUAL_REVIEW.json` with `reviewer.kind` `fresh_context_visual_reviewer`, its model and effort, and a result for every page, item and listed cut cell.
+1. Open a **new conversation**. Give it the full text of `<P>` (`qa/VISUAL_REVIEW_PROMPT.md`). It may open only the PNG files the prompt lists, and it judges PNGs only. For each delivered page the prompt lists the page PNG (the overview) and every tile of the page by absolute path; the reviewer reads every tile at full size and still records nine items per page. It writes `qa/visual_review/VISUAL_REVIEW.json` with `reviewer.kind` `fresh_context_visual_reviewer`, its model and effort, and a result for every page, item and listed cut cell.
 2. Then run:
    ```bash
    $R visual-record --job-dir $JOBS/<case id> --review $JOBS/<case id>/qa/visual_review/VISUAL_REVIEW.json \
       --reviewer-conversation-id "<the review conversation's id or link>" --operator-model "$ME"
    ```
-   `--reviewer-conversation-id` is your attestation of the conversation; it is required unless the review itself states `reviewer.conversation_id` (both, when given, must be equal). The runner checks that the review covers every selected page and every checklist item, with `n/a` only where an item does not apply; that every cell listed under `possibly_cut_cells` has a result and item 8 is not `n/a` on every delivered page when such cells exist; that each visual manifest's `saved_xlsx.sha256` equals `SAVED_QA.json`; and that every page image still has the sha256 its manifest lists. It records PASS or FAIL.
+   `--reviewer-conversation-id` is your attestation of the conversation; it is required unless the review itself states `reviewer.conversation_id` (both, when given, must be equal). The runner checks that the review covers every selected page and every checklist item, with `n/a` only where an item does not apply; that every cell listed under `possibly_cut_cells` has a result and item 8 is not `n/a` on every delivered page when such cells exist; that each visual manifest's `saved_xlsx.sha256` equals `SAVED_QA.json`; and that every page image and every tile of a delivered page still has the sha256 its manifest lists. It records PASS or FAIL; a delivered manifest beyond the legibility bound is always FAIL.
 
 **Clipped cells and page count.** The visual-QA manifest names no page for a `possibly_clipped_cells` cell, so when one lies on the review sheet `來源與審查` (or the list is capped), the runner lists every page of that sheet for review. That is the safe reading of condition 8 and is kept as it is. Naming the page of each clipped cell is a change to `research/export/visual_qa.py` (a new version, reviewed and admitted), not to the runner.
 
@@ -178,7 +178,7 @@ The visual review is done by a **fresh conversation that you start**. The runner
 | `NEXT: DELIVER_CHECK` | Stage 6 (real jobs). |
 | `NEXT: FREEZE` | Qualification: run `freeze`. |
 | `NEXT: STOP_VISUAL_REVIEW_FAILED` | Any failed item or cut cell fails visual QA. Tell the owner, and do not deliver. |
-| `NEXT: STOP_VISUAL_PAGES_CHANGED` | A page image differs from its manifest (tampering). Tell the owner. |
+| `NEXT: STOP_VISUAL_PAGES_CHANGED` | A page image or a tile differs from its manifest (tampering). Tell the owner. |
 | `REFUSED: REVIEW_INCOMPLETE` | The review omitted a page, item or cut cell and recorded no failure. The attempt is kept in `qa/visual_review_attempts/<seq>.json`. Have the reviewer complete it, then run the command again. A review with any `fail` is never refused: it is recorded as FAIL. |
 | `REFUSED: REVIEW_NOT_FRESH_CONTEXT` | `reviewer.kind` is not `fresh_context_visual_reviewer`, or the model or effort is blank. A review by you or by any other conversation is never recorded as a PASS. |
 | `REFUSED: REVIEWER_CONVERSATION_ID_REQUIRED` | Give `--reviewer-conversation-id`. |
@@ -212,7 +212,7 @@ Qualification jobs differ in the following ways.
 **The admission** is frozen once, with `research/guideline046_007/harness/freeze_admission.py`, and listed in the release, **before the first qualification `prepare` of the ledger**. `prepare` refuses an admission the release does not list by path and sha256 (`ADMISSION_NOT_RELEASED`) and one frozen after the ledger's first entry (`ADMISSION_FROZEN_AFTER_FIRST_PREPARE`). The admission pins, by sha256:
 - the package manifest and the route `package/tools/cps046b_route.py`;
 - per job: `JOB.json`, the source, the glossary (and the brand table on a contract job), and the title file under the label `job_title_<case id>`;
-- under labels equal to their repository-relative paths: `deploy/run/cps_job.py`, `deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md`, the seven harness files, the five source-prep files, `research/export/ADMISSION_WRITER_V27.json`, the evaluator `research/evaluation/compare_target050.py` and the aggregator `research/evaluation/aggregate_qualification050.py`;
+- under labels equal to their repository-relative paths: `deploy/run/cps_job.py`, `deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md`, the seven harness files, the five source-prep files, `research/export/ADMISSION_WRITER_V28.json`, the evaluator `research/evaluation/compare_target050.py` and the aggregator `research/evaluation/aggregate_qualification050.py`;
 - `JOBS.json` under the label `JOBS.json`.
 
 Each pin is checked against the bytes the runner uses (`ADMISSION_MISSING_PINS` lists what is missing or different).
@@ -235,27 +235,33 @@ python3 -I -B $CPS/research/guideline046_007/harness/freeze_admission.py --confi
 
 **Run A and run B use separate job roots:** `--jobs-root $Q/A --reader A`, and later `--jobs-root $Q/B --reader B`.
 
-**Restart (protocol rule 3).** A technical interruption before any scope reader or generator response is written may be restarted **once** per case and reader.
+**Restart (protocol rule 3: "A technical interruption before the response is written may be restarted once").** A run may be restarted **once per case and reader in total**, in one of two forms: in a new folder, or in place after an agreed scope. Use `interrupt` only for a technical break (the platform failed, the conversation was lost, it ended without writing its file), never because you dislike a result. If the conversation wrote its file, run `scope-finish` or `finish` as usual.
 
-*The scope reader or generator conversation broke* (after `NEXT: SCOPE_READER` or `NEXT: GENERATE`, before it wrote its file: the platform failed, the conversation was lost, it ended without writing). Record it first, then freeze:
+Record a broken conversation with:
 ```bash
 $R interrupt --job-dir $Q/A/<case id> --reason TECHNICAL_CONVERSATION_BROKE \
    --started-utc 2026-11-06T09:00:05Z --ended-utc 2026-11-06T09:12:40Z \
    --conversation-id "<the broken conversation's id or link, if it has one>" --operator-model "$ME"
-$R freeze --job-dir $Q/A/<case id> --operator-model "$ME"
 ```
-- `interrupt` is allowed only when the last completed stage printed `NEXT: GENERATE` or `NEXT: SCOPE_READER` and no scope reader or generator response is frozen (`INTERRUPT_NOT_ALLOWED` otherwise; never after `finish` or `scope-finish` froze a file). So on a large workbook, once `scope-finish` has frozen the reader's file, a broken generator conversation is not restartable: freeze the folder and tell the owner. It is for qualification jobs only (`INTERRUPT_QUALIFICATION_ONLY`).
 - `--reason` is `TECHNICAL_<CODE>` in capitals (`TECHNICAL_CONVERSATION_BROKE`, `TECHNICAL_PLATFORM_ERROR`, ...). The times are the broken conversation's, to the second, between the end of the stage that printed `NEXT:` and now (`INTERRUPTION_TIMES`); round the start up and the end down. `--conversation-id` is your attestation, recorded as given.
-- It records a completed `TECHNICAL_INTERRUPTION` (`NEXT: STOP_TECHNICAL_INTERRUPTION`, exit 3) with the conversation id, the times and a listing of the conversation's output folder, mirrored in the ledger. After it only `freeze` runs in that folder (`JOB_INTERRUPTED`).
-- Use it only for a technical break, never because you dislike a result. If the conversation wrote its file, run `scope-finish` or `finish` as usual.
+- It records a completed `TECHNICAL_INTERRUPTION` in the run record, with the conversation id, the times and a listing of the conversation's output folder, mirrored in the ledger. It is for qualification jobs only (`INTERRUPT_QUALIFICATION_ONLY`).
+- It is refused (`INTERRUPT_NOT_ALLOWED`) unless the last completed stage printed `NEXT: GENERATE` or `NEXT: SCOPE_READER`, and always once a generator response is frozen (`finish` began).
+- **The limit.** In a folder that is itself a restart (`restart_of`), or that was already restarted in place, `interrupt` is refused (`INTERRUPT_RESTART_USED`): freeze the run as it is. It is a failed run; tell the owner.
 
-*A technical stop before any response* (`NEXT: STOP_<reason>` at `prepare`, such as `STOP_RENDER_VIEWS_FAILED` or `STOP_RUNNER_ERROR`, or `NEXT: STOP_INTERRUPTED` of a stage killed before it froze a response): freeze the folder as it is.
+**Form 1: restart in a new folder.** For a broken conversation before any scope reader or generator response is frozen (the scope reader after `NEXT: SCOPE_READER`, or the generator after `prepare`'s `NEXT: GENERATE`), and for a technical stop before any response (`NEXT: STOP_<reason>` at `prepare`, such as `STOP_RENDER_VIEWS_FAILED` or `STOP_RUNNER_ERROR`, or `NEXT: STOP_INTERRUPTED` of a stage killed before it froze a response).
+1. After a broken conversation, `interrupt` prints `NEXT: STOP_TECHNICAL_INTERRUPTION` (exit 3); after it only `freeze` runs in that folder (`JOB_INTERRUPTED`).
+2. Freeze the folder as it is: `$R freeze --job-dir $Q/A/<case id> --operator-model "$ME"`.
+3. Prepare again under a new jobs root (for example `$Q/A_restart1`).
+4. Tell the owner, naming both folders.
 
-Then:
-1. prepare again under a new jobs root (for example `$Q/A_restart1`);
-2. tell the owner, naming both folders.
+The new record's `restart_of` and the ledger name the earlier folder. The runner allows this restart only when the earlier run is frozen, froze no scope reader or generator response (no `freeze_response`, and its `FROZEN.json` lists neither `scope/SCOPE_READER_RESPONSE.json` nor anything in `response/`), was not restarted in place, and ended in the recorded interruption, an `INTERRUPTED` stage or a technical `STOP_` before any response. It refuses every other restart (`QUALIFICATION_RESTART_NOT_ALLOWED`: a response was frozen; the run ended in `OWNER_DECISION`; it was frozen at `NEXT: GENERATE` or `NEXT: SCOPE_READER` without `interrupt`, which makes it a failed run; or run B of the case has started) and a second one (`QUALIFICATION_RESTART_USED`, also after an in-place restart).
 
-The new record's `restart_of` and the ledger name the earlier folder. The runner allows the restart only when the earlier run is frozen, froze no scope reader or generator response (no `freeze_response`, and its `FROZEN.json` lists neither `scope/SCOPE_READER_RESPONSE.json` nor anything in `response/`), and ended in the recorded interruption, an `INTERRUPTED` stage or a technical `STOP_` before any response. It refuses every other restart (`QUALIFICATION_RESTART_NOT_ALLOWED`: a response was frozen; the run ended in `OWNER_DECISION`; it was frozen at `NEXT: GENERATE` or `NEXT: SCOPE_READER` without `interrupt`, which makes it a failed run; or run B of the case has started) and a second one (`QUALIFICATION_RESTART_USED`).
+**Form 2: restart in place, after the scope is agreed.** On a large workbook, `scope-finish` froze the scope reader's response, agreed the scope and printed `NEXT: GENERATE`; then the generator conversation broke before `finish` froze anything. `interrupt` in that folder:
+1. checks that the generation run is exactly as `scope-finish` pinned it (run inputs, `PACKET_PINS.json`, the generator prompt; otherwise `NEXT: STOP_RUN_INPUTS_CHANGED`);
+2. moves the broken conversation's `run/<reader>/output/` to `interrupted/generator_output/` (read-only, listed in the record) and leaves an empty `output/`;
+3. records the `TECHNICAL_INTERRUPTION` (the run's one restart) and prints `NEXT: GENERATE prompt=<P> folder=<F>` again, exit 0: the same prompt, the same pinned run inputs and the frozen scope decision. The scope stage is not repeated.
+
+Then do Stage 3 once more, in a new conversation, and run `finish` (Stage 4) as usual. The generation record describes this second conversation: its times lie after the `interrupt` (`GENERATION_RECORD_TIMES` otherwise). If this conversation breaks too, `interrupt` is refused (`INTERRUPT_RESTART_USED`): freeze the run as a failed run and tell the owner.
 
 **`PACKET_PINS.json`.** Before it prints `NEXT: GENERATE`, the runner pins every in-job product (builder config, full and scoped packets with their views, scope files, decision, receipt, frozen reader response, generator prompt and run pins) in a read-only `PACKET_PINS.json`, and writes its sha256 to the ledger. `finish` stops (`STOP_PACKET_CHANGED`) if any of them changed.
 
@@ -304,7 +310,7 @@ $R verify-frozen --job-dir $Q/A/<case id>
 | `source_prep.path` | `build_inventory_xlsx_v2.py`, `build_inventory_v2.py`, `render_views.py`, `screenshot_views.cjs`, `auto_views.py` |
 | `source_prep.deps_bundle` | folder holding `private/deps` (openpyxl 3.1.5, xlrd 2.0.2) for the builders' `--bundle` |
 | `source_prep.node_path` | optional `NODE_PATH` that resolves `playwright` for `render_views.py` |
-| `writer.admission`, `writer.admission_sha256` | `research/export/ADMISSION_WRITER_V27.json` and its pin. Its `files_sha256` is condition 3; its `writer_dir_sha256` is condition 4; its `checker_node` is used when the release has none. |
+| `writer.admission`, `writer.admission_sha256` | `research/export/ADMISSION_WRITER_V28.json` (writer v2.8.2, saved_qa v6.4, visual_qa v4.4) and its pin. Its `files_sha256` is condition 3; its `writer_dir_sha256` is condition 4; its `checker_node` is used when the release has none. While that file says `"status": "PROVISIONAL_NOT_ADMITTED"` it is for testing only and is never named in a release; when v2.8.2 is admitted the file is replaced, so its sha256 (`writer.admission_sha256`, and the qualification admission's pin) changes. |
 | `writer.writer_dir` | the writer folder (`deploy/writer_route/writer`) for the writer and saved QA |
 | `checker_node.path`, `checker_node.sha256` | the checker's node binary (condition 2). Its sha256 must be listed in `admitted_checker_node_sha256`. |
 | `admitted_checker_node_sha256` | the node binaries the maintainer admitted after a full self-test |
@@ -327,10 +333,11 @@ $R verify-frozen --job-dir $Q/A/<case id>
 | `scope/` | `tool/` (the scope proposal, and the digest when the stage applies; read-only); `reader/input/` (read-only), `reader/output/`; `SCOPE_READER_PROMPT.md`; `SCOPE_READER_RESPONSE.json` (frozen); `decision/`; `scoped_packet/` |
 | `run/` | `A/` (or `B/`), the bounded generation folder from `prepare_run.py` (its `input/` read-only); `GENERATOR_PROMPT.md`; `GENERATION_RECORD.json` (yours) |
 | `PACKET_PINS.json` | every in-job product pinned before `NEXT: GENERATE` (read-only) |
+| `interrupted/` | only after an in-place restart: `generator_output/`, the broken generator conversation's output, set aside read-only |
 | `response/` | `GENERATION_RECORD.json`, `GENERATOR_TRANSCRIPT.<ext>` (when exported) and `response.json` (frozen), `ROUTE_CHECK.json` |
 | `carrier/` | `convert/`: `carrier.json`, `ADAPTER_RECEIPT.json`, `CENSUS_LEDGER.json` |
 | `export/` | `writer/`: `<name>(未填).xlsx` (the delivered workbook), `INTERNAL_QA_WORKBOOK.xlsx`, `EXPECTED_SAVED_VALUES.json`, `WRITER_RECEIPT.json` |
-| `qa/` | `SAVED_QA.json`; `visual_deliverable/`, `visual_internal/`; `VISUAL_PAGES.json`; `QA_EVIDENCE.json`; `VISUAL_REVIEW_PROMPT.md`; `visual_review/`; `visual_review_attempts/` (refused reviews); `VISUAL_REVIEW.json` (frozen); `VISUAL_RECORD.json`; `DELIVERY_CHECK.json` |
+| `qa/` | `SAVED_QA.json`; `visual_deliverable/` (with `tiles/`), `visual_internal/`; `VISUAL_PAGES.json`; `QA_EVIDENCE.json`; `VISUAL_REVIEW_PROMPT.md`; `visual_review/`; `visual_review_attempts/` (refused reviews); `VISUAL_REVIEW.json` (frozen); `VISUAL_RECORD.json`; `DELIVERY_CHECK.json` |
 | `logs/` | every tool's stdout and stderr, and the traceback of a `RUNNER_ERROR` (private; never paste them anywhere) |
 | `RUN_RECORD.json` | the record (below) |
 | `.STAGE_IN_PROGRESS.json` | the marker of a stage that is consuming (never touch it). The job lock is a lock on the folder itself, not a file. |

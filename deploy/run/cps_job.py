@@ -16,7 +16,9 @@ Subcommands (RUN_JOB_COMMANDS.md has the exact commands and what to do at each N
   visual-record --job-dir D --review D/qa/visual_review/VISUAL_REVIEW.json [--reviewer-conversation-id TEXT]
   deliver-check --job-dir D
   interrupt     --job-dir D --reason TECHNICAL_<CODE> --started-utc T --ended-utc T [--conversation-id TEXT]
-                (qualification, protocol rule 3: the scope reader or generator conversation broke before its file)
+                (qualification, protocol rule 3: the scope reader or generator conversation broke before its file; once
+                per case and reader: NEXT: STOP_TECHNICAL_INTERRUPTION, then freeze and restart in a new folder, or, after
+                an agreed scope, NEXT: GENERATE again in the same folder)
   freeze        --job-dir D            (FROZEN.json; then every file and folder of the job is read-only)
   verify-frozen --job-dir D            (recomputes FROZEN.json; never writes)
   nonattempt    --release RELEASE.json --admission ADMISSION.json --case ID --reader A|B [--jobs-root DIR] [--reason CODE]
@@ -28,6 +30,8 @@ JOB_BUSY; the tools a stage runs hold it too) and verifies the hash chain of <jo
 that completed (with any result, a recorded failure or an interruption included) is never run again in the same job
 folder. A qualification job is also mirrored, entry by entry, in the qualification ledger the release names (outside
 every job folder), which allows one run per case and reader, and one restart after a technical interruption.
+Visual QA (writer admission ADMISSION_WRITER_V28.json, visual_qa v4.4): the delivered workbook is rendered without --dpi,
+and the reviewer prompt lists every tile of every delivered page; every page image and tile is re-checked at visual-record.
 The last line printed is the next step: NEXT: SCOPE_READER, GENERATE, OWNER_DECISION, VISUAL_REVIEW, DELIVER_CHECK,
 FREEZE, DELIVER, DONE or STOP_<reason>.
 Exit codes: 0 continue with the NEXT step; 3 the job stopped (NEXT: STOP_<reason> or OWNER_DECISION, recorded);
@@ -37,7 +41,7 @@ import argparse, atexit, datetime, fcntl, hashlib, json, os, re, shutil, stat, s
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-VERSION = 'cps-job-runner.v3'
+VERSION = 'cps-job-runner.v4'
 HERE = Path(__file__).resolve().parent
 RECORD_SCHEMA = 'cps.job-run-record.v2'
 RELEASE_SCHEMA = 'cps.release.v1'
@@ -58,7 +62,9 @@ REASON_RE = re.compile(r'[A-Z][A-Z0-9_]{2,63}', re.ASCII)
 TECHNICAL_RE = re.compile(r'TECHNICAL_[A-Z0-9_]{2,54}', re.ASCII)
 NONATTEMPT_DEFAULT_REASON = 'NONATTEMPT_SOURCE_UNAVAILABLE'         # protocol rule 6: the status of a nonattempt record
 # D3 (owner decision O40, 2026-11-06): the rule every generation record states
-O40_RULE = 'O40 2026-11-06: exported or not_available, both accepted; count reported'
+O40_DECISION_RECORD = 'research/guideline046_005/DECISIONS_OWNER_O23_O25.md'
+O40_RULE = ('O40 2026-11-06 (' + O40_DECISION_RECORD + ', "O40 (2026-11-06): evidence of generator isolation in '
+            'qualification"): exported or not_available, both accepted; count reported')
 COMMIT_RE = re.compile(r'[0-9a-f]{40}([0-9a-f]{24})?', re.ASCII)
 LAYOUT = ('input', 'packet', 'scope', 'run', 'response', 'carrier', 'export', 'qa', 'logs')
 CONDITION3_TOOLS = ('research/export/saved_qa.py', 'research/export/writer_portable.py',
@@ -776,6 +782,12 @@ def ledger_admission_order(led, adm):
             raise Refused('ADMISSION_FROZEN_AFTER_FIRST_PREPARE', 'the admission must be frozen before the first qualification prepare')
 
 
+def in_place_restart_used(led, job_dir):
+    """Rule 3 limit: the ledger records an in-place restart (an interrupt that printed NEXT: GENERATE) of this folder."""
+    return any(e.get('stage') == 'interrupt' and e.get('completed') and e.get('next') == 'GENERATE'
+               for e in led.of('record', job_dir=job_dir))
+
+
 def restart_problem(led, prev):
     """D1 (protocol rule 3): why the frozen run in folder prev may not be restarted, or None. A run may be restarted when it
     froze no scope reader or generator response (no freeze_response entry in the ledger; none of RESPONSE_WITNESSES in
@@ -786,6 +798,8 @@ def restart_problem(led, prev):
     if not fz:
         return 'the earlier run is not frozen'
     recs = led.of('record', job_dir=prev)
+    if in_place_restart_used(led, prev):
+        return 'the earlier run already used its one technical restart in place'
     if any(e.get('stage') == 'freeze_response' for e in recs):
         return 'the earlier run froze a generator response'
     done = [(e['stage'], e['next']) for e in recs if e['completed'] and e['stage'] != 'freeze']
@@ -827,6 +841,8 @@ def ledger_admit_prepare(led, jobs, case, reader, job_dir, adm):
         prev = mine[0]['job_dir']
         if not led.of('freeze', job_dir=prev):
             raise Refused('QUALIFICATION_RUN_EXISTS', 'this case and reader already have a run that is not frozen')
+        if in_place_restart_used(led, prev):
+            raise Refused('QUALIFICATION_RESTART_USED', 'this case and reader were already restarted once, in place')
         why = restart_problem(led, prev)
         if why:
             raise Refused('QUALIFICATION_RESTART_NOT_ALLOWED', 'a restart is allowed once, only after a recorded technical '
@@ -1597,8 +1613,9 @@ def cmd_scope_finish(a):
 
 
 def require_not_interrupted(jd):
-    """D1: after a recorded technical interruption only freeze runs in the folder (the one restart is a new prepare)."""
-    if jd.done('interrupt'):
+    """D1: after a technical interruption that stopped the folder only freeze runs in it (the restart is a new prepare);
+    an in-place restart (an interrupt that printed NEXT: GENERATE) lets the run go on."""
+    if any(x['next'] == 'STOP_TECHNICAL_INTERRUPTION' for x in jd.done('interrupt')):
         raise Refused('JOB_INTERRUPTED', 'a technical interruption is recorded: freeze the folder; a restart is a new prepare')
 
 
@@ -1757,11 +1774,19 @@ def cmd_finish(a):
 
 
 def generation_stage(jd):
+    """The stage that pinned the generation run (scope-finish or prepare, NEXT: GENERATE)."""
     for name in ('scope-finish', 'prepare'):
         d = jd.done(name)
         if d and str(d[-1]['next']).startswith('GENERATE'):
             return d[-1]
     return None
+
+
+def generation_window_start(jd, gen):
+    """The generator conversation starts after the last completed stage that printed NEXT: GENERATE: the stage that pinned
+    the run, or the in-place restart after it (rule 3)."""
+    after = [x for x in jd.rec['stages'] if x['completed'] and x['next'] == 'GENERATE' and x['seq'] >= gen.get('seq', 0)]
+    return (after[-1] if after else gen)
 
 
 GEN_KEYS = {'schema', 'case_id', 'reader', 'platform', 'model', 'effort', 'conversation_id', 'started_utc', 'ended_utc',
@@ -1835,7 +1860,8 @@ def check_generation_record(st, jd, a, gen, rel):
         raise Refused('GENERATION_RECORD_INVALID', {'fields': bad})
     if g['prompt_sha256'] != gen['outputs']['generator_prompt']['sha256']:
         raise Refused('GENERATION_RECORD_PROMPT_MISMATCH', 'prompt_sha256 is not the sha256 of run/GENERATOR_PROMPT.md')
-    t0, t1, lo, hi = parse_utc(g['started_utc']), parse_utc(g['ended_utc']), parse_utc(gen['ended_utc']), parse_utc(st.started)
+    win = generation_window_start(jd, gen)
+    t0, t1, lo, hi = parse_utc(g['started_utc']), parse_utc(g['ended_utc']), parse_utc(win['ended_utc']), parse_utc(st.started)
     if not (lo <= t0 <= t1 <= hi):
         raise Refused('GENERATION_RECORD_TIMES', 'started_utc and ended_utc lie between the end of the stage that printed '
                       'NEXT: GENERATE and the start of this finish')
@@ -1867,7 +1893,7 @@ def check_generation_record(st, jd, a, gen, rel):
              'single_user_message': g['single_user_message'], 'features_enabled': sorted(k for k, v in g['features'].items() if v),
              'tools_enabled': len(g['tools_enabled']), 'prompt_sha256_matches_generator_prompt': True, 'times_within_bounds': True,
              'generation_seconds': round((t1 - t0).total_seconds(), 1), 'window_seconds': round((hi - lo).total_seconds(), 1),
-             'qualification_transcript_rule': O40_RULE}
+             'window_from_stage': {'stage': win.get('stage'), 'seq': win.get('seq')}, 'qualification_transcript_rule': O40_RULE}
     return {'raw': raw, 'facts': facts, 'transcript': transcript}
 
 
@@ -2102,9 +2128,11 @@ def finish_body(st, jd, a):
         raise Outcome('SAVED_QA_NOT_EVIDENCE_GRADE', 'STOP_SAVED_QA_NOT_EVIDENCE_GRADE')
     # 5. visual QA on both workbooks, separately (condition 8)
     vis = {}
+    st.facts['visual_qa_dpi'] = {}
     for key, fname, saved_sha in (('deliverable', sq['deliverable_xlsx']['file'], sq['deliverable_xlsx']['sha256']),
                                   ('internal', sq['xlsx']['file'], sq['xlsx']['sha256'])):
         dest = jd.p('qa', 'visual_' + key)
+        # v2.8.2 condition 8 (O39, F3): never --dpi, so visual_qa's automatic dpi rule applies (the delivered sheet by its width)
         code, out, err = st.run('visual_qa_' + key, rel.root / 'research/export/visual_qa.py', ['--xlsx', out_dir / fname, '--dest', dest], env=env)
         man_p = dest / 'VISUAL_QA_MANIFEST.json'
         man = read_json(man_p, 'visual manifest') if code == 0 and man_p.is_file() else None
@@ -2113,15 +2141,34 @@ def finish_body(st, jd, a):
             st.pin_out('visual_manifest_' + key, man_p)
         sx = (man or {}).get('saved_xlsx') or {}
         ok = man is not None and sx.get('sha256') == saved_sha and sx.get('unchanged_after_render') is True and man.get('complete_render') is True
+        tp = deliverable_tile_problems(man) if key == 'deliverable' else []
+        st.facts['visual_qa_dpi'][key] = {'dpi_argument_given': False, 'dpi': (man or {}).get('dpi'), 'dpi_rule': (man or {}).get('dpi_rule')}
         ev.add('8.render_' + key, f'visual QA of the {key} workbook: manifest saved_xlsx.sha256 equals SAVED_QA.json '
-               + ('deliverable_xlsx.sha256' if key == 'deliverable' else 'xlsx.sha256') + ', unchanged after render, complete render',
+               + ('deliverable_xlsx.sha256' if key == 'deliverable' else 'xlsx.sha256') + ', unchanged after render, complete render'
+               + ('; every page has its tiles (visual_qa v4.4, F3)' if key == 'deliverable' else ''),
                {'exit': code, 'manifest_saved_xlsx_sha256': sx.get('sha256'), 'saved_qa_sha256': saved_sha,
-                'complete_render': (man or {}).get('complete_render'), 'pages': (man or {}).get('pages')}, ok)
+                'complete_render': (man or {}).get('complete_render'), 'pages': (man or {}).get('pages'),
+                **({'tiles': tiles_summary(man), 'tile_problems': tp} if key == 'deliverable' else {})}, ok and not tp)
         vis[key] = (man, man_p)
     if not ev.grade():
         ev.write(jd, st, pre, sq)
         st.codes += ev.failed()
         raise Outcome('VISUAL_QA_RENDER_FAILED', 'STOP_VISUAL_QA_RENDER_FAILED')
+    # F3: beyond visual_qa's legibility bound the 600-dpi cap shrinks the glyphs: an unreadable sheet cannot be judged, so the
+    # delivered workbook fails visual QA here (a recorded visual failure), before any reviewer is asked
+    dman = vis['deliverable'][0]
+    exceeded = legibility_bound_exceeded(dman)
+    ev.add('8.legibility', 'the delivered workbook lies within visual_qa\'s legibility bound (manifest tiles.legibility_bound_exceeded '
+           'false); an unreadable sheet cannot be judged and fails visual QA', tiles_summary(dman), not exceeded)
+    if exceeded:
+        ev.write(jd, st, pre, sq)
+        rec = {'schema': 'cps.visual-record.v1', 'case_id': jd.rec['case_id'], 'recorded_utc': utc(), 'result': 'FAIL',
+               'reviewer': None, 'failed_items': ['deliverable: tiles.legibility_bound_exceeded (an unreadable sheet cannot be judged)'],
+               'tiles': tiles_summary(dman), 'note': 'recorded by finish from the delivered visual manifest; no visual review was asked'}
+        write_new(jd.p('qa', 'VISUAL_RECORD.json'), dumps(rec))
+        st.pin_out('visual_record', jd.p('qa', 'VISUAL_RECORD.json'))
+        st.codes += ['TILES_LEGIBILITY_BOUND_EXCEEDED']
+        raise Outcome('VISUAL_QA_FAILED', 'STOP_VISUAL_REVIEW_FAILED')
     pages = select_pages(jd, vis)
     write_new(jd.p('qa', 'VISUAL_PAGES.json'), dumps(pages))
     st.pin_out('visual_pages', jd.p('qa', 'VISUAL_PAGES.json'))
@@ -2152,7 +2199,7 @@ class Evidence:
         doc = {'schema': EVIDENCE_SCHEMA, 'case_id': jd.rec['case_id'], 'written_utc': utc(),
                'writer_admission_sha256': pre['adm_sha'], 'admission_file': str(pre['rel'].writer_admission),
                'evidence_grade': self.grade(), 'failed_conditions': self.failed(),
-               'evidence_grade_meaning': ('true only when every condition of ADMISSION_WRITER_V27.json that this machine can check holds; '
+               'evidence_grade_meaning': (f'true only when every condition of {pre["rel"].writer_admission.name} that this machine can check holds; '
                                           'the visual review (condition 8) and the delivery check (condition 9) are recorded later by '
                                           'visual-record and deliver-check'),
                'saved_qa_sha256': sha_file(jd.p('qa', 'SAVED_QA.json')) if sq is not None else None,
@@ -2217,6 +2264,46 @@ def page_no(k):
     return int(k)
 
 
+TILE_KEYS = ('file', 'sha256', 'bytes', 'x', 'y', 'width_px', 'height_px', 'png_width_px', 'png_height_px')
+
+
+def tile_file_ok(name):
+    """A tile's file is a relative path inside the render folder (tiles/<name>.png), never absolute or with '..'."""
+    return isinstance(name, str) and not name.startswith('/') and '\\' not in name and '..' not in name.split('/') and name.endswith('.png')
+
+
+def deliverable_tile_problems(man):
+    """F3 (visual_qa v4.4): the delivered workbook's manifest has a tiles block, every page has a non-empty tiles list of
+    complete entries, and the block's count is their total."""
+    if man is None:
+        return []
+    tb, imgs = man.get('tiles'), man.get('images') or []
+    if not isinstance(tb, dict):
+        return ['DELIVERED_TILES_MISSING']
+    out = []
+    if any(not isinstance(i.get('tiles'), list) or not i['tiles'] for i in imgs):
+        out.append('DELIVERED_PAGE_WITHOUT_TILES')
+    if any(not isinstance(t_, dict) or set(TILE_KEYS) - set(t_) or not tile_file_ok(t_.get('file')) or not is_sha(t_.get('sha256'))
+           for i in imgs for t_ in (i.get('tiles') if isinstance(i.get('tiles'), list) else [])):
+        out.append('DELIVERED_TILE_ENTRY_INVALID')
+    if tb.get('count') != sum(len(i.get('tiles') or []) for i in imgs if isinstance(i.get('tiles'), list)):
+        out.append('DELIVERED_TILES_COUNT_MISMATCH')
+    if not isinstance(tb.get('legibility_bound_exceeded'), bool):
+        out.append('DELIVERED_TILES_LEGIBILITY_FLAG_MISSING')
+    return out
+
+
+def legibility_bound_exceeded(man):
+    """F3: true unless the delivered manifest says its total A:Q width lies within the legibility bound."""
+    tb = (man or {}).get('tiles')
+    return not (isinstance(tb, dict) and tb.get('legibility_bound_exceeded') is False)
+
+
+def tiles_summary(man):
+    tb = (man or {}).get('tiles')
+    return {k: tb.get(k) for k in ('count', 'total_width', 'legibility_bound_exceeded')} if isinstance(tb, dict) else None
+
+
 def select_pages(jd, vis):
     """Condition 8: every page of the delivered workbook; of the internal workbook every page of the main and composition
     sheets, review-sheet pages 1, 2 and the last, every page holding a possibly_clipped_cells cell, and every page whose
@@ -2256,10 +2343,15 @@ def select_pages(jd, vis):
             if roles[p] == 'review':
                 n += 1
                 review_index[p] = n
+        tiles = {str(i['page']): [{'image': str(man_p.parent / x['file']), 'sha256': x.get('sha256'), 'x': x.get('x'), 'y': x.get('y'),
+                                   'width_px': x.get('width_px'), 'height_px': x.get('height_px')} for x in i.get('tiles') or []]
+                 for i in man['images']} if key == 'deliverable' else {}
         out['workbooks'][key] = {
             'manifest': jd.rel(man_p), 'manifest_sha256': sha_file(man_p), 'saved_xlsx_sha256': man['saved_xlsx']['sha256'],
             'pages_total': len(allp), 'selected': [int(p) for p in selected], 'selection': why,
-            'pages': {p: {'image': imgs[p], 'role': roles_label[p], 'review_sheet_page': review_index.get(p)} for p in allp},
+            'pages': {p: dict({'image': imgs[p], 'role': roles_label[p], 'review_sheet_page': review_index.get(p)},
+                              **({'tiles': tiles.get(p, [])} if key == 'deliverable' else {})) for p in allp},
+            **({'tiles': tiles_summary(man)} if key == 'deliverable' else {}),
             'possibly_cut_cells': {'count': cut.get('count'), 'cells': [
                 {'sheet_role': ('delivered sheet' if key == 'deliverable' else ('main' if c.get('sheet') == main else c.get('sheet'))),
                  'cell': c.get('cell'), 'kind': c.get('kind'), 'neighbours_filled': c.get('neighbours_filled')} for c in cut.get('first') or []]},
@@ -2278,7 +2370,10 @@ def write_review_prompt(jd, pages):
         for p in w[key]['selected']:
             e = w[key]['pages'][str(p)]
             role = e['role'] + (f', its page {e["review_sheet_page"]}' if e['review_sheet_page'] else '')
-            lines.append(f'- page {p} ({role}): `{e["image"]}`')
+            tl = e.get('tiles') or []
+            lines.append(f'- page {p} ({role}): `{e["image"]}`' + (f' (the overview; read its {len(tl)} tiles below)' if tl else ''))
+            for k, x in enumerate(tl, start=1):          # F3: every tile of every delivered page, by absolute path
+                lines.append(f'  - page {p}, tile {k} of {len(tl)} (x {x["x"]}, y {x["y"]}, {x["width_px"]} x {x["height_px"]} px): `{x["image"]}`')
         return '\n'.join(lines)
 
     def cells(key, which):
@@ -2459,13 +2554,19 @@ def na_allowed(key, role, item):
 
 
 def page_image_problems(mans):
-    """R8: every page image both manifests list (the pages the reviewer opened among them), unchanged since finish."""
+    """R8: every page image both manifests list (the pages the reviewer opened among them), and every tile of a delivered
+    page (F3), unchanged since finish."""
     bad = []
     for key, (man, mp) in mans.items():
         for img in man.get('images') or []:
             f = Path(mp).parent / str(img.get('file'))
             if not regular(f) or os.lstat(f).st_size != img.get('bytes') or sha_file(f) != img.get('sha256'):
                 bad.append(f'{key} page {img.get("page")}')
+            for k, t_ in enumerate(img.get('tiles') or [], start=1):
+                tf = Path(mp).parent / str(t_.get('file'))
+                if (not tile_file_ok(t_.get('file')) or not inside(tf, Path(mp).parent) or not regular(tf)
+                        or os.lstat(tf).st_size != t_.get('bytes') or sha_file(tf) != t_.get('sha256')):
+                    bad.append(f'{key} page {img.get("page")} tile {k}')
     return bad
 
 
@@ -2480,6 +2581,8 @@ def visual_record_body(st, jd, a):
         st.codes += ['PAGE_IMAGE_CHANGED'] + bad[:20]
         raise Outcome('VISUAL_PAGES_CHANGED', 'STOP_VISUAL_PAGES_CHANGED')
     review = pre['review'] if isinstance(pre['review'], dict) else {}
+    if legibility_bound_exceeded(pre['manifests']['deliverable'][0]):        # F3: an unreadable sheet cannot be judged
+        pre['fails'] = pre['fails'] + ['deliverable: tiles.legibility_bound_exceeded (an unreadable sheet cannot be judged)']
     result = 'FAIL' if (pre['fails'] or review.get('overall') == 'FAIL') else 'PASS'
     inconsistent = (review.get('overall') == 'PASS') != (result == 'PASS')
     rv = review.get('reviewer') if isinstance(review.get('reviewer'), dict) else {}
@@ -2721,22 +2824,48 @@ def cmd_interrupt(a):
     return run_stage(jd, st, lambda: interrupt_body(st, jd, a), preflight=lambda: interrupt_pre(st, jd, a))
 
 
+def restart_used_here(jd):
+    """Rule 3 limit: why this folder's case and reader have used their one technical restart, or None: the folder is
+    itself a folder restart (restart_of), or it records an in-place restart (an interrupt that printed NEXT: GENERATE)."""
+    if jd.rec.get('restart_of'):
+        return 'this folder is the restart of an earlier run'
+    if any(x['stage'] == 'interrupt' and x['completed'] and x['next'] == 'GENERATE' for x in jd.rec['stages']):
+        return 'this folder was already restarted in place'
+    return None
+
+
 def interrupt_pre(st, jd, a):
-    """D1 (protocol rule 3): allowed only in qualification, when the last completed stage printed NEXT: GENERATE or
-    NEXT: SCOPE_READER and no scope reader or generator response is frozen (no freeze_response entry, none of
-    RESPONSE_WITNESSES in the folder); the operator attests the broken conversation's id (optional) and times."""
+    """D1 and the in-place restart (protocol rule 3: "A technical interruption before the response is written may be
+    restarted once"), qualification only, at most one technical restart per case and reader in either form:
+    - restart in a new folder: the last completed stage printed NEXT: GENERATE or NEXT: SCOPE_READER and no scope reader
+      or generator response is frozen (no freeze_response entry, none of RESPONSE_WITNESSES in the folder);
+    - restart in place: the last completed stage printed NEXT: GENERATE after scope-finish froze the scope reader's
+      response and agreed the scope, and no generator response is frozen.
+    The operator attests the broken conversation's id (optional) and times."""
     jd.require_not_frozen()
-    jd.require_stage_open('interrupt')
     if not jd.rec['qualification']:
         raise Refused('INTERRUPT_QUALIFICATION_ONLY', 'a technical interruption is recorded for qualification jobs (protocol rule 3)')
-    done = [s for s in jd.rec['stages'] if s['completed']]
+    used = restart_used_here(jd)
+    if used:
+        raise Refused('INTERRUPT_RESTART_USED', {'reason': used, 'note': 'at most one technical restart per case and reader: '
+                                                 'freeze the run as it is (a failed run) and tell the owner'})
+    jd.require_stage_open('interrupt')
+    done = [x for x in jd.rec['stages'] if x['completed']]
     last = done[-1] if done else None
     if last is None or last['next'] not in ('GENERATE', 'SCOPE_READER'):
         raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'the last completed stage did not print NEXT: GENERATE or NEXT: SCOPE_READER',
                                                 'last_completed_stage': (last or {}).get('stage'), 'next': (last or {}).get('next')})
-    frozen = [w for w in RESPONSE_WITNESSES if os.path.lexists(jd.p(w))]
-    if jd.stages('freeze_response') or frozen:
-        raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'a scope reader or generator response is frozen', 'frozen': frozen})
+    gen_frozen = [w for w in RESPONSE_WITNESSES if w.startswith('response/') and os.path.lexists(jd.p(w))]
+    if jd.stages('freeze_response') or gen_frozen:
+        raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'a generator response is frozen', 'frozen': gen_frozen})
+    in_place = os.path.lexists(jd.p('scope', 'SCOPE_READER_RESPONSE.json'))
+    if in_place:
+        sf = jd.done('scope-finish')
+        if last['next'] != 'GENERATE' or not sf or sf[-1]['next'] != 'GENERATE':
+            raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'a scope reader response is frozen but scope-finish did not agree '
+                                                    'the scope and print NEXT: GENERATE', 'frozen': ['scope/SCOPE_READER_RESPONSE.json']})
+        if os.path.lexists(jd.p('interrupted')):
+            raise Refused('INTERRUPT_NOT_ALLOWED', {'reason': 'interrupted/ exists: the set-aside folder of an in-place restart'})
     if not isinstance(a.reason, str) or not TECHNICAL_RE.fullmatch(a.reason):
         raise Refused('INTERRUPT_REASON', 'an upper-case code TECHNICAL_<CODE>, for example TECHNICAL_CONVERSATION_BROKE')
     if a.conversation_id is not None and not attested(a.conversation_id):
@@ -2747,26 +2876,51 @@ def interrupt_pre(st, jd, a):
                       'that printed NEXT: ' + last['next'] + ' and the start of this command')
     rel = jd.release()
     check_release_static(rel, True, st, jd.admission())
-    return {'last': last, 'window': (lo, hi), 'times': (t0, t1)}
+    return {'last': last, 'window': (lo, hi), 'times': (t0, t1), 'in_place': in_place, 'rel': rel}
 
 
 def interrupt_body(st, jd, a):
-    last, (lo, hi), (t0, t1) = st.pre['last'], st.pre['window'], st.pre['times']
+    last, (lo, hi), (t0, t1), in_place = st.pre['last'], st.pre['window'], st.pre['times'], st.pre['in_place']
     role = 'scope_reader' if last['next'] == 'SCOPE_READER' else 'generator'
+    gen = generation_stage(jd) if role == 'generator' else None
     out_dir = jd.p('scope', 'reader', 'output') if role == 'scope_reader' else \
-        jd.p((last['facts'].get('generation') or {}).get('run_dir') or ('run/' + jd.rec['reader']), 'output')
+        jd.p((gen['facts'].get('generation') or {}).get('run_dir') or ('run/' + jd.rec['reader']), 'output')
     t = tree(out_dir)
     listing = {k: v['sha256'] for k, v in sorted(t['files'].items())} if t else None
+    st.codes.append(a.reason)
     st.facts['interruption'] = {
         'protocol_rule': 3, 'reason': a.reason, 'conversation_role': role,
+        'restart': 'in_place' if in_place else 'new_folder_after_freeze',
         'after_stage': {'stage': last['stage'], 'seq': last['seq'], 'next': last['next']},
         'conversation_id_attested_by_operator': a.conversation_id, 'started_utc': a.started_utc, 'ended_utc': a.ended_utc,
         'times_within_bounds': True, 'conversation_seconds': round((t1 - t0).total_seconds(), 1),
         'window_seconds': round((hi - lo).total_seconds(), 1), 'response_frozen': False,
         'output_folder': jd.rel(out_dir), 'output_files': listing,
         'response_file_present': bool(listing) and ('response.json' in listing or 'SCOPE_READER_RESPONSE.json' in listing),
-        'note': 'attested by the operator: the runner cannot see the conversation; freeze the folder, then one restart is allowed'}
-    raise Outcome('TECHNICAL_INTERRUPTION', 'STOP_TECHNICAL_INTERRUPTION', [a.reason])
+        'note': ('attested by the operator: the runner cannot see the conversation; ' + (
+            'the scope is agreed and frozen, so this folder allows one more generator conversation on the same pinned run '
+            'inputs and scope decision (the restart of this case and reader)' if in_place else
+            'freeze the folder, then one restart in a new folder is allowed'))}
+    if not in_place:
+        raise Outcome('TECHNICAL_INTERRUPTION', 'STOP_TECHNICAL_INTERRUPTION')
+    # in place: the generation run is exactly as pinned by scope-finish; the broken conversation's output is set aside
+    icodes, _, _ = run_folder_problems(jd, st.pre['rel'], gen)
+    pcodes = packet_pins_problems(jd, gen)
+    prompt = jd.p('run', 'GENERATOR_PROMPT.md')
+    if not regular(prompt) or sha_file(prompt) != gen['outputs']['generator_prompt']['sha256']:
+        icodes.append('GENERATOR_PROMPT_CHANGED')
+    if icodes or pcodes:
+        st.codes += icodes + pcodes
+        raise Outcome('RUN_INPUTS_CHANGED', 'STOP_RUN_INPUTS_CHANGED')
+    aside = jd.p('interrupted', 'generator_output')
+    aside.parent.mkdir()
+    os.rename(out_dir, aside)
+    out_dir.mkdir()
+    make_tree_readonly(aside.parent)
+    st.facts['interruption']['set_aside'] = {'folder': jd.rel(aside), 'files': tree_shas(aside)}
+    st.facts['generation'] = dict(gen['facts']['generation'], pinned_by={'stage': gen['stage'], 'seq': gen['seq']})
+    run_dir = jd.p(gen['facts']['generation']['run_dir'])
+    return 'TECHNICAL_INTERRUPTION', f'GENERATE prompt={prompt} folder={run_dir}'
 
 
 # ------------------------------------------------------------------ nonattempt (qualification rule 6, R11, D2)

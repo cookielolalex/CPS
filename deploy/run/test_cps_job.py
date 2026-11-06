@@ -7,8 +7,9 @@ stands in for the generator and passes the route check), an invented glossary (c
 JOB.json (cps.job-config.v2) and JOB_TITLE.json (cps.job-title.v1) files, an invented qualification jobs list, invented
 admissions, ledgers, generation records and release files, then runs the runner's subcommands end to end: prepare,
 finish, visual-record, deliver-check, scope-finish, interrupt, freeze, verify-frozen and nonattempt, with the negative
-cases (one test or more for each finding R1-R13 and each fixed note of the 2026-11-06 review, and for each finding D1-D3
-and each fixed note DN1-DN14 of the 2026-11-06 delta review). No private data is read or written.
+cases (one test or more for each finding R1-R13 and each fixed note of the 2026-11-06 review, for each finding D1-D3
+and each fixed note DN1-DN14 of the 2026-11-06 delta review, and for the export v2.8.2 integration: V28, the in-place
+restart of protocol rule 3, the delivered tiles of visual_qa v4.4, F2 and the O40 record). No private data is read or written.
 
 Usage: python3 -I -B deploy/run/test_cps_job.py --work /abs/NEW_DIR
          [--writer-dir /abs/deploy/writer_route/writer] [--node /opt/node22/bin/node] [--node-sha256 HEX] [--node-path DIR]
@@ -34,8 +35,11 @@ EXECUTED = (['deploy/run/cps_job.py', 'deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.
                'make_scoped_inventory.py', 'prepare_run.py', 'GENERATOR_PROMPT_TEMPLATE.md', 'SCOPE_READER_PROMPT_TEMPLATE.md')]
             + ['research/guideline046_003/source_prep/' + n for n in ('build_inventory_xlsx_v2.py', 'build_inventory_v2.py',
                'render_views.py', 'screenshot_views.cjs', 'auto_views.py')])
+# The writer admission the test release names (one constant: when v2.8.2 is admitted this file is replaced and its sha256
+# changes; the tests read the sha256 from the file, never a copy of it)
+WRITER_ADMISSION = 'research/export/ADMISSION_WRITER_V28.json'
 # R12: the further files a qualification admission pins by label (repository-relative path), and JOBS.json
-ADMISSION_TOOL_LABELS = EXECUTED + ['research/export/ADMISSION_WRITER_V27.json', 'research/evaluation/compare_target050.py',
+ADMISSION_TOOL_LABELS = EXECUTED + [WRITER_ADMISSION, 'research/evaluation/compare_target050.py',
                                     'research/evaluation/aggregate_qualification050.py']
 FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents')
 REVIEWER = {'kind': 'fresh_context_visual_reviewer', 'model': 'none (invented test)', 'effort': 'n/a',
@@ -250,8 +254,7 @@ def setup(t):
         'harness': {'path': 'research/guideline046_007/harness'},
         'source_prep': {'path': 'research/guideline046_003/source_prep', 'deps_bundle': str(w / 'deps'),
                         **({'node_path': t.a.node_path} if t.a.node_path else {})},
-        'writer': {'admission': 'research/export/ADMISSION_WRITER_V27.json',
-                   'admission_sha256': sha_file(REPO / 'research/export/ADMISSION_WRITER_V27.json'), 'writer_dir': t.a.writer_dir},
+        'writer': {'admission': WRITER_ADMISSION, 'admission_sha256': sha_file(REPO / WRITER_ADMISSION), 'writer_dir': t.a.writer_dir},
         'checker_node': {'path': str(w / 'nodelink' / 'node'), 'sha256': t.a.node_sha256},
         'admitted_checker_node_sha256': [t.a.node_sha256],
         'tables': {'glossary': {'path': str(gpath), 'sha256': sha_file(gpath)}, 'brand_table': None,
@@ -271,7 +274,9 @@ def setup(t):
         {'case_id': '9990040', 'order': 6, 'nonattempt': False}, {'case_id': '9990041', 'order': 7, 'nonattempt': False},
         {'case_id': '9990042', 'order': 8, 'nonattempt': False},
         {'case_id': '9990044', 'order': 9, 'nonattempt': True, 'reason': 'NONATTEMPT_SOURCE_UNAVAILABLE'},
-        {'case_id': '9990045', 'order': 10, 'nonattempt': True}]}
+        {'case_id': '9990045', 'order': 10, 'nonattempt': True},
+        # the in-place restart of protocol rule 3 after an agreed scope (a large invented workbook)
+        {'case_id': '9990046', 'order': 11, 'nonattempt': False}]}
     t.jobs_path = w / 'qualification' / 'JOBS.json'
     t.jobs_path.write_text(json.dumps(jobs, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
 
@@ -482,6 +487,9 @@ def test_real_job(t):
             and fin['facts']['generation_record']['isolation_evidence'] == 'attested_not_audited', lambda: json.dumps(fin['facts'].get('generation_record')))
     ev = json.loads((jd / 'qa' / 'QA_EVIDENCE.json').read_text(encoding='utf-8')) if (jd / 'qa' / 'QA_EVIDENCE.json').is_file() else {}
     t.check('finish: QA_EVIDENCE evidence_grade true', lambda: ev.get('evidence_grade') is True, lambda: json.dumps(ev.get('failed_conditions')))
+    t.check('V28: QA_EVIDENCE.json states the conditions of the writer admission the release names (ADMISSION_WRITER_V28.json)',
+            lambda: 'ADMISSION_WRITER_V28.json' in ev['evidence_grade_meaning'] and 'V27' not in ev['evidence_grade_meaning']
+            and ev['admission_file'].endswith(WRITER_ADMISSION), lambda: ev.get('evidence_grade_meaning'))
     ids = {c['id']: c for c in ev.get('conditions', [])}
     t.check('finish: QA_EVIDENCE records condition 7 (title file) and condition 6 (mode v2 from the convert receipt)',
             lambda: ids.get('7.job_title', {}).get('met') is True and ids.get('6.mode', {}).get('value', {}).get('mode') == 'v2')
@@ -496,6 +504,28 @@ def test_real_job(t):
     want = sorted({int(p) for p, e in it['pages'].items() if e['role'] != 'review'} | set(sorted(rev)[:2] + sorted(rev)[-1:]))
     t.check('finish: page selection (every delivered page; internal main/composition pages, review pages 1, 2 and last)',
             lambda: dl['selected'] == list(range(1, dl['pages_total'] + 1)) and it['selected'] == want, lambda: json.dumps(it['selected']))
+    dman = safe(lambda: json.loads((jd / 'qa' / 'visual_deliverable' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')), {})
+    iman = safe(lambda: json.loads((jd / 'qa' / 'visual_internal' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')), {})
+    want_tiles = safe(lambda: {str(i['page']): [(str(jd / 'qa' / 'visual_deliverable' / x['file']), x['sha256']) for x in i['tiles']]
+                               for i in dman['images']}, {})
+    t.check('F3-tiles: VISUAL_PAGES.json lists every tile of every delivered page (absolute path and the manifest sha256), the internal '
+            'workbook none', lambda: dman['tiles']['count'] >= 1 and all(want_tiles[p] for p in want_tiles)
+            and {p: [(x['image'], x['sha256']) for x in e['tiles']] for p, e in dl['pages'].items()} == want_tiles
+            and dl['tiles']['legibility_bound_exceeded'] is False and iman['tiles'] is None
+            and all('tiles' not in e for e in it['pages'].values()), lambda: json.dumps(dl['pages'])[:600])
+    vprompt = safe(lambda: (jd / 'qa' / 'VISUAL_REVIEW_PROMPT.md').read_text(encoding='utf-8'), '')
+    t.check('F3-tiles: the review prompt lists every tile of every delivered page by absolute path and tells the reviewer to read every '
+            'tile (the page PNG is the overview)', lambda: all(f'`{path}`' in vprompt for v in want_tiles.values() for path, _ in v)
+            and 'Read every tile of every page, at full size' in vprompt and 'the overview' in vprompt)
+    fin_ = stages(jd, 'finish')[-1]
+    t.check('F3-tiles: the runner renders the delivered workbook without --dpi: its manifest records the automatic rule, and finish '
+            'records that no --dpi was given', lambda: dman['dpi_rule'].startswith('auto: delivered one-sheet workbook')
+            and fin_['facts']['visual_qa_dpi']['deliverable'] == {'dpi_argument_given': False, 'dpi': dman['dpi'], 'dpi_rule': dman['dpi_rule']}
+            and fin_['facts']['visual_qa_dpi']['internal']['dpi_rule'].startswith('auto: 150'), lambda: json.dumps(fin_['facts'].get('visual_qa_dpi')))
+    t.check('F3-tiles: QA_EVIDENCE records the delivered tiles (no problem) and the legibility bound (8.legibility met)',
+            lambda: ids['8.render_deliverable']['value']['tile_problems'] == [] and ids['8.render_deliverable']['value']['tiles']['count'] == dman['tiles']['count']
+            and ids['8.legibility']['met'] is True and ids['8.legibility']['value']['legibility_bound_exceeded'] is False,
+            lambda: json.dumps({k: ids.get(k) for k in ('8.render_deliverable', '8.legibility')})[:600])
     code, _, last = t.runner('finish', '--job-dir', jd, '--response', resp)
     t.check('a second finish is refused', lambda: code == 4 and last == 'REFUSED: STAGE_ALREADY_COMPLETED', last)
     review = stand_in_review(jd)
@@ -730,7 +760,8 @@ def test_qualification(t):
             and fr['facts']['generation_record']['model'] == 'stand-in (invented test)', lambda: json.dumps(fr.get('facts')))
     t.check('D3: the qualification record states the O40 rule (qualification_transcript_rule), not an open owner decision; '
             'not_available is attested_not_audited', lambda: fr['facts']['generation_record']['qualification_transcript_rule']
-            == 'O40 2026-11-06: exported or not_available, both accepted; count reported'
+            == 'O40 2026-11-06 (research/guideline046_005/DECISIONS_OWNER_O23_O25.md, "O40 (2026-11-06): evidence of generator '
+            'isolation in qualification"): exported or not_available, both accepted; count reported'
             and 'owner_decision_open' not in fr['facts']['generation_record']
             and fr['facts']['generation_record']['isolation_evidence'] == 'attested_not_audited', lambda: json.dumps(fr.get('facts')))
     code, _, last = t.runner('visual-record', '--job-dir', jd, '--review', stand_in_review(jd, fail=True))
@@ -1028,14 +1059,22 @@ def test_r4_lock_and_interruption(t):
     t.check('R4: freeze while finish runs is refused JOB_BUSY and appends nothing; finish then completes NEXT: VISUAL_REVIEW',
             lambda: ok and running and code2 == 4 and last2 == 'REFUSED: JOB_BUSY' and not stages(jd, 'freeze') and not (jd / 'FROZEN.json').exists()
             and flast.startswith('NEXT: VISUAL_REVIEW') and stages(jd, 'finish')[-1]['completed'], lambda: f'{last2} / {flast}')
+    swapped = {}
+
     def png_swap():
         vi = jd / 'qa' / 'visual_internal'
         force_write(vi / 'page-0002.png', (vi / 'page-0003.png').read_bytes())
+        tl = jd / 'qa' / 'visual_deliverable' / 'tiles'          # F3: a delivered tile swapped at the same time
+        if (tl / 'page-0001-tile-02.png').exists():
+            force_write(tl / 'page-0001-tile-02.png', (tl / 'page-0001-tile-01.png').read_bytes())
         code, _, last = t.runner('visual-record', '--job-dir', jd, '--review', stand_in_review(jd))
         vr = stages(jd, 'visual-record')[-1] if stages(jd, 'visual-record') else {}
+        swapped['codes'] = vr.get('codes', [])
         return (code == 3 and last == 'NEXT: STOP_VISUAL_PAGES_CHANGED' and vr.get('completed') and 'internal page 2' in vr.get('codes', [])
                 and not (jd / 'qa' / 'VISUAL_RECORD.json').exists())
     t.check('R8: a page image swapped after finish stops visual-record as tampering (NEXT: STOP_VISUAL_PAGES_CHANGED, recorded)', png_swap)
+    t.check('F3-tiles/R8: a delivered tile swapped after finish is caught as tampering too (deliverable page 1 tile 2 in the codes)',
+            lambda: 'deliverable page 1 tile 2' in swapped['codes'], lambda: json.dumps(swapped.get('codes')))
     code, out, last, jd = prepare(t, '9990024')
     resp = stand_in_response(t, jd, '9990024')
     p = subprocess.Popen([sys.executable, '-I', '-B', str(RUNNER), 'finish', '--job-dir', str(jd), '--response', str(resp)],
@@ -1488,9 +1527,11 @@ def test_delta_qualification(t):
             lambda: code == 0 and last.startswith('NEXT: GENERATE') and record(jd2)['restart_of'] == str(jd)
             and any(e['type'] == 'prepare' and e['job_dir'] == str(jd2) and e['restart_of'] == str(jd) for e in led()), last)
     code, _, last = interrupt(t, jd2)
+    t.check('R3-limit: interrupt in a folder that is itself a restart (restart_of) is refused INTERRUPT_RESTART_USED, nothing consumed',
+            lambda: code == 4 and last == 'REFUSED: INTERRUPT_RESTART_USED' and not any(s['completed'] for s in stages(jd2, 'interrupt')), last)
     code, _, last = t.runner('freeze', '--job-dir', jd2)
     code, _, last = qprepare(t, rq, *cases[case], 'qd_A_restart2', 'A', adms[case])
-    t.check('D1: a second restart, after the restarted run was interrupted too, is refused QUALIFICATION_RESTART_USED', lambda: code == 4
+    t.check('D1: a second restart, after the restarted run was frozen as a failed run, is refused QUALIFICATION_RESTART_USED', lambda: code == 4
             and last == 'REFUSED: QUALIFICATION_RESTART_USED' and not (t.work / 'qd_A_restart2' / case).exists(), last)
     # ---- 9990041: the scope reader conversation broke after NEXT: SCOPE_READER
     case = '9990041'
@@ -1760,6 +1801,182 @@ def test_docs_delta(t):
             and items == [str(i) for i in range(1, 10)], lambda: json.dumps(items))
 
 
+def test_int_inplace(t):
+    """Protocol rule 3 after scope agreement (the export v2.8.2 integration, item 2): a generator conversation that broke
+    after scope-finish froze the reader's response is restarted in place, once: interrupt records the TECHNICAL_INTERRUPTION
+    and prints NEXT: GENERATE again in the same folder; a second interrupt is refused; no further restart in a new folder."""
+    case = '9990046'
+    L = t.work / 'qualification' / 'LEDGER_inplace.jsonl'
+    jp, tp = job_files(t, case, source=t.paths['large'])
+    adm = admission(t, case, jp, tp)
+    rq = qual_release(t, 'RELEASE_QUAL_INPLACE.json', [adm], L)
+    code, _, last = qprepare(t, rq, jp, tp, 'qi_A', 'A', adm)
+    jd = t.work / 'qi_A' / case
+    rr = safe(lambda: scope_reader_response(jd, case, end=t.large_end_row))
+    psha = safe(lambda: sha_file(jd / 'scope' / 'SCOPE_READER_PROMPT.md'), '0' * 64)
+    code, _, last = t.runner('scope-finish', '--job-dir', jd, '--reader-response', rr, '--reader-prompt-sha256', psha,
+                             '--operator-model', 'test-harness')
+    gen_last = last
+    t.check('qualification prepare and scope-finish of the large 9990046 (the in-place scenario): NEXT: GENERATE after an agreed scope',
+            lambda: code == 0 and last.startswith('NEXT: GENERATE') and (jd / 'scope' / 'SCOPE_READER_RESPONSE.json').is_file(), last)
+    out_dir = jd / 'run' / 'A' / 'output'
+    safe(lambda: (out_dir / 'scratch').mkdir())
+    safe(lambda: (out_dir / 'scratch' / 'partial.txt').write_text('invented scratch of the broken conversation\n', encoding='utf-8'))
+    code, out, last = interrupt(t, jd, reason='TECHNICAL_PLATFORM_ERROR')
+    it = safe(lambda: [s for s in stages(jd, 'interrupt') if s['completed']][-1], {})
+    aside = jd / 'interrupted' / 'generator_output'
+    t.check('R3-inplace: after scope-finish froze the reader response, interrupt records TECHNICAL_INTERRUPTION and prints NEXT: GENERATE '
+            'again in the same folder (same prompt and folder, exit 0), mirrored in the ledger; the broken conversation\'s output is set '
+            'aside read-only and output/ is empty', lambda: code == 0 and last == gen_last and it['result'] == 'TECHNICAL_INTERRUPTION'
+            and it['next'] == 'GENERATE' and it['facts']['interruption']['restart'] == 'in_place'
+            and it['facts']['interruption']['set_aside']['files'] == {'scratch/partial.txt': sha(b'invented scratch of the broken conversation\n')}
+            and (aside / 'scratch' / 'partial.txt').is_file() and not no_write_bits(jd / 'interrupted') and sorted(os.listdir(out_dir)) == []
+            and any(e['type'] == 'record' and e['job_dir'] == str(jd) and e['stage'] == 'interrupt' and e['next'] == 'GENERATE'
+                    and e['completed'] for e in ledger(L)), lambda: last + json.dumps(it.get('facts', {}).get('interruption'))[:400])
+    code, _, last = interrupt(t, jd)
+    t.check('R3-limit: a second interrupt in the folder restarted in place is refused INTERRUPT_RESTART_USED, nothing consumed',
+            lambda: code == 4 and last == 'REFUSED: INTERRUPT_RESTART_USED' and len([s for s in stages(jd, 'interrupt') if s['completed']]) == 1, last)
+    resp = safe(lambda: stand_in_response(t, jd, case))
+    sf_end = safe(lambda: stages(jd, 'scope-finish')[-1]['ended_utc'], '2020-01-01T00:00:00.000Z')
+    g = safe(lambda: generation_record(jd, case, started_utc=sf_end, ended_utc=it['ended_utc']))
+    code, _, last = t.runner('finish', '--job-dir', jd, '--response', resp, '--generator-model', 'stand-in (invented test)',
+                             '--generation-record', g)
+    t.check('R3-inplace: a generation record timed before the in-place restart (the broken conversation) is refused '
+            'GENERATION_RECORD_TIMES, nothing consumed', lambda: code == 4 and last == 'REFUSED: GENERATION_RECORD_TIMES'
+            and not (jd / 'response' / 'response.json').exists(), last)
+    g = safe(lambda: generation_record(jd, case))
+    code, _, last = t.runner('finish', '--job-dir', jd, '--response', resp, '--generator-model', 'stand-in (invented test)',
+                             '--generation-record', g)
+    fr = safe(lambda: stages(jd, 'freeze_response')[-1], {})
+    t.check('R3-inplace: finish takes the second generator conversation in the same folder: its record (timed after the interruption) '
+            'and its response are frozen, on the pinned scoped run inputs', lambda: code in (0, 3) and fr.get('completed') is True
+            and fr['facts']['generation_record']['window_from_stage']['stage'] == 'interrupt' and (jd / 'response' / 'response.json').is_file()
+            and stages(jd, 'finish')[-1]['facts']['run_inputs_unchanged'] is True, lambda: last + json.dumps(fr.get('facts'))[:400])
+    code, _, last = t.runner('freeze', '--job-dir', jd)
+    code, _, last = qprepare(t, rq, jp, tp, 'qi_A_restart1', 'A', adm)
+    t.check('R3-limit: after an in-place restart no restart in a new folder is allowed for that case and reader (QUALIFICATION_RESTART_USED), '
+            'nothing created', lambda: code == 4 and last == 'REFUSED: QUALIFICATION_RESTART_USED' and not (t.work / 'qi_A_restart1' / case).exists(), last)
+    code, _, last = qprepare(t, rq, jp, tp, 'qi_B', 'B', adm)
+    t.check('R3-limit (guard): run B may start once run A is frozen and its one restart was used in place', lambda: code == 0
+            and last.startswith('NEXT: SCOPE_READER'), last)
+
+
+def test_units_int(t):
+    """Units of the integration items 2 and 3: the restart limit on an invented ledger, the delivered tiles (render problems,
+    the legibility bound, R8 on every tile) on invented manifests and files."""
+    cj = load_runner()
+    u = t.work / 'unit_int'
+    u.mkdir()
+    d = u / 'prev'
+    d.mkdir()
+    fz = cj.dumps({'schema': 'cps.job-frozen.v2', 'files': []})
+    (d / 'FROZEN.json').write_bytes(fz)
+    es = [{'type': 'record', 'job_dir': str(d), 'stage': st_, 'next': nx, 'completed': True, 'utc': '2026-01-02T00:00:00.000Z'}
+          for st_, nx in (('prepare', 'SCOPE_READER'), ('scope-finish', 'GENERATE'), ('interrupt', 'GENERATE'), ('finish', 'STOP_INTERRUPTED'))]
+    es += [{'type': 'freeze', 'job_dir': str(d), 'frozen_sha256': sha(fz)},
+           {'type': 'prepare', 'case_id': '9990009', 'reader': 'A', 'job_dir': str(d), 'utc': '2026-01-02T00:00:00.000Z'}]
+    led = fake_ledger(cj, u / 'L.jsonl', es)
+    t.check('R3-limit (unit): a run restarted in place is never restarted again: the restart rule refuses it, and prepare is refused '
+            'QUALIFICATION_RESTART_USED', lambda: 'in place' in str(safe(lambda: cj.restart_problem(led, str(d)), ''))
+            and refusal(cj.ledger_admit_prepare, led, {'9990009': {'case_id': '9990009', 'nonattempt': False}}, '9990009', 'A', '/x/new',
+                        {'frozen_utc': '2026-01-01T00:00:00.000Z'}) == 'QUALIFICATION_RESTART_USED')
+    # tiles: an invented delivered render folder with one page and two tiles
+    r = u / 'render'
+    (r / 'tiles').mkdir(parents=True)
+    page, t1, t2 = b'invented page png', b'invented tile 1 png', b'invented tile 2 png'
+    (r / 'page-0001.png').write_bytes(page)
+    (r / 'tiles' / 'page-0001-tile-01.png').write_bytes(t1)
+    (r / 'tiles' / 'page-0001-tile-02.png').write_bytes(t2)
+
+    def tile(k, b):
+        return {'file': f'tiles/page-0001-tile-{k:02d}.png', 'sha256': sha(b), 'bytes': len(b), 'x': 0, 'y': 0, 'width_px': 1900,
+                'height_px': 1900, 'png_width_px': 1900, 'png_height_px': 1900}
+
+    def man(**over):
+        m = {'images': [{'file': 'page-0001.png', 'page': 1, 'sha256': sha(page), 'bytes': len(page), 'tiles': [tile(1, t1), tile(2, t2)]}],
+             'tiles': {'count': 2, 'total_width': 332.2, 'legibility_bound_exceeded': False}}
+        m.update(over)
+        return m
+    good = man()
+    no_tiles = man(images=[{'file': 'page-0001.png', 'page': 1, 'sha256': sha(page), 'bytes': len(page)}])
+    escaped = man(images=[dict(good['images'][0], tiles=[dict(tile(1, t1), file='../outside.png'), tile(2, t2)])])
+    t.check('F3-tiles: a delivered page without tiles, a missing tiles block, a count that is not the tiles listed, or a tile path '
+            'outside the render folder is a render problem; the complete manifest has none',
+            lambda: safe(lambda: cj.deliverable_tile_problems(good), 'raised') == []
+            and 'DELIVERED_PAGE_WITHOUT_TILES' in cj.deliverable_tile_problems(dict(no_tiles, tiles=dict(good['tiles'], count=0)))
+            and cj.deliverable_tile_problems(man(tiles=None)) == ['DELIVERED_TILES_MISSING']
+            and 'DELIVERED_TILES_COUNT_MISMATCH' in cj.deliverable_tile_problems(man(tiles=dict(good['tiles'], count=3)))
+            and 'DELIVERED_TILE_ENTRY_INVALID' in cj.deliverable_tile_problems(escaped))
+    t.check('F3-tiles: tiles.legibility_bound_exceeded true (or a delivered manifest without its tiles block) is a visual failure: the '
+            'sheet cannot be judged', lambda: cj.legibility_bound_exceeded(man(tiles=dict(good['tiles'], legibility_bound_exceeded=True)))
+            is True and cj.legibility_bound_exceeded(man(tiles=None)) is True and cj.legibility_bound_exceeded(good) is False)
+    mp = r / 'VISUAL_QA_MANIFEST.json'
+    mp.write_text(json.dumps(good), encoding='utf-8')
+    before = safe(lambda: cj.page_image_problems({'deliverable': (good, mp)}), ['raised'])
+    (r / 'tiles' / 'page-0001-tile-02.png').write_bytes(t1)              # a tile swapped
+    after = safe(lambda: cj.page_image_problems({'deliverable': (good, mp)}), ['raised'])
+    esc = safe(lambda: cj.page_image_problems({'deliverable': (escaped, mp)}), ['raised'])
+    t.check('F3-tiles/R8 (unit): every tile of a delivered page is checked against its manifest sha256 and path (a swapped tile and a '
+            'tile outside the render folder are problems)', lambda: before == [] and after == ['deliverable page 1 tile 2']
+            and 'deliverable page 1 tile 1' in esc, lambda: json.dumps([before, after, esc]))
+
+
+def test_docs_int(t):
+    """Items 1-4 in the command sheet, the template and the code: V28, the two restart forms, the tiles and the template
+    heading, F2 (item 9 equals the README's), and the O40 record."""
+    doc = (HERE / 'RUN_JOB_COMMANDS.md').read_text(encoding='utf-8')
+    tpl = (HERE / 'VISUAL_REVIEW_PROMPT_TEMPLATE.md').read_text(encoding='utf-8')
+    readme = (REPO / 'research/export/README.md').read_text(encoding='utf-8')
+    cj = load_runner()
+    texts = {n: (HERE / n).read_text(encoding='utf-8') for n in ('cps_job.py', 'RUN_JOB_COMMANDS.md', 'RELEASE.example.json',
+                                                             'VISUAL_REVIEW_PROMPT_TEMPLATE.md')}
+    rel_ex = json.loads(texts['RELEASE.example.json'])
+    t.check('V28: deploy/run names research/export/ADMISSION_WRITER_V28.json and no longer ADMISSION_WRITER_V27.json (the test release '
+            'names it through one constant)', lambda: WRITER_ADMISSION == 'research/export/ADMISSION_WRITER_V28.json'
+            and rel_ex['writer']['admission'] == WRITER_ADMISSION and all('ADMISSION_WRITER_V' + '27' not in x for x in texts.values())
+            and 'ADMISSION_WRITER_V28.json' in texts['VISUAL_REVIEW_PROMPT_TEMPLATE.md'] and doc.count('ADMISSION_WRITER_V28.json') >= 3
+            and json.loads(t.release_path.read_text(encoding='utf-8'))['writer']['admission'] == WRITER_ADMISSION)
+    t.check('R3-inplace: RUN_JOB_COMMANDS "Restart" describes both forms (a new folder, and in place after an agreed scope) and the one '
+            'restart per case and reader in total', lambda: '**Form 1: restart in a new folder.**' in doc
+            and '**Form 2: restart in place, after the scope is agreed.**' in doc and 'once per case and reader in total' in doc
+            and 'INTERRUPT_RESTART_USED' in doc and 'interrupted/generator_output/' in doc)
+
+    def checklist(text, heading):
+        a = text.index(heading)
+        lines = text[a:].splitlines()[1:]
+        items = {}
+        for ln in lines:
+            ln = ln.strip()
+            if ln[:2] in [f'{i}.' for i in range(1, 10)]:
+                items[ln[0]] = ln[3:]
+            elif items and (ln.startswith('#') or ln.startswith('- **') or ln.startswith('**')):
+                break
+        return items
+
+    def core(x):
+        """An item without its closing parenthetical note and final punctuation."""
+        x = x.rstrip(' .;')
+        if x.endswith(')') and ' (' in x:
+            x = x[:x.rindex(' (')]
+        return x.rstrip(' .;')
+    tpl_items = checklist(tpl, '**Delivered workbook checklist')
+    rd_items = checklist(readme, '- **Delivered workbook checklist')
+    t.check('F2 (guard): the template\'s delivered checklist item 9 equals item 9 of the README delivered checklist '
+            '(research/export/README.md, "Conditions of use"), up to its closing note; both lists have nine items',
+            lambda: sorted(tpl_items) == sorted(rd_items) == [str(i) for i in range(1, 10)] and core(tpl_items['9']) == core(rd_items['9'])
+            and 'no value is cut at a column edge or by a filled neighbour' in core(tpl_items['9']),
+            lambda: json.dumps([tpl_items.get('9'), rd_items.get('9')], ensure_ascii=False))
+    t.check('F3-tiles: the template\'s delivered checklist heading names v2.8, O38 and O39, and section A tells the reviewer to read every '
+            'tile of every page (the page PNG is the overview)', lambda: '**Delivered workbook checklist (v2.8, owner decisions O38 and O39).**' in tpl
+            and 'Read every tile of every page, at full size' in tpl and 'the tiles of each page' in tpl)
+    rec = (REPO / 'research/guideline046_005/DECISIONS_OWNER_O23_O25.md').read_text(encoding='utf-8')
+    t.check('O40: qualification_transcript_rule cites research/guideline046_005/DECISIONS_OWNER_O23_O25.md, which records O40, and '
+            'RUN_JOB_COMMANDS cites it', lambda: 'research/guideline046_005/DECISIONS_OWNER_O23_O25.md' in cj.O40_RULE
+            and '## O40 (2026-11-06): evidence of generator isolation in qualification' in rec
+            and 'evidence of generator isolation in qualification' in cj.O40_RULE
+            and 'recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`' in doc)
+
+
 def test_no_private_values_printed(t):
     leaks = []
     for out in t.outputs:
@@ -1791,7 +2008,7 @@ def main():
                test_real_job, test_node_and_tamper, test_route_check_failure, test_stage_output_exists, test_qualification,
                test_qualification_ledger, test_visual_fail_blocks_delivery, test_large, test_r1_scope_inputs,
                test_r4_lock_and_interruption, test_r5_run_folder, test_units_delta, test_docs_delta, test_delta_qualification,
-               test_no_private_values_printed):
+               test_units_int, test_docs_int, test_int_inplace, test_no_private_values_printed):
         try:
             fn(t)
         except Exception:                                  # noqa: BLE001
