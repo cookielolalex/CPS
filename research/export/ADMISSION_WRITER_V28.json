@@ -1,0 +1,90 @@
+{
+ "schema": "cps.writer-admission.v1",
+ "admitted_utc": "2026-11-06T12:55:00.354047+00:00",
+ "status": "ADMITTED",
+ "subject": "CPS portable export writer v2.8.2 (cps-export-writer-portable.v2.8.2), saved_qa v6.4 (cps-export-saved-qa.v6.4), visual_qa v4.5 (cps-export-visual-qa.v4.5)",
+ "decision": "ADMITTED for CPS qualification evidence and delivery under the conditions below. Supersedes ADMISSION_WRITER_V27.json for new runs; outputs already recorded under v2.7 keep that record.",
+ "owner_decisions": [
+  "O33 deliverable naming (v2.6)",
+  "O34 G/H not shaded (v2.6)",
+  "O38 delivered workbook: one sheet in the creator's format; four-sheet INTERNAL_QA_WORKBOOK.xlsx kept for QA, never delivered (v2.7)",
+  "O39 delivered-workbook widths: the O38 widths are minimums, a column is widened when a value would be cut (v2.8); default font 新細明體 11, owner-confirmed 2026-11-06"
+ ],
+ "reviews": [
+  "v2.6+v2.7 review (independent reviewer, of writer v2.7 7a82da6f / saved_qa v6 ef5882de / visual_qa v4 f71abb5c): ADMIT_AFTER_LISTED_FIXES W1 (column widths read as LibreOffice reads them), D1 (invented test titles); notes N1-N7",
+  "delta review (same reviewer, commit 1c9f07e, saved_qa v6.1 / visual_qa v4.1, writer unchanged): ADMIT",
+  "v2.8 review (independent reviewer, e64ba10): ADMIT_AFTER_LISTED_FIXES R1 (character counts), R2 (calibration text); notes N1-N9 (applied in v2.8.1, 281c6f8)",
+  "v2.8.1 delta review (independent reviewer, 281c6f8): ADMIT_AFTER_LISTED_FIXES F1 (Ⅷ and characters outside Big5), F2 (reviewer prompt item 9; runner), F3 (tiles for the reviewer), F4 (documentation); notes F5-F7 (applied in v2.8.2)",
+  "second delta review (same reviewer, 38e74ca, v2.8.2 / v4.4): ADMIT_AFTER_LISTED_FIXES G1 (measured legibility flag); notes G2-G4 (applied in visual_qa v4.5, b16947b)",
+  "third delta review (same reviewer, visual_qa v4.5 at b16947b; branch 1edfab1, same tree): ADMIT; notes H1 (the 9.2 px threshold is a word-box height), H2 (enforcement in the runner), H3 (two README figures)"
+ ],
+ "tests": {
+  "with_visual_public_copy": "600/600",
+  "skip_visual_public_copy": "577/577 (v2.8.2; v4.5 changes only visual tests)"
+ },
+ "files_sha256": {
+  "research/export/writer_portable.py": "72b7016de83f58a946a0a21c8d9e3833699d3a0aac9b28eca7e4e0b973f6389b",
+  "research/export/saved_qa.py": "80dd2887ebeed19497aa0a440e5e5c721ba221e340f7dd3bec9ac7700a5c4e28",
+  "research/export/visual_qa.py": "68814f14ad1b551295ca90de3098a2c47057405094171e8033093d65b1898ac0",
+  "research/export/writer004_matrices.mjs": "028dbdae55a9e42c686fbbaf371d956168bf4eeee9cfeea1642f6dda3713b3f8",
+  "research/export/README.md": "d7350e74895418f5a40e5b4d814bfa7e035bd781546b6e2c4125d114bcf00de2",
+  "research/export/tests/run_export_tests.py": "fa6a0951803c1b5266b52d8916a9f4cf30fb7385768891ff7283cc08729be684",
+  "research/export/tests/make_tamper_fixtures.py": "6282f79dc8564612888a7d7fcf35d15847678cd920d715c19c36802410eb503d",
+  "research/export/tests/make_export_fixtures.py": "716ee0a4472a2e66a3045e34c6d4a0d19a519688d9b092eeae84fea8d0638293",
+  "research/export/tests/make_export_fixtures_v2.py": "a00503aa3c01f6154286be8bfd6b892cd4791d83ed170ae10579b63c19b16199",
+  "research/guideline046_006/package/tools/cps046b_route.py": "9db8033b8cb4fab6add87f60ba8b37e1994af6ff7f0559f305e892936df4811d"
+ },
+ "writer_dir_sha256": {
+  "writer004.mjs": {
+   "archived_original": "85a7f619b9cfedc0c3c851b34c1d8cee38cfe5ab88ed050fcf4bba566c18c0d7",
+   "public_copy": "70d7f66455bfc5a2a6574b01509cfb78576a21b75bd7d75500746faf2661efb7"
+  },
+  "validate_carrier_v4.mjs": "984da083219fa3df69dfd34652115fe1ddd5cd0ed723321981916adc5a87e013",
+  "receipt_bytes.mjs": "b2ff15fd5d44a8adfbd5370f8bf8d81c432b89f5a6ea4f81d71477e283d11d2c",
+  "artifact_tool_stub_index.mjs": "67134acad4326089bca7cd074c753bda88887a64c6a1499d15e1153d673796a4",
+  "artifact_tool_stub_package.json": "5a93295fdcc83c399de1f1616040ddce237eddd9f40d3a69933cb2c5a461b46d"
+ },
+ "checker_node": {
+  "path": "/opt/node22/bin/node",
+  "sha256": "2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff",
+  "version": "v22.23.4"
+ },
+ "environment": {
+  "python": "3.13.18",
+  "openpyxl": "3.1.5",
+  "lxml": "6.1.3",
+  "libreoffice": "24.2.7.2"
+ },
+ "deliverable_pins": {
+  "format": "owner_O38_O39_creator_format_v2",
+  "deliverable_styles_xml_sha256": "3295b4960563f775fba5c6e4ce2883532a68fd47cde13c8beff18c353d03a43b",
+  "deliverable_workbook_template_sha256": "06baba0b2acbe1af0d2b8c215bd95d4ae588fa7072d8003476bbd447f2090b27",
+  "internal_workbook_template_sha256": "3b831f50f102d38062f2c4abe30ef190f8a755daa20f48fe36363afd7b31f13a"
+ },
+ "conditions_of_use": [
+  "1 Required runs: saved QA with --carrier = the frozen route carrier (expected_provenance.carrier_sha256 checked against ADAPTER_RECEIPT.json carrier_sha256 or the freeze record, and the check recorded), --writer-dir, without --no-formatting; status SAVED_ALL_CELL_VALUE_TYPE_PASS, expected_provenance.result PASS, receipt_claims.match true, cps_evidence_preconditions.all_checked_here_met true (for a titled output this includes deliverable_checked and deliverable_byte_identical_to_rerun).",
+  "2 Checker node: run from a clean shell independent of the producer, with --checker-node and --checker-node-sha256 from this record (checker_node; further binaries need their own entry, for example the Dot VM's node after its full self-test); never taken from the producer receipt, --node or PATH; checker_node.realpath, sha256 and sha256_after_check must match, and the same file must appear in writer004_check_node (v1 receipts) and rerun_node.",
+  "3 Tools: before the run the operator checks the sha256 of saved_qa.py, writer_portable.py, writer004_matrices.mjs and visual_qa.py against files_sha256; the saved-QA record must show the listed writer_portable.py and writer004_matrices.mjs hashes.",
+  "4 Writer directory and versions: pinned files as regular files in the writer directory; the checker --writer-dir holds the same writer004.mjs pin as the producer; openpyxl 3.1.5.",
+  "5 Receipt: only the compared fields count (mode, relaxations without route_v4_port.path, cross_check, expected_saved_values, matrices_sha256, sheets, writer, writer_files, status, admitted, deliverable, deliverable_xlsx); v2 relaxation classes and documented cells come from expected_provenance.rerun_relaxation_classes and rerun_documented_cells. A WRITER_RECEIPT.json with duplicate JSON keys is not evidence (v2.5 open note N1): the run harness rejects it before saved QA.",
+  "6 Mode v2 only for carriers whose convert receipt says export_mode_required v2 and policy_checks applied; reported as writer004 on the placeholder copy plus the documented cells; M/N facts are R48 policy checks. Saved QA establishes saved-cell fidelity to writer004 intended matrices (and, for the deliverable, to the main matrix) only: nothing about source semantics or Excel display.",
+  "7 Job title: --job-title is the harness's per-job project folder title; the operator checks deliverable.job_title against the per-job input record and records the check.",
+  "8 Visual QA: never re-save a workbook. Render the delivered <name>.xlsx and INTERNAL_QA_WORKBOOK.xlsx separately; each manifest's saved_xlsx.sha256 must equal the corresponding hash in the evidence-grade SAVED_QA.json (deliverable_xlsx.sha256 for the delivered workbook, xlsx.sha256 for the internal one). A separate reviewer checks every page of the delivered workbook against the README delivered-workbook checklist, and the internal workbook's reviewed set (every page of the main and composition sheets; review sheet pages 1, 2, the last and every page with a possibly_clipped_cells cell) against the 9-item internal checklist; VISUAL_REVIEW.json per run records page -> item -> pass/fail; any fail fails visual QA. v2.8.2 (O39, F3): the delivered workbook is rendered without --dpi (auto dpi), and the visual reviewer reads every tile of every delivered page listed in the manifest (images[].tiles), checked against their sha256; delivered checklist item 9 includes \"no value is cut at a column edge or by a filled neighbour\".",
+  "9 Delivery (O38; review N3r): deliver only <name>.xlsx. At delivery time, check that the file sent is a regular file whose sha256 equals deliverable_xlsx.sha256 in the run's evidence-grade SAVED_QA.json, and record the check. Never deliver INTERNAL_QA_WORKBOOK.xlsx, EXPECTED_SAVED_VALUES.json, the receipt or QA reports.",
+  "10 This record is the admission for the hashes listed; the README status text is superseded by it."
+ ],
+ "open_notes": {
+  "v25_N1": "duplicate JSON keys in WRITER_RECEIPT.json accepted by saved_qa (condition 5, harness check)",
+  "v25_N2": "zip entry raw name vs normalised name not rejected (caught by provenance; condition 8 hash match)",
+  "v25_N3": "saved_qa does not verify its own tool hashes (condition 3)",
+  "v25_N4": "node path compared by operator (condition 2)",
+  "N2": "closed by v2.8 (O39): the delivered default font is 新細明體 11, owner-confirmed 2026-11-06.",
+  "N3r": "a hard link to identical bytes outside the output directory passes saved QA (condition 9 closes it at delivery)",
+  "N5": "ten edits that change no cell value pass without provenance and fail with it (condition 1 requires provenance)",
+  "visual_wrapping_numbers": "possibly_cut_cells does not check number cells that wrap; only the internal workbook has them",
+  "O39_outside_big5": "Recorded limitation: characters outside Big5 measured wider than their count (README, O39); the PNG review is their check."
+ },
+ "post_review_changes": [
+  "research/export/README.md only, after the third delta review: H1 (the unit of the legibility threshold stated) and H3 (two figures corrected), and the status paragraph recording this admission. No code changed."
+ ]
+}

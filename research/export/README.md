@@ -14,7 +14,22 @@
 
 **Writer v2.7 / saved_qa v6.1 / visual_qa v4.1: ADMITTED 2026-11-05 under `ADMISSION_WRITER_V27.json`** (review ADMIT_AFTER_LISTED_FIXES, then delta review ADMIT; it supersedes `ADMISSION_WRITER_V25.json` for new runs). The paragraph below is the build note. **Writer v2.7 / saved_qa v6 / visual_qa v4 (2026-11-05, owner decision O38).** The owner approved one-sheet previews in the creator's own 未填 format (O38). With `--job-title` the delivered workbook `<name>.xlsx` is now one sheet `<name>` in that format: 新細明體 12; grey `#C0C0C0` header with thin borders; gridlines shown; only the header row frozen; no wrapping; E F L M N Q centred, C left; her column widths and row heights. The v2.6 four-sheet workbook (main sheet `<name>`, `來源與審查`, `組成參考`, `組成連結`) is written beside it as `INTERNAL_QA_WORKBOOK.xlsx`, with the same bytes as v2.6. It serves saved QA and internal review and is never delivered. saved_qa v6 checks the delivered workbook as well: its own pinned package, its cells against the main sheet with three readers, its format and its rerun bytes. visual_qa v4 prints gridlines where the sheet shows them and lists no-wrap cells whose text may be cut. Untitled outputs are unchanged. See "Owner decision O38 (v2.7)". v2.7 includes v2.6, which was never admitted; both are admitted only after an independent reviewer confirms them and records the admission outside this README.
 
-**Writer v2.8.2 / saved_qa v6.4 / visual_qa v4.5 (2026-11-06, owner decision O39; NOT ADMITTED).** Second delta review of v2.8.2 / v4.4: ADMIT_AFTER_LISTED_FIXES G1 (a measured legibility flag), notes G2–G4, applied in visual_qa v4.5 (the writer gets a comment correction only). Two independent reviews: of v2.8, ADMIT_AFTER_LISTED_FIXES (R1–R2 and notes, applied in v2.8.1); and of v2.8.1, ADMIT_AFTER_LISTED_FIXES (F1–F7, applied in v2.8.2: the other non-ASCII count 27, the coverage scope and the limitation outside Big5, tiles for the reviewer, documentation). A delta review follows. The paragraph below describes v2.8. The admitted state is still writer v2.7 / saved_qa v6.1 / visual_qa v4.1 under `ADMISSION_WRITER_V27.json`. In the 046g development trial, two delivered workbooks failed visual review because values were cut at the column edge (the O38 widths are fixed; the creator's own files overflow too, and she sets widths per job). The owner chose "widen to fit" (O39): the O38 widths are minimums, and a column is widened when a value in it would be cut. The delivered workbook's default font (fonts[0]) becomes 新細明體 11, as in her files. Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json`, and visual QA's `possibly_cut_cells` uses the same conservative estimate. `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their v2.7 bytes. See "Owner decision O39 (v2.8)". v2.8 is not admitted until an independent reviewer confirms it and records the admission outside this README.
+**Writer v2.8.2 / saved_qa v6.4 / visual_qa v4.5: ADMITTED 2026-11-06 under `ADMISSION_WRITER_V28.json`.** This admission rests on owner decision O39 and supersedes `ADMISSION_WRITER_V27.json` for new runs.
+
+- **The change.** In the 046g development trial, two delivered workbooks failed visual review because values were cut at the column edge. The O38 widths were fixed; the creator's own files overflow too, and she sets widths per job.
+  - The owner chose "widen to fit" (O39). The O38 widths are minimums, and a column is widened when a value in it would be cut, by a conservative per-character estimate.
+  - The delivered workbook's default font (`fonts[0]`) is 新細明體 11, as in her files (owner-confirmed).
+  - Saved QA recomputes the expected widths from `EXPECTED_SAVED_VALUES.json`.
+  - Visual QA uses the same estimate for `possibly_cut_cells`. It also cuts each delivered page into tiles at full size for the visual reviewer, and measures whether those tiles are legible.
+  - `INTERNAL_QA_WORKBOOK.xlsx` and the untitled outputs keep their v2.7 bytes.
+- **Reviews.** Each round was independent:
+  1. Of v2.8: ADMIT_AFTER_LISTED_FIXES, R1–R2 and notes, applied in v2.8.1.
+  2. Delta review of v2.8.1: ADMIT_AFTER_LISTED_FIXES, F1–F7, applied in v2.8.2 and visual_qa v4.4.
+  3. Second delta review: ADMIT_AFTER_LISTED_FIXES, G1–G3, applied in visual_qa v4.5.
+  4. Third delta review: **ADMIT**. Its documentation notes H1 and H3 were applied afterwards, to this README only.
+- **Conditions.** As in `ADMISSION_WRITER_V28.json`. They include rendering the delivered workbook without `--dpi`, reading every tile, and treating `tiles.legibility_bound_exceeded` as a visual failure.
+
+See "Owner decision O39 (v2.8)"
 
 This directory holds code and invented test fixtures only. Do not commit case carriers, outputs, renders or reports made from case data. Write those outside the repository.
 
@@ -274,7 +289,7 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
   |---|---|---|---|---|
   | one column unit | 7.00 pt | 7.10 pt | | |
   | East Asian wide or full-width, in Big5 | 1.71 (CJK) | ヴ 1.73 (CJK 1.69) | 2.4 | 0.67 |
-  | other non-ASCII, in Big5 | Ⅷ 2.26 | Ⅷ 2.53, ① 2.35 | 2.7 | 0.17 |
+  | other non-ASCII, in Big5 | Ⅷ 2.25 | Ⅷ 2.53, ① 2.35 | 2.7 | 0.17 |
   | other ASCII | `# + < = > ^ ~` 1.43 | `+ < > ~` 1.12 | 1.5 | 0.07 |
   | capitals other than M W | O, Q 1.35 | O, Q 1.29 | 1.8 | 0.45 |
   | `M W m w @ %` | `@` 1.71 | W 1.66 | 2.2 | 0.49 |
@@ -323,7 +338,9 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
     - The manifest lists them under each image (`tiles`: file, sha256, position, size) and in `tiles` (count, total width, `legibility_bound_exceeded`).
     - Shown at full size, a tile's CJK body glyphs are about 15 px at a total A:Q width up to about 990 units (dpi below the cap).
     - **v4.5 (second delta review, G1).** Above about 1,275 units, which needs about four columns at the 255 cap, LibreOffice halves its fit-width scale, and the glyphs drop to about 5.8 px. So the legibility flag is measured, not inferred from the width.
-      - The rule: the smallest per-page median height of the CJK words in the PDF text layer must be at least 9.2 px at the render dpi. That is the v2.7 render as the reviewer saw it on the Dot. The figure is `tiles.glyph_px_min_page_median`.
+      - The rule: the smallest per-page median height of the CJK words in the PDF text layer must be at least 9.2 px at the render dpi. The figure is `tiles.glyph_px_min_page_median`.
+      - The unit is a word-box height, which runs 1.26 to 1.45 times the font size (third delta review, H1). The v2.7 reference of 9.2 px was a font size and measures about 13.4 px as word boxes, so the threshold is laxer than that reference.
+      - In the reviews' renders the gap does not matter. Every sheet that was not flagged measured 11.7 px or more as word boxes (19.06 and 18.64 px in the tests), and every flagged sheet measured 5.0 to 5.8 px.
       - Without pdftotext, the flag falls back to a total width above 1,270.
       - A flagged sheet cannot pass visual QA.
     - A width above 255 counts as 255 (G3).
@@ -341,7 +358,7 @@ Recorded in `research/guideline046_005/DECISIONS_OWNER_O23_O25.md`, O39.
     - the classes of the counts (`l_o39_fit_classes_v282`, with Ⅷ ① ‰ ℃ × é and half-width forms);
     - the tile layout (`l_visual_tile_boxes_cover_overlap_and_bound`);
     - every branch of the dpi rule, including a non-finite width and the cap (`l_visual_auto_dpi_branches`);
-    - with visual tests, a render without `--dpi` whose tiles match their hashes and are at most 1,900 px (`d_visual_qa_deliverable_tiles_and_glyph_size_*`). Its CJK glyphs are at least 9.2 px and unflagged on a titled output and on a widened copy, and v4.5 also checks a copy of about 1,456 units, inside the halved-scale range, which must be flagged.
+    - with visual tests, a render without `--dpi` whose tiles match their hashes and are at most 1,900 px (`d_visual_qa_deliverable_tiles_and_glyph_size_*`). Its CJK glyphs are at least 9.2 px and unflagged on a titled output and on a widened copy, and v4.5 also checks a copy of about 1,523 units (columns A–E at 255), inside the halved-scale range, which must be flagged.
 - **Not changed.** Values (a unit with trailing spaces stays verbatim under R57; its column is widened), every other O38 property, the internal workbook and the untitled outputs.
 
 ## What it reproduces
