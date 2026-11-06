@@ -1,0 +1,11 @@
+# CPS no-root fonts: Ubuntu 24.04 (noble) font packages, the same CJK fonts as deploy/setup_vm.sh
+# (fonts-noto-cjk, fonts-noto-cjk-extra), plus DejaVu and fontconfig-config's rules (conf.d), so fontconfig
+# picks Noto Sans CJK TC for zh-tw (70-fonts-noto-cjk.conf). Architecture-independent content; no glibc requirement.
+# Resolved 2026-11-06T06:29Z with the LibreOffice lock (same apt run); mirrors and checks as there.
+# snapshot: https://snapshot.ubuntu.com/ubuntu/20261106T050000Z
+# Format: sha256 size pool-path
+9df0579cd298a1f2b7a40efd519c849745aecd193a09733cf4d1032284a62bbf 37298 pool/main/f/fontconfig/fontconfig-config_2.15.0-1.1ubuntu2_amd64.deb
+40049660c194f3b8a2541fc7369efebb10e9f94bdac836a2f38fafedd10fa73a 835172 pool/main/f/fonts-dejavu/fonts-dejavu-core_2.37-8_all.deb
+8a599d6553307db7ecb795d2f0e5a301e03234afc75c7358b0ba43466454c89a 502232 pool/main/f/fonts-dejavu/fonts-dejavu-mono_2.37-8_all.deb
+7d64b985f6fe128c99eae5610d5c047338e572bdcfb2bb09736be01b824a7f6c 61229778 pool/main/f/fonts-noto-cjk/fonts-noto-cjk_20230817+repack1-3_all.deb
+68c8da6484bfefebc68d38e871b67ce75c1e951ef0c3c8ef8564b7bed5250688 144768932 pool/main/f/fonts-noto-cjk/fonts-noto-cjk-extra_20230817+repack1-3_all.deb
