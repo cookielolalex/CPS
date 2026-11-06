@@ -19,9 +19,11 @@ These files are for the CPS operator's VM. They contain no case data.
 python3 -I -B research/export/tests/run_export_tests.py --writer-dir "$PWD/deploy/writer_route/writer" --work /tmp/cps_selftest
 ```
 
-It uses invented fixtures only, and every test must pass. On a no-root VM, source `~/cps-tools/env.sh` first (next section). The export admission (`research/export/ADMISSION_WRITER_V25.json` or its successor) pins the checker's node binary by sha256. A VM's node binary becomes admitted evidence only after the maintainer records it there, and only after a fully passing self-test on that VM.
+It uses invented fixtures only, and every test must pass. On a no-root VM, source `~/cps-tools/env.sh` first (next section). The export admission (`research/export/ADMISSION_WRITER_V27.json`) pins the checker's node binary by sha256. A VM's node binary becomes admitted evidence only after the maintainer records it there, and only after a fully passing self-test on that VM.
 
 ## No-root setup
+
+Tested 2026-11-06 as an unprivileged user with no sudo, in a clean HOME, with a Node 24 first on PATH: fresh install exit 0 (173 s), re-run 7 s, `check_env.py` all met, export self-test with visual tests 579/579 (three runs, including a second prefix with the 22.04 LibreOffice lock and a conda Python). The installed node v22.23.4 (official nodejs.org build, sha256 `94efd062…9a90`) must be admitted separately after the VM's own self-test.
 
 For a VM where the operator is an ordinary user without sudo. `setup_vm_user.sh` installs what `setup_vm.sh` installs, under one prefix (default `~/cps-tools`, or `CPS_TOOLS=/abs/dir`). It needs no root, no sudo and no `apt-get install`, and it never pipes a download into a shell. Every download is pinned by version and sha256, either in the script or in the lock files next to it, and the script also pins the lock files' own sha256. Each file is verified before it is unpacked.
 
