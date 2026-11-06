@@ -1,6 +1,6 @@
 # Independent semantic review of candidate 046g (2026-11-05)
 
-**Status: round 1 returned SEMANTIC_APPROVE_AFTER_LISTED_FIXES. Fixes are being applied. 046g is not frozen and not admitted.**
+**Status: semantically approved (round 1 and a delta review), harness references approved, then frozen 2026-11-06 (manifest `bf06fae2e3ab0129ecbe6d88a97f00edac9b9cfbe47847eecc11313e5620b25f`, 16 files). Not admitted, not deployed.** The record below is the review history.
 
 ## Scope
 
@@ -63,3 +63,36 @@ The evidence behind the changes is in `research/guideline046_005/STUDY_LARGE_MAT
 2. Run an evaluation-role replay of the revised R56 on the 15 exposed source cases. It decides S11, and checks that the agreement still holds (47/65 A and 26/28 heading-derived before the revision).
 3. Delta review, then freeze.
 4. Run a dev trial on the five large exposed tuning cases, with a real scope reader, plus a regression on the four current-template dev cases under evaluator v3.
+
+## Delta review (2026-11-05): SEMANTIC_APPROVE_AFTER_LISTED_FIXES
+
+The same reviewer checked commit `49eb625`. D1, the tag definition, was required; D2–D4 were determinism and accuracy fixes. All four were applied verbatim in `b677540`: route 284/284, scope stage 62/62. D4, the scope-tool validation, is recorded in `harness/README.md` (5 of 5 study cases reproduced). The replay confirmation under the D1–D3 wording gave A 47/65, heading-derived 26/28 and B 28/65, with 0 rows differing (`f86c172`). No further semantic round was needed.
+
+## Harness delta review (2026-11-06, a fresh independent context): APPROVE_AFTER_LISTED_FIXES
+
+The review covered commit `6403752`, which made four changes:
+- the historical-match evaluator references moved to the frozen v4 (`compare_target050.py` `fc723405…`; owner decision O35);
+- the gate aggregator moved to v2 (`aggregate_qualification050.py` `e5aa4fc7…`);
+- the reviewer's `ab_row_check` critical-error class was added (`PROPOSAL_050.md` S5);
+- the writer references moved to the admitted writer v2.7 (`ADMISSION_WRITER_V27.json`), and `target_runtime` was updated per O36/O37.
+
+**Reviewer's checks.**
+- Hashes and schemas match the freeze and admission records.
+- No text still names v3 or aggregator v1 as governing.
+- The semantic files are byte-identical to the parent: FIELD_ROLES, OUTPUT_CONTRACT, the examples, the route `ba8414a0…`, and the guideline except its status header and one metric reference.
+- Tests: route 284/284, scope 62/62, v4 43/43 and 12/12, aggregator v2 52/52 and 11/11.
+
+**Required fixes, applied verbatim.**
+- **F1.** `ab_row_check` does not list a CPS A/B equal to its aligned target row's. On a group-wide target it therefore misses A/B on a device row. The critical-error class now says to check every CPS row carrying A or B, and the checklist matches.
+- **F2.** The job title is a private per-job title file, pinned in the admission. It is not a job-JSON key, and the receipt's title is checked against it.
+- **F3.** The per-row scoring wording now covers unpaired rows.
+- **F4.** `v3_per_row_AB` and `v2_alignment` use v4's K–O tie-break, so they equal their frozen evaluators except on a tie.
+
+**Recommended fixes, also applied.**
+- **F5.** Fuller A/B definitions.
+- **F6.** A missing comma.
+- **F7.** The export mode now follows `export_mode_required`.
+
+**Notes kept as written:** FIELD_ROLES line 250, guideline line 5, the dated "Next" item, and the manifest wording.
+
+**After the fixes:** route 284/284, scope stage 62/62. The manifest was regenerated, and 046g was frozen.

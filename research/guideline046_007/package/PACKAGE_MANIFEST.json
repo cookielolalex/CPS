@@ -3,14 +3,14 @@
   "candidate": "046g",
   "parent_candidate": "046f",
   "parent_manifest_sha256": "5f5502a7117e734c5a2f999227c6f0a8a95927c7dce959d28f11e11dbb620467",
-  "status": "DRAFT_UNDER_INDEPENDENT_REVIEW_NOT_FROZEN",
+  "status": "FROZEN_FOR_BOUNDED_SOURCE_TRIAL_NOT_DEPLOYED",
   "target_runtime": "Qualification and use: the Dot operator runtime (owner decisions O36, O37); development trials in the maintainer environment. Every run records the actual model, effort and tools; scores do not carry across models.",
-  "semantic_review": "round 1 (2026-11-05, one fresh independent context): SEMANTIC_APPROVE_AFTER_LISTED_FIXES on R56/O30 (enclosure-row A/B), R59 (scoped packets), route v4.3 and the scope-stage harness; round-1 fixes (B1, Q1-Q3, S1-S10, S12, S13, S15, N1-N3, N6, N7) applied, plus the R56 Terms exception for a noun ending in 箱體/盤體; S11 not adopted; round-1 replay on 15 exposed cases done (A 47/65 with the exception, heading-derived 26/28, B 28/65; post hoc). Delta review (2026-11-05): SEMANTIC_APPROVE_AFTER_LISTED_FIXES, no further semantic round needed; delta review D1–D4 applied; replay confirmation under D1-D3 done (A 47/65, heading 26/28, B 28/65, 0 rows differ; commit f86c172). Harness and checklist moved to evaluator v4 / gate aggregator v2 under O35 (with the ab_row_check critical-error class, PROPOSAL_050 S5) and to the admitted writer v2.7: harness-only delta review pending",
+  "semantic_review": "research/guideline046_007/REVIEW_046g.md",
   "route": {
     "path": "tools/cps046b_route.py",
     "version": "cps046g-route.v4.3"
   },
-  "utf8_bytes": 496158,
+  "utf8_bytes": 496193,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
@@ -56,8 +56,8 @@
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
-      "bytes": 13082,
-      "sha256": "eb869b2d4bf46b73ee7bd5f098a998d28652b0f20b879537c5e127cb0c776a35"
+      "bytes": 13117,
+      "sha256": "9de0f06b54545f9730c18aaca05ee8473c95b3a7dccc243063beafab78aa93fe"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",

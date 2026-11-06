@@ -92,7 +92,7 @@
  },
  "evidence": "docs/evidence/LOCAL_EVIDENCE_INDEX.json",
  "read_first": "AGENTS.md",
- "latest_candidate": "046f",
+ "latest_candidate": "046g",
  "deployment_artifact": "Markdown guideline and supplementary resources used by an AI agent",
  "proposed_model": "sol6.1/xhigh; actual model/effort and tool route must be recorded in future tests",
  "latest_preparation": {
@@ -308,6 +308,17 @@
   "needs": "independent review",
   "status_2026_11_05": "ADMITTED v2.5 / saved_qa v4 under research/export/ADMISSION_WRITER_V25.json (round 4 ADMIT)",
   "status_2026_11_05_late": "ADMITTED v2.7 / saved_qa v6.1 / visual_qa v4.1 under research/export/ADMISSION_WRITER_V27.json (owner decisions O33, O34, O38; review ADMIT_AFTER_LISTED_FIXES W1, D1, then delta ADMIT; 579/579 and 559/559). The delivered workbook is the one-sheet <name>(未填).xlsx in the creator's format; INTERNAL_QA_WORKBOOK.xlsx is never delivered."
+ },
+ "candidate_046g": {
+  "path": "research/guideline046_007/package",
+  "manifest_sha256": "bf06fae2e3ab0129ecbe6d88a97f00edac9b9cfbe47847eecc11313e5620b25f",
+  "status": "FROZEN_NOT_ADMITTED",
+  "review": "research/guideline046_007/REVIEW_046g.md",
+  "route": "cps046g-route.v4.3",
+  "evaluator": "research/evaluation/compare_target050.py v4 (fc723405), gate aggregator v2 (e5aa4fc7)",
+  "writer": "research/export writer_portable v2.7 (ADMITTED, ADMISSION_WRITER_V27.json)",
+  "frozen_utc": "2026-11-06",
+  "next": "creator survey answers (Dot) fold into the next candidate; dev trial of the scope stage; qualification release"
  },
  "candidate_046f": {
   "path": "research/guideline046_006/package",
