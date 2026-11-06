@@ -1,3 +1,25 @@
+# Status addendum — 2026-11-06: dev trial, writer v2.8.2 and runner admitted, Dot setup ready
+
+- **Dot setup.** The Dot's VM has no root and has Node 24. `deploy/setup_vm_user.sh` (commit `01eaf23`) installs everything under `~/cps-tools`, and was tested as an unprivileged user. The Drive folder "CPS" (in "Dots Folder") has the new `cps_runtime/RUN_PHASE1.md`. The owner relays the Phase 1 rerun; the survey is on hold until CPS can run right after it.
+- **046g development trial.** Nine exposed tuning cases, reader A only, through the job runner: 3,183/3,292 = 0.967 pooled, lowest case 0.954, 0 critical errors. Development evidence only. Details: [RESULTS_046G_DEVTRIAL.md](RESULTS_046G_DEVTRIAL.md).
+- **Owner decisions:**
+  - O39: delivered columns widen to fit; the O38 widths are minimums; default font 新細明體 11, owner-confirmed;
+  - O40: an attested generation record is accepted as evidence of generator isolation, with the transcript when the Dot can export one.
+- **Writer v2.8.2 / saved_qa v6.4 / visual_qa v4.5 ADMITTED** (`research/export/ADMISSION_WRITER_V28.json`). Three independent review rounds; the last gave ADMIT.
+  - Values are never cut, by a calibrated per-character estimate. Its scope is Big5 and ASCII; the limitation is recorded.
+  - Each delivered page is also cut into tiles for the visual reviewer, with a measured legibility flag.
+  - Tests: 600/600 with visual tests.
+- **Job runner `cps_job.py` (cps-job-runner.v4) ADMITTED** for everyday and qualification jobs (`deploy/run/ADMISSION_RUNNER_V4.json`).
+  - Reviews: a first review (13 required fixes), a delta review (3), a final review (2), then a confirmation that gave ADMIT for both uses. Each fix round was implemented by a separate implementer.
+  - What it enforces: a pinned and clean release; a verified record chain; frozen read-only folders; a job lock; exact input pins; fresh-context attestations; the tile hash check; re-checking the live release and the writer admission at delivery; a qualification ledger, admission and nonattempts; the rule 3 restart, once and only before a response is written; the O40 generation record.
+  - Tests: 249/249 as root and 249/249 with every capability dropped.
+- **Next.**
+  - The Dot's Phase 1 setup report, which gives its VM paths and its node sha256.
+  - Then stage the qualification jobs in Drive.
+  - After the survey: candidate 046h (`research/guideline046_008/PLAN_046h.md`), its review and freeze, then the qualification admission and release.
+
+---
+
 # Status addendum — 2026-11-05 (deployment preparation: the Dot)
 
 - **Deployment path (owner decisions O36, O37).** A ChatGPT agent, "the Dot", runs CPS on its own cloud VM and interviews the creator. The Dot works from a curated private Google Drive folder (`CPS_Dot_20261105`, in the project workspace). Qualification comes first.

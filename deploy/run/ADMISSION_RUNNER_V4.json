@@ -1,0 +1,51 @@
+{
+ "schema": "cps.runner-admission.v1",
+ "admitted_utc": "2026-11-06T14:03:26.333711+00:00",
+ "status": "ADMITTED",
+ "subject": "CPS operator job runner deploy/run/cps_job.py (cps-job-runner.v4)",
+ "decision": "ADMITTED for everyday CPS jobs and for qualification jobs, under the conditions below.",
+ "owner_decisions": [
+  "O36-O37 go-live path and runner",
+  "O40 attested generation record (transcript exported or not_available, both accepted; count reported)"
+ ],
+ "reviews": [
+  "first review (independent reviewer, at 01eaf23, runner unchanged since ee2cf25): ADMIT_AFTER_LISTED_FIXES R1-R13, notes N1-N15",
+  "delta review (independent reviewer, 6f831ea): everyday ADMIT; qualification ADMIT_AFTER_LISTED_FIXES D1-D3, notes DN1-DN14",
+  "final delta review (same reviewer, integrated tree 5f7808c with the admitted export tools V28): ADMIT_AFTER_LISTED_FIXES E1 (no restart once the response is written), E2 (writer admission always pinned, re-checked at finish, visual-record, deliver-check); notes EN1-EN6",
+  "confirmation (same reviewer, 87b6d3e; branch ada487c, same tree): everyday ADMIT, qualification ADMIT; notes EN7-EN8"
+ ],
+ "tests": {
+  "root": "249/249",
+  "every_capability_dropped": "249/249",
+  "unprivileged_cpstest_at_5f7808c": "234/234"
+ },
+ "files_sha256": {
+  "deploy/run/cps_job.py": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+  "deploy/run/test_cps_job.py": "c8fcd491bfa6c39ae7209c5b4629ac053cccb6be1cfb22643222ff02caaee7b1",
+  "deploy/run/RUN_JOB_COMMANDS.md": "7d0728d569674b355cf2d37cac90ba47e9e6b1f44b8ecc4b1325abd5136a91f4",
+  "deploy/run/VISUAL_REVIEW_PROMPT_TEMPLATE.md": "07f7ea251587fbc605c7b4a96f54406f4f79e0ad49c81ebe73e529c53c0daf89",
+  "deploy/run/RELEASE.example.json": "e7d7eb24c3af6d865938ce24cf2bc218763d16050f14443e264e7fea1a765885",
+  "deploy/run/JOBS.example.json": "d068f809bfeb415e99a627f78fad9b2d0b9fcf54f272a9ea710c7bbed34dc593",
+  "deploy/run/GENERATION_RECORD.example.json": "b551df5ac9877cb0327ff9eae471769a81f9de7b6fe6a93e37eab8282289a3f0"
+ },
+ "writer_admission": {
+  "path": "research/export/ADMISSION_WRITER_V28.json",
+  "sha256": "cbd4afd526aa787a85fce3ff864b5ba6ae397fa88620dedb6172570641fcedf3"
+ },
+ "conditions_of_use": [
+  "1 Release: every release names this runner commit, pins deploy/run/cps_job.py and every executed file (R10), and pins writer.admission_sha256 to research/export/ADMISSION_WRITER_V28.json (E2). The repository checkout is clean at that commit.",
+  "2 Qualification: one admission listed in the release, frozen before the first qualification prepare, pinning the runner, harness, source prep, writer admission, evaluator compare_target050.py, aggregator aggregate_qualification050.py and JOBS.json; the ledger outside every job folder (R11, R12).",
+  "3 Fresh contexts: the generator, the scope reader and the visual reviewer are each a new conversation started by the operator; the runner records the operator's attestation (reviewer kind, model, conversation ids, generation record under O40). It cannot prove freshness.",
+  "4 Rule 3: at most one technical restart per case and reader, only before the response file is written (E1); a written file goes through finish or scope-finish and is recorded as it is.",
+  "5 Visual QA: the reviewer reads every page and every tile listed in the prompt; a sheet flagged by tiles.legibility_bound_exceeded fails visual QA.",
+  "6 Delivery: only the file deliver-check prints, after it re-checks the live release and the writer admission.",
+  "7 The operator sends the run_record_sha256 printed after each command outside the VM; the record chain is unkeyed (FIXES.md section 3)."
+ ],
+ "open_notes": {
+  "EN2": "the review JSON does not record a per-tile read; reading every tile is an operator attestation",
+  "EN3": "the legibility-flag branch has no end-to-end fixture in the runner tests (export tests cover the flag)",
+  "EN5": "residuals carried forward from earlier rounds (DN6, DN8, DN9, DN12; N8, N9, N13, N15)",
+  "EN7": "a response file written and then deleted before interrupt is not visible to the runner; the command sheet forbids deleting it",
+  "EN8": "a RESPONSE_WRITTEN refusal adds no record entry, unlike other refusals; an attempted restart leaves no trace in the folder"
+ }
+}
