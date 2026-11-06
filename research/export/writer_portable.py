@@ -79,7 +79,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-writer-portable.v2.8.1'
+VERSION = 'cps-export-writer-portable.v2.8.2'
 HERE = Path(__file__).resolve().parent
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
 # Mode v2: the route v4.2 Python writer port (candidate 046f). Its bytes are pinned by sha256 (046f review N3) and
@@ -183,6 +183,12 @@ DELIVERY_HEADER_HEIGHT, DELIVERY_ROW_HEIGHT = 23.25, 20.45
 # units with a 7-pixel default digit, the less favourable assumption; 2.0 with 8 px). The LibreOffice unit is the digit width of
 # the font standing in for 新細明體 (DejaVu Sans on the Dot, Inter here): a toolchain font change needs a new measurement.
 FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
+# v2.8.2 (delta review of v2.8.1, F1): a non-ASCII character that is not East Asian wide or full-width (ambiguous, neutral,
+# half-width: Ⅷ ① ‰ ℃ × ± Φ …) counts 27. Measured over every Big5 character and the printable ASCII in both LibreOffice
+# environments, the widest is Ⅷ 2.53 units (maintainer); CJK and full-width forms stay at 24 (widest 1.71). Characters outside
+# Big5 measured wider than their count (a recorded limitation): ⸻ 5.07, ⸺ 3.38, ‱ 2.97, long arrows U+27F5–27FF up to 2.96,
+# ⩶ 2.89, emoji up to 2.75 (DejaVu Sans), ⌨ 2.47, ⋘ ⋙ 2.44, ⬳ 2.41.
+FIT_TENTHS_NON_ASCII_OTHER = 27
 FIT_BROAD = 'MWmw@%'
 DELIVERY_MAX_WIDTH_TENTHS = 2550
 O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one sheet <name>: the main-sheet values of '
@@ -193,7 +199,7 @@ O38_RULE = ('O38: with --job-title the delivered workbook <name>.xlsx holds one 
             '10.3 13 8.1; gridlines shown; only row 1 frozen (pane at A2); no tab colour. The four-sheet workbook (v2.6 bytes) is '
             'INTERNAL_QA_WORKBOOK.xlsx. Without --job-title no deliverable is written (v2.6 outputs).')
 O39_RULE = ('O39 (v2.8, counts v2.8.1): the O38 widths are minimums. Each column\'s width is the larger of its O38 width and the '
-            'widest value in it (header included) by fit_tenths: in tenths of a column-width unit, 24 per non-ASCII character, 22 '
+            'widest value in it (header included) by fit_tenths: in tenths of a column-width unit, 24 per East Asian wide or full-width character, 27 per other non-ASCII character (v2.8.2), 22 '
             'per M W m w @ %, 18 per other ASCII capital, 15 per other ASCII character, plus 10 (line breaks count nothing; a number counts its '
             'stored JavaScript Number::toString text), capped at 255. The workbook default font (fonts[0]) is 新細明體 11, as in '
             'the creator\'s files. Every other O38 property is unchanged.')
@@ -271,7 +277,7 @@ def fit_tenths(v):
         if ch in '\r\n':
             continue
         if ord(ch) > 0x7e:
-            t += FIT_TENTHS_NON_ASCII
+            t += FIT_TENTHS_NON_ASCII if unicodedata.east_asian_width(ch) in 'WF' else FIT_TENTHS_NON_ASCII_OTHER
         elif ch in FIT_BROAD:
             t += FIT_TENTHS_BROAD
         elif 'A' <= ch <= 'Z':

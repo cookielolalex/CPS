@@ -362,8 +362,9 @@ def o39_width(main_rows, j):
     def fit(v):
         if not isinstance(v, str) or v == '':
             return 0 if not isinstance(v, (int, float)) or isinstance(v, bool) else None
-        return sum(0 if ch in '\r\n' else 24 if ord(ch) > 0x7e else 22 if ch in 'MWmw@%' else 18 if 'A' <= ch <= 'Z' else 15
-                   for ch in v) + 10
+        import unicodedata
+        return sum(0 if ch in '\r\n' else (24 if unicodedata.east_asian_width(ch) in 'WF' else 27) if ord(ch) > 0x7e
+                   else 22 if ch in 'MWmw@%' else 18 if 'A' <= ch <= 'Z' else 15 for ch in v) + 10
     need = [fit(r[j]) for r in main_rows if j < len(r)]
     assert None not in need, 'o39_width: numbers are not used by the tampers'
     return min(max(round(mins[j] * 10), max(need or [0])), 2550) / 10

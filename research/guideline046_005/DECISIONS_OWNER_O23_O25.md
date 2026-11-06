@@ -150,6 +150,10 @@ The creator's own files show the same effect, and she sets widths per job. Acros
 
 **Effect (writer v2.8, saved_qa v6.2, visual_qa v4.2).**
 - **Width rule.** Each column's width is the larger of its O38 width and the widest value in it, header included, capped at Excel's 255. The value estimate is counted in tenths of a column-width unit: 23 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital, 14 per other ASCII character, plus 10.
+- **Counts of writer v2.8.2 (after the delta review of v2.8.1, F1).** A non-ASCII character that is not East Asian wide or full-width (Ⅷ ① ‰ ℃ × …) counts 27. The other counts below are unchanged.
+  - **Coverage claim.** It covers every Big5 character and the printable ASCII, as measured in both LibreOffice environments. The widest is Ⅷ at 2.53 units (maintainer environment).
+  - **Recorded limitation.** A few characters outside Big5 are wider than their count: ⸻ ⸺ ‱, long arrows, emoji and a few symbols (README, O39). The PNG review is the check for them.
+  - **Tiles.** visual_qa v4.4 also cuts each delivered page into tiles, so that the visual reviewer sees the text at full size.
 - **Calibration (corrected after the independent review of v2.8, R1/R2; counts of writer v2.8.1).**
   - The counts are 24 per non-ASCII character, 22 per M W m w @ %, 18 per other ASCII capital and 15 per other ASCII character, plus 10.
   - Each count covers the widest character of its class measured in the v2.8 configuration on invented workbooks. The Dot toolchain (unit 7.00 pt): ‰ 2.30, `#` 1.43. The maintainer environment (unit 7.10 pt): ① 2.35.

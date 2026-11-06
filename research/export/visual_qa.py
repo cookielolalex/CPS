@@ -44,8 +44,14 @@ values beyond Excel's 255 limit: it applies the writer's own rule, so it is not 
 review is (checklist item 9).
 v4.3 (review of v2.8): the counts follow writer v2.8.1 (24 per non-ASCII, 15 per other ASCII character). --dpi defaults to
 auto: 150 dpi, except for a one-sheet workbook whose view shows gridlines (the delivered workbook) in fit-width mode, which is
-rendered at 200 dpi times its total A:Q width over the O38 total 330.8, rounded up, at most 400 dpi, so widened columns do
-not shrink the text below the v2.7 render (N5). The manifest records the dpi and the rule.
+rendered at 200 dpi times its total A:Q width over the O38 total 330.8, rounded up, at most 400 dpi (N5). The manifest records
+the dpi and the rule.
+v4.4 (delta review of v2.8.1): counts of writer v2.8.2 (27 per non-ASCII character that is not East Asian wide or full-width,
+F1). The dpi cap is 600. A reviewer's viewer that shrinks images to 2000 px shows a whole page reduced whatever the dpi, so each
+page of the delivered workbook is also cut into row-major tiles of at most 1900 x 1900 px, overlapping by at least 120 px,
+rendered from the PDF at the page dpi (manifest images[].tiles and tiles). At full size a tile shows CJK body glyphs of about
+15 px up to a total A:Q width of about 990 and at least 9.2 px (the v2.7 render as seen on the Dot) up to 1650; above that the
+manifest sets tiles.legibility_bound_exceeded (F3). A non-finite width counts as the default width (F5).
 
 What the render does not show (v2, review S4; also in the manifest limitations): numbers display in the
 General format, so the stored binary64 precision is not visible; a row taller than a printed page is
@@ -60,7 +66,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-visual-qa.v4.3'
+VERSION = 'cps-export-visual-qa.v4.4'
 HEADER_MARKER = '[[{}]]'                 # page header text: [[sheet name]] (review N1)
 EXCEL_MAX_ROW_HEIGHT_PT = 409.0          # Excel row-height limit; also far below one A3 page in LibreOffice
 LINE_HEIGHT_PT = 15.0                    # approximate line height of 11 pt text with the CJK fallback font
@@ -210,6 +216,7 @@ def map_pages(text, names, pages=None):
 
 # ------------------------------------------------------------------ cells that may be clipped (review S4)
 FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
+FIT_TENTHS_NON_ASCII_OTHER = 27                 # v4.4: writer v2.8.2 (non-ASCII, not East Asian wide or full-width)
 FIT_BROAD = 'MWmw@%'
 
 
@@ -222,7 +229,7 @@ def fit_tenths_text(text):
         if ch in '\r\n':
             continue
         if ord(ch) > 0x7e:
-            t += FIT_TENTHS_NON_ASCII
+            t += FIT_TENTHS_NON_ASCII if unicodedata.east_asian_width(ch) in 'WF' else FIT_TENTHS_NON_ASCII_OTHER
         elif ch in FIT_BROAD:
             t += FIT_TENTHS_BROAD
         elif 'A' <= ch <= 'Z':
@@ -398,21 +405,23 @@ def possibly_clipped_cells(xlsx):
 # ------------------------------------------------------------------ rendering
 O38_MIN_WIDTHS = [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]
 O38_TOTAL_WIDTH = round(sum(O38_MIN_WIDTHS), 6)   # v4.3: 330.8, the sum of the O38 minimum widths A:Q
-AUTO_DPI_BASE, AUTO_DPI_DELIVERABLE, AUTO_DPI_MAX = 150, 200, 400
+AUTO_DPI_BASE, AUTO_DPI_DELIVERABLE, AUTO_DPI_MAX = 150, 200, 600     # v4.4 (F3): cap 600 (v4.3: 400)
+TILE_MAX_PX, TILE_OVERLAP_PX = 1900, 120      # v4.4 (F3): tiles of a delivered page, at most 1900 px each way, overlapping
+LEGIBLE_TOTAL_WIDTH_MAX = 1650.0             # v4.4 (F3): above this total A:Q width the 600-dpi cap shrinks CJK glyphs below 9.2 px
 
 
-def auto_dpi(xlsx, mode):
-    """v4.3 (review of v2.8, N5): 150 dpi, except for a one-sheet workbook whose view shows gridlines (the delivered workbook)
-    in fit-width mode: 200 dpi times its total A:Q column width over the O38 total, rounded up, at most 400."""
+def delivered_shape(xlsx, mode):
+    """v4.4: (True, total A:Q width) for a one-sheet workbook whose view shows gridlines (the delivered workbook) rendered in
+    fit-width mode; otherwise (False, reason). A non-finite or unparsable width counts as the default width (F5)."""
     if mode != 'fit-width':
-        return AUTO_DPI_BASE, 'auto: 150 (not fit-width)'
+        return False, 'not fit-width'
     with zipfile.ZipFile(xlsx) as z:
         parts = sheet_parts(z)
         if len(parts) != 1:
-            return AUTO_DPI_BASE, 'auto: 150 (not a one-sheet workbook)'
+            return False, 'not a one-sheet workbook'
         xml = z.read(parts[0][1]).decode('utf-8')
     if not shows_gridlines(xml):
-        return AUTO_DPI_BASE, 'auto: 150 (gridlines off)'
+        return False, 'gridlines off'
     widths = {}
     for m_ in re.finditer(r'<col\b([^>]*)/?>', xml):
         a = dict(re.findall(r'(\w+)="([^"]*)"', m_.group(1)))
@@ -420,11 +429,36 @@ def auto_dpi(xlsx, mode):
             lo, hi, w = int(a.get('min', 1)), int(a.get('max', 1)), float(a.get('width', DEFAULT_COLUMN_WIDTH))
         except ValueError:
             continue
+        if not math.isfinite(w) or w < 0:
+            w = DEFAULT_COLUMN_WIDTH
         for k in range(max(1, lo), min(hi, 17) + 1):
             widths.setdefault(k, w)                # the first <col> that covers a column, as LibreOffice
-    total = sum(widths.get(k, DEFAULT_COLUMN_WIDTH) for k in range(1, 18))
-    dpi = min(AUTO_DPI_MAX, max(AUTO_DPI_DELIVERABLE, math.ceil(AUTO_DPI_DELIVERABLE * total / O38_TOTAL_WIDTH)))
-    return dpi, f'auto: delivered one-sheet workbook, total A:Q width {round(total, 2)} -> {dpi} dpi (200 x total / 330.8, 200..400)'
+    return True, sum(widths.get(k, DEFAULT_COLUMN_WIDTH) for k in range(1, 18))
+
+
+def auto_dpi(xlsx, mode):
+    """v4.3 (review of v2.8, N5): 150 dpi, except for the delivered workbook in fit-width mode: 200 dpi times its total A:Q
+    column width over the O38 total, rounded up; v4.4: at most 600 (F3)."""
+    shaped, info = delivered_shape(xlsx, mode)
+    if not shaped:
+        return AUTO_DPI_BASE, f'auto: 150 ({info})'
+    dpi = min(AUTO_DPI_MAX, max(AUTO_DPI_DELIVERABLE, math.ceil(AUTO_DPI_DELIVERABLE * info / O38_TOTAL_WIDTH)))
+    return dpi, f'auto: delivered one-sheet workbook, total A:Q width {round(info, 2)} -> {dpi} dpi (200 x total / 330.8, 200..600)'
+
+
+def tile_boxes(w, h, tmax=TILE_MAX_PX, ov=TILE_OVERLAP_PX):
+    """v4.4 (F3): row-major tiles (x, y, width, height) covering a w x h page, each at most tmax px each way, neighbours
+    overlapping by at least ov px; the last tile of a row or column is anchored to the page edge."""
+    def spans(n):
+        if n <= tmax:
+            return [(0, n)]
+        out, x = [], 0
+        while x + tmax < n:
+            out.append((x, tmax))
+            x += tmax - ov
+        out.append((n - tmax, tmax))
+        return out
+    return [(x, y, ww, hh) for (y, hh) in spans(h) for (x, ww) in spans(w)]
 
 
 def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='pdftoppm', timeout=900, tmp_root=None, sheets=None):
@@ -434,6 +468,7 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
         dpi, dpi_rule = auto_dpi(xlsx, mode)
     else:
         dpi_rule = 'given (--dpi)'
+    tiled, shape_info = delivered_shape(xlsx, mode)  # v4.4 (F3): the delivered workbook's pages are also tiled
     if dest.exists():
         raise RenderError('DEST_EXISTS')
     before = xlsx.read_bytes()
@@ -487,6 +522,7 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
             selected = [n for n in range(1, pages + 1) if page_sheets.get(n) in sheets or page_sheets.get(n) is None]
         images = []
         render_cmds = []
+        tiles_by_page = {}
         if have_pdftoppm:
             ranges = []
             for n in (selected if selected is not None else []):
@@ -507,6 +543,23 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
                 shutil.copyfile(p, dest / name)
                 images.append((n, name))
             fallback = False
+            if tiled:                                # v4.4 (F3): crops of each delivered page, rendered from the PDF at the same dpi
+                (dest / 'tiles').mkdir()
+                for n, name in images:
+                    pw, ph = png_size((dest / name).read_bytes())
+                    page_tiles = []
+                    for k, (tx, ty, tw, th) in enumerate(tile_boxes(pw, ph), start=1):
+                        stem = work / f'tile-{n}-{k}'
+                        rc = [pdftoppm, '-r', str(dpi), '-f', str(n), '-l', str(n), '-x', str(tx), '-y', str(ty), '-W', str(tw),
+                              '-H', str(th), '-singlefile', '-png', str(pdf), str(stem)]
+                        c5, o5, e5 = run(rc, timeout, env)
+                        out_png = stem.with_name(stem.name + '.png')
+                        if c5 != 0 or not out_png.is_file():
+                            raise RenderError('PDFTOPPM_TILE_FAILED: ' + e5[-500:])
+                        tname = f'tiles/page-{n:04d}-tile-{k:02d}.png'
+                        shutil.copyfile(out_png, dest / tname)
+                        page_tiles.append({'file': tname, 'x': tx, 'y': ty, 'width_px': tw, 'height_px': th})
+                    tiles_by_page[n] = page_tiles
         else:
             c3, o3, e3 = run([soffice, '--headless', '--norestore', '-env:UserInstallation=' + profile.as_uri(),
                               '--convert-to', 'png', '--outdir', str(work), str(copy)], timeout, env)
@@ -523,7 +576,14 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
     for n, name in images:
         b = (dest / name).read_bytes()
         w, h = png_size(b)
-        entries.append({'file': name, 'page': n, 'sheet': page_sheets.get(n), 'sha256': sha256(b), 'bytes': len(b), 'width_px': w, 'height_px': h})
+        entry = {'file': name, 'page': n, 'sheet': page_sheets.get(n), 'sha256': sha256(b), 'bytes': len(b), 'width_px': w, 'height_px': h}
+        if n in tiles_by_page:                       # v4.4 (F3)
+            for t_ in tiles_by_page[n]:
+                tb = (dest / t_['file']).read_bytes()
+                tw_, th_ = png_size(tb)
+                t_.update(sha256=sha256(tb), bytes=len(tb), png_width_px=tw_, png_height_px=th_)
+            entry['tiles'] = tiles_by_page[n]
+        entries.append(entry)
     fonts = {q: version(['fc-match', q]) for q in ('Arial', 'Arial:lang=zh-tw', 'sans-serif:lang=zh-tw', '新細明體', 'PMingLiU')}
     try:
         clipped = possibly_clipped_cells(xlsx)
@@ -539,6 +599,11 @@ def render(xlsx, dest, mode='fit-width', dpi=None, soffice='soffice', pdftoppm='
         'reviewer_task': 'An independent reviewer inspects every PNG (all sheets, all rows, all 17 columns of the main and components sheets) and records the judgement separately.',
         'saved_xlsx': {'path': str(xlsx), 'sha256': sha256(before), 'unchanged_after_render': True},
         'mode': mode, 'dpi': dpi, 'dpi_rule': dpi_rule,
+        'tiles': ({'max_px': TILE_MAX_PX, 'overlap_px': TILE_OVERLAP_PX, 'count': sum(len(v) for v in tiles_by_page.values()),
+                   'total_width': round(shape_info, 2), 'legibility_bound_exceeded': shape_info > LEGIBLE_TOTAL_WIDTH_MAX,
+                   'rule': 'v4.4 (F3): each page of the delivered workbook is also cut into row-major tiles of at most 1900 x 1900 px, '
+                           'overlapping by at least 120 px, rendered from the PDF at the page dpi; a reviewer whose viewer shrinks '
+                           'images to 2000 px sees each tile at full size'} if tiles_by_page else None),
         'render_copy': {'sha256': sha256(copy_bytes), 'identical_to_saved': copy_bytes == before,
                         'sheetData_identical_to_saved': True, 'modifications': changes},
         'pdf': {'file': 'rendered.pdf', 'sha256': sha256(pdf_bytes), 'pages': pages,

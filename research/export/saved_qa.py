@@ -81,6 +81,8 @@ width text must be exactly what openpyxl writes for the expected width ('%.16g')
 are computed inside the deliverable section's guard; a main-sheet value of a type the writer never writes counts 0 for the
 width, and its value check fails as before (N2). Without provenance, the receipt's deliverable_xlsx.column_widths must equal the
 recomputed widths (finding integrity; N8).
+v6.4 (delta review of v2.8.1): the counts follow writer v2.8.2 (27 per non-ASCII character that is not East Asian wide or
+full-width; F1).
 Self-contained: it does not import the writer (the provenance rerun runs it as a separate process).
 
 Usage
@@ -96,7 +98,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-VERSION = 'cps-export-saved-qa.v6.3'
+VERSION = 'cps-export-saved-qa.v6.4'
 HERE = Path(__file__).resolve().parent
 WRITER = HERE / 'writer_portable.py'
 NODE_MATRICES = HERE / 'writer004_matrices.mjs'
@@ -211,6 +213,7 @@ DELIVERY = {'font': '新細明體', 'size': 12, 'header_fill': 'FFC0C0C0', 'bord
             'min_widths': [16.1, 23.1, 21.3, 81.9, 6.9, 8.3, 12.9, 13.0, 12.3, 13.0, 21.4, 11.0, 24.1, 34.1, 10.3, 13.0, 8.1]}
 # v6.2 (O39): saved QA's own copy of the writer's width rule (writer_portable O39_RULE, fit_tenths, delivery_widths).
 FIT_TENTHS_NON_ASCII, FIT_TENTHS_BROAD, FIT_TENTHS_CAPITAL, FIT_TENTHS_OTHER, FIT_TENTHS_PAD = 24, 22, 18, 15, 10
+FIT_TENTHS_NON_ASCII_OTHER = 27                 # v6.4: writer v2.8.2 (non-ASCII, not East Asian wide or full-width)
 FIT_BROAD = 'MWmw@%'
 DELIVERY_MAX_WIDTH_TENTHS = 2550
 
@@ -261,7 +264,7 @@ def fit_tenths(v):
         if ch in '\r\n':
             continue
         if ord(ch) > 0x7e:
-            t += FIT_TENTHS_NON_ASCII
+            t += FIT_TENTHS_NON_ASCII if unicodedata.east_asian_width(ch) in 'WF' else FIT_TENTHS_NON_ASCII_OTHER
         elif ch in FIT_BROAD:
             t += FIT_TENTHS_BROAD
         elif 'A' <= ch <= 'Z':
@@ -294,7 +297,8 @@ def expected_cols(kind, part, deliv_widths=None):
 
 def cols_ok(cols, want):
     """Exactly one <col> per column 1..len(want), in order: attributes exactly min, max, width, customWidth; min = max = the
-    column; customWidth "1"; width plain decimal text within 1e-9 of the pin (openpyxl writes 81.9 as 81.90000000000001)."""
+    column; customWidth "1"; v6.3: the width text exactly '%.16g' of the expected width, as openpyxl writes it (81.9 as
+    81.90000000000001)."""
     if len(cols) != len(want):
         return False
     for j, (c, w) in enumerate(zip(cols, want), start=1):

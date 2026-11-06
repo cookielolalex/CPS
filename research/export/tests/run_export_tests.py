@@ -1170,7 +1170,7 @@ def main():
                   and rc['deliverable_xlsx']['file'] == dv['xlsx_file'] and rc['deliverable_xlsx']['sheet'] == dv['main_sheet']
                   and rc['deliverable_xlsx']['format'] == sq.DELIVERY_FORMAT == wp.DELIVERY_FORMAT
                   and rc['deliverable_xlsx']['sha256'] == sha((od / dv['xlsx_file']).read_bytes()) and rp_.get('deliverable_xlsx') is None
-                  and rc['deliverable']['job_title'] == title and rc['writer'] == 'cps-export-writer-portable.v2.8.1'
+                  and rc['deliverable']['job_title'] == title and rc['writer'] == 'cps-export-writer-portable.v2.8.2'
                   and wp.DELIVERABLE_LIMITATION in rc['limitations'] and wp.DELIVERABLE_LIMITATION not in rp_['limitations']
                   and all(rc[k] == rp_[k] for k in ('matrices_sha256', 'sheets', 'cross_check', 'expected_saved_values', 'relaxations', 'mode'))
                   and wp.NAMING_LIMITATION in rc['limitations'] and wp.NAMING_LIMITATION not in rp_['limitations'])
@@ -1287,8 +1287,9 @@ def main():
            == (sq.FIT_TENTHS_NON_ASCII, sq.FIT_TENTHS_BROAD, sq.FIT_TENTHS_CAPITAL, sq.FIT_TENTHS_OTHER, sq.FIT_TENTHS_PAD, sq.FIT_BROAD)
            == (vq_l.FIT_TENTHS_NON_ASCII, vq_l.FIT_TENTHS_BROAD, vq_l.FIT_TENTHS_CAPITAL, vq_l.FIT_TENTHS_OTHER, vq_l.FIT_TENTHS_PAD, vq_l.FIT_BROAD)
            == (24, 22, 18, 15, 10, 'MWmw@%') and wp.DELIVERY_MAX_WIDTH_TENTHS == sq.DELIVERY_MAX_WIDTH_TENTHS == 2550
+           and wp.FIT_TENTHS_NON_ASCII_OTHER == sq.FIT_TENTHS_NON_ASCII_OTHER == vq_l.FIT_TENTHS_NON_ASCII_OTHER == 27
            and (wp.DELIVERY_DEFAULT_FONT, wp.DELIVERY_DEFAULT_FONT_SIZE) == ('新細明體', 11)
-           and all(x in wp.O39_RULE for x in ('24 per non-ASCII', '22 per M W m w @ %', '18 per other ASCII capital', '15 per other ASCII',
+           and all(x in wp.O39_RULE for x in ('24 per East Asian wide or full-width', '27 per other non-ASCII', '22 per M W m w @ %', '18 per other ASCII capital', '15 per other ASCII',
                                               'plus 10', '255', '新細明體 11')))
     o39_samples = ['', '中' * 10, 'W', 'A', 'a', '0', ' ', '\n', 'a\r\nb', 'NFB-3P 50A', '式' + ' ' * 8, 'Φ50', '１２', '\t', '𠀋', 'é', '～',
                    'm@%w', 'x' * 3000, 0, 1, -2.5, 12.5, 1e21, 1e-7, 123456789.25, 0.30000000000000004, None, True]
@@ -1301,6 +1302,22 @@ def main():
            and wp.fit_tenths(None) == 0 and wp.fit_tenths(True) == 0 and sq.js_number(1e-7) == wp.js_number(1e-7) == '1e-7'
            and all(sq.js_number(v) == wp.js_number(v) for v in (0, 1, -2.5, 1e21, 1e-7, 123456789.25, 0.30000000000000004, 5e-324, 2 ** 53 + 1.0)),
            {'writer': fit_w, 'saved_qa': fit_s})
+    # v2.8.2 (delta review F1): East Asian wide or full-width 24, other non-ASCII 27 (Ⅷ ① ‰ ℃ × é), the same in all three
+    cls_samples = {'中': 34, '～': 34, '𠀋': 34, 'Ⅷ': 37, '①': 37, '‰': 37, '℃': 37, '×': 37, 'é': 37, 'ﾊ': 37, 'Ⅷ' * 9: 253}
+    record('l_o39_fit_classes_v282', all(wp.fit_tenths(k) == sq.fit_tenths(k) == vq_l.fit_tenths_text(k) == v for k, v in cls_samples.items()),
+           {k: [wp.fit_tenths(k), sq.fit_tenths(k), vq_l.fit_tenths_text(k), v] for k, v in cls_samples.items()})
+    # visual_qa v4.4 (F3, F6): tile layout
+    tb_ok = True
+    for (tw_, th_) in ((1800, 1200), (1900, 1900), (1901, 1901), (3539, 2503), (9921, 7016), (4000, 100)):
+        bx = vq_l.tile_boxes(tw_, th_)
+        cover = all(any(x <= px < x + w and y <= py < y + h for (x, y, w, h) in bx)
+                    for px in range(0, tw_, 97) for py in range(0, th_, 97))
+        xs = sorted({x for (x, y, w, h) in bx}); ys = sorted({y for (x, y, w, h) in bx})
+        ovx = all(xs[i] + 1900 - xs[i + 1] >= 120 for i in range(len(xs) - 1))
+        ovy = all(ys[i] + 1900 - ys[i + 1] >= 120 for i in range(len(ys) - 1))
+        tb_ok = tb_ok and cover and ovx and ovy and all(w <= 1900 and h <= 1900 and x >= 0 and y >= 0 and x + w <= tw_ and y + h <= th_
+                                                          for (x, y, w, h) in bx)
+    record('l_visual_tile_boxes_cover_overlap_and_bound', tb_ok and len(vq_l.tile_boxes(3539, 2503)) == 4 and len(vq_l.tile_boxes(1800, 1200)) == 1)
     hdr_row = list(wp.HEADERS)
     w_min = wp.delivery_widths([hdr_row])
     w_long = wp.delivery_widths([hdr_row, [None] * 13 + ['甲' * 30, None, None, None]])
@@ -1352,8 +1369,8 @@ def main():
             if v is None or isinstance(v, bool):
                 return 0
             t_ = v if isinstance(v, str) else wp.js_number(v)
-            return 0 if t_ == '' else 10 + sum(0 if ch in '\r\n' else 24 if ord(ch) > 0x7e else 22 if ch in 'MWmw@%'
-                                               else 18 if 'A' <= ch <= 'Z' else 15 for ch in t_)
+            return 0 if t_ == '' else 10 + sum(0 if ch in '\r\n' else (24 if unicodedata.east_asian_width(ch) in 'WF' else 27)
+                                               if ord(ch) > 0x7e else 22 if ch in 'MWmw@%' else 18 if 'A' <= ch <= 'Z' else 15 for ch in t_)
         need = [max([_fit_indep(row_[j]) for row_ in main if j < len(row_)] or [0]) for j in range(17)]
         o39_ok = all(abs(w_ - min(max(round(m_ * 10), n_), 2550) / 10) < 1e-9 for w_, m_, n_ in zip(widths, wp.DELIVERY_WIDTHS, need))
         with zipfile.ZipFile(od / dv['xlsx_file']) as z:
@@ -1460,6 +1477,38 @@ def main():
         q1, q2 = qa_report(d / 'SAVED_QA.json'), qa_report(d / 'SAVED_QA_PROVENANCE.json')
         record('l_symlinked_deliverable_refused', c1 == 1 and c2 == 1 and 'integrity' in q1.get('findings', {}) and 'integrity' in q2.get('findings', {})
                and q2.get('cps_evidence_preconditions', {}).get('all_checked_here_met') is False, [sorted(q1.get('findings', {})), sorted(q2.get('findings', {}))])
+        # visual_qa v4.4 (F5, F6): every branch of the automatic dpi rule, on copies of the writer's deliverable
+        def _cols_copy(src_x, dst_x, width_of):
+            with zipfile.ZipFile(src_x) as zi, zipfile.ZipFile(dst_x, 'w', zipfile.ZIP_DEFLATED) as zo:
+                for info in zi.infolist():
+                    data = zi.read(info.filename)
+                    if info.filename == 'xl/worksheets/sheet1.xml':
+                        data = re.sub(r'<col width="([^"]*)" customWidth="1" min="([0-9]+)" max="([0-9]+)"/>',
+                                      lambda m_: '<col width="%s" customWidth="1" min="%s" max="%s"/>' % (width_of(int(m_.group(2)), m_.group(1)),
+                                                                                                         m_.group(2), m_.group(3)),
+                                      data.decode('utf-8')).encode('utf-8')
+                    zo.writestr(info, data)
+        dsrc = src_t / dvs['xlsx_file']
+        x_inf, x_cap, x_wide = work / 'dpi_inf.xlsx', work / 'dpi_cap.xlsx', work / 'dpi_wide.xlsx'
+        _cols_copy(dsrc, x_inf, lambda j, w: 'inf' if j == 1 else ('nan' if j == 2 else w))
+        _cols_copy(dsrc, x_cap, lambda j, w: '255')
+        _cols_copy(dsrc, x_wide, lambda j, w: '120' if j <= 4 else w)
+        try:
+            b_deliv, b_exact = vq_l.auto_dpi(dsrc, 'fit-width'), vq_l.auto_dpi(dsrc, 'exact')
+            b_internal = vq_l.auto_dpi(src_t / dvs['qa_workbook_file'], 'fit-width')
+            b_grid = vq_l.auto_dpi(ldt / 'L02_gridlines_hidden' / dvs['xlsx_file'], 'fit-width')
+            b_inf, b_cap, b_wide = vq_l.auto_dpi(x_inf, 'fit-width'), vq_l.auto_dpi(x_cap, 'fit-width'), vq_l.auto_dpi(x_wide, 'fit-width')
+            tot = vq_l.delivered_shape(dsrc, 'fit-width')[1]
+            dpi_err = None
+        except Exception as e_:                  # noqa: BLE001
+            b_deliv = b_exact = b_internal = b_grid = b_inf = b_cap = b_wide = (None, None)
+            tot, dpi_err = None, repr(e_)
+        record('l_visual_auto_dpi_branches', dpi_err is None and b_deliv[0] == min(600, max(200, math.ceil(200 * tot / 330.8)))
+               and b_deliv[1].startswith('auto: delivered') and b_exact == (150, 'auto: 150 (not fit-width)')
+               and b_internal == (150, 'auto: 150 (not a one-sheet workbook)') and b_grid == (150, 'auto: 150 (gridlines off)')
+               and b_cap[0] == 600 and b_wide[0] > b_deliv[0] and isinstance(b_inf[0], int) and 200 <= b_inf[0] <= 600,
+               {'deliv': b_deliv, 'exact': b_exact, 'internal': b_internal, 'grid': b_grid, 'inf': b_inf, 'cap': b_cap, 'wide': b_wide,
+                'error': dpi_err})
         # review of v2.8, N2: a main-sheet value of a type the writer never writes (an object) does not skip the deliverable checks
         d = wdir / 'N2_object_value_in_expected'
         shutil.copytree(src_t, d)
@@ -1644,7 +1693,7 @@ def main():
             record('d_manifest_states_render_limits', 'General format' in lim and 'row taller than one printed page is clipped' in lim
                    and 'complete_render means that every PDF page was rendered' in lim and 'Never re-save' in lim
                    and m1.get('possibly_clipped_cells', {}).get('count') == 0 and '[[sheet name]] marker' in (m1.get('page_sheet_mapping_basis') or '')
-                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.3'
+                   and all('[[&A]]' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c) and m1['tool'] == 'cps-export-visual-qa.v4.4'
                    and not any('printOptions' in c['inserted'] for c in m1['render_copy']['modifications'] if 'sheet' in c)
                    and m1.get('main_sheet') == '未填研究草稿' and m1.get('sheet_order') == wp.SHEET_ORDER,
                    {'limitations': m1.get('limitations'), 'basis': m1.get('page_sheet_mapping_basis')})
@@ -1686,7 +1735,7 @@ def main():
             mp_ = mt_.get('page_sheet_mapping') or {}
             record(f'd_visual_qa_titled_{tag}', code == 0 and mt_.get('complete_render') is True and mp_ and all(mp_.values())
                    and set(mp_.values()) == set(mt_.get('sheet_order') or []) and mt_.get('main_sheet') == dv['main_sheet']
-                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.3'
+                   and mt_.get('sheet_order') == [dv['main_sheet']] + wp.SHEET_ORDER[1:] and mt_.get('tool') == 'cps-export-visual-qa.v4.4'
                    and {i['sheet'] for i in mt_['images']} == set(mt_['sheet_order']) and mt_['saved_xlsx']['unchanged_after_render'],
                    {'stderr': err[-300:], 'mapping': list(mp_.values())[:6], 'main_sheet': mt_.get('main_sheet')})
         dv_s = sq.derive_deliverable(T_SPECIAL)
@@ -1726,6 +1775,28 @@ def main():
                        and md_['saved_xlsx']['unchanged_after_render'] and dl_px[tag] and min(p_[0] for p_ in dl_px[tag]) >= 1000
                        and max(p_[1] for p_ in dl_px[tag]) <= 50 and (tag != 'v05_long' or md_['possibly_cut_cells']['count'] >= 2),
                        {'stderr': err[-300:], 'pixels': dl_px[tag], 'mods': mods, 'cut': (md_.get('possibly_cut_cells') or {}).get('count')})
+        # v4.4 (F3): without --dpi the delivered workbook is rendered at the auto dpi and tiled; as the reviewer's viewer shows
+        # them (at most 2000 px wide, so a tile of at most 1900 px at full size) the CJK body glyphs are at least 9.2 px
+        for tag, xl in (('v05_long', titled.get('v05_long', work / 'missing') / sq.derive_deliverable(T1)['xlsx_file']),
+                        ('wide', x_wide if 'x_wide' in dir() else work / 'missing')):
+            code, out, err = run(PY + [EXPORT / 'visual_qa.py', '--xlsx', xl, '--dest', vis / f'tiles_{tag}'])
+            md_ = json.loads((vis / f'tiles_{tag}' / 'VISUAL_QA_MANIFEST.json').read_text(encoding='utf-8')) if code == 0 else {}
+            tiles_ok, glyph_px = bool(md_.get('images')), None
+            for im_ in md_.get('images', []):
+                tl = im_.get('tiles') or []
+                tiles_ok = tiles_ok and bool(tl) and all(
+                    sha((vis / f'tiles_{tag}' / t_['file']).read_bytes()) == t_['sha256'] and t_['png_width_px'] <= 1900
+                    and t_['png_height_px'] <= 1900 for t_ in tl)
+            if code == 0:
+                bb = subprocess.run(['pdftotext', '-bbox', '-f', '1', '-l', '1', str(vis / f'tiles_{tag}' / 'rendered.pdf'), '-'],
+                                    capture_output=True, text=True).stdout
+                hs = sorted(float(y1) - float(y0) for y0, y1, w_ in re.findall(r'<word xMin="[^"]*" yMin="([^"]*)" xMax="[^"]*" yMax="([^"]*)">([^<]*)</word>', bb)
+                            if any(0x4e00 <= ord(c_) <= 0x9fff for c_ in w_))
+                glyph_px = round(hs[len(hs) // 2] * md_['dpi'] / 72, 2) if hs else None
+            record(f'd_visual_qa_deliverable_tiles_and_glyph_size_{tag}', code == 0 and tiles_ok and md_.get('tiles', {}).get('count', 0) >= len(md_.get('images', []))
+                   and md_.get('dpi_rule', '').startswith('auto: delivered') and glyph_px is not None and glyph_px >= 9.2
+                   and md_['tiles']['legibility_bound_exceeded'] is False,
+                   {'stderr': err[-300:], 'dpi': md_.get('dpi'), 'tiles': (md_.get('tiles') or {}).get('count'), 'glyph_px': glyph_px})
         record('d_visual_qa_deliverable_header_colour_control', dl_px.get('L05_control') and max(p_[1] for p_ in dl_px['L05_control']) >= 1000, dl_px.get('L05_control'))
 
     failed = [r for r in results if not r['pass']]
