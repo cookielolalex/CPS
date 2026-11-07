@@ -466,6 +466,8 @@
    "B qualification generation complete (once)",
    "C system failure or bug (any time; evidence in reports/)"
   ],
-  "release_status": "SETUP_ONLY (Drive cps_runtime/RELEASE.json); next RELEASED_FOR_QUALIFICATION after the Dot's setup report, then RELEASED_FOR_USE only on a recorded pass"
+  "release_status": "SETUP_ONLY (Drive cps_runtime/RELEASE.json); next RELEASED_FOR_QUALIFICATION after the Dot's setup report, then RELEASED_FOR_USE only on a recorded pass",
+  "phase1_commit": "b79a14e9057e86aa0846b04aa3f2f822741cfc96 (test user: all_met true, self-test 600/600 with visual; setup inputs unchanged since 01eaf23)",
+  "drive_manifest": "FOLDER_MANIFEST.md 2026-11-07, 45 files"
  }
 }

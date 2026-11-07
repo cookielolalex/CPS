@@ -5,6 +5,12 @@
 - **O42: qualification is kept, on the frozen 046g** with writer v2.8.2 and runner v4. The maintainer scores it once and sets `RELEASED_FOR_USE` only on a pass. After that the maintainer is involved only for failures or bugs (hand-back case C, evidence in `reports/`).
 - **046h.** No survey-driven 046h. `research/guideline046_008/PLAN_046h.md` is marked superseded as a survey plan; its section B is kept as a backlog for a bug-fix candidate.
 - **Dot documents rewritten** in the Drive folder "CPS". New `09_PERSONAL_COPY.md`. Each user's profile is `<user profile folder>/CPS_PREFERENCES.md`, outside CPS. The empty `OPTIONS.json` mechanism and `04_handback/` are superseded. Model summary: [DEPLOYMENT_MODEL.md](DEPLOYMENT_MODEL.md).
+- **Drive folder "CPS" updated (2026-11-07).**
+  - The rewritten documents are uploaded, with the old copies in `_superseded/`.
+  - New folders `qualification/` and `reports/`.
+  - `FOLDER_MANIFEST.md` lists 45 files with their sha256. Every Drive file's size matches it.
+  - `cps_runtime/RUN_PHASE1.md` and `RELEASE.json` (still `SETUP_ONLY`) now pin commit `b79a14e`, with writer v2.8.2 and runner v4.
+  - Phase 1 at `b79a14e` was re-run from a fresh public clone as the unprivileged test user, using the installed `~/cps-tools`. The setup inputs are unchanged since `01eaf23`. Results: `all_met` true, export self-test 600/600 with visual tests.
 - **Next.**
   1. The Dot's Phase 1 setup report.
   2. Admit the VM node and stage the qualification jobs.
