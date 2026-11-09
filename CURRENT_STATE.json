@@ -469,5 +469,19 @@
   "release_status": "SETUP_ONLY (Drive cps_runtime/RELEASE.json); next RELEASED_FOR_QUALIFICATION after the Dot's setup report, then RELEASED_FOR_USE only on a recorded pass",
   "phase1_commit": "b79a14e9057e86aa0846b04aa3f2f822741cfc96 (test user: all_met true, self-test 600/600 with visual; setup inputs unchanged since 01eaf23)",
   "drive_manifest": "FOLDER_MANIFEST.md 2026-11-07, 45 files"
- }
+ },
+ "owner_decisions_2026_11_09": {
+  "O43": "qualification evidence is stored as per-run Drive archives plus the final ledger and ALL_FROZEN.json (replacing QUAL_FROZEN.tar); a local frozen folder is deleted only after its upload is verified (OD-1)",
+  "O44": "a non-AI stage lost to a VM reset may run again from the newest verified package, logged, without using the rule-3 restart, only on a fingerprint with a recorded self-test PASS; a result already seen binds the re-run, otherwise the run fails RESET_DIVERGED (OD-2)",
+  "O45": "a scope-reader or generator conversation interrupted by a reset whose transcript shows it wrote nothing may be followed by one fresh conversation, which is the rule-3 restart; for the visual reviewer, once per run (OD-3)",
+  "O46": "an AI output written, partly written or possibly written and then lost before reaching Drive is a failure (failed run, or failed visual QA for the reviewer), counted in that reader's O31 denominators and never regenerated (OD-4)",
+  "O47": "any VM whose fingerprint has a recorded self-test PASS is the admitted VM; a run may span such VMs; a new fingerprint stops all jobs until its self-test passes (OD-5)",
+  "O48": "every page PNG stays in the evidence, including unreviewed internal-workbook pages, unless the Drive probe shows it cannot be uploaded; then the question returns to the owner (OD-6)",
+  "O49": "everyday-job records go to an owner-only Dots Folder/CPS_JOB_RECORDS; a job lost before any AI output may be prepared again once, logged; after a lost AI output a new job starts only at the user's request (OD-7)",
+  "O50": "if conversations the Dot opens cannot use its VM's files (probe P1), all CPS jobs wait for a separately reviewed transfer design (OD-8)",
+  "O51": "runner v5 stays optional and may be admitted only before or after qualification, never during it (OD-9)",
+  "O52": "before scoring, the owner or a person the owner names compares the account's conversation list with the Dot's START notes; an unlogged CPS conversation fails that case and flags qualification (OD-10)",
+  "O53": "the maintainer may read, write and edit the Dot's folder in the owner's Drive; maintainer instructions reach the Dot as CPS/maintainer_messages/Mnnn_*.md when the owner says 'mail'; replies go to reports/Mnnn_*/REPLY.md"
+ },
+ "owner_decisions_2026_11_09_source": "owner approved OD-1..OD-10 of docs/handoff/RESET_PROOF_DESIGN_DRAFT.md as recommended ('Approval all', 2026-11-09); O53 from the owner's message of the same day"
 }

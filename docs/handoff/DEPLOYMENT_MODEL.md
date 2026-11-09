@@ -1,4 +1,4 @@
-# CPS deployment model (owner decisions O36, O37, O41, O42; 2026-11-06)
+# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O53; 2026-11-06, extended 2026-11-09)
 
 This page says how CPS is deployed and who owns what. The operating documents themselves are in the private Drive folder "CPS" (in "Dots Folder"). They are not published here because the interview material holds company data.
 
@@ -62,3 +62,21 @@ The Dot uploads the evidence to `reports/` and the owner pastes the prompt into 
 - the 38 reserved projects, closed until all qualification outputs are frozen;
 - the deployment thresholds;
 - every frozen output.
+
+## VM resets and the maintainer's messages (O43–O53, 2026-11-09)
+
+The Dot's VM keeps nothing across a reset; only Google Drive persists.
+- On 2026-11-09 the owner approved OD-1 to OD-10 of [RESET_PROOF_DESIGN_DRAFT.md](RESET_PROOF_DESIGN_DRAFT.md) as recommended, recorded as O43–O52:
+  - evidence goes to Drive per run, as it is made;
+  - a lost step without AI may run again, bound to any result already seen;
+  - an AI conversation that provably wrote nothing may restart once, under rule 3;
+  - a written AI output that is lost counts as a failure;
+  - any VM whose fingerprint passed the self-test is admitted;
+  - all page PNGs are kept;
+  - everyday-job records go to an owner-only folder;
+  - if new conversations cannot use the VM, everything waits;
+  - runner v5 is never swapped in mid-qualification;
+  - the owner compares the conversation list with the Dot's notes before scoring.
+- Qualification stays blocked until the helpers G1 are built, reviewed and admitted, the probes P1–P4 pass, and a reset drill passes.
+- **O53:** the maintainer may edit the Dot's folder. Instructions reach the Dot as `CPS/maintainer_messages/Mnnn_*.md` when the owner says "mail", and the Dot replies in `reports/Mnnn_*/REPLY.md`.
+- Every file the Dot downloads from the CPS folder is first checked with `deploy/verify_drive_files.py` against `FOLDER_MANIFEST.md`, because the maintainer's uploads can carry base64 slips.

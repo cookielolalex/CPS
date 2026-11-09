@@ -1,6 +1,6 @@
-# Draft: keeping CPS working when the Dot's VM is wiped (pending owner decisions and probes)
+# Keeping CPS working when the Dot's VM is wiped (adopted in principle by O43–O52; pending probes and the build)
 
-Status: **DRAFT, not adopted.** Written on 2026-11-09 by a design workflow: a constraints study, three independent designs,
+Status: **ADOPTED IN PRINCIPLE (owner decisions O43–O52 approve OD-1 to OD-10 as recommended, 2026-11-09). Not yet built or qualified.** Written on 2026-11-09 by a design workflow: a constraints study, three independent designs,
 two adversarial judges, then a synthesis based on design 3, with the judges' required fixes. It still needs:
 - the owner's answers to OD-1 to OD-10, to be recorded as O43 onward;
 - the Dot's probe results P1 to P3 (asked in maintainer message M002) and P4;
