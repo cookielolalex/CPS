@@ -7,6 +7,7 @@ These files are for the CPS operator's VM. They contain no case data.
 | `setup_vm.sh` | Installs the toolchain on Debian/Ubuntu. That is Python 3.11+ in a venv (openpyxl 3.1.5, xlrd 2.0.2, lxml), Node v22, LibreOffice with `pdftoppm`, Noto CJK fonts, and Playwright Chromium. |
 | `check_env.py` | Writes `ENV_REPORT.json`: tool versions and paths, the node binary's sha256, and which requirements are met. |
 | `render_examples.py` | Renders the interview example excerpts (.xlsx) to PNG on the VM (LibreOffice, pdftoppm 120 dpi, trimmed and stacked), as the kit did. |
+| `verify_drive_files.py` | Checks files downloaded from the CPS Drive folder against its `FOLDER_MANIFEST.md` (sha256), and repairs the maintainer's upload copy-errors: a binary file the maintainer uploads travels as hand-written base64, and a slip changes a character but not the size. It writes a repaired copy only when its sha256 equals the manifest's. See "Files the maintainer uploads to Drive". |
 | `setup_vm_user.sh` | The same toolchain without root or sudo, under one prefix, every download pinned by version and sha256. See "No-root setup". |
 | `lok_convert.py` | Runs `soffice --convert-to pdf` through LibreOfficeKit, in-process, without soffice's IPC socket. `setup_vm_user.sh` installs it. The `soffice` wrapper uses it only on a host where `soffice` itself cannot convert (see "PDF conversion without the IPC socket"). |
 | `conda-lock-linux-64.txt`, `conda-lock-python-linux-64.txt` | Explicit conda-forge locks (`@EXPLICIT`, URL + sha256) for `setup_vm_user.sh`: poppler, fontconfig tools, zstd, unzip, git, curl; and the fallback Python 3.12. |
@@ -115,3 +116,31 @@ Source-prep builders: `build_inventory_xlsx_v2.py` and `build_inventory_v2.py` r
 Hosts used: nodejs.org, conda.anaconda.org, pypi.org, files.pythonhosted.org, archive.ubuntu.com, security.ubuntu.com, registry.npmjs.org and storage.googleapis.com. Fallbacks, used only when a file is missing: snapshot.ubuntu.com (the dated snapshot in the deb locks), launchpad.net (which redirects to launchpadlibrarian.net) and cdn.playwright.dev. The Ubuntu archive drops superseded package versions, so after an Ubuntu update the dated snapshot or Launchpad supplies the locked file, with the same sha256. To re-lock, re-run the apt resolution and micromamba solve recorded in each lock's header, then update the lock hashes pinned in the script.
 
 Options: `CPS_TOOLS`, `CPS_DOWNLOADS` (download cache, default `~/cps-tools/downloads`; safe to delete after a successful run), `CPS_PYTHON=/abs/python3`, `CPS_PYTHON_FROM=conda`, `CPS_LO_LOCK=noble|jammy`, `CPS_WITH_LIBREOFFICE=0` or `=host` (next section), `CPS_WITH_CHROMIUM=0` (the phase-1 self-test does not use Chromium; source prep does), `CPS_DEB_EXTRACT=python` (no `dpkg-deb`). The script ends with `~/cps-tools/INSTALL_SUMMARY.txt`. It lists each tool's path and version, the node sha256, the builder deps bundle, `NODE_PATH`, the LibreOffice smoke test and the `lok_convert.py` sha256, the Chromium checks (one headless launch, plus `screenshot_views.cjs` on an invented page), any missing system libraries, the hosts contacted and the sizes. Outside the prefix it writes only micromamba's `~/.conda/environments.txt` and LibreOffice's and Chromium's usual per-user caches.
+
+## Files the maintainer uploads to Drive
+
+The maintainer puts a file into the Dot's Drive folder by writing its content into the upload call: text as text, and a
+binary file (an .xlsx, a PNG, a zip) as base64. A slip in that hand-written base64 changes one character. The file keeps
+its size, but one or two bytes differ. On 2026-11-09, 8 of the 27 interview example workbooks had one or two slips each.
+DOT-08_ex1 had two, at base64 characters 2862 and 11846, and the Dot's sha256 of its download matched the copy in Drive
+exactly. Downloads and uploads by the Dot or by users move bytes faithfully. Only the maintainer's hand-written uploads
+can carry slips.
+
+So, before using any file from the CPS folder, the operator checks it against `FOLDER_MANIFEST.md`:
+
+```bash
+python3 deploy/verify_drive_files.py FOLDER_MANIFEST.md DOWNLOAD_ROOT --repair-to REPAIRED_DIR
+```
+
+A file reported `REPAIRED` has a copy in `REPAIRED_DIR` whose sha256 equals the manifest's, so it is byte for byte the
+released file. The operator uploads that copy, and the maintainer moves it into place, which moves bytes without
+rewriting them. A file reported `NOT REPAIRED` needs a new upload from the maintainer. That means text (uploaded as
+text), a changed size, or more slips than the search covers.
+
+The search covers:
+- one slip anywhere in a file of up to 64 KB;
+- for a zip, one slip in each damaged part (found with the part's CRC-32), plus one more outside the parts' data.
+
+On the 27 example workbooks, it repaired 27 of 27 files with one random slip, mean 0.8 s. With two random slips it
+repaired 22 of 27, mean 1.9 s; the five it did not repair had both slips in one part or both outside the parts. It
+never wrote a wrong file.
