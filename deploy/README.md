@@ -8,7 +8,7 @@ These files are for the CPS operator's VM. They contain no case data.
 | `check_env.py` | Writes `ENV_REPORT.json`: tool versions and paths, the node binary's sha256, and which requirements are met. |
 | `render_examples.py` | Renders the interview example excerpts (.xlsx) to PNG on the VM (LibreOffice, pdftoppm 120 dpi, trimmed and stacked), as the kit did. |
 | `setup_vm_user.sh` | The same toolchain without root or sudo, under one prefix, every download pinned by version and sha256. See "No-root setup". |
-| `lok_convert.py` | Runs `soffice --convert-to pdf` through LibreOfficeKit, in-process, without soffice's IPC socket. `setup_vm_user.sh` installs it and its `soffice` wrapper uses it (see "PDF conversion without the IPC socket"). |
+| `lok_convert.py` | Runs `soffice --convert-to pdf` through LibreOfficeKit, in-process, without soffice's IPC socket. `setup_vm_user.sh` installs it. The `soffice` wrapper uses it only on a host where `soffice` itself cannot convert (see "PDF conversion without the IPC socket"). |
 | `conda-lock-linux-64.txt`, `conda-lock-python-linux-64.txt` | Explicit conda-forge locks (`@EXPLICIT`, URL + sha256) for `setup_vm_user.sh`: poppler, fontconfig tools, zstd, unzip, git, curl; and the fallback Python 3.12. |
 | `requirements-user.txt` | Hash-pinned pip requirements (`--require-hashes`) for the no-root venv. |
 | `deb-lock-fonts-noble.txt`, `deb-lock-libreoffice-noble-amd64.txt`, `deb-lock-libreoffice-jammy-amd64.txt` | Ubuntu package locks (sha256, size, pool path): the Noto CJK fonts and LibreOffice 24.2.7 (24.04) with its library closure; LibreOffice 7.3.7 (22.04) for hosts with glibc 2.35–2.37. |
@@ -46,7 +46,7 @@ What goes where:
 | poppler, fontconfig tools, zstd, unzip, git, curl | `conda-lock-linux-64.txt` (micromamba checks each package's sha256) | `~/cps-tools/conda`. `pdftoppm`, `pdfinfo`, `pdftotext` and `fc-*` are linked into `~/cps-tools/bin`. git, unzip, curl and zstd are fallbacks at the end of `PATH`. |
 | Python venv | the system `python3` if it is 3.11 or newer (`venv --without-pip`, so `python3-venv` is not needed); otherwise Python 3.12 from `conda-lock-python-linux-64.txt`. pip runs from its pinned wheel. | `~/cps-tools/venv`: openpyxl 3.1.5, et-xmlfile 2.0.0, xlrd 2.0.2, lxml 6.1.3, pillow 12.3.0, pip 26.2.2, from `requirements-user.txt` with `--require-hashes` |
 | Noto CJK fonts | `deb-lock-fonts-noble.txt`: Ubuntu 24.04 `fonts-noto-cjk` and `fonts-noto-cjk-extra` (as in `setup_vm.sh`), DejaVu, and `fontconfig-config`'s rules. conda-forge's `font-ttf-noto-cjk` was not used: it has Sans only, as variable fonts, and fontconfig picked its KR face for `zh-tw`. | `~/cps-tools/fonts/root`. `~/cps-tools/etc/fonts/fonts.conf` (`FONTCONFIG_FILE`) reads only the prefix's fonts, so `sans-serif:lang=zh-tw` resolves to Noto Sans CJK TC. |
-| LibreOffice 24.2.7 | `deb-lock-libreoffice-noble-amd64.txt`: `libreoffice-calc`, `libreoffice-core` and their library closure from Ubuntu 24.04 (195 packages, no `libc6`). conda-forge has no LibreOffice, and download.documentfoundation.org was not reachable when the lock was made. | `~/cps-tools/libreoffice/root`, extracted with `dpkg-deb -x`, so no maintainer scripts run. The script makes absolute symlinks relative, points `share/registry` at `.registry`, and uses upstream's relative paths in `fundamentalrc`/`sofficerc`. `~/cps-tools/bin/soffice` sets `LD_LIBRARY_PATH` only for LibreOffice's own processes, and runs `--convert-to pdf` through `lok_convert.py` (next section). The install fails if any LibreOffice library would load from outside the bundle (glibc excepted). **Needs host glibc 2.38 or newer** (Ubuntu 24.04+, Debian 13+). On glibc 2.35–2.37 (Ubuntu 22.04, Debian 12) the script uses `deb-lock-libreoffice-jammy-amd64.txt` instead (LibreOffice 7.3.7, 197 packages); force either with `CPS_LO_LOCK=noble` or `CPS_LO_LOCK=jammy`. Below 2.35 there is no LibreOffice. |
+| LibreOffice 24.2.7 | `deb-lock-libreoffice-noble-amd64.txt`: `libreoffice-calc`, `libreoffice-core` and their library closure from Ubuntu 24.04 (195 packages, no `libc6`). conda-forge has no LibreOffice, and download.documentfoundation.org was not reachable when the lock was made. | `~/cps-tools/libreoffice/root`, extracted with `dpkg-deb -x`, so no maintainer scripts run. The script makes absolute symlinks relative, points `share/registry` at `.registry`, and uses upstream's relative paths in `fundamentalrc`/`sofficerc`. `~/cps-tools/bin/soffice` sets `LD_LIBRARY_PATH` only for LibreOffice's own processes. On a host where `soffice` cannot convert, it runs `--convert-to pdf` through `lok_convert.py` (next section). The install fails if any LibreOffice library would load from outside the bundle (glibc excepted). **Needs host glibc 2.38 or newer** (Ubuntu 24.04+, Debian 13+). On glibc 2.35–2.37 (Ubuntu 22.04, Debian 12) the script uses `deb-lock-libreoffice-jammy-amd64.txt` instead (LibreOffice 7.3.7, 197 packages); force either with `CPS_LO_LOCK=noble` or `CPS_LO_LOCK=jammy`. Below 2.35 there is no LibreOffice. |
 | Playwright 1.63.0 + Chromium 1243 | npm tarballs `playwright`/`playwright-core` 1.63.0 (sha256; they match npm's sha512 integrity). Chrome for Testing 153.0.8010.12 `chrome-headless-shell-linux64.zip` and `chrome-linux64.zip` from storage.googleapis.com, with cdn.playwright.dev as a fallback that must give the same sha256. | `~/cps-tools/playwright/node_modules` and `~/cps-tools/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH`). There is no `--with-deps`: the script lists the system libraries Chromium lacks (`ldd`) and tries one headless launch. |
 
 `env.sh` puts `~/cps-tools/venv/bin`, `~/cps-tools/node/bin` and `~/cps-tools/bin` first on `PATH`, so a Node 24 elsewhere on `PATH` is no longer used. It sets `FONTCONFIG_FILE` and `PLAYWRIGHT_BROWSERS_PATH`, and it sets `NODE_PATH` to `~/cps-tools/playwright/node_modules`, so `source_prep/screenshot_views.cjs` (via `render_views.py`) resolves `require('playwright')`. The export writer and saved QA remove every `NODE_*` variable from node's environment, so `NODE_PATH` does not reach them. `env.sh` sets no `LD_LIBRARY_PATH`.
@@ -55,19 +55,33 @@ What goes where:
 
 `soffice` starts by binding a Unix socket in `/tmp` (`OSL_PIPE_<uid>_SingleOfficeIPC_<hash>`), so that a second start can pass its arguments to the first. Some agent sandboxes refuse `bind()` for every process. LibreOffice then exits 1 at once, prints nothing and writes no file, while `soffice --version` still works. That happened on the Dot's VM on 2026-11-09 (Debian 13, glibc 2.41), and it was reproduced here with a seccomp filter that refuses `bind`, `listen` and `accept`.
 
-So the prefix's `soffice` wrapper runs every `--convert-to pdf` call through `~/cps-tools/share/cps/lok_convert.py`, a copy of `deploy/lok_convert.py`.
-- **How it works.** It loads the same LibreOffice libraries in-process through LibreOfficeKit and saves with the same PDF export filter. It needs no socket.
+**Which route the host uses.** The installer's LibreOffice check decides it once per host.
+1. It converts an invented workbook with Chinese text through `soffice` itself. If the PDF is right, the host keeps the `soffice` route, which is exactly as before.
+2. Only if that fails does it run the next steps:
+   - it records why, including whether a Unix socket in `/tmp` can be bound;
+   - it switches the `soffice`/`libreoffice` wrappers to the LibreOfficeKit route;
+   - it checks again, through `~/cps-tools/share/cps/lok_convert.py`, a copy of `deploy/lok_convert.py`.
+
+The route is recorded in `INSTALL_SUMMARY.txt` (`libreoffice pdf route:`), in `RELEASE_PATHS.json` (`libreoffice_pdf_route`), in each wrapper's header, and in `~/cps-tools/var/lo_smoke/ROUTE.txt`. The check keeps its files in `~/cps-tools/var/lo_smoke/`: per route, `lo.status`, `lo.out` and `lo.err`, plus `ipc_probe.txt`. A failure therefore keeps its evidence. Before this fix, the check's files were in `.tmp`, which the script removed before exiting.
+
+On the LibreOfficeKit route:
+- **How it works.** `lok_convert.py` loads the same LibreOffice libraries in-process through LibreOfficeKit and saves with the same PDF export filter. It needs no socket.
 - **Arguments.** It accepts the arguments the CPS tools pass: `--headless`, `--norestore`, `--nolockcheck`, `-env:UserInstallation=file:///...`, `--convert-to pdf`, `--outdir` and the input files. It refuses anything else with exit 2.
-- **Results.** It writes `<outdir>/<stem>.pdf` and exits 0 only when every PDF was written.
-- **Other calls.** `--version`, and `--convert-to png` (only visual QA's no-`pdftoppm` fallback, which the setup rules out), still go to LibreOffice's own launcher. LibreOfficeKit's PNG export does not work for spreadsheets in this build.
+- **Results.** It writes `<outdir>/<stem>.pdf`, creating `<outdir>` if needed. One file's failure does not stop the others. It exits 0 only when every PDF was written.
+- **Housekeeping.** LibreOffice's temporary files go to a private folder that is removed. If the locale's encoding is not UTF-8, it uses `C.UTF-8` for character handling, so paths with Chinese characters load as they do with `soffice`.
+- **Other calls.** `--version`, and `--convert-to png` (used only by visual QA's no-`pdftoppm` fallback, which the setup rules out), still go to LibreOffice's own launcher. LibreOfficeKit's PNG export does not work for spreadsheets in this build.
+- **Known differences.**
+  - LibreOfficeKit runs with an en-US configuration, so a sheet without its own page setup prints on Letter instead of A4. Visual QA in fit-width mode, the mode the job runner uses, sets the page setup itself. Unpatched renders, such as the interview example images, may break pages differently.
+  - Automatic row heights of long wrapped text can come out slightly smaller.
 
 **Checked on 2026-11-09:**
 - Visual QA's page and tile PNGs of 11 delivered 未填 files (9 real development-trial files, 2 invented) are pixel-identical through the two routes.
 - In 2 `INTERNAL_QA_WORKBOOK.xlsx` files, the long wrapped review text gets slightly smaller automatic row heights through LibreOfficeKit, so later page breaks move. 7 of 242 pages differ in one file, and the other has 207 pages instead of 208. The text and its line breaks are the same, and nothing is cut.
-- Run under the same filter as an unprivileged user, the installer, `check_env.py`, the export self-test (600/600, visual tests included) and `render_examples.py` pass.
+- Two runs as an unprivileged user:
+  - **Normally:** the installer keeps the `soffice` route.
+  - **Under the filter:** it chooses LibreOfficeKit. In each run, `check_env.py`, the export self-test (600/600, visual tests included) and `render_examples.py` pass.
 - Without the fix, the conversion fails under that filter.
-
-The LibreOffice check in the installer keeps its files in `~/cps-tools/var/lo_smoke` (`lo.status`, `lo.out`, `lo.err`), so a failure keeps its evidence.
+- An independent review of the first version (LibreOfficeKit on every host) found the paper-size difference. That finding led to the per-host route.
 
 Source-prep builders: `build_inventory_xlsx_v2.py` and `build_inventory_v2.py` run with `python3 -I -S -B` and import openpyxl and xlrd from `<bundle>/private/deps`. The script creates `~/cps-tools/builder-deps/private/deps`, a symlink to the venv's site-packages, and checks it under `-S`. Use `~/cps-tools/builder-deps` as `--bundle`, or as the job runner's `source_prep.deps_bundle`. `~/cps-tools/RELEASE_PATHS.json` records the paths the runner's release file needs: `source_prep.deps_bundle` with its site-packages target, `source_prep.node_path`, and `checker_node` (path and sha256).
 

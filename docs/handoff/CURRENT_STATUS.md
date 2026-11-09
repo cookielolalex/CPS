@@ -1,3 +1,24 @@
+# Status addendum — 2026-11-09: the Dot's Phase 1 failed on LibreOffice; fixed
+
+- **What happened.** On the Dot's VM (Debian 13, glibc 2.41, an agent sandbox), the no-root setup at `b79a14e` installed everything, then failed its LibreOffice check. `soffice --convert-to pdf` exits 1 in 0 s with no output, while `soffice --version` works.
+  - The script removed the check's error log before exiting. That is a bug in the setup, now fixed.
+  - A one-time diagnostic by the Dot confirmed the symptom. Its evidence is in the Drive folder "CPS" under `reports/20261109_SETUP_phase1` and `reports/20261109_setup_phase1`.
+- **Cause.** The VM refuses `bind()` for soffice's IPC socket in `/tmp` (`OSL_PIPE_*`). This was reproduced exactly with a seccomp filter that refuses `bind`, `listen` and `accept`.
+- **Fix** (`26a922d`, then `7f31335` after an independent review, ADMIT_AFTER_LISTED_FIXES). The setup now chooses a PDF route per host:
+  - `soffice` where it converts, unchanged;
+  - otherwise LibreOfficeKit, in-process through `deploy/lok_convert.py`, with no socket.
+
+  The route and the reason are recorded. The check keeps its evidence in `~/cps-tools/var/lo_smoke`. Details: `deploy/README.md`, "PDF conversion without the IPC socket".
+- **Checked.** As an unprivileged user, normally and under the filter:
+  - the setup, `check_env.py` and `render_examples.py` pass;
+  - the export self-test passes 600/600 with visual tests.
+
+  Visual QA renders of 11 delivered workbooks are pixel-identical through both routes. The internal QA workbook's wrapped review text paginates slightly differently on the LibreOfficeKit route, with nothing cut.
+- **Not yet verified on the Dot.** Its venv Python is the Codex runtime's Python 3.12. Loading LibreOfficeKit into it was tested here only with other Python builds (3.13, and a conda 3.12). The setup check would catch a failure.
+- **Next.** The Dot re-runs Phase 1 at the new commit, then hand-back A.
+
+---
+
 # Status addendum — 2026-11-06 (later): static CPS folder and personal preferences (O41, O42)
 
 - **Owner's instruction.** The CPS folder is the static project folder. The survey answers and any later instructions are standing personal preferences, kept in the Dots folder and different for each user. CPS returns to the maintainer only for system failures or bugs.
