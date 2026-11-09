@@ -373,17 +373,30 @@ for path, pairs in edits.items():
     open(path, 'w', encoding='utf-8').write(text)
 PYEOF
     LO_LIBPATH="$PROG:$LR/usr/lib/x86_64-linux-gnu:$LR/lib/x86_64-linux-gnu:$LR/usr/lib/lp_solve"
+    # "--convert-to pdf" runs through LibreOfficeKit (deploy/lok_convert.py): soffice itself first binds an IPC socket
+    # in /tmp, which some agent sandboxes refuse, and then exits 1 silently (the Dot's VM, 2026-11-09).
+    LOK_CONVERT=$P/share/cps/lok_convert.py
+    cp "$SCRIPT_DIR/lok_convert.py" "$LOK_CONVERT.new"; mv "$LOK_CONVERT.new" "$LOK_CONVERT"
+    LOK_CONVERT_SHA256=$(sha256_of "$LOK_CONVERT")
     for name in soffice libreoffice; do
       cat > "$P/bin/$name.new" <<EOF
 #!/bin/sh
 # CPS no-root LibreOffice (Ubuntu packages from deploy/$LO_LOCK, extracted by deploy/setup_vm_user.sh).
-# Does what program/soffice does (SAL_ENABLE_FILE_LOCKING=1, then oosplash) without its debug options.
-# The bundled libraries are visible only to LibreOffice's own processes, not to the calling shell.
+# "--convert-to pdf" runs in-process through LibreOfficeKit ($LOK_CONVERT, a copy of deploy/lok_convert.py),
+# without soffice's IPC socket. Every other call does what program/soffice does (SAL_ENABLE_FILE_LOCKING=1, then
+# oosplash) without its debug options. The bundled libraries are visible only to these processes, not to the caller.
 LD_LIBRARY_PATH="$LO_LIBPATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 export LD_LIBRARY_PATH
 SAL_ENABLE_FILE_LOCKING=1
 export SAL_ENABLE_FILE_LOCKING
 if [ -z "\${FONTCONFIG_FILE:-}" ]; then FONTCONFIG_FILE="$P/etc/fonts/fonts.conf"; export FONTCONFIG_FILE; fi
+_cps_prev=""
+for _cps_a in "\$@"; do
+  case "\$_cps_prev" in
+    --convert-to|-convert-to) if [ "\$_cps_a" = pdf ]; then exec "$VENV/bin/python" -I "$LOK_CONVERT" "$PROG" "\$@"; fi ;;
+  esac
+  _cps_prev=\$_cps_a
+done
 exec "$PROG/oosplash" "\$@"
 EOF
       chmod 755 "$P/bin/$name.new"; mv "$P/bin/$name.new" "$P/bin/$name"
@@ -509,19 +522,27 @@ component "checks"
 # shellcheck disable=SC1091
 . "$P/env.sh"
 SMOKE=$P/.tmp/smoke; rm -rf "$SMOKE"; mkdir -p "$SMOKE/home"
+# The LibreOffice check keeps its files in $P/var/lo_smoke (.tmp is removed at the end), so a failure keeps its evidence
+LO_SMOKE_DIR=$P/var/lo_smoke; rm -rf "$LO_SMOKE_DIR"; mkdir -p "$LO_SMOKE_DIR/home"
 LO_SMOKE="not run"
 if [ "$LO_STATUS" = installed ]; then
   "$VENV/bin/python" -I -c 'import sys, openpyxl
 wb = openpyxl.Workbook(); ws = wb.active; ws.title = "測試"
-ws.append(["品名", "規格"]); ws.append(["控制盤 箱體", "不鏽鋼 600x800"]); wb.save(sys.argv[1])' "$SMOKE/cjk.xlsx"
-  lo_txt="" lo_fonts=""
-  if HOME=$SMOKE/home SAL_USE_VCLPLUGIN=svp timeout 300 soffice --headless --convert-to pdf --outdir "$SMOKE" "$SMOKE/cjk.xlsx" >/dev/null 2>"$SMOKE/lo.err"; then
-    lo_txt=$(pdftotext "$SMOKE/cjk.pdf" - 2>/dev/null || true); lo_fonts=$(pdffonts "$SMOKE/cjk.pdf" 2>/dev/null || true)
+ws.append(["品名", "規格"]); ws.append(["控制盤 箱體", "不鏽鋼 600x800"]); wb.save(sys.argv[1])' "$LO_SMOKE_DIR/cjk.xlsx"
+  lo_txt="" lo_fonts="" lo_rc=0 lo_start=$(date +%s)
+  HOME=$LO_SMOKE_DIR/home SAL_USE_VCLPLUGIN=svp timeout 300 soffice --headless --convert-to pdf --outdir "$LO_SMOKE_DIR" \
+    "$LO_SMOKE_DIR/cjk.xlsx" >"$LO_SMOKE_DIR/lo.out" 2>"$LO_SMOKE_DIR/lo.err" || lo_rc=$?
+  lo_secs=$(( $(date +%s) - lo_start ))
+  if [ "$lo_rc" = 0 ] && [ -f "$LO_SMOKE_DIR/cjk.pdf" ]; then
+    lo_txt=$(pdftotext "$LO_SMOKE_DIR/cjk.pdf" - 2>/dev/null || true); lo_fonts=$(pdffonts "$LO_SMOKE_DIR/cjk.pdf" 2>/dev/null || true)
   fi
-  if [[ "$lo_txt" == *控制盤* && "$lo_fonts" == *NotoSansCJK* ]]; then
-    LO_SMOKE="ok (invented xlsx with Chinese text -> PDF, text extractable, Noto Sans CJK embedded)"
+  lo_ver=$(HOME=$LO_SMOKE_DIR/home timeout 120 soffice --version 2>/dev/null | head -n1 || true)
+  echo "convert exit=$lo_rc seconds=$lo_secs; version '$lo_ver'" > "$LO_SMOKE_DIR/lo.status"
+  if [[ "$lo_txt" == *控制盤* && "$lo_fonts" == *NotoSansCJK* && "$lo_ver" == LibreOffice* ]]; then
+    LO_SMOKE="ok (invented xlsx with Chinese text -> PDF through LibreOfficeKit, text extractable, Noto Sans CJK embedded; soffice --version ok)"
   else
-    LO_SMOKE="FAILED (see $SMOKE/lo.err)"; LO_STATUS="FAILED: smoke test"
+    LO_SMOKE="FAILED (convert exit $lo_rc after ${lo_secs} s; version '$lo_ver'; kept in $LO_SMOKE_DIR: lo.status, lo.out, lo.err)"
+    LO_STATUS="FAILED: smoke test"
   fi
 fi
 CHROMIUM_CHECK="not run"
@@ -605,6 +626,7 @@ PYEOF
   echo "NODE_PATH (release source_prep.node_path): $PWM"
   echo "release paths recorded in: $P/RELEASE_PATHS.json"
   echo "libreoffice smoke test: $LO_SMOKE"
+  [ -z "${LOK_CONVERT_SHA256:-}" ] || echo "libreoffice pdf conversion: LibreOfficeKit, in-process, no IPC socket ($LOK_CONVERT sha256 $LOK_CONVERT_SHA256)"
   echo "chromium: $CHROMIUM_CHECK"
   echo "hosts contacted by this and earlier runs: $(sort -u "$HOSTS_LOG" 2>/dev/null | paste -sd' ' -)"
   echo "size: $(du -sh "$P" 2>/dev/null | cut -f1) total; downloads $(du -sh "$DL" 2>/dev/null | cut -f1) (kept for re-runs, safe to delete); without downloads $(du -sh --exclude=downloads "$P" 2>/dev/null | cut -f1)"
