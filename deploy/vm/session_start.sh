@@ -49,32 +49,47 @@ COMMIT=$(git -C "$REPO" rev-parse HEAD)
 MARK="$TOOLS/var/cps_vm_session_ok"
 UTC=$(date -u +%Y%m%dT%H%M%SZ)
 
-# 5./6. setup and the environment check, once per boot and commit
-if [ -f "$TOOLS/env.sh" ] && [ -f "$MARK" ] && [ "$(cat "$MARK")" = "$BOOT $COMMIT" ]; then
+# 5./6. setup and the environment check, once per boot and commit. r2 R2-08: under a lock (two chats at once never run
+# the setup twice), with the marker checked again once the lock is held; an UPLOAD line names only a non-empty file
+# (Drive rejects empty files).
+setup_done() { [ -f "$TOOLS/env.sh" ] && [ -f "$MARK" ] && [ "$(cat "$MARK")" = "$BOOT $COMMIT" ]; }
+upload_if_nonempty() { if [ -s "$1" ]; then echo "UPLOAD $1 -> CPS/reports"; fi; }
+if setup_done; then
   echo "setup: already done in this boot"
 else
-  LOG="$BASE/outbox/setup_$UTC.log"
-  if ! CPS_WITH_LIBREOFFICE=host bash "$REPO/deploy/setup_vm_user.sh" > "$LOG" 2>&1; then
-    tail -n 40 "$LOG" || true
-    echo "RESULT: {\"status\":\"STOP\",\"code\":\"SETUP_FAILED\"}"
-    echo "UPLOAD $LOG -> CPS/reports"
-    echo "STOP: SETUP_FAILED the no-root setup failed: upload the log and hand back case C"
-    exit 3
+  exec 9>"$BASE/outbox/.setup.lock"
+  flock 9
+  if setup_done; then
+    echo "setup: already done in this boot"
+  else
+    LOG="$BASE/outbox/setup_$UTC.log"
+    if ! CPS_WITH_LIBREOFFICE=host bash "$REPO/deploy/setup_vm_user.sh" > "$LOG" 2>&1; then
+      tail -n 40 "$LOG" | sed 's/^/setup: /' || true
+      echo "RESULT: {\"status\":\"STOP\",\"code\":\"SETUP_FAILED\"}"
+      upload_if_nonempty "$LOG"
+      echo "STOP: SETUP_FAILED the no-root setup failed: upload the log (if printed) and hand back case C"
+      exit 3
+    fi
+    # shellcheck disable=SC1091
+    . "$TOOLS/env.sh"
+    REPORT="$BASE/outbox/ENV_REPORT_$UTC.json"
+    CLOG="$BASE/outbox/check_env_$UTC.log"
+    OUT=$(python3 "$REPO/deploy/check_env.py" --out "$REPORT" 2>"$CLOG") || true
+    case "$OUT" in
+      *'"all_met": true'*) ;;
+      *)
+        printf '%s\n' "$OUT" >> "$CLOG"
+        echo "RESULT: {\"status\":\"STOP\",\"code\":\"CHECK_ENV_FAILED\"}"
+        upload_if_nonempty "$REPORT"
+        upload_if_nonempty "$CLOG"
+        echo "STOP: CHECK_ENV_FAILED the environment check failed: upload the files printed and hand back case C"
+        exit 3 ;;
+    esac
+    mkdir -p "$TOOLS/var"
+    printf '%s %s' "$BOOT" "$COMMIT" > "$MARK.new"
+    mv "$MARK.new" "$MARK"
   fi
-  # shellcheck disable=SC1091
-  . "$TOOLS/env.sh"
-  OUT=$(python3 "$REPO/deploy/check_env.py" --out "$BASE/outbox/ENV_REPORT_$UTC.json") || true
-  case "$OUT" in
-    *'"all_met": true'*) ;;
-    *)
-      echo "RESULT: {\"status\":\"STOP\",\"code\":\"CHECK_ENV_FAILED\"}"
-      echo "UPLOAD $BASE/outbox/ENV_REPORT_$UTC.json -> CPS/reports"
-      echo "STOP: CHECK_ENV_FAILED the environment check failed: upload the report and hand back case C"
-      exit 3 ;;
-  esac
-  mkdir -p "$TOOLS/var"
-  printf '%s %s' "$BOOT" "$COMMIT" > "$MARK.new"
-  mv "$MARK.new" "$MARK"
+  exec 9>&-
 fi
 
 # 7. the launcher BASE/vm.sh ($V in every printed RUN line)

@@ -55,6 +55,7 @@ class T:
         self.a, self.work = a, Path(a.work)
         self.results, self.outputs = [], []
         self.titles = set()
+        self.deliverables = set()       # r2 R2-07: basenames of every deliverable written in a world (leak scan)
 
     def check(self, name, cond, detail=''):
         try:
@@ -81,11 +82,15 @@ class Drive:
         self.meta_path = self.root / '_meta.json'
         self.meta = json.loads(self.meta_path.read_text()) if self.meta_path.is_file() else {'n': 0, 'files': [], 'last': 0.0}
         self.hide, self.drop_last_page, self.page = set(), False, 50
+        self.t = None                   # r2 R2-07: set by World; a zero-byte upload is a failed check
 
     def save(self):
         self.meta_path.write_text(json.dumps(self.meta))
 
     def put(self, folder, name, data, mime=None):
+        if self.t is not None and not data:
+            self.t.check('11.7: Drive rejects a zero-byte upload: ' + name, False)
+            return None
         self.meta['n'] += 1
         fid = f'fid{self.meta["n"]:06d}'
         t = max(time.time(), self.meta['last'] + 0.001)
@@ -142,7 +147,9 @@ class Drive:
                     os.link(g, root / '_blobs' / g.name)
             else:
                 os.link(f, root / f.name)
-        return Drive(root)
+        d = Drive(root)
+        d.t = self.t
+        return d
 
     def flat(self, folder, dest):
         """Download a whole folder flat (the maintainer's view): the newest copy of each name."""
@@ -180,6 +187,7 @@ class World:
                                                              text=True).stdout.strip()
         os.symlink(self.repo, self.base / 'repo')
         self.drive = Drive(self.root / 'drive')
+        self.drive.t = t
         self.boot_path = self.root / 'boot_id'
         self.new_boot()
         self.cases, self.nonattempts, self.large = list(cases), list(nonattempts), set(large)
@@ -422,6 +430,9 @@ class Dot:
         p = subprocess.run(argv, capture_output=True, env=dict(self.w.env, **getattr(self, 'env_extra', {})), timeout=3600)
         text = p.stdout.decode('utf-8', 'replace')
         self.t.outputs.append(text)
+        for root in (self.w.base / 'qual', self.w.base / 'jobs'):
+            if root.is_dir():
+                self.t.deliverables |= {x.name for x in root.glob('*/*/export/writer/*.xlsx')}
         o = Out(p.returncode, text, ' '.join(str(a) for a in argv))
         self.history.append(o)
         if check_grammar:
@@ -756,7 +767,7 @@ def main():
 def hygiene(t, before):
     leaks = set()
     for out in t.outputs:
-        for s_ in list(tcj.PRIVATE_STRINGS) + sorted(t.titles):
+        for s_ in list(tcj.PRIVATE_STRINGS) + sorted(t.titles) + sorted(t.deliverables):
             if s_ in out:
                 leaks.add(s_)
     t.check('11.7: no helper output holds a private value, a job title or the deliverable name', lambda: not leaks,
@@ -916,7 +927,8 @@ def e3_full_run_with_wipes(t):
     o = dot.auto(o)
     fz = newest_pkg(w, c)
     t.check('E3: freeze made the FZ', lambda: fz.startswith('FZ_A_'), o)
-    o, sn = restore_cycle(t, dot, w, 'E3 FZ', 'NONE_IN_FLIGHT')
+    # r2 M2: the next runner command (reader B's prepare) is what a reset may have lost: NON_AI_STAGE_LOST (NOT_SEEN here)
+    o, sn = restore_cycle(t, dot, w, 'E3 FZ', 'NON_AI_STAGE_LOST')
     t.check('E3 FZ: an FZ newest restores the ledger and the FROZEN.json copy only', lambda: sn['restored']['fz_newest'] is True
             and not jd.exists() and (w.base / 'outbox/frozen_json' / f'A_{c}_FROZEN.json').is_file(), sn.get('restored'))
     t.check('E3 FZ: status prints evict (part verification)', lambda: o.actions[0].endswith(f'evict --job-dir {jd}'), o)
@@ -1116,6 +1128,9 @@ def e12_assemble_audit(t, w, dot):
     ar = json.loads((flat / 'AUDIT_REPORT.json').read_text()) if (flat / 'AUDIT_REPORT.json').is_file() else {}
     t.check('E12: audit --allow-test-overrides reports no anomaly and lists the failed-by-reset runs', lambda: p.returncode == 0
             and not ar['anomalies'] and len(ar['runs_failed_by_reset']) >= 3, lambda: (p.stdout[-500:], p.stderr[-800:], ar.get('anomalies', [])[:6]))
+    t.check('r2 M3: AUD_START_SUPERSEDED never names a reviewer START (the replacement reviewer replaces, it does not supersede)',
+            lambda: not any(x.get('code') == 'AUD_START_SUPERSEDED' and any(re.match(r'^START_[^_]+_V', n) for n in x.get('names', []))
+                            for x in ar.get('listed', [])), ar.get('listed'))
     o52 = json.loads((flat / 'O52_COMPARISON.json').read_text()) if (flat / 'O52_COMPARISON.json').is_file() else {}
     t.check('E12: O52_COMPARISON lists every START and marks nothing-written ones open_and_check', lambda: len(o52['rows']) == len(names(w.drive, w.records, 'START_'))
             and any(r['open_and_check'] for r in o52['rows']), o52)
@@ -1225,6 +1240,13 @@ def e13_anomalies(t, w, flat, sflat, rel):
         f0 = next(x for x in files(L) if x['name'] == f.name)
         L['pages'][-1]['files'].append(dict(f0, name=n, id='fid999998'))
     run_case('classification_contradicts', 'AUD_CLASSIFICATION_INCONSISTENT', contradict)
+
+    def not_failed(d, L):                       # r2 R2-04: a diverged run that ALL_FROZEN.json does not count as failed
+        af_ = json.loads((d / 'ALL_FROZEN.json').read_text())
+        af_['runs_failed_by_reset'] = []
+        (d / 'ALL_FROZEN.json').unlink()
+        (d / 'ALL_FROZEN.json').write_text(json.dumps(af_))
+    run_case('diverged_not_failed', 'AUD_BINDING_MISMATCH', not_failed)
     r2 = json.loads(rel.read_text())
     r2['pinned_files_sha256']['deploy/vm/cps_vm.py'] = '0' * 64
     rel2 = w.root / 'maint' / 'RELEASE_other_pin.json'
@@ -1731,7 +1753,7 @@ def e11_restore_refusals(t):
     (fake / 'pdftoppm').write_text('#!/bin/sh\nexit 1\n')
     os.chmod(fake / 'pdftoppm', 0o755)
     dot.env_extra = {'PATH': f'{fake}:{os.environ.get("PATH", "")}'}
-    attempt('E8: re-render fails (pdftoppm broken): the parts are downloaded and the PNG set restored from them',
+    attempt('6.4 parts fallback (r2 R2-05: not the W8 scenario): re-render fails (pdftoppm broken): the parts are downloaded and the PNG set restored from them',
             lambda o_: session_note(w, o_)['restored']['png'] == 'parts' and any('PNG_' in h.text and 'DOWNLOAD' in h.text for h in dot.history[-4:]),
             lambda d2: None, expect_ok=True)
     dot.env_extra = {}
@@ -1965,6 +1987,7 @@ def u_fingerprint_kit(t):
     (w.tools / 'env.sh').write_text((w.tools / 'env.sh').read_text() + '# changed\n')
     c = fp(env)
     t.check('U7: changing TOOLS/env.sh changes it', lambda: c != a)
+    t.check('U7: a .ttf font exists on this machine for the font-change check (r2 R2-08: never skipped silently)', lambda: bool(some))
     if some:
         shutil.copyfile(some[0], fonts / 'b.ttf')
         t.check('U7: adding a font file under the fontconfig dir changes it', lambda: fp(env) != c)
@@ -2356,8 +2379,9 @@ def t01_ai_rejected(t):
                 '--conversation-ended', '--transcript', tr)
     r2 = dot.vm('incident', '--classification', 'AI_NO_CONVERSATION', '--job-dir', jd, '--role', 'G', '--conversation-ended')
     r3 = dot.vm('ai-archive', '--job-dir', jd, '--role', 'G')
-    t.check('T-01: AI_NOTHING_WRITTEN and AI_NO_CONVERSATION are refused INCIDENT_ARCHIVE_REJECTED; ai-archive refuses AI_ARCHIVE_REJECTED',
-            lambda: r1.codeword == 'INCIDENT_ARCHIVE_REJECTED' and r2.codeword == 'INCIDENT_ARCHIVE_REJECTED' and r3.codeword == 'AI_ARCHIVE_REJECTED',
+    t.check('T-01: AI_NOTHING_WRITTEN and AI_NO_CONVERSATION are refused INCIDENT_ARCHIVE_REJECTED; ai-archive waits for the incident '
+            '(INCIDENT_REQUIRED, r2 R2-03)',
+            lambda: r1.codeword == 'INCIDENT_ARCHIVE_REJECTED' and r2.codeword == 'INCIDENT_ARCHIVE_REJECTED' and r3.codeword == 'INCIDENT_REQUIRED',
             (r1, r2, r3))
     o = dot.auto(o, halt=at_action(f'RUN {w.V} recheck'))
     inc = [i for i in incident_notes(w) if i['classification'] == 'AI_WRITTEN_LOST']
@@ -2366,8 +2390,10 @@ def t01_ai_rejected(t):
     w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
     o = dot.vm('recheck')
     os_ = dot.vm('start-note', '--job-dir', jd, '--role', 'G')
+    r3 = dot.vm('ai-archive', '--job-dir', jd, '--role', 'G')
     t.check('T-01: after recheck status prints wrap freeze (a failed run) and no second generator START is allowed',
             lambda: 'wrap freeze' in o.actions[0] and os_.refused == 'START_NOT_ALLOWED' and not names(w.drive, w.records, 'START_A_G2_'), (o, os_))
+    t.check('T-01: after the incident ai-archive refuses AI_ARCHIVE_REJECTED', lambda: r3.result.get('code') == 'AI_ARCHIVE_REJECTED', r3)
 
 
 @scenario
@@ -2959,8 +2985,415 @@ def t17_selftest_e18(t):
     t.check('E18: the completing freeze made an FZ at the CP\'s seq (no fork)', lambda: vm.parse_name(newest_pkg(w, c))['seq'] == cp_seq
             and newest_pkg(w, c).startswith('FZ_'), o)
     o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap prepare'))
-    o, sn = restore_cycle(t, dot, w, 'E18 after evict', 'NONE_IN_FLIGHT')
+    o, sn = restore_cycle(t, dot, w, 'E18 after evict', 'NON_AI_STAGE_LOST')     # r2 M2: the prepare printed after it
     t.check('E18: the restore after the FZ of that seq sees no fork (FZ newest)', lambda: sn['restored']['fz_newest'] is True, sn.get('restored'))
+
+
+# ------------------------------------------------------------------ review round 2 (r2): regression tests
+def wrap_line(o, sub):
+    return next((a for a in o.actions if a.startswith('RUN ') and f' wrap {sub} ' in a), None)
+
+
+@scenario
+def r2_fixes_a(t):
+    """r2 C1 (local session after expected_genesis), WRAP_BINDING_SUBCOMMAND, INCIDENT_SEEN_INVALID, C2 (divergence forced at the
+    incident, then the freeze) and M1 (status and a new-chat session print freeze for a diverged run)."""
+    ca, cb = '9992101', '9992102'
+    w = World(t, 'r2_fixes_a_w', cases=[ca, cb])
+    dot = Dot(w)
+    o = to_prepare(t, dot, w)
+    prep = o.actions[0]
+    # C1: the maintainer records the GENESIS (TELL_MAINTAINER); the next new chat on the same VM is a local session
+    gen = names(w.drive, w.records, 'GENESIS_')
+    w.cfg['expected_genesis'] = gen[0]
+    w.build_kit(cfg_only=True)
+    o = dot.session()
+    t.check('r2 C1: a local-mode session after expected_genesis is set exits 0 and prints the same prepare (no LISTING_MISSING_GENESIS)',
+            lambda: o.code == 0 and session_note(w, o).get('mode') == 'local' and o.actions == [prep], o)
+    # WRAP_BINDING_SUBCOMMAND: a seen finish token binds finish; freeze of a run that did not fail is refused
+    ja, jb = w.job_dir('A', ca), w.job_dir('A', cb)
+    dot.stop_before_upload = ('PNG_', None)
+    o = dot.auto(o)
+    real = list(dot.pending_tokens)
+    t.check('r2 setup: finish of case a ran and printed its token, nothing uploaded', lambda: real and real[-1].startswith(f'B1/finish/A/{ca}/'), o)
+    w.wipe()
+    o = dot.session()
+    t.check('r2 setup: the restore asks for AI_ARCHIVED SEEN/NOT_SEEN', lambda: 'SEEN' in dict(o.options) and 'AI_ARCHIVED' in dict(o.options)['SEEN'], o)
+    bad1 = dot.vm('incident', '--classification', 'AI_ARCHIVED', '--job-dir', ja, '--role', 'G', '--seen', 'B1/not/a/token')
+    bad2 = dot.vm('incident', '--classification', 'AI_ARCHIVED', '--job-dir', ja, '--role', 'G', '--seen', forge_token(real[-1], field=3))
+    t.check('r2 R2-04: a malformed token and a token of another case are refused INCIDENT_SEEN_INVALID',
+            lambda: bad1.refused == 'INCIDENT_SEEN_INVALID' and bad2.refused == 'INCIDENT_SEEN_INVALID', (bad1, bad2))
+    dot.pending_tokens = [real[-1]]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap finish'))
+    of = dot.vm('wrap', 'freeze', '--job-dir', ja, '--operator-model', MODEL)
+    t.check('r2 R2-04: while a seen token binds finish, wrap freeze of that run is refused WRAP_BINDING_SUBCOMMAND',
+            lambda: of.refused == 'WRAP_BINDING_SUBCOMMAND', of)
+    dot.pending_tokens = []
+    o = dot.run_line(wrap_line(o, 'finish')[4:])
+    o = wait_done(dot, o)
+    t.check('r2 setup: the bound finish matched', lambda: (o.result.get('binding') or {}).get('matched') is True and o.code == 0, o)
+    o = dot.auto(o, halt=lambda a, o_: a.startswith(f'RUN {w.V} wrap prepare') and f'/jobs/{cb}/' in a)
+    t.check('r2 setup: case a frozen and evicted, status moves to case b', lambda: f'/jobs/{cb}/' in o.actions[0] and not ja.exists(), o)
+    # C2: two seen tokens that disagree force RESET_DIVERGED at the incident; the run can still be frozen
+    dot.stop_before_upload = ('PNG_', None)
+    o = dot.auto(o)
+    real = list(dot.pending_tokens)
+    w.wipe()
+    o = dot.session()
+    dot.pending_tokens = [real[-1], forge_token(real[-1])]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    t.check('r2 C2: two disagreeing seen tokens: STOP RESET_DIVERGED at the incident, NEXT recheck, THEN wrap freeze',
+            lambda: o.stop == 'RESET_DIVERGED' and o.code == 3 and o.actions[0].endswith(' recheck') and 'wrap freeze' in o.actions[1], o)
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    st_ = dot.vm('status')
+    t.check('r2 M1: after the forced divergence recheck and status print only wrap freeze (never the generation record or finish)',
+            lambda: o.actions and 'wrap freeze' in o.actions[0] and st_.actions == o.actions[:1], (o, st_))
+    of = dot.vm('wrap', 'finish', '--job-dir', jb, '--operator-model', MODEL)
+    t.check('r2 C2: wrap finish of the diverged run is refused WRAP_RUN_FAILED_RESET_DIVERGED', lambda: of.refused == 'WRAP_RUN_FAILED_RESET_DIVERGED', of)
+    o2 = dot.session()
+    t.check('r2 M1: a new-chat session prints wrap freeze for the diverged run', lambda: o2.code == 0 and o2.actions and 'wrap freeze' in o2.actions[0], o2)
+    o = dot.run_line(o2.actions[0][4:])
+    o = wait_done(dot, o)
+    t.check('r2 C2: the freeze of a run diverged at the incident runs (no WRAP_BINDING_SUBCOMMAND) and its FZ is marked reset_diverged',
+            lambda: o.code == 0 and (o.result.get('package') or '').startswith('FZ_A_') and o.result.get('reset_diverged') is True
+            and o.actions and o.actions[0].endswith(f'evict --job-dir {jb}'), o)
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap prepare'))
+    t.check('r2 C2: after the evict status moves on to reader B (case a), no restart of the diverged run',
+            lambda: '--reader B' in o.actions[0] and f'/jobs/{ca}/' in o.actions[0]
+            and json.loads((w.base / 'outbox/frozen_json' / f'A_{cb}_FLAGS.json').read_text())['reset_diverged'] is True, o)
+
+
+@scenario
+def r2_fixes_b(t):
+    """r2 M2 (a prepare lost after an FZ binds the seen token), R2-03 (a boot change while a detached wrap ran goes to the
+    incident; job commands wait for it), N1 (the incident names the restore session after a new chat), and
+    QUALIFICATION_DIVERGED_RESTART_CONFLICT (reader A's run failed by divergence after a stop the runner would restart)."""
+    c, na = '9992201', '9992291'
+    w = World(t, 'r2_fixes_b_w', cases=[c], nonattempts=[na])
+    dot = Dot(w)
+    behaviour = {'G': 'nothing'}
+
+    def conv(jd, case, role, reader):
+        if behaviour.get(role) == 'nothing':
+            return
+        if role == 'G':
+            tcj.stand_in_response(None, jd, case, reader=reader)
+        else:
+            tcj.stand_in_review(jd, reviewer=dict(tcj.REVIEWER, conversation_id=dot.values['CONVERSATION_ID']))
+    dot.conv = {'G': conv, 'V': conv}
+    o = to_prepare(t, dot, w)
+    jd = w.job_dir('A', c)
+    # M2: the prepare after the nonattempt FZs ran, its CP-P never reached Drive
+    dot.stop_before_upload = ('CP_', 'wrap prepare')
+    o = dot.auto(o)
+    tok = list(dot.pending_tokens)
+    t.check('r2 setup: the prepare ran (token seen), CP-P not uploaded', lambda: tok and tok[-1].startswith(f'B1/prepare/A/{c}/'), o)
+    w.wipe()
+    o = dot.session()
+    t.check('r2 M2: a prepare lost after an FZ: the restore offers NON_AI_STAGE_LOST SEEN/NOT_SEEN (not NONE_IN_FLIGHT)',
+            lambda: 'NON_AI_STAGE_LOST' in dict(o.options).get('SEEN', '') and 'NOT_SEEN' in dict(o.options), o)
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    inc = [i for i in incident_notes(w) if i['classification'] == 'NON_AI_STAGE_LOST']
+    t.check('r2 M2: the incident binds the pending prepare with the seen token', lambda: inc and inc[-1]['next_subcommand'] == 'prepare'
+            and inc[-1]['seen'] == tok[-1:] and (inc[-1]['pending_job'] or {}).get('case') == c, inc)
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    o = dot.auto(o, halt=at_action('OPEN_CONVERSATION'))
+    rp = [h for h in dot.history if h.result.get('command') == 'wrap' and h.result.get('runner_subcommand') == 'prepare']
+    t.check('r2 M2: after the evict the re-run prepare compared its token with the one seen: matched',
+            lambda: rp and (rp[-1].result.get('binding') or {}).get('matched') is True and rp[-1].result['binding']['seen'] == tok[-1:], rp[-1:])
+    # R2-03: a reboot that keeps the disk while a detached wrap of the old boot is recorded; the conversation was open
+    d = {'id': '20261109T000000Z_deadbeef', 'kind': 'wrap', 'info': {'job_dir': str(jd), 'sub': 'finish'}, 'pid': 999999,
+         'started_utc': '2026-11-09T00:00:00Z', 'boot_id': w.boot, 'log': str(w.base / 'outbox' / 'x.log'),
+         'out': str(w.base / 'outbox' / 'x.out'), 'exit': None}
+    (w.base / 'outbox' / 'DETACHED.json').write_text(json.dumps(d))
+    w.new_boot()
+    o = dot.session()
+    first_session = o.result.get('session_note')
+    t.check('r2 R2-03: after a boot change with a detached wrap of the old boot, session prints the incident (no wait, no WORKER_DIED) '
+            'and drops DETACHED.json', lambda: o.code == 0 and o.state.get('pending_incident') == 'yes' and 'CHOOSE_FROM_TRANSCRIPT' in o.actions
+            and not (w.base / 'outbox' / 'DETACHED.json').exists(), o)
+    gate = [dot.vm('ai-archive', '--job-dir', jd, '--role', 'G'), dot.vm('package', '--job-dir', jd),
+            dot.vm('link-note', '--job-dir', jd, '--role', 'G', '--conversation', 'invented-c'), dot.vm('evict', '--job-dir', jd),
+            dot.vm('final')]
+    t.check('r2 R2-03: ai-archive, package, link-note, evict and final wait for the incident (INCIDENT_REQUIRED)',
+            lambda: all(g.refused == 'INCIDENT_REQUIRED' for g in gate), gate)
+    o = dot.session()
+    dot.values['CONVERSATION_ID'] = 'invented-conv-r2b-G'
+    t.check('r2 N1: a new chat before the incident keeps the pending incident (local mode)', lambda: o.code == 0
+            and o.state.get('pending_incident') == 'yes' and session_note(w, o).get('mode') == 'local', o)
+    o = dot.auto(o, choose=lambda o_: 'NOTHING_WRITTEN', halt=at_action(f'RUN {w.V} recheck'))
+    inc = [i for i in incident_notes(w) if i['classification'] == 'AI_NOTHING_WRITTEN']
+    t.check('r2 N1: the incident names the SESSION that asked for it (restore_session), not only the later chat\'s',
+            lambda: inc and inc[-1].get('restore_session') == first_session and inc[-1].get('session_note') != first_session, inc)
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    t.check('r2 setup: status prints wrap interrupt', lambda: o.actions and ' wrap interrupt ' in o.actions[0], o)
+    # QUALIFICATION_DIVERGED_RESTART_CONFLICT: the freeze after the interrupt ran; its FZ was lost; a different token is seen
+    dot.stop_before_upload = ('FZ_', 'wrap freeze')
+    o = dot.auto(o)
+    real = list(dot.pending_tokens)
+    t.check('r2 setup: interrupt (form 1) then the freeze ran, the FZ not uploaded', lambda: real and real[-1].startswith(f'B1/freeze/A/{c}/'), o)
+    w.wipe()
+    o = dot.session()
+    dot.pending_tokens = [forge_token(real[-1])]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    dot.pending_tokens = []
+    o = dot.auto(o, halt=lambda a, o_: o_.stop is not None)
+    t.check('r2 R2-04: reader A failed by divergence after a stop the runner would restart: STOP QUALIFICATION_DIVERGED_RESTART_CONFLICT',
+            lambda: o.stop == 'QUALIFICATION_DIVERGED_RESTART_CONFLICT'
+            and json.loads((w.base / 'outbox/frozen_json' / f'A_{c}_FLAGS.json').read_text())['reset_diverged'] is True, o)
+
+
+@scenario
+def r2_fixes_c(t):
+    """r2 M3 (the replacement reviewer's START does not supersede; a reset before its conversation is AI_NO_CONVERSATION), R2-01
+    (nothing written: both options; INCIDENT_TRANSCRIPT_REQUIRED for an absent or empty transcript, with the AI_WRITTEN_LOST
+    line), INCIDENT_NEEDS_JOB, REVISION_LIMIT and INCIDENT_CONTRADICTS_EARLIER."""
+    c1, c2 = '9992301', '9992302'
+    w = World(t, 'r2_fixes_c_w', cases=[c1, c2], cfg={'max_review_revisions': 0})
+    dot = Dot(w)
+    calls = {}
+
+    def conv(jd, case, role, reader):
+        k = (case, role)
+        calls[k] = calls.get(k, 0) + 1
+        if case == c1 and role == 'V' and calls[k] == 1:
+            return                                          # the first reviewer writes nothing
+        if case == c2 and role == 'G':
+            return                                          # c2's generator writes nothing
+        if role == 'G':
+            tcj.stand_in_response(None, jd, case, reader=reader)
+        elif role == 'V':
+            tcj.stand_in_review(jd, drop_page=True, reviewer=dict(tcj.REVIEWER, conversation_id=dot.values['CONVERSATION_ID']))
+    dot.conv = {'G': conv, 'V': conv}
+    j1 = w.job_dir('A', c1)
+    dot.conv['V-continue'] = lambda: tcj.stand_in_review(j1, reviewer=dict(tcj.REVIEWER, conversation_id=dot.values['CONVERSATION_ID']))
+    o = to_prepare(t, dot, w)
+    o = dot.auto(o, halt=at_action('CHOOSE_FROM_TRANSCRIPT'))
+    tp = w.base / 'transcripts' / f'{c1}_A_V1.txt'
+    t.check('r2 R2-01: a reviewer that wrote nothing: CHOOSE_FROM_TRANSCRIPT with NOTHING_WRITTEN and WRITTEN_OR_DOUBT (AI_WRITTEN_LOST)',
+            lambda: o.result.get('command') == 'ai-archive' and set(dict(o.options)) == {'NOTHING_WRITTEN', 'WRITTEN_OR_DOUBT'}
+            and 'AI_WRITTEN_LOST' in dict(o.options)['WRITTEN_OR_DOUBT'] and '--transcript' not in dict(o.options)['WRITTEN_OR_DOUBT'], o)
+    n1 = dot.vm('incident', '--classification', 'AI_NOTHING_WRITTEN', '--conversation-ended', '--conversation', 'invented-c')
+    n2 = dot.vm('incident', '--classification', 'AI_NOTHING_WRITTEN', '--job-dir', j1, '--role', 'V', '--conversation-ended',
+                '--transcript', tp)
+    t.check('r2 R2-04: incident without --job-dir/--role, or without --conversation, is refused INCIDENT_NEEDS_JOB',
+            lambda: n1.refused == 'INCIDENT_NEEDS_JOB' and n2.refused == 'INCIDENT_NEEDS_JOB', (n1, n2))
+    if tp.exists():
+        tp.unlink()
+    r_abs = dot.vm('incident', '--classification', 'AI_NOTHING_WRITTEN', '--job-dir', j1, '--role', 'V', '--conversation', 'invented-c',
+                   '--conversation-ended', '--transcript', tp)
+    tp.parent.mkdir(parents=True, exist_ok=True)
+    tp.write_bytes(b'')
+    r_empty = dot.vm('incident', '--classification', 'AI_NOTHING_WRITTEN', '--job-dir', j1, '--role', 'V', '--conversation', 'invented-c',
+                     '--conversation-ended', '--transcript', tp)
+    t.check('r2 R2-01: an absent or empty transcript is refused INCIDENT_TRANSCRIPT_REQUIRED, with the AI_WRITTEN_LOST line as NEXT',
+            lambda: all(r.code == 4 and r.result.get('code') == 'INCIDENT_TRANSCRIPT_REQUIRED' and r.actions
+                        and 'incident --classification AI_WRITTEN_LOST' in r.actions[0] for r in (r_abs, r_empty))
+            and not names(w.drive, w.records, 'TRANSCRIPT_'), (r_abs, r_empty))
+    tp.unlink()
+    dot.stop_after_upload = ('START_A_V2', None)
+    o = dot.auto(o)
+    sv2 = o.result
+    t.check('r2 M3: the replacement reviewer START (V2) has no supersedes; it names V1 in replaces', lambda: sv2.get('command') == 'start-note'
+            and sv2.get('attempt') == 2 and sv2.get('supersedes') is None and (sv2.get('replaces') or '').startswith('START_A_V1_'), sv2)
+    w.wipe()
+    o = dot.session()
+    t.check('r2 M3: a reset before the V2 conversation existed offers NO_CONVERSATION', lambda: 'NO_CONVERSATION' in dict(o.options), o)
+    o = dot.auto(o, choose=lambda o_: 'NO_CONVERSATION', halt=at_action(f'RUN {w.V} recheck'))
+    t.check('r2 M3: AI_NO_CONVERSATION for the replacement reviewer is recorded (no STOP AI_NO_CONVERSATION_REPEATED)',
+            lambda: o.stop is None and o.result.get('classification') == 'AI_NO_CONVERSATION', o)
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    o = dot.auto(o, halt=at_action('OPEN_CONVERSATION'))
+    t.check('r2 M3: the re-START is attempt 2 and supersedes the first V2 START', lambda: o.result.get('attempt') == 2
+            and o.result.get('supersedes') == sv2['start_note'], o)
+    # REVISION_LIMIT (max_review_revisions 0): the review comes back incomplete; the first revision stops
+    o = dot.auto(o, halt=lambda a, o_: o_.stop is not None)
+    t.check('r2 R2-04: a revision beyond max_review_revisions is STOP REVISION_LIMIT', lambda: o.stop == 'REVISION_LIMIT', o)
+    o = dot.run_line(f'{w.V} wrap freeze --job-dir {j1} --operator-model {MODEL}')
+    o = wait_done(dot, o)
+    o = dot.auto(o, halt=lambda a, o_: a.startswith(f'RUN {w.V} wrap prepare') and f'/jobs/{c2}/' in a)
+    t.check('r2 setup: case 1 frozen by hand after the STOP; status moves to case 2', lambda: f'/jobs/{c2}/' in o.actions[0], o)
+    # INCIDENT_CONTRADICTS_EARLIER: c2's generator wrote nothing; WRITTEN_OR_DOUBT is recorded; NOTHING_WRITTEN is then refused
+    j2 = w.job_dir('A', c2)
+    o = dot.auto(o, halt=at_action('CHOOSE_FROM_TRANSCRIPT'))
+    o = dot.run_line(dict(o.options)['WRITTEN_OR_DOUBT'][4:].replace('{CONVERSATION_ID}', 'invented-c2'))
+    t.check('r2 setup: AI_WRITTEN_LOST recorded for c2\'s generator; status prints wrap freeze', lambda: o.code == 0
+            and o.result.get('classification') == 'AI_WRITTEN_LOST' and 'wrap freeze' in o.actions[0], o)
+    tr = w.root / 'transcript_c2.txt'
+    tr.write_text('invented transcript\n')
+    rc = dot.vm('incident', '--classification', 'AI_NOTHING_WRITTEN', '--job-dir', j2, '--role', 'G', '--conversation', 'invented-c2',
+                '--conversation-ended', '--transcript', tr)
+    t.check('r2 R2-04: AI_NOTHING_WRITTEN after AI_WRITTEN_LOST on the same START is refused INCIDENT_CONTRADICTS_EARLIER',
+            lambda: rc.refused == 'INCIDENT_CONTRADICTS_EARLIER', rc)
+
+
+@scenario
+def r2_fixes_d(t):
+    """r2 M5 (an everyday prepare refused before its folder existed: FIX, then job-start gives the same run new inputs; a restore
+    places the newest inputs) and RESTORE_RECORD_PREFIX_MISMATCH (everyday)."""
+    c = '9992401'
+    w = World(t, 'r2_fixes_d_w', mode='everyday', cases=[c], cfg={'wrap_foreground_seconds': 1})
+    dot = Dot(w)
+    o = start_world(t, dot, w)
+    everyday_inputs(w, c)
+    jp = w.base / 'everyday_inputs' / c / 'JOB.json'
+    good = jp.read_bytes()
+    jp.write_bytes((json.dumps(dict(json.loads(good), invented_unknown_key=1), ensure_ascii=False, indent=1) + '\n').encode('utf-8'))
+    dot.values['CASE'] = c
+    o = dot.run_line(o.actions[1][4:])
+    tag, first_inputs = o.result['run_id'], o.result['inputs']
+    o = wait_done(dot, dot.run_line(o.actions[0][4:]))
+    t.check('r2 M5: the runner refuses the prepare before making the folder: FIX code=RUNNER_<code>, THEN job-start --case',
+            lambda: o.code == 4 and o.actions and o.actions[0].startswith('FIX code=RUNNER_') and o.actions[1] == f'RUN {w.V} job-start --case {c}'
+            and not w.job_dir(tag, c).exists(), o)
+    st_ = dot.vm('status')
+    same = dot.vm('job-start', '--case', c)
+    t.check('r2 M5: status prints the same FIX and job-start; job-start with the inputs unchanged is refused JOB_START_INPUTS_UNCHANGED',
+            lambda: st_.actions == o.actions and same.refused == 'JOB_START_INPUTS_UNCHANGED', (st_, same))
+    jp.write_bytes(good)
+    o = dot.run_line(st_.actions[1][4:])
+    t.check('r2 M5: job-start after the fix gives the same run new inputs (replaces the refused INPUTS) and prints its prepare',
+            lambda: o.code == 0 and o.result.get('run_id') == tag and o.result.get('replaces') == first_inputs
+            and o.result.get('inputs') != first_inputs and 'wrap prepare' in o.actions[0], o)
+    dot.stop_before_upload = ('CP_', None)
+    o = dot.auto(o)
+    t.check('r2 setup: the prepare with the corrected inputs ran', lambda: w.job_dir(tag, c).exists() and dot.pending_tokens, o)
+    w.wipe()
+    o = dot.session()
+    t.check('r2 M5: the restore places the newest INPUTS of the run (the corrected JOB.json) and offers NON_AI_STAGE_LOST',
+            lambda: o.code == 0 and jp.is_file() and jp.read_bytes() == good and 'NON_AI_STAGE_LOST' in dict(o.options).get('SEEN', ''), o)
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} recheck'))
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    o = dot.auto(o, halt=at_action('OPEN_CONVERSATION'))
+    t.check('r2 M5: the run goes on (prepare re-run, START G)', lambda: o.result.get('command') == 'start-note', o)
+    # RESTORE_RECORD_PREFIX_MISMATCH: a package of this run whose record is not a prefix of the restored one
+    cpp = newest_pkg(w, c)
+    p_ = vm.parse_name(cpp)
+    fake = vm.package_name('CP', tag, 'R', 0, '00000000', 'ffffffff', '00000000', p_['fp8'], '0' * 8, c)
+    w.drive.put(w.records, fake, b'invented package that never existed\n')
+    w.wipe()
+    o = dot.session()
+    t.check('r2 R2-04: a listed package of the run that does not extend its record: STOP RESTORE_RECORD_PREFIX_MISMATCH',
+            lambda: o.stop == 'RESTORE_RECORD_PREFIX_MISMATCH', o)
+
+
+@scenario
+def r2_fixes_e(t):
+    """r2 M4 (final takes the FZ copy whose bytes were checked, never the first listed copy), UPLOAD_NOT_CONFIRMED and
+    VERIFY_PART_MISMATCH (evict), on worlds with nonattempts only."""
+    na = '9992591'
+    w = World(t, 'r2_fixes_e_w', nonattempts=[na])
+    dot = Dot(w)
+    dot.truncate_upload = lambda n: n.startswith('FZ_NA-A_')
+    o = start_world(t, dot, w)
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} final'))
+    fza = [f for f in w.drive.files(w.records) if f['name'].startswith('FZ_NA-A_')]
+    t.check('r2 setup: NA-A\'s FZ landed twice (a partial copy first, then the whole one)', lambda: len(fza) == 2 and fza[0]['size'] < fza[1]['size'], fza)
+    w.wipe()
+    o = dot.session()
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} final'))
+    t.check('r2 setup: after a wipe status reaches final again', lambda: o.actions and o.actions[0].endswith(' final'), o)
+    o = dot.auto(o, halt=at_action('HANDBACK'))
+    af = read_json(w.base / 'outbox' / 'ALL_FROZEN.json')
+    run = next((r for r in af.get('runs', []) if r['tag'] == 'NA-A'), {})
+    ev = [json.loads(x) for x in (w.base / 'outbox' / 'INDEX.jsonl').read_text().splitlines() if '"final_rejected"' in x]
+    t.check('r2 M4: final rejects the partial first copy and records the whole copy\'s id and md5 in ALL_FROZEN.json',
+            lambda: o.actions == ['HANDBACK case=B'] and run.get('archive', {}).get('id') == fza[1]['id']
+            and run['archive']['md5'] == fza[1]['md5'] and any(e.get('drive_id') == fza[0]['id'] for e in ev), (o, run.get('archive'), ev))
+    flat = w.drive.flat(w.records, w.root / 'maint' / 'qualification')
+    w.wipe()
+    p = subprocess.run([sys.executable, '-I', '-B', str(HELPER), 'assemble', '--drive-dir', str(flat)], capture_output=True, text=True, timeout=600)
+    t.outputs.append(p.stdout)
+    t.check('r2 M4: assemble accepts ALL_FROZEN.json (the md5 it records is the intact copy\'s)', lambda: p.returncode == 0, p.stdout[-600:])
+    # UPLOAD_NOT_CONFIRMED: an FZ upload that never lands
+    w2 = World(t, 'r2_fixes_e_w2', nonattempts=[na])
+    dot2 = Dot(w2)
+    dot2.skip_upload = lambda n: n.startswith('FZ_NA-A_')
+    o = start_world(t, dot2, w2)
+    o = dot2.auto(o, halt=lambda a, o_: o_.stop is not None, max_steps=60)
+    t.check('r2 R2-04: an FZ that never shows on Drive: evict re-uploads it three times, then STOP UPLOAD_NOT_CONFIRMED',
+            lambda: o.stop == 'UPLOAD_NOT_CONFIRMED' and o.result.get('detail', {}).get('name', '').startswith('FZ_NA-A_'), o)
+    # VERIFY_PART_MISMATCH: the only copy on Drive is damaged and the local FZ is gone
+    w3 = World(t, 'r2_fixes_e_w3', nonattempts=[na])
+    dot3 = Dot(w3)
+    dot3.skip_upload = lambda n: n.startswith('FZ_NA-A_')
+    o = start_world(t, dot3, w3)
+    o = dot3.auto(o, halt=at_action(f'RUN {w3.V} evict'))
+    fzp = sorted((w3.base / 'outbox').glob('FZ_NA-A_*.tgz'))
+    t.check('r2 setup: NA-A frozen, its FZ held back', lambda: len(fzp) == 1 and not names(w3.drive, w3.records, 'FZ_NA-A_'), o)
+    w3.drive.put(w3.records, fzp[0].name, fzp[0].read_bytes()[:300])
+    fzp[0].unlink()
+    dot3.skip_upload = None
+    o = dot3.auto(o, halt=lambda a, o_: o_.stop is not None, max_steps=20)
+    t.check('r2 R2-04: no intact copy on Drive and no local source: evict STOPs VERIFY_PART_MISMATCH', lambda: o.stop == 'VERIFY_PART_MISMATCH', o)
+
+
+@scenario
+def r2_units(t):
+    """r2 R2-03 tests (a Drive default-fields listing names the missing field), R2-07 (packing refuses names restore refuses),
+    R2-08 (session_start uploads only non-empty files), R2-02 (a cut-off note download is downloaded again)."""
+    root = t.work / 'r2_units_w'
+    root.mkdir()
+    lp = root / 'L.json'
+    lp.write_text(json.dumps({'schema': 'cps.vm-drive-listing.v1', 'folder': 'CPS/qualification', 'name_filter': None,
+                              'pages': [{'kind': 'drive#fileList', 'files': [{'kind': 'drive#file', 'id': 'x1', 'name': 'GENESIS_0a1b2c3d_20261109T120000Z.json',
+                                                                              'mimeType': 'application/json'}]}]}))
+    try:
+        vm.parse_listing(lp, 'CPS/qualification', None, {'listing_page_marker': 'required'})
+        h = None
+    except vm.Halt as e:
+        h = e
+    t.check('r2 R2-03: a default-fields Drive page is refused LISTING_INVALID naming createdTime, the page and the entry',
+            lambda: h is not None and h.code == 'LISTING_INVALID' and h.detail.get('missing') == ['createdTime'] and h.detail.get('entry') == 1
+            and 'createdTime' in h.hint, lambda: (h and (h.code, h.hint, h.detail)))
+    readme = (HERE / 'README.md').read_text()
+    t.check('r2 R2-03: README rule 0.2 names the listing fields', lambda: all(f in readme for f in ('createdTime', 'md5Checksum', 'nextPageToken',
+                                                                                                     'incompleteSearch')))
+    src = root / 'src'
+    src.mkdir()
+    (src / 'a\\b.txt').write_text('x')
+    t.check('r2 R2-07: tree_list refuses a name restore would refuse (backslash)', lambda: halt_code(vm.tree_list, src) == 'PACKAGE_UNSUPPORTED_ENTRY')
+    # session_start.sh with a failing setup (empty log) and a failing environment check (no report written)
+    mini = root / 'mini'
+    (mini / 'deploy' / 'vm').mkdir(parents=True)
+    shutil.copyfile(SESSION_SH, mini / 'deploy' / 'vm' / 'session_start.sh')
+    (mini / 'deploy' / 'setup_vm_user.sh').write_text('#!/bin/bash\n# invented stub\nif [ -f "$STUB_SETUP_OK" ]; then mkdir -p "$CPS_TOOLS"; '
+                                                      'echo "export INVENTED=1" > "$CPS_TOOLS/env.sh"; exit 0; fi\nexit 1\n')
+    (mini / 'deploy' / 'check_env.py').write_text('import sys\nprint("invented check: not met", file=sys.stderr)\nprint("{\\"all_met\\": false}")\n')
+    g = ['git', '-C', str(mini), '-c', 'user.name=invented test', '-c', 'user.email=invented@example.invalid']
+    subprocess.run(['git', 'init', '-q', str(mini)], check=True)
+    subprocess.run(g + ['add', '-A'], check=True)
+    subprocess.run(g + ['commit', '-q', '-m', 'invented mini repo'], check=True)
+    base, tools, home = root / 'base', root / 'tools', root / 'home'
+    for d_ in (base, home):
+        d_.mkdir()
+    os.symlink(mini, base / 'repo')
+    (root / 'boot').write_text('invented-boot\n')
+    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(base), CPS_TOOLS=str(tools), CPS_VM_BOOT_ID_PATH=str(root / 'boot'),
+               STUB_SETUP_OK=str(root / 'setup_ok'))
+    r1 = subprocess.run(['bash', str(base / 'repo' / 'deploy' / 'vm' / 'session_start.sh'), '--operator-model', MODEL], capture_output=True, text=True, env=env)
+    t.outputs.append(r1.stdout)
+    t.check('r2 R2-08: a failed setup with an empty log: STOP SETUP_FAILED and no UPLOAD of the empty log', lambda: r1.returncode == 3
+            and 'STOP: SETUP_FAILED' in r1.stdout and 'UPLOAD ' not in r1.stdout, r1.stdout[-600:])
+    (root / 'setup_ok').write_text('1')
+    r2 = subprocess.run(['bash', str(base / 'repo' / 'deploy' / 'vm' / 'session_start.sh'), '--operator-model', MODEL], capture_output=True, text=True, env=env)
+    t.outputs.append(r2.stdout)
+    ups = [ln[7:].split(' -> ')[0] for ln in r2.stdout.splitlines() if ln.startswith('UPLOAD ')]
+    t.check('r2 R2-08: a failed environment check without its report: STOP CHECK_ENV_FAILED, UPLOAD only of the non-empty check log',
+            lambda: r2.returncode == 3 and 'STOP: CHECK_ENV_FAILED' in r2.stdout and len(ups) == 1 and 'check_env_' in ups[0]
+            and os.path.getsize(ups[0]) > 0, r2.stdout[-600:])
+    t.check('r2 R2-08: every line session_start printed has the helper grammar', lambda: all(ln.startswith(PREFIXES) for ln in
+            (r1.stdout + r2.stdout).splitlines() if ln.strip()), (r1.stdout + r2.stdout)[-800:])
 
 
 def read_json(p):

@@ -18,7 +18,15 @@ Each command prints, in order: `RESULT: {...}` (keep it in your notes), sometime
    between `folder=` and ` to=` is the folder; it may contain spaces). With `name=`, list only that file name. Save
    **every page the connector returns, each page's response unchanged**, in this wrapper, at the printed path:
    `{"schema": "cps.vm-drive-listing.v1", "folder": "<folder>", "name_filter": <the name or null>, "pages": [<page 1>, <page 2>, ...]}`.
-   Keep asking for the next page until the connector gives no next-page token. Never shorten, sort or retype a listing;
+   Keep asking for the next page until the connector gives no next-page token. Never shorten, sort or retype a listing.
+   Ask the connector for these fields: `kind, nextPageToken, incompleteSearch, files(id, name, createdTime, md5Checksum,
+   size, mimeType)`. Every file entry must carry `id`, `name` and `createdTime`, and every page must carry at least one of
+   `kind`, `nextPageToken`, `incompleteSearch` (the helper refuses `LISTING_INVALID` / `LISTING_NO_PAGE_MARKER`
+   otherwise; RESULT names the page, the entry and the missing field). A minimal one-page example:
+   `{"schema": "cps.vm-drive-listing.v1", "folder": "CPS/qualification", "name_filter": null, "pages": [{"kind": "drive#fileList",
+   "incompleteSearch": false, "files": [{"id": "1AbC", "name": "GENESIS_0a1b2c3d_20261109T120000Z.json",
+   "createdTime": "2026-11-09T12:00:05.123Z", "md5Checksum": "0123456789abcdef0123456789abcdef", "size": "1024",
+   "mimeType": "application/json"}]}]}`;
 3. every `DOWNLOAD id=<Drive id> name=<file name> -> <local path>`: download **that id** to that exact path
    (`id=CPS_FOLDER_PATH` means: the file at `<name>` in the static CPS folder);
 4. then `NEXT:` and each `THEN:` in order. **A `RUN` line replaces everything still pending:** once you have run it, the
@@ -26,10 +34,15 @@ Each command prints, in order: `RESULT: {...}` (keep it in your notes), sometime
    own NEXT and THEN lines). Then the command is finished.
 
 Other endings:
-- `STOP: <CODE> <hint>`: do what the NEXT lines say (if any), then stop the job and tell the owner (handback case C unless
-  the hint says otherwise).
-- `REFUSED: <CODE>`: nothing changed and nothing is to be uploaded. Read `hint` in RESULT, fix the cause, run the same
-  command again.
+- `STOP: <CODE> <hint>`: a STOP counts first and stays in force. Do its UPLOAD lines; then, if it printed NEXT/THEN
+  lines, follow that chain (each RUN line's output replaces the pending lines as usual) only through the freeze of this
+  job, its upload, its verification and `evict`; never run a command of another job (a `prepare`, `nonattempt`,
+  `job-start`, `final`, or a `start-note` of another job). Then stop and tell the owner the STOP code (handback case C
+  unless the hint says otherwise). `STOP_AFTER_FREEZE code=X` means the same.
+- `REFUSED: <CODE>` (or exit 4 with a code in RESULT): nothing changed and nothing is to be uploaded. If it printed NEXT
+  lines, do them. Otherwise read `hint` in RESULT, fix the cause, run the same command again. **If you cannot fix the
+  cause, run `$V status` once; if status prints the same refused command again, stop and hand back case C** with the
+  RESULT line (never loop on a refusal).
 - Exit code 10 (usually `NEXT: RUN_SAME_COMMAND_AGAIN`): do its UPLOAD lines first, then its SAVE_DRIVE_LISTING and
   DOWNLOAD lines, then run the same command again. A listing the helper refused is set aside by the helper and printed
   again (`RESULT` names the code, folder and path); after the third refusal of the same listing it stops (case C).
@@ -114,9 +127,14 @@ from `$V status`; never type runner arguments yourself.
     again. A copy that fails is never asked for again: the next copy, an UPLOAD of the local file (at most three times)
     or `rebuild-parts` follows. Then `$V status` gives the next run.
 
-A conversation that ends without its file: `CONFIRM_CONVERSATION_ENDED`, the transcript, then the printed `incident`
-line (`AI_NOTHING_WRITTEN`, or `AI_WRITTEN_LOST` without a transcript: doubt counts as written), then `wrap interrupt`
-or the replacement reviewer, as printed.
+A conversation that ends without its file: `CONFIRM_CONVERSATION_ENDED`, `EXPORT_TRANSCRIPT`, then
+`CHOOSE_FROM_TRANSCRIPT` with two options: `NOTHING_WRITTEN` (the transcript was exported, is not empty, and shows
+nothing was written: its RUN line passes the transcript) or `WRITTEN_OR_DOUBT` (anything else, **including an export
+that failed or came out empty**: doubt counts as written). Then `wrap interrupt`, the replacement reviewer or the freeze,
+as printed. You never edit a RUN line to drop an argument: each case has its own printed line.
+
+A run that failed by reset divergence (`STOP: RESET_DIVERGED`) can only be frozen: `status` and session start print its
+`wrap freeze` (never another step of it).
 
 Before qualification: `$V genesis --first-ledger` once (status prints it), upload GENESIS, tell the maintainer its name
 (`TELL_MAINTAINER`). Then all nonattempts (`wrap nonattempt`, one FZ each, each evicted). At the end: `$V final`
@@ -125,7 +143,10 @@ Before qualification: `$V genesis --first-ledger` once (status prints it), uploa
 ## 3. One everyday job (one at a time; it always ends frozen)
 
 1. Write `JOB.json`, `JOB_TITLE.json` and the source into `~/cps/everyday_inputs/<case>/`; `$V job-start --case {CASE}`.
-   Upload INPUTS (to `Dots Folder/CPS_JOB_RECORDS`).
+   Upload INPUTS (to `Dots Folder/CPS_JOB_RECORDS`). If the runner refuses the `wrap prepare` before it made the job
+   folder (for example `RUNNER_JOB_CONFIG_REFUSED`), the output prints `FIX code=...` and `$V job-start --case <case>`:
+   correct the inputs in that folder, then run that line. It gives the same run new inputs (a new INPUTS upload; at most
+   three times, then `STOP: EVERYDAY_PREPARE_REFUSED`, case C). Unchanged inputs are refused `JOB_START_INPUTS_UNCHANGED`.
 2. Steps 1-9 of section 2 with the printed everyday lines.
 3. When the copy can be sent now: `$V wrap deliver-check ...` (CP-D). Make the personal copy (`DELIVER`).
 4. `$V delivery-note --prepared ...`: upload the copy, the log and the note to `<profile>/deliveries/`, the note also to
@@ -150,7 +171,8 @@ token you saw since the job's last package upload (`SEEN`), or `NOT_SEEN`. Then 
 | conversation open or broken, transcript shows nothing written | `AI_NOTHING_WRITTEN` | `wrap interrupt ...` (qualification S/G), the replacement reviewer (V), or freeze |
 | written, partly written, maybe written, or no transcript | `AI_WRITTEN_LOST` | `wrap freeze` (failed run, never regenerated) |
 | after the AI archive upload | `AI_ARCHIVED` (seen or not) | the consuming wrap (finish after re-writing the generation record) |
-| after the FZ upload | `NONE_IN_FLIGHT` | verification and `evict` |
+| after the FZ upload, nothing printed after it but `evict` or `final` | `NONE_IN_FLIGHT` | verification and `evict` |
+| after the FZ upload, while the next runner command was printed (a `prepare` or `nonattempt`) | `NON_AI_STAGE_LOST` (seen or not: `NOT_SEEN` if it never ran) | verification and `evict`, then that command again, bound to the token |
 | an AI archive that reached Drive damaged (every copy fails its check) | `AI_WRITTEN_LOST` only (printed alone) | `wrap freeze` (failed run) |
 | everyday: after job-start, before the prepare's package | `NON_AI_STAGE_LOST` | the run's `wrap prepare` (once) |
 | a START on Drive whose package is not | — | `STOP: RESTORE_NOTES_AHEAD_OF_PACKAGE` (case C) |

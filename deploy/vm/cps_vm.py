@@ -755,6 +755,14 @@ def tree_list(root, unsupported_code='PACKAGE_UNSUPPORTED_ENTRY'):
         for n in dns + fns:
             p = os.path.join(dp, n)
             rel = os.path.relpath(p, root).replace(os.sep, '/')
+            try:                                    # r2 R2-07: only names restore accepts are packed
+                rel.encode('utf-8')
+                bad = unsafe_name(rel)
+            except UnicodeEncodeError:
+                bad = 'utf-8'
+            if bad:
+                stop(unsupported_code, 'a file name the archive format does not keep (backslash, NUL or not UTF-8)',
+                     detail={'path': rel.encode('utf-8', 'replace').decode('ascii', 'replace')[:200], 'why': bad})
             st = os.lstat(p)
             m = stat.S_IMODE(st.st_mode)
             if m & 0o7000:
@@ -1047,15 +1055,21 @@ class Listing:
         return name in self.by
 
 
-def listing_refuse(code, hint='list the folder again, following every page to the end'):
-    refuse(code, hint)
+LISTING_FIELDS_HINT = ('save every page with the fields nextPageToken, incompleteSearch, kind and '
+                       'files(id,name,createdTime,md5Checksum,size,mimeType) (README 0 rule 2), following every page to the end')
+
+
+def listing_refuse(code, hint='list the folder again, following every page to the end', detail=None):
+    refuse(code, hint, detail=detail)
 
 
 def parse_listing(path, folder, name_filter, cfg, sentinel=None, sentinel_bytes=None):
     """Read a saved listing (the wrapper of 3.2) and apply every refusal of 3.2; returns a Listing."""
     d = read_json_file(path)
     if not isinstance(d, dict) or d.get('schema') != LISTING_SCHEMA or not isinstance(d.get('pages'), list) or not d['pages']:
-        listing_refuse('LISTING_INVALID')
+        listing_refuse('LISTING_INVALID', 'save the pages in the wrapper of README 0 rule 2: '
+                       '{"schema": "cps.vm-drive-listing.v1", "folder": ..., "name_filter": ..., "pages": [...]}',
+                       {'why': 'wrapper'})
     if d.get('folder') != folder or d.get('name_filter') != name_filter:
         listing_refuse('LISTING_WRONG_FOLDER')
     files, marker = [], False
@@ -1064,7 +1078,7 @@ def parse_listing(path, folder, name_filter, cfg, sentinel=None, sentinel_bytes=
         if isinstance(pg, list):
             pg = {'files': pg}
         if not isinstance(pg, dict) or not isinstance(pg.get('files', []), list):
-            listing_refuse('LISTING_INVALID')
+            listing_refuse('LISTING_INVALID', LISTING_FIELDS_HINT, {'why': 'page', 'page': i + 1})
         if any(k in pg for k in ('nextPageToken', 'incompleteSearch', 'kind')):
             marker = True
         tok = pg.get('nextPageToken')
@@ -1074,18 +1088,24 @@ def parse_listing(path, folder, name_filter, cfg, sentinel=None, sentinel_bytes=
             listing_refuse('LISTING_INCOMPLETE')
         if i < len(pages) - 1 and not tok:
             listing_refuse('LISTING_INCOMPLETE')
-        for f in pg.get('files', []):
-            if not isinstance(f, dict) or not all(isinstance(f.get(k), str) and f.get(k) for k in ('name', 'id', 'createdTime')):
-                listing_refuse('LISTING_INVALID')
+        for j, f in enumerate(pg.get('files', [])):
+            where = {'page': i + 1, 'entry': j + 1}
+            if not isinstance(f, dict):
+                listing_refuse('LISTING_INVALID', LISTING_FIELDS_HINT, dict(where, why='entry'))
+            miss = [k for k in ('name', 'id', 'createdTime') if not (isinstance(f.get(k), str) and f.get(k))]
+            if miss:                                # r2 R2-03: name the missing field and the entry
+                listing_refuse('LISTING_INVALID', LISTING_FIELDS_HINT, dict(where, missing=miss))
             if parse_utc(f['createdTime']) is None:
-                listing_refuse('LISTING_INVALID')
+                listing_refuse('LISTING_INVALID', 'createdTime must be RFC 3339 as Drive gives it: save the page unchanged',
+                               dict(where, field='createdTime'))
             md5 = f.get('md5Checksum')
             if md5 is not None and not (isinstance(md5, str) and re.fullmatch(r'[0-9a-f]{32}', md5)):
-                listing_refuse('LISTING_INVALID')
+                listing_refuse('LISTING_INVALID', 'md5Checksum must be 32 lowercase hex digits: save the page unchanged',
+                               dict(where, field='md5Checksum'))
             size = f.get('size')
             if size is not None:
                 if isinstance(size, bool) or not (isinstance(size, int) or (isinstance(size, str) and size.isdigit())):
-                    listing_refuse('LISTING_INVALID')
+                    listing_refuse('LISTING_INVALID', 'size must be a number of bytes: save the page unchanged', dict(where, field='size'))
                 size = int(size)
             mt = f.get('mimeType')
             if isinstance(mt, str) and mt.startswith('application/vnd.google-apps.'):
@@ -1095,7 +1115,8 @@ def parse_listing(path, folder, name_filter, cfg, sentinel=None, sentinel_bytes=
             files.append({'name': f['name'], 'id': f['id'], 'created': iso(parse_utc(f['createdTime'])), 'md5': md5,
                           'size': size})
     if cfg['listing_page_marker'] == 'required' and not marker:
-        listing_refuse('LISTING_NO_PAGE_MARKER')
+        listing_refuse('LISTING_NO_PAGE_MARKER', 'save each page as the connector returns it, with its kind, nextPageToken '
+                       'and incompleteSearch fields (README 0 rule 2)')
     lst = Listing(folder, name_filter, files, len(pages))
     if name_filter is None and sentinel is not None:
         want_size = len(sentinel_bytes) if sentinel_bytes is not None else None
@@ -1116,7 +1137,7 @@ def read_listing(ctx, path, folder, name_filter, sentinel=None, sentinel_bytes=N
     except Halt as h:
         if h.kind != 'REFUSED' or not h.code.startswith('LISTING_'):
             raise
-        relist(ctx, path, folder, name_filter, h.code, h.hint, block)
+        relist(ctx, path, folder, name_filter, h.code, h.hint, block, extra=h.detail)
     for old in quarantined(ctx, path):
         old.unlink()
     return lst
@@ -1128,7 +1149,7 @@ def quarantined(ctx, path):
     return sorted(q.glob(key + '_*')) if q.is_dir() else []
 
 
-def relist(ctx, path, folder, name_filter, code, hint, block=None):
+def relist(ctx, path, folder, name_filter, code, hint, block=None, extra=None):
     """T-12: move the refused listing to outbox/rejected_listings/ (so no later command reads it), print the exact
     SAVE_DRIVE_LISTING again and exit 10; the third refusal of the same listing in a row is STOP (case C)."""
     q = ctx.lay.outbox / 'rejected_listings'
@@ -1138,6 +1159,8 @@ def relist(ctx, path, folder, name_filter, code, hint, block=None):
     if os.path.lexists(path):
         os.replace(path, q / f'{key}_{n:02d}_{Path(path).name}')
     detail = {'folder': folder, 'to': str(path), 'name_filter': name_filter, 'refusals': n}
+    if isinstance(extra, dict):
+        detail['problem'] = extra
     b = block if block is not None else Block()
     if n >= LISTING_REFUSALS_MAX:
         b.tail = []
@@ -1877,12 +1900,30 @@ def nothing_written_lines(ctx, plan, jv, role, att, T, meta):
         plan.run(f'{V} incident --classification AI_WRITTEN_LOST --job-dir {D} --role {role} --conversation {conv} --conversation-ended')
         return
     plan.act(f'EXPORT_TRANSCRIPT to={tp}')
-    plan.run(f'{V} incident --classification AI_NOTHING_WRITTEN --job-dir {D} --role {role} --conversation {conv} '
-             f'--conversation-ended --transcript {tp}')
+    # r2 R2-01: the export may fail; without a transcript doubt counts as written, so both lines are printed as options
+    plan.act('CHOOSE_FROM_TRANSCRIPT')
+    plan.block.option('NOTHING_WRITTEN', f'RUN {V} incident --classification AI_NOTHING_WRITTEN --job-dir {D} --role {role} '
+                                         f'--conversation {conv} --conversation-ended --transcript {tp}')
+    plan.block.option('WRITTEN_OR_DOUBT', f'RUN {V} incident --classification AI_WRITTEN_LOST --job-dir {D} --role {role} '
+                                          f'--conversation {conv} --conversation-ended')
+
+
+def run_failed_by_reset(ctx, tag, case):
+    """The run has failed by reset divergence: its newest package says so, or an INCIDENT of it forces it (r2 C2/M1)."""
+    prev = newest_package(ctx, tag, case)
+    if ((prev or {}).get('meta') or {}).get('reset_diverged'):
+        return True
+    return any(i['content'].get('forces_reset_diverged') for i in incidents(ctx) if concerns(i, tag, case))
 
 
 def job_plan(ctx, plan, jv):
     V, D = ctx.V, jv.dir
+    if run_failed_by_reset(ctx, jv.tag, jv.case):      # r2 M1: only freeze may run; print it, never a refused line
+        plan.run(freeze_line(ctx, D))
+        plan.wrap = {'sub': 'freeze', 'tag': jv.tag, 'case': jv.case, 'job_dir': str(D), 'pending': False}
+        if ctx.mode == 'everyday':
+            plan.act('STOP_AFTER_FREEZE code=EVERYDAY_RESET_DIVERGED')
+        return
     if (D / CJ.MARKER_NAME).exists() and lock_free(D):
         plan.run(freeze_line(ctx, D))
         plan.wrap = {'sub': 'freeze', 'tag': jv.tag, 'case': jv.case, 'job_dir': str(D), 'pending': False}
@@ -2069,6 +2110,21 @@ def inputs_shas(d, man):
     return out
 
 
+def run_inputs(ctx, tag):
+    """r2 M5: the INPUTS entry that a run's prepare uses: the newest INPUTS of the run whose manifest can be read (job-start
+    may give a run new inputs after the runner refused its prepare before making the folder)."""
+    es = [e for e in ctx.index.of('inputs') if e.get('tag') == tag]
+    es = [e for e in es if inputs_manifest(e) is not None] or es
+    return max(es, key=lambda e: (max(e.get('created_utc') or '', e.get('drive_created') or ''), e['name'])) if es else None
+
+
+def prepare_refusal(ctx, e):
+    """r2 M5: the runner code that refused this INPUTS run's prepare before any job folder existed (INDEX prepare_refused
+    for exactly this INPUTS name), else None."""
+    ev = [x for x in ctx.index.events if x['event'] == 'prepare_refused' and x['name'] == (e or {}).get('name')]
+    return ev[-1].get('code') if ev else None
+
+
 def everyday_pending_prepare(ctx):
     """T-08: the newest INPUTS run with no package and no job folder: its prepare is the job in flight."""
     runs = sorted(ctx.index.of('inputs'), key=lambda e: e.get('tag') or '')
@@ -2087,6 +2143,11 @@ def everyday_plan(ctx, plan):
     pend = everyday_pending_prepare(ctx)
     if pend is not None:
         tag, case = pend['tag'], pend['case_id']
+        rc = prepare_refusal(ctx, run_inputs(ctx, tag))
+        if rc is not None:                          # r2 M5: the inputs need fixing; job-start gives the run new inputs
+            plan.act(f'FIX code=RUNNER_{rc}')
+            plan.run(f'{V} job-start --case {case}')
+            return
         plan.run(everyday_prepare_line(ctx, tag, case))
         plan.wrap = {'sub': 'prepare', 'tag': tag, 'case': case, 'pending': True, 'job_dir': str(ctx.lay.job_dir(tag, case))}
         return
@@ -2110,11 +2171,12 @@ def everyday_plan(ctx, plan):
     plan.run(f"{V} job-start --case '{{CASE}}'")
 
 
-def plan_status(ctx, ignore_pending=False, in_worker=False):
-    """The first applicable rule of 5.17 (0, 1 and 3-8; rule 2 is incident_plan)."""
+def plan_status(ctx, ignore_pending=False, in_worker=False, past_fz_pending=False):
+    """The first applicable rule of 5.17 (0, 1 and 3-8; rule 2 is incident_plan). past_fz_pending (r2 M2): skip the
+    verification-only evict of FZ_PENDING to see the runner command after it (what a reset may have lost)."""
     plan = Plan()
     V, lay, st = ctx.V, ctx.lay, ctx.state or {}
-    if (lay.outbox / 'DETACHED.json').is_file() and not in_worker:
+    if (lay.outbox / 'DETACHED.json').is_file() and not in_worker and detached_live(lay):
         plan.run(f'{V} wait')
         return plan
     if not st.get('fingerprint_pass'):
@@ -2158,7 +2220,7 @@ def plan_status(ctx, ignore_pending=False, in_worker=False):
         else:
             plan.run(f'{V} evict --job-dir {d}')
         return plan
-    for e in fz_pending(ctx):
+    for e in ([] if past_fz_pending else fz_pending(ctx)):
         plan.run(f'{V} evict --job-dir {e["job_dir"]}')
         return plan
     if ctx.mode == 'qualification':
@@ -2234,7 +2296,9 @@ def situation(ctx):
                     return {'kind': 'archived', 'jv': jv, 'role': role, 'start': T, 'archive': archs[-1], 'wrap': inner.wrap,
                             'sub': CONSUMING_SUB[role]}
                 return {'kind': 'archive_nothing', 'jv': jv, 'role': role, 'start': T, 'archive': archs[-1]}
-    inner = plan_status(ctx, ignore_pending=True)
+    # r2 M2: an FZ_PENDING evict is verification only: the runner command after it (a prepare or nonattempt that may
+    # have run before the reset) is what the incident concerns, so its seen token binds the re-run (O44)
+    inner = plan_status(ctx, ignore_pending=True, past_fz_pending=True)
     if inner.wrap:
         return {'kind': 'runner', 'jv': jv, 'wrap': inner.wrap, 'sub': inner.wrap['sub']}
     return {'kind': 'none', 'jv': jv}
@@ -2496,6 +2560,12 @@ def validate_pass(ctx, raw, fp_sha):
     return d
 
 
+def detached_live(lay):
+    """r2 R2-03: a DETACHED.json written in another boot names a worker that died with that boot: it is not waited for."""
+    d = read_json_file(lay.outbox / 'DETACHED.json') if (lay.outbox / 'DETACHED.json').is_file() else None
+    return not isinstance(d, dict) or d.get('boot_id') == current_boot_id()
+
+
 def cleanup_leftovers(lay):
     """T-23: leftovers of a killed earlier helper (staging folders, outbox temporary files), removed under the helper
     lock and only when no detached worker of this boot is alive (a worker writes its own temporary files)."""
@@ -2503,10 +2573,13 @@ def cleanup_leftovers(lay):
     d = read_json_file(dp) if dp.is_file() else None
     if isinstance(d, dict) and worker_alive(d):
         return
+    if isinstance(d, dict) and d.get('boot_id') != current_boot_id():
+        dp.unlink()                                 # r2 R2-03: its worker died with the earlier boot (the incident follows)
     globs = [lay.base.glob('.cps_vm_stage_*'), lay.outbox.glob('.tmp_*')]
     for root in (lay.qual, lay.jobs):
         if root.is_dir():
             globs.append(root.glob('*/.cps_vm_stage_*'))
+            globs.append(root.glob('*/.cps_vm_evict_*'))   # r2 R2-04: an evict killed while deleting
     for g in globs:
         for p in list(g):
             try:
@@ -2628,9 +2701,11 @@ def session_body(ctx, a, inbox, block, old, kit):
             st['restore_recheck'] = bool(old.get('restore_recheck'))
             st['ai_corrupt'] = old.get('ai_corrupt') or []
             st['rejected_copies'] = old.get('rejected_copies') or []
-            for k in ('recheck_incident',):
-                if old.get(k):
+            for k in ('recheck_incident', 'restore_session'):
+                if old.get(k) and st['pending_incident']:
                     st[k] = old[k]
+            if old.get('recheck_incident'):
+                st['recheck_incident'] = old['recheck_incident']
             if old.get('boot_id') != boot:
                 st['pending_incident'], boot_changed = True, True
         else:                                   # T-09: a known INDEX without its SESSION_STATE (a killed session): incident first
@@ -2642,7 +2717,7 @@ def session_body(ctx, a, inbox, block, old, kit):
     if restored is not None:                    # T-01: what the restore rejected reaches SESSION_STATE (and so the INCIDENT)
         st['ai_corrupt'] = list(restored.get('ai_corrupt') or [])
         st['rejected_copies'] = list(restored.get('rejected_copies') or [])
-    elif ctx.mode == 'qualification' and ctx.cfg['expected_genesis'] is not None:
+    elif mode == 'fresh' and ctx.mode == 'qualification' and ctx.cfg['expected_genesis'] is not None:
         stop('LISTING_MISSING_GENESIS', 'fresh mode is impossible once a GENESIS is recorded: list the folder again, every page')
     # clock (step 3, local and fresh)
     if mode != 'restore':
@@ -2677,6 +2752,8 @@ def session_body(ctx, a, inbox, block, old, kit):
                                 'newest_session': prev_sess, 'sentinel': ctx.cfg['sentinels'][('everyday' if ctx.mode == 'everyday' else 'qualification')]['name'] if lst else None},
             'clock': {'floor_utc': None, 'waited_seconds': 0}, 'state': None}
     st['session_note'] = name
+    if mode == 'restore' or boot_changed:          # r2 N1: the incident names the SESSION that asked for it
+        st['restore_session'] = name
     ctx.state = st
     note['state'] = state_line(ctx)
     path = lay.outbox / name
@@ -2688,6 +2765,7 @@ def session_body(ctx, a, inbox, block, old, kit):
     for up in made(ctx, path, 'session', folder, content=note):
         block.upload(up, folder)
     ctx.save_state()
+    restore_done(lay)
     if inbox.exists():
         remove_tree(inbox)
     inbox.mkdir(parents=True, exist_ok=True)
@@ -2867,7 +2945,8 @@ def pkg_meta(man):
             'frozen_sha256': (man.get('frozen') or {}).get('frozen_sha256'), 'reset_diverged': bool(man.get('reset_diverged')),
             'png_set_sha256': png.get('set_sha256') if png else None, 'png_parts': png.get('parts') if png else [],
             'png_made_by': png.get('made_by_package') if png else None, 'bind': ((man.get('binding') or {}).get('own')),
-            'binding': man.get('binding'), 'command': (man.get('command') or {}).get('runner_subcommand')}
+            'binding': man.get('binding'), 'command': (man.get('command') or {}).get('runner_subcommand'),
+            'verify_frozen_exit': ((man.get('frozen') or {}).get('verify_frozen') or {}).get('exit')}
 
 
 def restore_needed(ctx, lst):
@@ -2957,15 +3036,17 @@ class Fetcher:
                 p.unlink()
                 refuse('RESTORE_WRONG_COPY', 'save each download under the printed path, by the printed id')
             why = check(p)
-            if why is None:
-                if (f['md5'] and f['md5'] != md5):
-                    stop('RESTORE_MD5_MISMATCH', 'the listing contradicts the downloaded bytes: hand back case C', detail={'name': name})
-                if f['size'] is not None and f['size'] != os.lstat(p).st_size:
+            if self.download_at_fault(f, p, md5):
+                # r2 R2-02: bytes that differ from the listing are a damaged download unless their whole-file hash (the
+                # name's) verifies: only then does the listing contradict intact bytes
+                if why is None and whole_hash_ok(p):
+                    if f['md5'] and f['md5'] != md5:
+                        stop('RESTORE_MD5_MISMATCH', 'the listing contradicts the downloaded bytes: hand back case C', detail={'name': name})
                     stop('RESTORE_SIZE_MISMATCH', 'the listing contradicts the downloaded bytes: hand back case C', detail={'name': name})
+                return self.redownload(f, name, p)
+            if why is None:
                 self.plan.setdefault('chosen', {})[name] = f
                 return p
-            if self.download_at_fault(f, p, md5):
-                return self.redownload(f, name, p)
             self.reject(name, f['id'], why)
             p.unlink()
 
@@ -3025,6 +3106,16 @@ class Fetcher:
             return DEAD
         self.plan.setdefault('chosen', {})[name] = {'id': None, 'created': created_of(self.lst, name), 'md5': None, 'size': len(data)}
         return out
+
+
+def whole_hash_ok(p):
+    """The file's name carries a hash of its whole bytes (package pkg8, transcript or INPUTS sha8) and it matches."""
+    pn = parse_name(Path(p).name) or {}
+    if pn.get('kind') == 'package':
+        return h8(sha_file(p)) == pn['pkg8']
+    if pn.get('kind') in ('transcript', 'inputs'):
+        return h8(sha_file(p)) == pn['sha8']
+    return False
 
 
 def check_pkg_bytes(p):
@@ -3207,8 +3298,9 @@ def restore(ctx, lst, inbox, block, st):
             mine = job is not None and p.get('tag') == job[0] and p.get('case') == job[1]
             if p['kind'] == 'delivery':
                 mine = run_tag is not None and job is not None and p['case'] == job[1]
-            if p['kind'] == 'inputs':
-                mine = p['tag'] == run_tag
+            if p['kind'] == 'inputs':                  # r2 M5: only the newest INPUTS of the run (new inputs replace refused ones)
+                mine = p['tag'] == run_tag and p['name'] == max((q_['name'] for q_ in names.values() if q_['kind'] == 'inputs'
+                                                                 and q_['tag'] == run_tag), key=lambda n: (created_of(lst, n) or '', n))
             later = tp is None or (created_of(lst, p['name']) or '') > tp
             if p['kind'] in ('start', 'link', 'ai') and later and not mine and (qual or p.get('tag') == run_tag):
                 stop('RESTORE_NOTES_AHEAD_OF_PACKAGE', 'a START, LINK or AI archive on Drive names a job whose package is not there: hand back case C',
@@ -3599,6 +3691,13 @@ def place_restore(ctx, rp, lst):
     return do_place(ctx, rp)
 
 
+def restore_done(lay):
+    """r2 R2-05: called once SESSION_STATE (and, for a session, its SESSION note) holds the restore's result."""
+    for n in ('RESTORE_IN_PROGRESS.json', 'RESTORE_PLAN.json'):
+        if (lay.outbox / n).exists():
+            (lay.outbox / n).unlink()
+
+
 def restore_resume(ctx):
     rp = read_json_file(ctx.lay.outbox / 'RESTORE_IN_PROGRESS.json')
     if not isinstance(rp, dict):
@@ -3713,9 +3812,8 @@ def do_place(ctx, rp):
     st = ctx.state if isinstance(ctx.state, dict) else {}
     st['ai_corrupt'] = rp.get('ai_corrupt') or []
     st['rejected_copies'] = rp.get('rejected_copies') or []
-    (lay.outbox / 'RESTORE_IN_PROGRESS.json').unlink()
-    if (lay.outbox / 'RESTORE_PLAN.json').exists():
-        (lay.outbox / 'RESTORE_PLAN.json').unlink()
+    # r2 R2-05: RESTORE_IN_PROGRESS.json stays until the caller has saved SESSION_STATE (and the SESSION note): a kill in
+    # between resumes the (idempotent) placement instead of falling into local mode without them
     return {'package': rp.get('package'), 'ai_archives_placed': [rp['ai'][0]] if rp.get('ai') and len(rp['ai']) == 2 else [],
             'png': (rp.get('png') or {}).get('source'), 'notes': sorted(rp['notes']), 'rejected_copies': rp.get('rejected_copies') or [],
             'ai_corrupt': rp.get('ai_corrupt') or [], 'fz_newest': bool(rp.get('fz_newest'))}
@@ -3937,6 +4035,12 @@ def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by
         p = jv.dir / rel
         mm.append(('job/' + rel, k, mode, int(os.lstat(p).st_mtime), None if k == 'dir' else str(p)))
     write_tgz(tmp, mm)
+    chk = Archive(tmp, ('MANIFEST.json', 'ledger', 'job'))  # r2 R2-07: read the package back as restore will
+    try:
+        check_pkg_manifest(chk)
+        chk.check(pkg_expected(chk.manifest))
+    finally:
+        chk.close()
     pkg8 = h8(sha_file(tmp))
     name = package_name(kind, jv.tag, seqkind, seq, h8(lsha) if qual else '00000000', h8(rsha), h8(fsha) if fsha else '00000000',
                         h8(ctx.state['fingerprint_sha256']), pkg8, jv.case)
@@ -4126,7 +4230,7 @@ def wrap_checks(ctx, sub, rargs):
         if packages(ctx, tag) or len([e for e in incidents(ctx) if e['content'].get('next_subcommand') == 'prepare'
                                       and (e['content'].get('pending_job') or {}).get('tag') == tag]) > 1:
             refuse('WRAP_EVERYDAY_REPREPARE_USED', 'this run was prepared already (one re-prepare after a lost prepare)')
-        im = inputs_manifest(runs[-1])
+        im = inputs_manifest(run_inputs(ctx, tag))
         jp = Path(o.get('job') or '')
         if im is None or jp.parent != lay.everyday_inputs / case or inputs_shas(jp.parent, im) != im.get('files'):
             refuse('WRAP_INPUTS_CHANGED', 'the inputs differ from the INPUTS archive job-start made: run status')
@@ -4137,9 +4241,9 @@ def wrap_checks(ctx, sub, rargs):
         refuse('WRAP_INTERRUPT_EVERYDAY', 'everyday: freeze, then job-start --restart-of (once)')
     jv = JobView(ctx, target)
     prev = newest_package(ctx, tag, case)
-    forced = any(i['content'].get('forces_reset_diverged') for i in incidents(ctx) if concerns(i, tag, case))
-    if sub != 'freeze' and (((prev or {}).get('meta') or {}).get('reset_diverged') or forced):
-        refuse('WRAP_RUN_FAILED_RESET_DIVERGED', 'this run has failed (reset diverged): only freeze may run')
+    failed = run_failed_by_reset(ctx, tag, case)
+    if sub != 'freeze' and failed:
+        refuse('WRAP_RUN_FAILED_RESET_DIVERGED', 'this run has failed (reset diverged): only freeze may run; run status')
     if sub == 'prepare' and qual and tag.endswith('-restart1'):
         prev_tag = tag.split('-')[0]
         fl_ = flags_copy(ctx, prev_tag, case)
@@ -4150,10 +4254,12 @@ def wrap_checks(ctx, sub, rargs):
     pre_newest = prev['name'] if prev else (chain_newest['name'] if chain_newest else None)
     cur_chain = chain_newest['name'] if chain_newest else None
     carried = set(carried_obligations(ctx, pre_newest, tag, case))
-    for i in incidents(ctx):
+    # r2 C2: a run failed by reset divergence may always be frozen, whatever runner command a seen token bound
+    binding_incidents = [] if (sub == 'freeze' and failed) else incidents(ctx)
+    for i in binding_incidents:
         if i['name'] in carried and i['content'].get('next_subcommand') != sub:
             refuse('WRAP_BINDING_SUBCOMMAND', 'a seen token still binds another runner command of this job: run the line status prints')
-    for i in incidents(ctx):
+    for i in binding_incidents:
         c = i['content']
         if c.get('next_subcommand') and c.get('newest_package') in (pre_newest, cur_chain):
             jb = (c.get('tag'), c.get('case_id')) if c.get('tag') else ((c.get('pending_job') or {}).get('tag'), (c.get('pending_job') or {}).get('case'))
@@ -4410,7 +4516,8 @@ def wrap_work(ctx, info):
     verify = None
     if sub in ('freeze', 'nonattempt') and last == 'NEXT: DONE':
         vc, _, vlast, vj, _ = run_runner(ctx, ['verify-frozen', '--job-dir', str(jd)], log)
-        verify = {'exit': vc, 'result': (vj or {}).get('result'), 'json': vj}
+        verify = {'exit': vc if vlast == 'NEXT: DONE' or vc != 0 else 3, 'result': (vj or {}).get('result'), 'json': vj,
+                  'last_line': vlast}
     jv = JobView(ctx, jd)
     completed = None
     if last.startswith('NEXT:') and jv.rec:
@@ -4439,9 +4546,9 @@ def wrap_work(ctx, info):
                 'record_sha256': jv.record_sha(), 'bind': b.bind, 'reset_diverged': diverged, 'binding': (pk or {}).get('binding')}
     V, D = ctx.V, jd
     b.code = code if code in (0, 3) else EXIT_OK
-    if verify is not None and verify['exit'] == 3:
-        b.next(f'RUN {V} status')
-        raise Halt('STOP', 'FROZEN_FOLDER_CHANGED', 'verify-frozen found the frozen folder changed: hand back case C', block=b)
+    if verify is not None and verify['exit'] != 0:     # the FZ (uploaded above) is the evidence; never evicted (r2 R2-01)
+        raise Halt('STOP', 'FROZEN_FOLDER_CHANGED', 'verify-frozen found the frozen folder changed: upload, then hand back case C',
+                   block=b)
     if pk is not None and pk.get('reset_diverged') and not pk.get('existing') and sub != 'freeze':
         b.next('RUN ' + freeze_line(ctx, D))
         raise Halt('STOP', 'RESET_DIVERGED', 'the re-run differs from what was seen: the run has failed; freeze it', block=b)
@@ -4451,6 +4558,16 @@ def wrap_work(ctx, info):
         if rc == 'JOB_BUSY':
             b.next(f'RUN {V} wait')
             b.then(f'RUN {V} status')
+            b.code = EXIT_REFUSED
+        elif sub == 'prepare' and ctx.mode == 'everyday' and not jd.exists() and pk is None:
+            # r2 M5: refused before the job folder existed: the run has not started; record it, so job-start may give it
+            # corrected inputs (the same run id) instead of leaving the run in flight for good
+            ri = run_inputs(ctx, info['tag'])
+            if ri is not None:
+                ctx.index.event('prepare_refused', ri['name'], tag=info['tag'], code=rc)
+            b.uploads = []
+            b.next(f'FIX code=RUNNER_{rc}')
+            b.then(f'RUN {V} job-start --case {info["case"]}')
             b.code = EXIT_REFUSED
         elif rc == 'REVIEW_INCOMPLETE':
             b.next('CONTINUE_CONVERSATION role=V')
@@ -4508,6 +4625,7 @@ def wrap_work(ctx, info):
 def cmd_package(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         clean_placed(ctx)
         jd = Path(os.path.abspath(a.job_dir))
         jv = JobView(ctx, jd)
@@ -4524,9 +4642,9 @@ def cmd_package(a):
             sub = last['stage'] if last else None
             completed = last if last and last['stage'] in WRAP_SUBS else None
             verify = None
-            if jv.frozen and last and last['stage'] == 'freeze':
+            if jv.frozen:                           # r2 R2-01: every frozen folder, nonattempts included
                 _, _, vlast, vj, _ = run_runner(ctx, ['verify-frozen', '--job-dir', str(jd)], ctx.lay.outbox / f'package_{utc14()}.log')
-                verify = {'exit': 0 if vlast == 'NEXT: DONE' else 3, 'result': (vj or {}).get('result'), 'json': vj}
+                verify = {'exit': 0 if vlast == 'NEXT: DONE' else 3, 'result': (vj or {}).get('result'), 'json': vj, 'last_line': vlast}
             prev = newest_package(ctx, jv.tag, jv.case)
             pre = prev['name'] if prev else (newest_package(ctx, chain=chain_of(jv.tag)) or {}).get('name')
             pk = build_package(ctx, jv, sub or 'package', pre, {'runner_subcommand': None, 'reason': 'package', 'verify_frozen': verify}
@@ -4536,6 +4654,9 @@ def cmd_package(a):
         tok = token_text(sub, jv.tag, jv.case, completed, saved_xlsx8(jd), bool(pk and pk['reset_diverged'])) if completed else 'none'
         b.bind = tok
         b.result = {'command': 'package', 'package': pk['name'] if pk else None, 'bind': tok, 'reset_diverged': bool(pk and pk['reset_diverged'])}
+        if verify is not None and verify['exit'] != 0:
+            raise Halt('STOP', 'FROZEN_FOLDER_CHANGED', 'verify-frozen found the frozen folder changed: upload, then hand back case C',
+                       block=b)
         if (jd / CJ.MARKER_NAME).exists():
             b.next('RUN ' + freeze_line(ctx, jd))
             if ctx.mode == 'everyday':
@@ -4580,14 +4701,15 @@ def job_arg(ctx, path):
 
 
 def next_attempt(ctx, jv, role):
-    """5.7 attempt rule: (attempt, supersedes) or a refusal."""
+    """5.7 attempt rule: (attempt, supersedes, replaces) or a refusal. supersedes is set only for the AI_NO_CONVERSATION
+    re-START (the same attempt); the replacement reviewer names the START it replaces in replaces (r2 M3)."""
     T = newest_start(ctx, jv.tag, role, jv.case)
     k = jv.g_attempt() - 1 if role == 'G' else 0
     if T is None:
-        return 1 + k, None
+        return 1 + k, None, None
     att = T.get('attempt') or 1
     if role == 'G' and att < 1 + k:
-        return 1 + k, None
+        return 1 + k, None, None
     archs = ai_archives(ctx, jv.tag, role, att, jv.case)
     inc = resolving(ctx, T['name'])
     cls = inc['content'].get('classification') if inc else None
@@ -4595,18 +4717,18 @@ def next_attempt(ctx, jv, role):
         if inc is None:
             refuse('START_ALREADY_RECORDED', 'a START of this attempt exists: run status')
         if cls == 'AI_NO_CONVERSATION':
-            return att, T['name']
+            return att, T['name'], None
         if cls == 'AI_NOTHING_WRITTEN':
             if role == 'V':
                 if att >= 2:
                     refuse('REVIEWER_REPLACEMENT_USED', 'the one replacement reviewer was used')
-                return 2, T['name']
+                return 2, None, T['name']
             refuse('START_NOT_ALLOWED', 'the scope reader or generator is restarted by interrupt (or a new folder), not by a new START')
         refuse('START_NOT_ALLOWED', 'the incident on this START does not allow another conversation')
     if role == 'V' and cls == 'AI_NOTHING_WRITTEN':
         if att >= 2:
             refuse('REVIEWER_REPLACEMENT_USED', 'the one replacement reviewer was used')
-        return 2, T['name']
+        return 2, None, T['name']
     refuse('START_ALREADY_RECORDED', 'this attempt has its conversation: run status')
 
 
@@ -4623,10 +4745,8 @@ def cmd_start_note(a):
         lay = ctx.lay
         if jv.frozen or jv.last_next() != ROLE_STEP[role]:
             refuse('START_STATE', 'the job does not wait for this conversation: run status')
-        prev = newest_package(ctx, jv.tag, jv.case)
-        forced = any(i['content'].get('forces_reset_diverged') for i in incidents(ctx) if concerns(i, jv.tag, jv.case))
-        if ((prev or {}).get('meta') or {}).get('reset_diverged') or forced:
-            refuse('WRAP_RUN_FAILED_RESET_DIVERGED', 'this run has failed (reset diverged)')
+        if run_failed_by_reset(ctx, jv.tag, jv.case):
+            refuse('WRAP_RUN_FAILED_RESET_DIVERGED', 'this run has failed (reset diverged): only freeze may run; run status')
         rsha = jv.record_sha()
         pk = [e for e in packages(ctx, jv.tag, jv.case) if (e.get('meta') or {}).get('record_sha256') == rsha]
         if not pk:
@@ -4655,20 +4775,21 @@ def cmd_start_note(a):
         prompt, pin = prompt_pin(jv, role)
         if not prompt.is_file() or sha_file(prompt) != pin:
             refuse('START_PROMPT_CHANGED', 'the prompt file differs from the record pin: hand back case C')
-        att, sup = next_attempt(ctx, jv, role)
+        att, sup, repl = next_attempt(ctx, jv, role)
         nonce = secrets.token_hex(16)
         now = now_dt()
         name = f'START_{jv.tag}_{role}{att}_{utc14(now)}_{h8(nonce)}_{jv.case}.json'
         led_seq = len(read_ledger(ctx)[1]) if ctx.mode == 'qualification' else None
         inc = None
-        if sup:
-            r = resolving(ctx, sup)
+        if sup or repl:
+            r = resolving(ctx, sup or repl)
             inc = r['name'] if r else None
         note = {'schema': 'cps.vm-start.v1', 'helper': helper_info(), 'boot_id': current_boot_id(), 'created_utc': iso(now),
                 'case_id': jv.case, 'reader': jv.reader, 'tag': jv.tag, 'job_dir': str(jv.dir), 'role': role, 'attempt': att,
                 'nonce': nonce, 'prompt_path': str(prompt), 'prompt_sha256': pin, 'run_path': str(run_path(jv, role)),
                 'output_dir': str(out), 'record_sha256': rsha, 'ledger_seq': led_seq,
-                'fingerprint_sha256': ctx.state['fingerprint_sha256'], 'supersedes': sup, 'incident': inc, 'rules': START_RULES,
+                'fingerprint_sha256': ctx.state['fingerprint_sha256'], 'supersedes': sup, 'replaces': repl, 'incident': inc,
+                'rules': START_RULES,
                 'package_confirmed': {'name': pk['name'], 'drive_id': pk.get('drive_id'), 'md5': pk.get('md5'), 'listing': 'narrow'},
                 'output_dir_empty': True}
         p = lay.outbox / name
@@ -4677,7 +4798,7 @@ def cmd_start_note(a):
         for u in made(ctx, p, 'start', ctx.records_folder(), tag=jv.tag, case_id=jv.case, role=role, attempt=att, job_dir=str(jv.dir),
                       record_sha256=rsha, content=note):
             b.upload(u, ctx.records_folder())
-        b.result = {'command': 'start-note', 'start_note': name, 'role': role, 'attempt': att, 'supersedes': sup}
+        b.result = {'command': 'start-note', 'start_note': name, 'role': role, 'attempt': att, 'supersedes': sup, 'replaces': repl}
         b.next(f'OPEN_CONVERSATION role={role} prompt={prompt}')
         if ctx.cfg['link_notes']:                   # T-10: the RUN line's own output carries the steps after it
             b.then(f"RUN {ctx.V} link-note --job-dir {jv.dir} --role {role} --conversation '{{CONVERSATION_ID}}'")
@@ -4697,6 +4818,7 @@ def current_start(ctx, jv, role):
 def cmd_link_note(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         jv = job_arg(ctx, a.job_dir)
         role = a.role
         T = current_start(ctx, jv, role)
@@ -4741,6 +4863,7 @@ def unexpected_entries(tree, role):
 def cmd_ai_archive(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         jv = job_arg(ctx, a.job_dir)
         role = a.role
         lay = ctx.lay
@@ -4846,6 +4969,11 @@ def ai_next(ctx, b, jv, role, T, meta):
 
 
 # ------------------------------------------------------------------ incident (spec 5.11)
+def transcript_given(path):
+    """A transcript file that exists and is not empty (r2 R2-01: an empty export counts as no transcript)."""
+    return bool(path) and Path(path).is_file() and os.path.getsize(path) > 0
+
+
 def cmd_incident(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
@@ -4932,8 +5060,12 @@ def incident_body(ctx, a):
                 refuse('INCIDENT_CLASSIFICATION', 'the output folder holds files: AI_WRITTEN_LOST')
         if not a.conversation or not a.conversation.strip() or a.conversation.strip().startswith('<'):
             refuse('INCIDENT_NEEDS_JOB', '--conversation (the conversation id) is required')
-        if not a.transcript or not Path(a.transcript).is_file():
-            refuse('INCIDENT_TRANSCRIPT_REQUIRED', 'without a transcript doubt counts as written: AI_WRITTEN_LOST')
+        if not transcript_given(a.transcript):     # r2 R2-01: absent or empty; the refusal prints the line that applies
+            b0 = Block()
+            b0.next(f'RUN {ctx.V} incident --classification AI_WRITTEN_LOST --job-dir {jv.dir} --role {role} '
+                    f'--conversation {q(a.conversation)} --conversation-ended')
+            refuse('INCIDENT_TRANSCRIPT_REQUIRED', 'without a transcript (or with an empty one) doubt counts as written: AI_WRITTEN_LOST',
+                   block=b0)
         if ctx.mode == 'qualification' and role in ('S', 'G'):
             sub = 'interrupt' if CJ.restart_used_here(jv) is None else 'freeze'
         elif role in ('S', 'G'):
@@ -4969,7 +5101,7 @@ def incident_body(ctx, a):
     # transcript copy
     b = Block()
     tinfo = None
-    if a.transcript and Path(a.transcript).is_file():
+    if transcript_given(a.transcript):
         tb = Path(a.transcript).read_bytes()
         ext = ''.join(c for c in Path(a.transcript).suffix[1:] if c.isascii() and c.isalnum())[:10] or 'txt'
         att = T['attempt'] if T else 1
@@ -5001,7 +5133,8 @@ def incident_body(ctx, a):
     name = f'INCIDENT_{utc14(now)}_{boot8}_{cls}_{tag or "NOJOB"}_{ra}_{case or "none"}.json'
     note = {'schema': 'cps.vm-incident.v1', 'helper': helper_info(), 'boot_id': current_boot_id(), 'created_utc': iso(now),
             'boot_id_new': current_boot_id(), 'boot_id_old': (sess[-1].get('content') or {}).get('boot_id') if sess else None,
-            'session_note': st.get('session_note'), 'newest_package': newest['name'] if newest else None, 'step_in_flight': step,
+            'session_note': st.get('session_note'), 'restore_session': st.get('restore_session') if after else None,
+            'newest_package': newest['name'] if newest else None, 'step_in_flight': step,
             'classification': cls, 'job_dir': str(jv.dir) if jv else None, 'case_id': case, 'tag': tag, 'role': role,
             'attempt': T['attempt'] if T else None, 'start_note': T['name'] if T else None, 'conversation': a.conversation,
             'transcript': tinfo, 'note': a.note, 'after_restore': after, 'pending_job': pending_job, 'seen': seen, 'not_seen': not_seen,
@@ -5016,6 +5149,7 @@ def incident_body(ctx, a):
                   content=note):
         b.upload(u, ctx.records_folder())
     st['pending_incident'] = False
+    st.pop('restore_session', None)
     if after:
         st['restore_recheck'] = True
         st['recheck_incident'] = name
@@ -5072,6 +5206,11 @@ def cmd_recheck(a):
                     and (ctx.index.get(pn['name']) or {}).get('origin') != 'made':
                 stop('RESTORE_STALE_LISTING', 'an upload believed lost landed late: nothing is re-run; hand back case C',
                      detail={'package': pn['name']})
+        for p_ in lst.names():                      # r2 N2: 6.1 step 5 on the second listing (a late START, LINK or AI)
+            if p_['kind'] in ('start', 'link', 'ai') and p_['name'] not in known \
+                    and (ctx.index.get(p_['name']) or {}).get('origin') not in ('made', 'restored'):
+                stop('RESTORE_STALE_LISTING', 'a START, LINK or AI archive landed after the restore\'s listing: nothing is re-run; '
+                     'hand back case C', detail={'name': p_['name']})
         rej = {e['name'] for e in ctx.index.events if e['event'] == 'rejected'}
         for n in rej:
             ids = {f['id'] for f in lst.by.get(n, [])}
@@ -5101,6 +5240,7 @@ def cmd_genesis(a):
             refuse('GENESIS_FLAG', 'genesis --first-ledger, only as status prints it')
         if ctx.cfg['expected_genesis'] is not None:
             refuse('GENESIS_ALREADY_EXPECTED', 'a GENESIS is recorded: run session_start.sh for a restore')
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         require_session_ready(ctx)
         if os.path.lexists(lay.ledger_dir):
             refuse('GENESIS_LEDGER_EXISTS', 'BASE/ledger exists')
@@ -5227,6 +5367,9 @@ def cmd_fingerprint_pass(a):
             b = Block()
             if res_raw:
                 b.upload(res_p, reports_folder(ctx))
+            lg = d / 'selftest.log'                 # r2 R2-08: the suite's own log, when it holds anything
+            if lg.is_file() and lg.stat().st_size > 0:
+                b.upload(lg, reports_folder(ctx))
             stop('SELFTEST_FAILED', 'the export self-test did not pass on this VM: upload the results and hand back case C', block=b)
         now = now_dt()
         fp8 = h8(fp)
@@ -5399,6 +5542,7 @@ def drive_id_of(ctx, name):
 def cmd_evict(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         clean_placed(ctx)
         consume_confirms(ctx)
         lay = ctx.lay
@@ -5411,6 +5555,9 @@ def cmd_evict(a):
         else:
             refuse('EVICT_ARGUMENTS', '--job-dir D or --all')
         done, needs = [], False
+        for root in (lay.qual, lay.jobs):           # r2 R2-04: leftovers of a killed evict
+            for g in (root.glob('*/.cps_vm_evict_*') if root.is_dir() else []):
+                remove_tree(g)
         for jd in targets:
             pend = [e for e in fz_pending(ctx) if e['job_dir'] == str(jd)]
             if jd.is_dir():
@@ -5436,6 +5583,12 @@ def cmd_evict(a):
                 jv = None
             else:
                 refuse('EVICT_NOT_FROZEN', 'no frozen folder there')
+            vfe = (fz.get('meta') or {}).get('verify_frozen_exit')
+            if vfe is None and fz.get('payload'):
+                vfe = (((fz_manifest(ctx, fz) or {}).get('frozen') or {}).get('verify_frozen') or {}).get('exit')
+            if vfe not in (None, 0):                 # r2 R2-01: a folder that failed verify-frozen is kept as found
+                stop('EVICT_FROZEN_UNVERIFIED', 'the FZ records a failed verify-frozen: do not delete anything; hand back case C',
+                     detail={'fz': fz['name']})
             mode = ctx.cfg['upload_verification']
             missing, rebuild = [], False
             for name, sha, md5, size, src in verify_refs(ctx, fz):
@@ -5462,7 +5615,10 @@ def cmd_evict(a):
                 if not (lay.frozen_json / f'{jv.tag}_{jv.case}_FLAGS.json').is_file():
                     write_atomic(lay.frozen_json / f'{jv.tag}_{jv.case}_FLAGS.json',
                                  note_bytes({'reset_diverged': bool((fz.get('meta') or {}).get('reset_diverged')), 'fz': fz['name']}))
-                remove_tree(jd)
+                gone = jd.parent / f'.cps_vm_evict_{jd.name}_{os.getpid()}'
+                os.rename(jd, gone)                 # r2 R2-04: atomic; a kill during the delete leaves only a dot folder
+                ctx.index.event('evicted', fz['name'], job_dir=str(jd))
+                remove_tree(gone)
                 tag, case = jv.tag, jv.case
             else:
                 tag, case = pend[0]['tag'], pend[0]['case']
@@ -5512,9 +5668,21 @@ def cmd_job_start(a):
         require_session_ready(ctx)
         require_no_incident(ctx)
         require_recheck(ctx)
-        if in_flight(ctx) or everyday_pending_prepare(ctx) is not None:
-            refuse('WRAP_RUN_IN_FLIGHT', 'one everyday job at a time: finish and evict the current one (status prints its next step)')
         case = a.case
+        pend = everyday_pending_prepare(ctx)
+        reinput = None
+        if pend is not None and not in_flight(ctx):
+            cur = run_inputs(ctx, pend['tag'])
+            if prepare_refusal(ctx, cur) is not None and pend.get('case_id') == case and not a.restart_of:
+                if parse_name(cur['name'])['restart_of']:
+                    stop('EVERYDAY_PREPARE_REFUSED', 'the runner refused the prepare of a restart run: hand back case C',
+                         detail={'run_id': pend['tag']})
+                if len([e for e in ctx.index.of('inputs') if e.get('tag') == pend['tag']]) > REINPUT_MAX:
+                    stop('EVERYDAY_PREPARE_REFUSED', 'the runner refused this run\'s prepare again after new inputs: hand back case C',
+                         detail={'run_id': pend['tag']})
+                reinput = cur
+        if in_flight(ctx) or (pend is not None and reinput is None):
+            refuse('WRAP_RUN_IN_FLIGHT', 'one everyday job at a time: finish and evict the current one (status prints its next step)')
         d = lay.everyday_inputs / case
         restart_of, incn = a.restart_of, a.incident
         if restart_of:
@@ -5526,7 +5694,7 @@ def cmd_job_start(a):
                 refuse('JOB_START_RESTART_INCIDENT', 'an AI_NOTHING_WRITTEN incident of that run for the scope reader or generator')
             if fz_for(ctx, restart_of, case) is None:
                 refuse('JOB_START_RESTART_NOT_FROZEN', 'freeze the original run first')
-            orig = [e for e in ctx.index.of('inputs') if e.get('tag') == restart_of]
+            orig = [x for x in [run_inputs(ctx, restart_of)] if x is not None]
             if any(parse_name(e['name'])['restart_of'] == restart_of for e in ctx.index.of('inputs')) or \
                     any(parse_name(e['name'])['restart_of'] for e in orig):
                 refuse('JOB_START_RESTART_USED', 'that run was restarted once already (or is itself a restart)')
@@ -5545,11 +5713,17 @@ def cmd_job_start(a):
                     set(om.get('files') or {}) != {'JOB.json', 'JOB_TITLE.json', src.name}:
                 refuse('JOB_START_RESTART_INPUTS_DIFFER', 'the restart must use the inputs of the original run unchanged')
         now = now_dt()
-        rid = utc14(now)
-        tag = 'E' + rid
+        files = {n: sha_file(d / n) for n in ('JOB.json', 'JOB_TITLE.json', src.name)}
+        if reinput is not None:                     # r2 M5: the same run id, new inputs (nothing of the run exists yet)
+            if files == (inputs_manifest(reinput) or {}).get('files'):
+                refuse('JOB_START_INPUTS_UNCHANGED', 'the runner refused these inputs: fix them first (RUN_JOB_COMMANDS.md names the code)')
+            tag = reinput['tag']
+        else:
+            tag = 'E' + utc14(now)
         man = {'schema': 'cps.vm-inputs.v1', 'case_id': case, 'run_id': tag, 'restart_of': restart_of, 'incident': incn,
-               'created_utc': iso(now), 'helper': helper_info(),
-               'files': {n: sha_file(d / n) for n in ('JOB.json', 'JOB_TITLE.json', src.name)}}
+               'created_utc': iso(now), 'helper': helper_info(), 'files': files,
+               'replaces': reinput['name'] if reinput is not None else None,
+               'replaced_because': ('RUNNER_' + prepare_refusal(ctx, reinput)) if reinput is not None else None}
         tmp = lay.outbox / f'.tmp_{os.getpid()}_inputs.tgz'
         if tmp.exists():
             tmp.unlink()
@@ -5558,11 +5732,14 @@ def cmd_job_start(a):
             mm.append(('inputs/' + n, 'file', 0o644, 0, str(d / n)))
         write_tgz(tmp, mm)
         name = f'INPUTS_{tag}_{restart_of or "E0"}_{h8(sha_file(tmp))}_{case}.tgz'
+        if (lay.outbox / name).exists() or ctx.index.get(name) is not None:
+            tmp.unlink()
+            refuse('JOB_START_INPUTS_UNCHANGED', 'these inputs were given to this run already: fix them first')
         os.rename(tmp, lay.outbox / name)
         b = Block()
         for u in made(ctx, lay.outbox / name, 'inputs', ctx.records_folder(), tag=tag, case_id=case, content=man):
             b.upload(u, ctx.records_folder())
-        b.result = {'command': 'job-start', 'run_id': tag, 'inputs': name}
+        b.result = {'command': 'job-start', 'run_id': tag, 'inputs': name, 'replaces': man['replaces']}
         b.next('RUN ' + everyday_prepare_line(ctx, tag, case))
         return b
 
@@ -5570,6 +5747,7 @@ def cmd_job_start(a):
 def cmd_delivery_note(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         jv = job_arg(ctx, a.job_dir)
         if ctx.mode != 'everyday':
             refuse('DELIVERY_MODE', 'everyday only')
@@ -5623,24 +5801,74 @@ def cmd_delivery_note(a):
 
 
 # ------------------------------------------------------------------ final (spec 5.14)
+FINAL_DOWNLOAD_MAX = 3
+REINPUT_MAX = 3
+
+
+def matching_copy(ctx, lst, name, md5=None, size=None):
+    """r2 M4: the listed copy of name that holds the bytes this VM knows (a 'verified' or 'confirmed' event's Drive id,
+    else the first copy whose listed md5/size equal the known ones), or None."""
+    fs = lst.by.get(name, [])
+    e = ctx.index.get(name) or {}
+    known = e.get('origin') in ('made', 'restored')
+    if md5 is None and known:
+        md5 = e.get('md5')
+    if size is None and known:
+        size = e.get('bytes')
+    for ev in reversed(ctx.index.events):
+        if ev['name'] == name and ev['event'] in ('verified', 'confirmed') and ev.get('drive_id'):
+            hit = next((f for f in fs if f['id'] == ev['drive_id'] and (md5 is None or f['md5'] in (None, md5))), None)
+            if hit is not None:
+                return hit
+    if md5 is None and size is None:
+        return None
+    return next((f for f in fs if file_matches(f, md5, size)), None)
+
+
 def ensure_fz_meta(ctx, fz, lst, block):
-    """The FZ manifest summary (INDEX meta), downloading the FZ when this VM never held it."""
+    """The FZ manifest summary (INDEX meta), downloading the FZ when this VM never held it. r2 M4: the copies are tried
+    in ascending createdTime, each Drive id rejected once its listed bytes fail the name hash (INDEX final_rejected); a
+    download whose bytes differ from the listing is asked again (at most FINAL_DOWNLOAD_MAX times per id)."""
     if (fz.get('meta') or {}).get('pkind') == 'FZ':
         return fz['meta']
-    p = ctx.lay.inbox / fz['name']
-    if p.is_file() and h8(sha_file(p)) == parse_name(fz['name'])['pkg8']:
-        a = Archive(p, ('MANIFEST.json', 'ledger', 'job'))
-        check_pkg_manifest(a)
-        a.check(pkg_expected(a.manifest))
-        meta = pkg_meta(a.manifest)
-        a.close()
-        e = ctx.index.add(name=fz['name'], kind='package', folder=fz.get('folder'), sha256=sha_file(p), md5=md5_file(p),
-                          bytes=os.lstat(p).st_size, origin='restored', drive_id=fz.get('drive_id'), drive_created=fz.get('drive_created'),
-                          tag=fz.get('tag'), case_id=fz.get('case_id'), seq=fz.get('seq'), meta=meta)
+    name = fz['name']
+    p = ctx.lay.inbox / name
+    req = [e for e in ctx.index.events if e['event'] == 'final_requested' and e['name'] == name]
+    did = req[-1].get('drive_id') if req else None
+    if p.is_file():
+        lf = next((f for f in lst.by.get(name, []) if f['id'] == did), None)
+        if h8(sha_file(p)) == parse_name(name)['pkg8']:
+            a = Archive(p, ('MANIFEST.json', 'ledger', 'job'))
+            try:
+                check_pkg_manifest(a)
+                a.check(pkg_expected(a.manifest))
+                meta = pkg_meta(a.manifest)
+            finally:
+                a.close()
+            e = ctx.index.add(name=name, kind='package', folder=fz.get('folder'), sha256=sha_file(p), md5=md5_file(p),
+                              bytes=os.lstat(p).st_size, origin='restored', drive_id=did or fz.get('drive_id'),
+                              drive_created=(lf or {}).get('created') or fz.get('drive_created'),
+                              tag=fz.get('tag'), case_id=fz.get('case_id'), seq=fz.get('seq'), meta=meta)
+            if did:
+                ctx.index.event('verified', name, drive_id=did, method='download')
+            p.unlink()
+            return e['meta']
+        local_md5, local_size = md5_file(p), os.lstat(p).st_size
         p.unlink()
-        return e['meta']
-    f = lst.copies(fz['name'])[0] if lst.has(fz['name']) else None
-    block.download(f['id'] if f else fz.get('drive_id'), fz['name'], p)
+        if lf is not None and file_matches(lf, local_md5, local_size):
+            ctx.index.event('final_rejected', name, drive_id=did)       # the copy on Drive itself is damaged
+        elif sum(1 for e in req if e.get('drive_id') == did) >= FINAL_DOWNLOAD_MAX:
+            stop('FINAL_DOWNLOAD_FAILED', 'an FZ download kept arriving damaged: hand back case C', detail={'name': name, 'id': did})
+        else:
+            block.download(did, name, p)                                # damaged on the way here: the same id again
+            ctx.index.event('final_requested', name, drive_id=did)
+            return None
+    rejected = {e.get('drive_id') for e in ctx.index.events if e['event'] == 'final_rejected' and e['name'] == name} | rejected_ids(ctx, name)
+    cands = [f for f in lst.copies(name) if f['id'] not in rejected]
+    if not cands:
+        stop('FINAL_FROZEN_ARCHIVE_MISSING', 'no copy of an FZ on Drive passes its hash: hand back case C', detail={'name': name})
+    block.download(cands[0]['id'], name, p)
+    ctx.index.event('final_requested', name, drive_id=cands[0]['id'])
     return None
 
 
@@ -5668,12 +5896,15 @@ def run_flags(ctx, tag, case, meta, lst, led, job_dir):
         fl.append('START_SUPERSEDED')
     if any(p['revision'] > 1 for p in lst.names('ai') if p['tag'] == tag and p['case'] == case):
         fl.append('REVIEW_REVISED')
+    if (meta or {}).get('verify_frozen_exit') not in (None, 0):
+        fl.append('FROZEN_UNVERIFIED')
     return fl
 
 
 def cmd_final(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         lay = ctx.lay
         if ctx.mode != 'qualification':
             refuse('FINAL_MODE', 'final is for qualification')
@@ -5738,7 +5969,16 @@ def cmd_final(a):
                 if not lst.has(part['name']):
                     stop('FINAL_PARTS_MISSING', 'a PNG part of an FZ is not on Drive', detail={'name': part['name']})
             ent = ctx.index.get(fzname)
-            fc = lst.copies(fzname)[0]
+            fc = matching_copy(ctx, lst, fzname)                 # r2 M4: the copy whose bytes were checked, never copies[0]
+            if fc is None:
+                stop('FINAL_FROZEN_ARCHIVE_MISSING', 'no listed copy of an FZ holds the checked bytes: hand back case C',
+                     detail={'name': fzname})
+            part_copies = []
+            for p_ in meta.get('png_parts') or []:
+                pc = matching_copy(ctx, lst, p_['name'], p_.get('md5'), p_.get('bytes'))
+                if pc is None:
+                    stop('FINAL_PARTS_MISSING', 'no listed copy of a PNG part holds its bytes: hand back case C', detail={'name': p_['name']})
+                part_copies.append(pc)
             mine = lambda k: sorted(x['name'] for x in lst.names(k) if x.get('tag') == tag and x.get('case') == case)
             for k in ('start', 'link', 'ai', 'incident', 'transcript', 'package'):
                 accounted |= set(mine(k))
@@ -5747,8 +5987,8 @@ def cmd_final(a):
                          'run_record_sha256': fze['run_record_sha256'], 'final_stage': fze.get('final_stage'), 'transcript': fze.get('transcript'),
                          'archive': {'name': fzname, 'id': fc['id'], 'md5': fc['md5'], 'sha256': ent.get('sha256') if ent.get('origin') != 'listed' else None,
                                      'sha8': parse_name(fzname)['pkg8'], 'created': fc['created']},
-                         'png_parts': [{'name': p_['name'], 'id': lst.copies(p_['name'])[0]['id'], 'md5': p_['md5'], 'sha256': p_['sha256']}
-                                       for p_ in meta.get('png_parts') or []],
+                         'png_parts': [{'name': p_['name'], 'id': pc['id'], 'md5': p_['md5'], 'sha256': p_['sha256']}
+                                       for p_, pc in zip(meta.get('png_parts') or [], part_copies)],
                          'packages': mine('package'), 'start_notes': mine('start'), 'link_notes': mine('link'), 'ai_archives': mine('ai'),
                          'transcripts': mine('transcript'), 'incidents': mine('incident'),
                          'fingerprints': sorted({x['fp8'] for x in pk if x['tag'] == tag and x['case'] == case}),
@@ -5760,7 +6000,7 @@ def cmd_final(a):
         lf = lay.outbox / f'LEDGER_FINAL_L{len(lines):05d}_{h8(sha_bytes(raw))}.jsonl'
         if not lf.exists():
             write_new(lf, raw)
-        gl = lst.copies(gens[0]['name'])[0]
+        gl = matching_copy(ctx, lst, gens[0]['name']) or lst.copies(gens[0]['name'])[0]
         af = {'schema': 'cps.all-frozen.v2', 'created_utc': utc(), 'helper': helper_info(), 'release_sha256': sha_bytes(ctx.rel_raw),
               'admission_sha256': sha_file(ctx.admission_path()), 'jobs_sha256': sha_file(ctx.rel['qualification']['jobs_file']),
               'ledger': {'path': str(lay.ledger), 'final_seq': len(lines), 'sha256': sha_bytes(raw), 'bytes': len(raw),
@@ -5792,6 +6032,7 @@ def cmd_final(a):
 def cmd_rebuild_parts(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
+        require_no_incident(ctx)                    # r2 R2-03: spec 4, every non-exempt command
         fz = ctx.index.get(a.fz)
         if fz is None:
             refuse('REBUILD_UNKNOWN_FZ', 'no such FZ in this session')
@@ -5862,6 +6103,7 @@ def cmd_restore(a):
         ingest_listing(ctx, lst)
         ctx.state['pending_incident'] = True
         ctx.save_state()
+        restore_done(lay)
         plan = incident_plan(ctx)
         b.tail = plan.block.tail
         b.result = {'command': 'restore', 'restored': r}
@@ -5940,6 +6182,23 @@ def cmd_assemble(a):
             if sha_bytes(tar) != png['set_sha256']:
                 stop('ASSEMBLE_PARTS', 'the joined PNG tar differs from the manifest')
         plans.append((r, ar, man, tar))
+    # r2 R2-09: every target has the layout of its tag and case under one base, agrees with ALL_FROZEN, and is unique
+    lpath = af['ledger'].get('path')
+    if not isinstance(lpath, str) or not os.path.isabs(lpath) or Path(lpath).name != 'LEDGER.jsonl' \
+            or Path(lpath).parent.name != 'ledger' or os.path.normpath(lpath) != lpath:
+        stop('ASSEMBLE_TARGET_LAYOUT', 'the ledger path of ALL_FROZEN.json is not BASE/ledger/LEDGER.jsonl')
+    base = Path(lpath).parent.parent
+    seen_dirs = set()
+    for r, _, m, _ in plans:
+        jd = m.get('job_dir')
+        tag, case = m.get('tag'), m.get('case_id')
+        want = str(base / 'qual' / QUAL_ROOTS.get(tag, '?') / str(case)) if tag in QUAL_ROOTS else None
+        if not isinstance(jd, str) or want is None or jd != want or r.get('job_dir') != jd or r.get('tag') != tag \
+                or r.get('case_id') != case or (m.get('ledger') or {}).get('path') != lpath or jd in seen_dirs \
+                or parse_name(r['archive']['name'])['tag'] != tag or parse_name(r['archive']['name'])['case'] != case:
+            stop('ASSEMBLE_TARGET_LAYOUT', 'a frozen folder path does not match its tag, case, ALL_FROZEN.json and the ledger path, '
+                 'or appears twice', detail={'archive': r['archive']['name']})
+        seen_dirs.add(jd)
     targets = [Path(m['job_dir']) for _, _, m, _ in plans] + [Path(af['ledger']['path'])]
     if any(os.path.lexists(t) for t in targets):
         stop('ASSEMBLE_TARGET_EXISTS', 'a target path exists; assemble writes only new paths')
@@ -6158,7 +6417,8 @@ def cmd_audit(a):
         if c.get('mode') == 'restore' or c.get('boot_changed_without_restore'):
             nxt = [p for p in pk + starts_ if created(p['name']) and t and created(p['name']) > t]
             limit = min((created(p['name']) for p in nxt), default=None)
-            mine = [p for p, ic in incs if ic.get('session_note') == sp['name'] and (limit is None or (created(p['name']) or t) <= limit)]
+            mine = [p for p, ic in incs if sp['name'] in (ic.get('session_note'), ic.get('restore_session'))
+                    and (limit is None or (created(p['name']) or t) <= limit)]
             if len(mine) != 1:
                 A('AUD_RESTORE_WITHOUT_INCIDENT', [sp['name']])
     for p, c in incs:
