@@ -1,26 +1,40 @@
-"""CPS: `soffice --convert-to` through LibreOfficeKit, inside this process, without LibreOffice's IPC socket.
+"""CPS: `soffice --convert-to pdf` through LibreOfficeKit, inside this process, without LibreOffice's IPC socket.
 
 Why: `soffice` starts by binding a Unix socket in /tmp (OSL_PIPE_<uid>_SingleOfficeIPC_<hash>) so that a second
-start can hand its arguments to the first one. Some agent sandboxes refuse bind() for every process. LibreOffice then
-exits 1 at once, silently, before it opens any file (seen on the Dot's VM on 2026-11-09). LibreOfficeKit loads the
-same LibreOffice libraries in-process and saves through the same export filters, without that socket.
+start can hand its arguments to the first one. Some agent sandboxes refuse that. LibreOffice then exits 1 at once,
+silently, before it opens any file (the Dot's VM, 2026-11-09). LibreOfficeKit loads the same LibreOffice libraries
+in-process and saves through the same PDF export filter, without that socket.
 
-The no-root setup (deploy/setup_vm_user.sh) installs this file as <prefix>/share/cps/lok_convert.py. The prefix's
-`soffice` wrapper runs it for every call with `--convert-to pdf`, the only conversion the CPS tools use (visual QA,
-the example renderer, the setup check). Every other call (--version, or --convert-to png, which only visual QA's
-no-pdftoppm fallback would use) goes to LibreOffice's own launcher, as before. LibreOfficeKit's PNG export does not
-work for spreadsheets in this build, so this file refuses png.
+When it is used: the no-root setup (deploy/setup_vm_user.sh) installs this file as <prefix>/share/cps/lok_convert.py.
+It first tries a PDF conversion with `soffice` itself. Only if that fails does it switch the prefix's `soffice`
+wrapper to run every `--convert-to pdf` call through this file, after the same check passes this way. The setup
+summary records which route the host uses. Every other call (--version, --convert-to png) always goes to
+LibreOffice's own launcher.
+
+Differences from `soffice --convert-to pdf`, on the LibreOfficeKit route:
+- Default paper. LibreOfficeKit runs with an en-US configuration, so a sheet without its own page setup prints on
+  Letter, where soffice under LC_ALL=C.UTF-8 uses A4. The CPS visual QA (fit-width mode, the one the job runner
+  uses) sets the page setup itself, so its renders of the delivered workbook are unchanged. Unpatched renders, such
+  as the interview example images, may break pages differently.
+- Row heights. Automatic row heights of long wrapped text can come out slightly smaller, which can move later page
+  breaks. This was seen in the internal QA workbook's review sheet.
+- Exit codes. A file that cannot be loaded or saved gives exit 1 (soffice may still exit 0).
+- PNG. Refused: LibreOfficeKit's PNG export does not work for spreadsheets in this build.
 
 Usage (the wrapper adds the program directory first):
   lok_convert.py PROGRAM_DIR [--headless] [--norestore] [--nolockcheck] [--nologo] [--nodefault] [--invisible]
-                 [--nofirststartwizard] [-env:UserInstallation=FILE_URL] --convert-to pdf --outdir DIR FILE...
-Accepted, as by soffice: one or two leading dashes. Anything else is refused with exit 2 before LibreOffice starts.
-Each FILE is written to DIR/<FILE stem>.pdf; an existing output is replaced. Exit 0 only when every output was
-written; 1 when LibreOfficeKit cannot start, a file cannot be loaded, or an output is missing.
+                 [--nofirststartwizard] [-env:UserInstallation=FILE_URL] --convert-to pdf [--outdir DIR] FILE...
+Options take one or two leading dashes, as with soffice. Anything else is refused with exit 2 before LibreOffice
+starts. Each FILE is written to DIR/<FILE stem>.pdf (DIR is created if needed; default the current directory), and
+an existing output is replaced. Each output line ends with "(LibreOfficeKit)". Exit 0 only when every PDF was
+written; 1 otherwise.
 """
 import ctypes
+import locale
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 IGNORED_FLAGS = {'headless', 'norestore', 'nolockcheck', 'nologo', 'nodefault', 'invisible', 'nofirststartwizard'}
@@ -84,10 +98,11 @@ def parse(argv):
         raise UsageError('--convert-to is required')
     if not files:
         raise UsageError('no input file')
-    return profile, fmt, Path(outdir) if outdir else Path.cwd(), [Path(f) for f in files]
+    # soffice names the output after the path as given (a symlink's own name), so no resolve() here
+    return profile, fmt, Path(os.path.abspath(outdir or os.curdir)), [Path(os.path.abspath(f)) for f in files]
 
 
-def main(argv):
+def convert(argv):
     if len(argv) < 2:
         print('usage: lok_convert.py PROGRAM_DIR SOFFICE_ARGS...', file=sys.stderr)
         return 2
@@ -97,12 +112,10 @@ def main(argv):
     except UsageError as e:
         print('lok_convert: ' + str(e), file=sys.stderr)
         return 2
-    if not outdir.is_dir():
-        print(f'lok_convert: output directory {outdir} does not exist', file=sys.stderr)
-        return 1
-    missing = [str(f) for f in files if not f.is_file()]
-    if missing:
-        print('Error: source file could not be loaded: ' + ', '.join(missing), file=sys.stderr)
+    try:
+        outdir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f'lok_convert: cannot create the output directory {outdir}: {e}', file=sys.stderr)
         return 1
     try:
         lib = ctypes.CDLL(str(prog / 'libmergedlo.so'), mode=ctypes.RTLD_GLOBAL)
@@ -121,35 +134,69 @@ def main(argv):
     get_error = ctypes.CFUNCTYPE(ctypes.c_char_p, ctypes.POINTER(_Kit))(kc.getError)
     failed = 0
     for src in files:
-        src = src.resolve()
-        dst = (outdir / (src.stem + '.' + fmt)).resolve()
-        doc = load(kit, src.as_uri().encode())
-        if not doc:
-            err = get_error(kit)
-            print(f'Error: source file could not be loaded: {src} ({err.decode("utf-8", "replace") if err else "no detail"})',
-                  file=sys.stderr)
+        dst = outdir / (src.stem + '.' + fmt)
+        try:
+            if not src.is_file():
+                raise RuntimeError(f'Error: source file could not be loaded: {src} (no such file)')
+            doc = load(kit, src.as_uri().encode())
+            if not doc:
+                err = get_error(kit)
+                raise RuntimeError(f'Error: source file could not be loaded: {src} '
+                                   f'({err.decode("utf-8", "replace") if err else "no detail"})')
+            dc = doc.contents.pClass.contents
+            save = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(_Doc), ctypes.c_char_p, ctypes.c_char_p,
+                                    ctypes.c_char_p)(dc.saveAs)
+            doc_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(_Doc))(dc.getDocumentType)(doc)
+            try:
+                if dst.exists() or dst.is_symlink():
+                    dst.unlink()
+                ok = save(doc, dst.as_uri().encode(), fmt.encode(), None)
+            finally:
+                ctypes.CFUNCTYPE(None, ctypes.POINTER(_Doc))(dc.destroy)(doc)
+            if not ok or not dst.is_file() or dst.stat().st_size == 0:
+                raise RuntimeError(f'Error: could not write {dst}')
+            print(f'convert {src} as a {DOC_TYPES.get(doc_type, "LibreOffice")} document -> {dst} (LibreOfficeKit)')
+        except Exception as e:  # one file's failure must not stop the others, nor skip os._exit
+            print(str(e) if isinstance(e, RuntimeError) else f'Error: {src}: {type(e).__name__}: {e}', file=sys.stderr)
             failed += 1
-            continue
-        dc = doc.contents.pClass.contents
-        save = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(_Doc), ctypes.c_char_p, ctypes.c_char_p,
-                                ctypes.c_char_p)(dc.saveAs)
-        doc_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(_Doc))(dc.getDocumentType)(doc)
-        if dst.exists():
-            dst.unlink()
-        ok = save(doc, dst.as_uri().encode(), fmt.encode(), None)
-        destroy = ctypes.CFUNCTYPE(None, ctypes.POINTER(_Doc))(dc.destroy)
-        destroy(doc)
-        if not ok or not dst.is_file() or dst.stat().st_size == 0:
-            print(f'Error: could not write {dst}', file=sys.stderr)
-            failed += 1
-            continue
-        print(f'convert {src} as a {DOC_TYPES.get(doc_type, "LibreOffice")} document -> {dst} (LibreOfficeKit)')
     return 1 if failed else 0
 
 
+def main():
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='backslashreplace')
+        except (AttributeError, ValueError):
+            pass
+    # LibreOfficeKit maps file URLs to paths in the process's character encoding: under an ASCII locale (LC_ALL=C) a
+    # file whose path holds Chinese characters would not load, while soffice loads it. So use UTF-8 when it is not
+    try:
+        if locale.nl_langinfo(locale.CODESET).upper().replace('-', '') != 'UTF8':
+            locale.setlocale(locale.LC_CTYPE, 'C.UTF-8')
+            for var in ('LC_ALL', 'LC_CTYPE'):
+                if os.environ.get(var):
+                    os.environ[var] = 'C.UTF-8'
+    except (locale.Error, AttributeError):
+        pass
+    # LibreOffice's own temporary files (lu*.tmp) go to a private folder, removed below: os._exit skips its cleanup
+    private_tmp = tempfile.mkdtemp(prefix='cps_lok_')
+    os.environ['TMPDIR'] = private_tmp
+    code = 1
+    try:
+        code = convert(sys.argv)
+    except BaseException as e:  # never fall through to interpreter shutdown with LibreOfficeKit's threads alive
+        print(f'lok_convert: {type(e).__name__}: {e}', file=sys.stderr)
+        code = 1
+    finally:
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        shutil.rmtree(private_tmp, ignore_errors=True)
+        # LibreOfficeKit's own shutdown can wait on threads it started; every output is complete and closed by now
+        os._exit(code)
+
+
 if __name__ == '__main__':
-    code = main(sys.argv)
-    sys.stdout.flush()
-    sys.stderr.flush()
-    # LibreOfficeKit's own shutdown can wait on threads it started; every output is complete and closed by now
-    os._exit(code)
+    main()
