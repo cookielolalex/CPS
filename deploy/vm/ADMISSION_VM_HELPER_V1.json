@@ -1,0 +1,565 @@
+{
+ "schema": "cps.vm-helper-admission.v1",
+ "reviewed_utc": "2026-11-09",
+ "status": "NOT_ADMITTED",
+ "subject": "CPS VM-reset helper candidate cps-vm-helper.v1 (deploy/vm/*) with deploy/make_kit.py and deploy/vm/apply_frozen_flags.py, at commit 95df27099c275ba1a8442df5087cb87b97434dae",
+ "decision": "DO_NOT_ADMIT",
+ "scopes": "Neither scope is admitted. Qualification: not admitted. Everyday: not admitted. The two modes share the same restore, incident, save-point, INDEX and evict core, so F1, SAFE-01 and SAFE-04 apply to both. Everyday also has its own defect, SAFE-02 (an invalid case id wedges the VM), and its visual-review continuation path is the same code as F1. Without this admission, deploy/run/cps_job.py (cps-job-runner.v4, sha 7505e98a) stays the admitted runner, unchanged. Neither make_kit.py nor apply_frozen_flags.py is admitted as part of this candidate.",
+ "owner_decisions": [
+  "O43-O52 (reset-proof design OD-1..OD-10)",
+  "O53 (maintainer Drive access and messages)"
+ ],
+ "reviews": [
+  "independent admission review 1: five lenses (integrity, safety, operator executability, tests with mutation testing, kit route and pre-gate), one adversarial verifier per lens, then an admission decision; reviewers did not build the code and were given the code and the governing documents, not the build workflow's conclusions"
+ ],
+ "build_history": "spec (46 review findings resolved) -> implement (609 tests) -> 3 review/fix rounds (29, 26, 20 confirmed) -> completeness critic (8 major) -> final fix; 1678/1678 tests",
+ "tests": {
+  "maintainer_rerun_at_95df270": "1678/1678 passed from a clean clone, --jobs 4, 724 s",
+  "review_run": "the review machine ran out of disk (ENOSPC) and counted 1595 tests; a single full green run on a machine with at least 1 GB free is a condition",
+  "make_kit": "19/19"
+ },
+ "verdict_counts": {
+  "CONFIRMED:critical": 1,
+  "CONFIRMED:major": 15,
+  "CONFIRMED:minor": 24,
+  "PLAUSIBLE:minor": 2,
+  "PLAUSIBLE:major": 1
+ },
+ "blocking": [
+  {
+   "id": "F1",
+   "severity": "critical",
+   "title": "A reviewer revision written after REVIEW_INCOMPLETE and lost to a reset is classified AI_ARCHIVED, and the same reviewer is asked again (role_plan 2053-2060, situation 2552-2561, run_flags 6513-6517)",
+   "why_blocking": "Confirmed critical. An AI output that was written and then lost is re-requested instead of being counted as failed visual QA, which breaks O46 and rule 3. A FAIL can come back as PASS, and nothing in ALL_FROZEN.json or the audit records it, so a run can be scored with the wrong outcome."
+  },
+  {
+   "id": "F2",
+   "severity": "major",
+   "title": "When a START is missing from both restore listings, the helper prints a fresh start-note for the same attempt. Audit, final and the O52 sheet do not flag the two STARTs of one attempt (audit 6974-6978, 7096-7103)",
+   "why_blocking": "Confirmed major on the no-hidden-retry rule (O45 and O46). A second generator conversation runs, the first conversation's written output is lost uncounted, and the audit exits 0."
+  },
+  {
+   "id": "OP-01",
+   "severity": "major",
+   "title": "The START note is not confirmed by a narrow listing before OPEN_CONVERSATION (cmd_start_note 5315-5389). After a reset the helper itself directs a second generator conversation for attempt 1",
+   "why_blocking": "Confirmed major on the no-hidden-retry rule. OD-10 detection after the fact does not excuse the helper printing the retry. This finding has the same root as F2 and SAFE-04."
+  },
+  {
+   "id": "SAFE-04",
+   "severity": "major",
+   "title": "Index.append ignores short writes (cps_vm.py:690), so INDEX events such as a START can vanish on a full tmpfs",
+   "why_blocking": "Confirmed major on two integrity paths. A lost START record leads next_attempt to write a second START for the same attempt, which is a hidden retry. Lost made, verified or evicted records corrupt the bounded-retry and verification bookkeeping, which is evidence integrity."
+  },
+  {
+   "id": "TST-01",
+   "severity": "major",
+   "title": "No test covers START_ALREADY_RECORDED. Mutant M27 survives and opens a second conversation silently",
+   "why_blocking": "Confirmed major: a required test is missing for the only guard against a second START, a hidden-retry path. The guard works at HEAD, but it is unprotected against regression."
+  },
+  {
+   "id": "F3",
+   "severity": "major",
+   "title": "A runner stage in flight at a reset is recorded as NONE_IN_FLIGHT whenever the plan first needs an FZ download (qual_plan 2283-2304, situation 2562-2568), so the seen BIND token never binds the re-run",
+   "why_blocking": "Confirmed major on O44. A non-AI stage lost to a reset is re-run unbound, so a re-run that diverged after a failure the Dot had seen is not marked RESET_DIVERGED."
+  },
+  {
+   "id": "F4",
+   "severity": "major",
+   "title": "run_flags never flags a reset-caused second interruption (AI_NOTHING_WRITTEN with the restart used, then freeze), and apply_frozen_flags refuses the empty carrier for every unflagged run that has no output",
+   "why_blocking": "Confirmed major on the O46 failure-recording rule. A reset-caused failure is missing from runs_failed_by_reset, and the documented scoring path for such runs cannot pass."
+  },
+  {
+   "id": "F5",
+   "severity": "major",
+   "title": "Audit copies runs_failed_by_reset from ALL_FROZEN.json (7132) instead of deriving it from AI_WRITTEN_LOST incidents. Final derives the flags from the Dot's own listing, which can be incomplete",
+   "why_blocking": "Confirmed major on O46 evidence integrity. A dropped listing page erases AI_OUTPUT_LOST from ALL_FROZEN.json, and the maintainer's audit, run on the full listing, reports no anomaly. This is a missing required cross-check."
+  },
+  {
+   "id": "SAFE-01",
+   "severity": "major",
+   "title": "evict can delete job-folder content that never reached Drive. tree_list's os.walk has no onerror (851), unsupported entries are recorded by hash only, and evict compares against the same blind listing (6186-6197, 6233-6235)",
+   "why_blocking": "Confirmed major on the rule that evidence must not be lost. Frozen-folder content is deleted locally without ever having been packed or uploaded."
+  },
+  {
+   "id": "FLAGS-1",
+   "severity": "major",
+   "title": "apply_frozen_flags trusts a caller-supplied --empty-carrier-sha and binds no manifest carrier to its frozen run (apply_frozen_flags.py:108-111, 130-132)",
+   "why_blocking": "Confirmed major on O44 and O46. If the scorer passes the wrong sha, a failed run's real output is scored as a normal run, and the only guard against a wrong qualification score reports 'consistent'."
+  },
+  {
+   "id": "FLAGS-3",
+   "severity": "major",
+   "title": "Failed runs that the runner recorded and that have no output (technical stop after the restart was used, frozen at GENERATE without an interrupt) can never pass the flags check",
+   "why_blocking": "Confirmed major. The procedure documented in RUN_JOB_COMMANDS.md:251/259/266 strands qualification scoring. The only workaround exploits the FLAGS-1 binding gap."
+  },
+  {
+   "id": "OP-04",
+   "severity": "major",
+   "title": "A literal '{CONVERSATION_ID}' is accepted as an attested value. It is recorded in the add-only LINK note and frozen by the runner into VISUAL_RECORD (cmd_link_note 5411, delivery-note 6382-6383)",
+   "why_blocking": "Confirmed major. Frozen records, which are never modified (freeze immutability), carry a placeholder as the attested conversation, so O52 and incident evidence cannot be tied to a real conversation, and LINK_ALREADY_RECORDED blocks any correction."
+  },
+  {
+   "id": "OP-02",
+   "severity": "major",
+   "title": "recheck loops forever when the INCIDENT upload did not land. It never prints the INCIDENT UPLOAD again and has no bound (cmd_recheck 5803-5807)",
+   "why_blocking": "Confirmed major: wrong behaviour in a realistic case, with an unbounded exit-10 loop. Major items rule out ADMIT_WITH_CONDITIONS."
+  },
+  {
+   "id": "OP-03",
+   "severity": "major",
+   "title": "final hands back case B without confirming LEDGER_FINAL and ALL_FROZEN.json, and FINAL_ALREADY checks only the name, so a truncated ALL_FROZEN.json dead-ends after a reset (cmd_final 6548-6549, 6654-6661)",
+   "why_blocking": "Confirmed major. After a reset, qualification completion is stranded unless the helper is changed."
+  },
+  {
+   "id": "SAFE-02",
+   "severity": "major",
+   "title": "job-start never validates --case (6285) and everyday_prepare_line does not quote its paths (2322-2326), so an invalid id wedges the everyday VM",
+   "why_blocking": "Confirmed major in the everyday scope. It also uploads inputs that may name the customer under a name that restore cannot parse."
+  },
+  {
+   "id": "SAFE-03",
+   "severity": "major",
+   "title": "probe-p5 check reports PASS without verifying that the starting tool call ended (7316-7330, 7360-7371)",
+   "why_blocking": "The safety verifier confirmed it as major; the operator verifier downgraded its twin, OP-05, to minor. I keep major because this probe's output is the evidence for the p5_detached_survival release gate. A false PASS invalidates a release precondition, even though later failures fail safe."
+  },
+  {
+   "id": "OP-06",
+   "severity": "major",
+   "title": "Every session start, recheck and final needs a full-folder listing saved verbatim. It grows to about 1,000-1,200 entries (250-300 KB) by late qualification",
+   "why_blocking": "Plausible major. The verifier confirmed the code requirement and the size; whether the Dot can save the listing faithfully depends on P1 and P2. If it cannot, qualification stalls at every late reset. It stays blocking until the design uses incremental or name-filtered listings, or P2 shows the connector can write a listing to a file verbatim."
+  }
+ ],
+ "conditions_before_release": [
+  "Fix every blocking item. Each fix needs a regression test that fails on HEAD 95df270: wipe before the AI-V1r2 upload (F1); two STARTs for one attempt (F2, OP-01, TST-01); a pending stage needing an FZ download at restore (F3); a reset-caused second interruption and a technically failed run without output (F4, FLAGS-3); audit run on a listing that contains an incident the final listing missed (F5); an unreadable folder or special-mode file before evict (SAFE-01); a short INDEX write (SAFE-04); a wrong or real-carrier --empty-carrier (FLAGS-1); a placeholder conversation id (OP-04); a lost INCIDENT upload at recheck (OP-02); a truncated ALL_FROZEN.json (OP-03); an invalid --case (SAFE-02); probe-p5 start and check run in one call (SAFE-03).",
+  "Obtain a new admission review of the fixed candidate under a new version id. Review the diff against 95df270 plus the restore, incident, save-point, final and audit core in full. Re-run the mutation set M08, M10, M14, M16, M19, M24, M26, M27, M30-M32, M34, M37 and M39 on a machine with enough disk, and require every mutant to be killed.",
+  "Get one green full run of test_cps_vm.py, all scenarios in a single run, on a machine with at least about 1 GB free. Record the actual test count and reconcile it with README.md:268 (which claims 1,678; this review counted 1,595 because of ENOSPC truncation). Also require test_make_kit.py 19/19.",
+  "Answer probes P1-P5 and record them. P5 must use the fixed probe-p5, which records the caller's ppid and session id and refuses a same-call check. P2 must establish whether the connector can save a full listing to a VM file verbatim; this settles OP-06. Also measure the cold setup duration against the platform's tool-call limit (SAFE-07).",
+  "Get the owner's decision on transcript export and upload for conversations that wrote and were lost (F7) before qualification starts.",
+  "Admit the pre-gate separately before any release names it.",
+  "Correct the Drive-call budget in the README and spec (OP-07: about 29 Drive calls per normal run) so that owner time planning and P2 sizing use real numbers.",
+  "The 38 reserved answers stay closed. No fix may need them, and the frozen evaluator, the aggregator e5aa4fc7 and runner v4 7505e98a stay unchanged."
+ ],
+ "non_blocking": [
+  "F6 (minor): evict and other commands that copy status's plan code can exit 10 with a DOWNLOAD and no NEXT line. Add NEXT: RUN status.",
+  "F7 (minor, pending owner decision): under WRITTEN_OR_DOUBT the exported transcript is never uploaded and evict deletes it. Pass --transcript when the file is non-empty, and remove the test assertion at test_cps_vm.py:3446 that forbids it.",
+  "F8 (minor): when two stages are lost (a dead CP plus the next stage), INCIDENT_SEEN_INVALID strands the run in case C.",
+  "SAFE-05 (minor): listing ids are not validated, and the patterns ending in '$' accept a trailing newline. Use fullmatch and an id charset.",
+  "SAFE-06 (minor): session_start.sh fails open when git status errors, then exits 128 with no RESULT line.",
+  "SAFE-07 (minor, plausible): setup and check_env run in the foreground, and no release gate covers their duration.",
+  "OP-05 (the same defect as SAFE-03; blocking under SAFE-03).",
+  "OP-07 (minor): the Drive-call budget is understated, and verify downloads every PNG part back.",
+  "OP-08 (minor): CP-V is never confirmed. It is uploaded twice at evict and its payload stays in tmpfs.",
+  "OP-09 (minor): ai-archive accepts a run whose link-note was skipped; WAIT_FOR_USER_REQUEST is printed before ASK_USER_IF_SEND_NOW; the self-test WORKER_DIED loop is unbounded and leaves selftest folders behind; README section 5's rule for which copy to keep is circular.",
+  "TST-02..TST-09 (minor): no test reaches INCIDENT_RESPONSE_PRESENT, INCIDENT_CONVERSATION_NOT_ENDED, the download-mode verify sha mismatch, the package-versus-archive branch of RESTORE_AI_CONFLICT, START_PROMPT_CHANGED, the helper's B-before-A WRAP_RUN_IN_FLIGHT, or under_stage; one assertion has an `or o3.code != 0` catch-all.",
+  "TST-10 (minor): the test harness has no free-space preflight.",
+  "KIT-1 (minor, downgraded): a different RELEASE.json is accepted after genesis once no job folder exists. Spec 2.3 allows this, but a genesis release_sha256 consistency check at session, restore, final and audit is recommended.",
+  "FLAGS-2 (minor): a single empty carrier conflicts with the aggregator's READERS_SHARE_CARRIER check. The docstring's 'exactly one run' and the runs_needing_owner checks are not implemented.",
+  "MK-1 (minor): a header-path slip in one copy defeats the A/B recovery.",
+  "MK-2 (minor): pack accepts duplicate binary file names.",
+  "GATE-1 (minor): release gates are checked only at session; status and wrap still run in the same boot after a gate STOP.",
+  "KIT-2 (minor, plausible): the zip route does not re-hash the chosen kit.",
+  "TEST-1 (minor): no test covers KIT_CHANGE_WITH_RUN_IN_FLIGHT."
+ ],
+ "simplification_advice": "Yes, the size is a risk in itself, and these results show it. The rule-breaking findings (F1, F2, F3, OP-01, SAFE-04, F5) are not exotic. Each is a seam where one of about 19 subcommands carries its own copy of a state rule: whether a save point is confirmed, whether a conversation is open, which stage is pending, which runs failed. 7.5k lines of helper plus 4.8k lines of tests produce more distinct printed situations than an LLM operator, or one review round, can reliably cover. Each extra branch is one more place where the Dot can follow a printed line into a hidden retry. Simplifications that keep every rule:\n(1) One save-point primitive. Every note and package (START, LINK, AI, INCIDENT, CP, FZ, LEDGER_FINAL, ALL_FROZEN) goes through the same sequence: upload, narrow listing, md5 confirm, bounded re-upload, then STOP. Nothing that depends on a note being on Drive may print the next step until the note is confirmed. This alone closes OP-01, OP-02, OP-03 and OP-08, and most of F2.\n(2) One open-conversation rule for every AI role, continuations included. When an AI role has a START, or a REVIEW_INCOMPLETE continuation, newer than its newest confirmed archive, the only path is confirm-ended, then export the transcript, then choose: NOTHING_WRITTEN (one restart) or WRITTEN (failed, upload the transcript). Remove the special 'archived' and continuation branches. This closes F1 and F7 and simplifies incident_plan.\n(3) Derive the failure flags in one pure function, from the notes plus the frozen records, and call it from both final and audit, with audit running it on its own listing and reporting any difference. Have apply_frozen_flags take the empty-carrier files and compute the carrier hashes itself. That closes F4, F5, FLAGS-1, FLAGS-2 and FLAGS-3 with less code than today.\n(4) Make restore classification fail closed. Any state the classifier cannot settle without a download (F3), or any listing that is not provably complete, prints the downloads and asks again. It never falls back to NONE_IN_FLIGHT.\n(5) Replace full-folder hand-saved listings with name-prefix queries for the current job plus one bounded 'newer than the last SESSION' listing (OP-06), or prove with P2 that the connector writes listings to a file.\n(6) Split everyday and qualification into separate entry modules over a shared core. Drop or quarantine probe-p5 and other one-off tooling from the operator command set. Keep the operator's surface to essentially 'run status, then run exactly the printed line', with every attested value validated against a strict pattern (no {TOKEN}, no space in the case id).\n(7) Enforce tests mechanically. A lint test should fail if any refuse or stop code in cps_vm.py never appears in test_cps_vm.py. That would have caught TST-01..TST-07.\n(8) Use durable primitives: write INDEX with a full-write loop and fsync (SAFE-04), walk trees with onerror=raise (SAFE-01). Each change is a few lines and removes a whole class of silent loss.\nFor the next admission round, review the diff of the fixed core rather than the whole 7.5k lines, so the review stays tractable.",
+ "rationale": "The rules say any confirmed or plausible critical, or any confirmed major on an integrity rule, blocks admission. F1 is a confirmed critical, verified by an independent re-run: a reviewer revision that was written and then lost to a reset is classified AI_ARCHIVED, and the same reviewer is prompted again. That is a hidden retry under O46, it can turn FAIL into PASS, and nothing flags it. That alone decides DO_NOT_ADMIT. Several confirmed majors also sit on integrity rules. On no hidden retry: F2, OP-01, SAFE-04, and TST-01 (a missing test on a hidden-retry guard). On O44: F3, an unbound re-run of a stage lost to a reset. On O46 failure recording: F4 and F5. On evidence loss: SAFE-01. On freeze immutability and wrong scores: OP-04 and FLAGS-1. Further majors are not integrity rules but still exclude ADMIT_WITH_CONDITIONS, which allows only minor items and conditions outside the code: OP-02, OP-03, SAFE-02, SAFE-03, FLAGS-3, and the plausible OP-06. Both scopes are refused because everyday shares the faulty core and has its own wedge (SAFE-02). The verifiers downgraded F2 to major, OP-05 to minor and KIT-1 to minor. I took those downgrades into account and they do not change the outcome. I keep SAFE-03 as major even though its twin OP-05 was downgraded, because it falsifies the evidence for a release gate. What the reviews found sound: archive extraction safety, kit sha pinning and make_kit --expect, the lock handed to the detached worker, refusal of a second restart, A-before-B (backed by runner v4, which stays unchanged), protection of frozen folders by verify-frozen, the ledger and fork checks at final and audit, and no exposure of reserved answers. The fixes are mostly local, and a re-admission is realistic after the simplifications above.",
+ "findings": [
+  {
+   "lens": "integrity",
+   "id": "F1",
+   "reported_severity": "critical",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "critical",
+   "title": "A reviewer revision written after REVIEW_INCOMPLETE and lost to a reset is regenerated (O46 hidden retry of the visual reviewer)",
+   "where": "deploy/vm/cps_vm.py: role_plan lines 2053-2060 (CONTINUE_CONVERSATION when the last record entry is a REVIEW_INCOMPLETE refusal newer than the newest archive), situation lines 2552-2561 (archive with response_present -> kind 'archived'), incident_plan 'archived' branch (AI_ARCHIVED, never a transcript classification); run_flags 6513-6517 (no VISUAL_QA_FAILED_BY_RESET for this case)"
+  },
+  {
+   "lens": "integrity",
+   "id": "F2",
+   "reported_severity": "critical",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "A START missing from the restore listings lets a second conversation run for the same attempt; final, audit and the O52 sheet do not flag it",
+   "where": "deploy/vm/cps_vm.py: role_plan 2061-2063 (no START -> start-note, same attempt), next_attempt 5283-5289; audit AUD_START_UNRESOLVED at 6974-6978 (has_ai matches by tag/role/attempt/case, not by the AI manifest's start_note); no audit check for two STARTs of one attempt without supersedes; O52 rows 7172-7186; run_flags 6521-6525 (only the informational START_SUPERSEDED); parse_listing 1323-1328 (a dropped middle page passes: only token presence is checked)"
+  },
+  {
+   "lens": "integrity",
+   "id": "F3",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "After a reset, a runner command that was in flight is recorded as NONE_IN_FLIGHT when the plan first needs an FZ download, so its seen token never binds the re-run (O44)",
+   "where": "deploy/vm/cps_vm.py: situation 2562-2568 (inner plan_status with no wrap -> kind 'none'); qual_plan 2283-2304 returns early when eligible_restart sets plan.code = EXIT_NEED (2234-2251); incident_plan 2611 prints NONE_IN_FLIGHT"
+  },
+  {
+   "lens": "integrity",
+   "id": "F4",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "apply_frozen_flags.py rejects the empty carrier for every unflagged run without output, and run_flags never flags a reset-caused second interruption",
+   "where": "deploy/vm/apply_frozen_flags.py:110-111 (EMPTY_CARRIER_FOR_SCORED_RUN for any run not flagged RESET_DIVERGED/AI_OUTPUT_LOST); deploy/vm/cps_vm.py incident_body 5657-5660 (AI_NOTHING_WRITTEN with the restart used -> next_subcommand freeze) and run_flags 6499-6531 (no failed flag for it)"
+  },
+  {
+   "lens": "integrity",
+   "id": "F5",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "audit does not derive runs_failed_by_reset from the incidents; it copies ALL_FROZEN.json, and final derives the flags from the Dot's own listing",
+   "where": "deploy/vm/cps_vm.py audit 7132 (failed_runs = set(af.get('runs_failed_by_reset'))), report 7187-7190; final run_flags 6502-6511 (AI_OUTPUT_LOST from lst.names('incident') of the Dot's final listing); no comparison of runs[].incidents/start_notes with the maintainer's listing"
+  },
+  {
+   "lens": "integrity",
+   "id": "F6",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Commands that copy status's plan code can exit 10 with a DOWNLOAD and no NEXT line; 'run the same command again' then fails",
+   "where": "deploy/vm/cps_vm.py cmd_evict 6267-6269 (b.tail, b.code = plan.block.tail, plan.code), likewise 5484, 6009 and incident/recheck tails, when qual_plan's eligible_restart returns EXIT_NEED (2248-2251)"
+  },
+  {
+   "lens": "integrity",
+   "id": "F7",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The exported transcript of a written-and-lost conversation is never uploaded and is deleted at evict (failure evidence lost)",
+   "where": "deploy/vm/cps_vm.py nothing_written_lines 2146-2147 and incident_plan 2593-2594 (WRITTEN_OR_DOUBT line has no --transcript), cmd_evict 6256-6258 (transcripts/<case>_<tag>_* deleted)"
+  },
+  {
+   "lens": "integrity",
+   "id": "F8",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Tokens of two lost stages (one package dead on Drive) are refused INCIDENT_SEEN_INVALID, stranding the run in case C",
+   "where": "deploy/vm/cps_vm.py incident_body 5684-5694 (a token whose sub differs from the incident's sub and is not a restored stage is refused)"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-01",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "evict can delete frozen job-folder content that was never packed or uploaded (unreadable folders skipped silently; special-mode or unsupported-name regular files recorded by hash only)",
+   "where": "deploy/vm/cps_vm.py:851 (tree_list uses os.walk with no onerror), 823-841 (unsupported_entry keeps bytes and sha256, never content), 4503 (build_package packs only the supported entries), 6186-6197 and 6233-6235 (evict compares a new lenient tree_list against the FZ manifest, then rename + remove_tree); ai-archive 5462 has the same blind spot"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-02",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "job-start does not validate --case: an invalid case id produces an unrecognisable INPUTS upload, unquoted RUN lines and a wedged everyday VM",
+   "where": "deploy/vm/cps_vm.py:6285 (case = a.case, never matched against CASE); 2322-2326 (everyday_prepare_line interpolates everyday_inputs/<case> unquoted); compare place_inputs 4344, which does check CASE"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-03",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "probe-p5 check reports PASS without verifying that the starting tool call ended",
+   "where": "deploy/vm/cps_vm.py:7316-7330 (start records foreground_pid but not the tool call's shell), 7360-7371 (survives = (alive or done) and lived >= min_gap - 5); README section 6"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-04",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Index.append ignores short writes: INDEX records can be lost silently on a full tmpfs",
+   "where": "deploy/vm/cps_vm.py:690 (os.write(fd, line) return value unchecked), 691-694 (the in-memory index is updated as if the write succeeded); the partial tail is truncated by the next append (684-688) and ignored on reload (649-655)"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-05",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Drive listing ids are printed unvalidated, and the anchored name patterns accept a trailing newline",
+   "where": "deploy/vm/cps_vm.py:1318-1351 (parse_listing checks only that id is a non-empty string), 375-379 (Block.download prints id and name raw), 84-104 (patterns end in `$`, which re.match also matches before a final newline); Fetcher.slice_path 3480-3481 builds a local path from the id"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-06",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "session_start.sh: the dirty-tree check fails open on a git error, and set -e then exits 128 with no RESULT or REFUSED line",
+   "where": "deploy/vm/session_start.sh:40 (if [ -n \"$(git status ...)\" ]: a failing git gives an empty string, which reads as clean), 46 (COMMIT=$(git rev-parse HEAD) aborts under set -e)"
+  },
+  {
+   "lens": "safety",
+   "id": "SAFE-07",
+   "reported_severity": "minor",
+   "verdict": "PLAUSIBLE",
+   "severity_after_verification": "minor",
+   "title": "The no-root setup and check_env run in the foreground of the session_start tool call; a killed setup restarts from scratch, and no release gate covers its duration",
+   "where": "deploy/vm/session_start.sh:62-89 (setup_vm_user.sh and check_env.py run synchronously; the marker is written only at the end); cps_vm.py:600-607 and 626-635 (the P5 gate compares the tool-call limit only with wrap_foreground_seconds + 60)"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-01",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "START note is not confirmed on Drive before OPEN_CONVERSATION; after a reset the helper prints a second generator conversation for a run whose first one already wrote",
+   "where": "deploy/vm/cps_vm.py cmd_start_note 5315-5389 (UPLOAD START then NEXT: OPEN_CONVERSATION at 5383, no narrow listing); restore classifies NONE_IN_FLIGHT when no START/LINK is listed"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-02",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "recheck loops forever when the INCIDENT upload did not land: it never re-prints the INCIDENT UPLOAD and never stops",
+   "where": "deploy/vm/cps_vm.py cmd_recheck 5803-5807 (if not lst.has(recheck_incident): unlink, SAVE_DRIVE_LISTING, need RECHECK_LISTING_STALE)"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-03",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "final hands back case B without confirming LEDGER_FINAL and ALL_FROZEN.json; a truncated ALL_FROZEN.json then dead-ends (FINAL_ALREADY by name only, while status keeps printing final)",
+   "where": "deploy/vm/cps_vm.py cmd_final 6548-6549 (refuse FINAL_ALREADY if any ALL_FROZEN.json name is listed, no md5 check) and 6654-6661 (two UPLOAD lines, then NEXT: HANDBACK case=B, no confirmation)"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-04",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Unreplaced RUN-line tokens are accepted as attested values: a literal '{CONVERSATION_ID}' is recorded in the LINK note and frozen by the runner into VISUAL_RECORD",
+   "where": "deploy/vm/cps_vm.py cmd_link_note 5411 (only blank, '<' and newline are refused); conv_token 1982-1985 re-prints q(content) as \"'{CONVERSATION_ID}'\"; the same weak check for --profile-folder in delivery-note (prof.startswith('<')); runner placeholder() checks only '<'"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-05",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "probe-p5 check reports PASS even when start and check run in the same tool call, so the release gate p5_detached_survival can be answered without ever testing a tool-call boundary",
+   "where": "deploy/vm/cps_vm.py cmd_probe_p5 check, survives at 7370 (alive-or-done and lived >= min_gap-5); START.json records foreground_pid, but nothing compares the calling shell or session of start and check"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-06",
+   "reported_severity": "major",
+   "verdict": "PLAUSIBLE",
+   "severity_after_verification": "major",
+   "title": "Whole-folder listings that the Dot must save verbatim grow to about 1,000-1,400 entries (about 300 KB) and are required at every session start, every recheck and final",
+   "where": "README section 0 rule 2 and section 1 step 3; parse_listing 1304-1366 (requires every page and every id, createdTime and md5 kept unchanged); session, recheck and final ask for name_filter=null listings of the records folder"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-07",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Drive calls per qualification run are about 2.5-3x the design and spec budget; download verification fetches every PNG part back",
+   "where": "docs/handoff/RESET_PROOF_DESIGN_DRAFT.md H ('Uploads per run: 8 normal, 11 scope, plus 2 or 3 LINK'; '670-840 uploads, 3.7-4.7 hours'); SPEC 9.2 ('10 uploads plus 1-3 PNG parts per run, and 3 narrow listings'); cmd_evict 6154 and verify_one 6099 (one narrow listing, then one download, per FZ and part)"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-08",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "CP-V is never confirmed: every evict prints a duplicate upload of it and keeps its payload in tmpfs until a reset",
+   "where": "deploy/vm/cps_vm.py cmd_evict 6239-6256 (unconfirmed made packages: kept.append and b.upload again); build_package 4567-4571 deletes an older CP only when confirmed and only on the next package of the same job, which never comes after freeze"
+  },
+  {
+   "lens": "operator",
+   "id": "OP-09",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Smaller operator gaps: a skipped link-note is accepted silently, the everyday send-now question is preceded by WAIT_FOR_USER_REQUEST, and the self-test WORKER_DIED loop is unbounded",
+   "where": "cmd_ai_archive 5447 (no LINK check when link_notes is true); plan lines 2179 and 2409 (WAIT_FOR_USER_REQUEST before ASK_USER_IF_SEND_NOW); wait_block 4955-4960 and README rule 0 (WORKER_DIED of a self-test: run selftest again, no count; selftest_<UTC> folders are not removed); README section 5 ('keep the one whose md5 the listing shows for the copy you use' is circular)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-01",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "No test covers START_ALREADY_RECORDED (second START for the same attempt): removing it opens a second conversation silently",
+   "where": "deploy/vm/cps_vm.py:5297-5298 (next_attempt); deploy/vm/test_cps_vm.py has no occurrence of START_ALREADY_RECORDED"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-02",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "No test reaches INCIDENT_RESPONSE_PRESENT; with either check removed, a written response can be recorded as AI_NOTHING_WRITTEN",
+   "where": "deploy/vm/cps_vm.py:5639-5644 (incident_body, AI_NOTHING_WRITTEN branch)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-03",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "No test reaches INCIDENT_CONVERSATION_NOT_ENDED",
+   "where": "deploy/vm/cps_vm.py:5599-5600"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-04",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Download-mode upload verification never meets a mismatching download; its sha comparison can be removed without any failure",
+   "where": "deploy/vm/cps_vm.py:6119 (verify_one: `if sha_file(vp) == sha:`)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-05",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "No test reaches RESTORE_AI_CONFLICT for a package output folder that differs from the archived AI output",
+   "where": "deploy/vm/cps_vm.py:3975-3976 (restore_package)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-06",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "No test reaches START_PROMPT_CHANGED",
+   "where": "deploy/vm/cps_vm.py:5356-5357 (cmd_start_note)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-07",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Helper's in-flight check for wrap prepare/nonattempt (reader B before A is frozen) is untested; only the runner's refusal backs it",
+   "where": "deploy/vm/cps_vm.py:4757-4758 (wrap_checks: `if sub in ('prepare', 'nonattempt') and fl:`)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-08",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Staging.under_stage has no direct test (defence-in-depth path check)",
+   "where": "deploy/vm/cps_vm.py:954-960, used at :1097"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-09",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "One assertion is weakened by a catch-all disjunct",
+   "where": "deploy/vm/test_cps_vm.py:4501-4502 (r4_fingerprint_gates)"
+  },
+  {
+   "lens": "tests",
+   "id": "TST-10",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Disk exhaustion shows up as scattered failures; the test-count claim could not be reproduced",
+   "where": "deploy/vm/test_cps_vm.py (run_parallel/main); deploy/vm/README.md:268-270"
+  },
+  {
+   "lens": "kit",
+   "id": "KIT-1",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A different kit (another RELEASE.json) is accepted mid-qualification once no job folder exists; the genesis release_sha256 is never compared again",
+   "where": "deploy/vm/cps_vm.py:2885-2886 (fl = Layout().job_folders() is the only in-flight test), 2743-2744 (unpack_kit refusal), 5875 (genesis records release_sha256), 6633 (ALL_FROZEN records only the current release); cmd_audit 6896+ has no release/kit consistency anomaly"
+  },
+  {
+   "lens": "kit",
+   "id": "FLAGS-1",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "apply_frozen_flags trusts a caller-supplied --empty-carrier-sha and binds no manifest carrier to its frozen run",
+   "where": "deploy/vm/apply_frozen_flags.py:108-111, 130-132"
+  },
+  {
+   "lens": "kit",
+   "id": "FLAGS-3",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Runner-recorded failed runs that have no output can never pass the flags check, so qualification scoring is stranded",
+   "where": "deploy/vm/apply_frozen_flags.py:96-111 (must_empty only for RESET_DIVERGED/AI_OUTPUT_LOST, nonattempt or an owner 'fail' on FROZEN_UNVERIFIED)"
+  },
+  {
+   "lens": "kit",
+   "id": "FLAGS-2",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A single empty-carrier sha conflicts with the frozen aggregator's READERS_SHARE_CARRIER check; documented checks are not implemented",
+   "where": "deploy/vm/apply_frozen_flags.py:21-22, 27, 108; research/evaluation/aggregate_qualification050.py (READERS_SHARE_CARRIER); deploy/vm/test_cps_vm.py:4721 (base_man puts both A/c3 and B/c3 on the same empty sha)"
+  },
+  {
+   "lens": "kit",
+   "id": "MK-1",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "make_kit A/B recovery fails when one copy's member-header path slips, even though the other copy is intact",
+   "where": "deploy/make_kit.py:186-202 (parse_part keys entries by the header path), 234-237 (an unsafe candidate path fails the whole assemble), 252-263"
+  },
+  {
+   "lens": "kit",
+   "id": "MK-2",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "make_kit pack accepts two binary members with the same file name, producing a bundle that can never be assembled",
+   "where": "deploy/make_kit.py:132-147"
+  },
+  {
+   "lens": "kit",
+   "id": "GATE-1",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Release gates are enforced only by session; after a gate-reopening config-only kit, the same boot's earlier session state still lets status and wrap prepare run",
+   "where": "deploy/vm/cps_vm.py:2739-2742 (config-only rewrite), 2999-3003 (the only open_gates() call), 4613-4616 (require_session_ready)"
+  },
+  {
+   "lens": "kit",
+   "id": "KIT-2",
+   "reported_severity": "minor",
+   "verdict": "PLAUSIBLE",
+   "severity_after_verification": "minor",
+   "title": "The zip route trusts verify_drive_files.py's printed status and never re-hashes the kit it uses (the parts route does)",
+   "where": "deploy/vm/cps_vm.py:2867-2883 (status 'ok'/'REPAIRED' leads straight to kit_members; no sha_file(use) == sha); compare rebuild_kit 2820"
+  },
+  {
+   "lens": "kit",
+   "id": "TEST-1",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "No test for the kit-change guard (KIT_CHANGE_WITH_RUN_IN_FLIGHT) or for a config-only update while a run is in flight",
+   "where": "deploy/vm/test_cps_vm.py (grep 'RUN_IN_FLIGHT' finds only WRAP_RUN_IN_FLIGHT; cfg_only=True builds at 3000, 3014, 3268, 4566, 4570 test expected_genesis paths)"
+  }
+ ],
+ "files_sha256": {
+  "deploy/vm/cps_vm.py": "7524987159f579d426eb99a22983a414bbcfa9c5ba99ea655611b7d77d43e14a",
+  "deploy/vm/session_start.sh": "fb246fe3d87c8a49ed539193e06beff388950d56c006e19ef6042a0bde0fa9f5",
+  "deploy/vm/test_cps_vm.py": "3c052af942633e1b53d4a9ecdfd47c851c5bb67aafce70504d63124f77dd2575",
+  "deploy/vm/README.md": "0d005e2b696c9da517bdde17045f6168aad1df7c5daaaaa20237f539b28c8a6c",
+  "deploy/vm/apply_frozen_flags.py": "db23b31d973a393fc564e241dabacf8237334aacdab89b3cf7d0e92cf870bb05",
+  "deploy/make_kit.py": "16594021ac570df3e5325cd3f20c1b3b1b209854091355219f20046a520a6bcb",
+  "deploy/test_make_kit.py": "d93cdf4399af37e7a05f76f694c3bc181a431e344bafbfa15adeb56517929321",
+  "deploy/run/cps_job.py": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431"
+ },
+ "unchanged": "runner v4 deploy/run/cps_job.py (7505e98a) stays the admitted runner; the frozen evaluator and aggregators are untouched; no reserved answer was needed or opened"
+}
