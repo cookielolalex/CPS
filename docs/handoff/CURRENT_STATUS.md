@@ -1,3 +1,28 @@
+# Status addendum — 2026-11-09 (evening): the "Drive corruption" was the maintainer's own upload; a Drive mailbox; the reset-proof design draft
+
+- **Cause found.** The Dot's 8 mismatched example workbooks, DOT-08_ex1 among them, were damaged by the maintainer's
+  uploads, not by the Dot's VM or Drive.
+  - The maintainer uploads a binary file as hand-written base64, and slips change one character, not the size.
+  - DOT-08_ex1 in Drive differs from the original at exactly 2 base64 characters (2862 `M`→`g`, 11846 `s`→`o`).
+  - A byte-exact copy of the Drive file reproduces the Dot's sha256 `a54baa91…`. So the Dot's transfers are faithful.
+  - The PNG the Dot uploaded (DOT-11_x1) has valid chunk CRCs and image data.
+- **Repair tool** `deploy/verify_drive_files.py` (6e540c2):
+  - checks downloads against `FOLDER_MANIFEST.md`, and repairs slips with a search guided by each zip part's CRC-32;
+  - writes a repaired copy only when its sha256 equals the manifest's;
+  - on the real DOT-08 copy, found both slips in 0.5 s;
+  - simulated: 1 slip, 27/27 repaired; 2 slips, 22/27 repaired; never a wrong file.
+- **Rule from now on:** the Dot checks every CPS-folder file it downloads with this tool before use. The next release
+  adds the rule to 00 and 05.
+- **Mailbox.** The maintainer cannot message the Dot directly; it runs inside ChatGPT. So the owner set up
+  `CPS/maintainer_messages/`:
+  - message files `Mnnn_<date>_<topic>.md`;
+  - the owner says "mail" to the Dot, which replies in `reports/Mnnn_*/REPLY.md`;
+  - the maintainer reads replies from Drive.
+  - M001: repair the 8 workbooks, check all 45 files, render the 8 PNGs, then case A.
+  - M002: probes P1 (new conversations on the VM), P2 (50/200 MB Drive round trips), P3 (machine identity).
+- **Reset-proof design:** a draft, not adopted. See [RESET_PROOF_DESIGN_DRAFT.md](RESET_PROOF_DESIGN_DRAFT.md).
+  It needs owner decisions OD-1 to OD-10, the probe results and an admitted helper (G1) before qualification.
+
 # Status addendum — 2026-11-09 (later): the Dot's VM resets; the owner chose the light setup
 
 - **The Dot's VM keeps nothing across resets.** Its home and `/tmp` are in-memory filesystems. A later session found `~/cps*` gone, and the Dot cannot configure a start-up script or snapshot. Only Google Drive persists.
