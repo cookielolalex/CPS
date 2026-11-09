@@ -8,6 +8,7 @@ These files are for the CPS operator's VM. They contain no case data.
 | `check_env.py` | Writes `ENV_REPORT.json`: tool versions and paths, the node binary's sha256, and which requirements are met. |
 | `render_examples.py` | Renders the interview example excerpts (.xlsx) to PNG on the VM (LibreOffice, pdftoppm 120 dpi, trimmed and stacked), as the kit did. |
 | `verify_drive_files.py` | Checks files downloaded from the CPS Drive folder against its `FOLDER_MANIFEST.md` (sha256), and repairs the maintainer's upload copy-errors: a binary file the maintainer uploads travels as hand-written base64, and a slip changes a character but not the size. It writes a repaired copy only when its sha256 equals the manifest's. See "Files the maintainer uploads to Drive". |
+| `make_kit.py` | Builds the session kit (`SESSION_KIT_<v>.zip`) byte for byte reproducibly, so the maintainer never uploads it as a binary. Text members travel as plain-text bundle parts in two copies; binary members are copied inside Drive; the operator rebuilds the zip and checks its sha256. See "The session kit without a binary upload". Tests: `test_make_kit.py`. |
 | `setup_vm_user.sh` | The same toolchain without root or sudo, under one prefix, every download pinned by version and sha256. See "No-root setup". |
 | `lok_convert.py` | Runs `soffice --convert-to pdf` through LibreOfficeKit, in-process, without soffice's IPC socket. `setup_vm_user.sh` installs it. The `soffice` wrapper uses it only on a host where `soffice` itself cannot convert (see "PDF conversion without the IPC socket"). |
 | `conda-lock-linux-64.txt`, `conda-lock-python-linux-64.txt` | Explicit conda-forge locks (`@EXPLICIT`, URL + sha256) for `setup_vm_user.sh`: poppler, fontconfig tools, zstd, unzip, git, curl; and the fallback Python 3.12. |
@@ -144,3 +145,23 @@ The search covers:
 On the 27 example workbooks, it repaired 27 of 27 files with one random slip, mean 0.8 s. With two random slips it
 repaired 22 of 27, mean 1.9 s; the five it did not repair had both slips in one part or both outside the parts. It
 never wrote a wrong file.
+
+### The session kit without a binary upload
+
+The session kit holds the release, the helper's configuration, the company tables and, for qualification, every job's
+`JOB.json`, `JOB_TITLE.json` and source workbook (about 4.7 MB). It is too large for a hand-written base64 upload, and
+slips would be likely. So it never travels as one:
+
+1. The maintainer builds the kit from its member tree and splits the text members into bundle parts:
+   `python3 -I -B deploy/make_kit.py pack TREE OUTDIR --kit-name SESSION_KIT_<v>.zip --binary-name PATH=NAME ...`.
+   Each part is written twice, as copies A and B. The kit's sha256 is printed and goes into `FOLDER_MANIFEST.md`.
+2. The maintainer uploads each part as text, both copies. The binary members are copied inside Drive (`copy_file`),
+   so their bytes never pass through the maintainer.
+3. The operator downloads the parts and the copied files and rebuilds the kit:
+   `python3 -I -B deploy/make_kit.py assemble OUT.zip --binaries DIR --expect <kit sha256> PART ...`. Each text member
+   is taken from a copy whose content matches its sha256, so a slip in one copy is skipped. Every binary member must
+   match its sha256. The zip is written only when its sha256 equals `--expect`.
+4. The operator uploads the kit, and the maintainer moves it into `cps_runtime/` (a move keeps the bytes).
+
+The zip is stored, not compressed, with fixed timestamps, modes and member order. The same members give the same bytes
+on Python 3.11, 3.12 and 3.13 (tested).
