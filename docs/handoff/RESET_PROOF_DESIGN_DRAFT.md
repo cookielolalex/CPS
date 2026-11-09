@@ -188,7 +188,7 @@ G6 Before qualification, all on invented data:
 H. STORAGE AND TIME (assumes 20 s per Drive call; MB/s not yet measured)
 - Local tmpfs peak: tools 2.1 GB + one run 0.3 GB + staging 0.3 GB + inbox 0.3 GB = about 3.0 GB of 4.9 GB.
 - Drive per run: about 160 MB (PNG parts 130 MB, cores 25 MB, AI outputs under 1 MB).
-- Drive for 72 runs: about 11.5 GB, plus ledgers under 0.1 GB.
+- Drive for 72 runs: about 11.5 GB, plus ledgers under 0.1 GB. The owner reports about 2 TB free (2026-11-09), so total space is not a limit; P2 still measures the per-file limit and speed.
 - Uploads per run: 8 normal, 11 scope, plus 2 or 3 LINK notes if needed.
 - Uploads for qualification: about 670-840, which is 3.7-4.7 hours of calls plus transfer time.
 - The runs themselves: 12-24 hours in sequence, more for large jobs.

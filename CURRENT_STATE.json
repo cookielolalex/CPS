@@ -483,5 +483,6 @@
   "O52": "before scoring, the owner or a person the owner names compares the account's conversation list with the Dot's START notes; an unlogged CPS conversation fails that case and flags qualification (OD-10)",
   "O53": "the maintainer may read, write and edit the Dot's folder in the owner's Drive; maintainer instructions reach the Dot as CPS/maintainer_messages/Mnnn_*.md when the owner says 'mail'; replies go to reports/Mnnn_*/REPLY.md"
  },
- "owner_decisions_2026_11_09_source": "owner approved OD-1..OD-10 of docs/handoff/RESET_PROOF_DESIGN_DRAFT.md as recommended ('Approval all', 2026-11-09); O53 from the owner's message of the same day"
+ "owner_decisions_2026_11_09_source": "owner approved OD-1..OD-10 of docs/handoff/RESET_PROOF_DESIGN_DRAFT.md as recommended ('Approval all', 2026-11-09); O53 from the owner's message of the same day",
+ "owner_fact_2026_11_09_drive_space": "about 2 TB free in the owner's Google Drive (owner's message, 2026-11-09); qualification evidence needs about 11.5 GB (RESET_PROOF_DESIGN_DRAFT.md section H), so total space does not limit O48. Per-file size limits and transfer speed are still measured by probe P2"
 }
