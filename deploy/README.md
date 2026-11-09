@@ -75,7 +75,7 @@ The runner records the LibreOffice version of every job (`external_tools`) but d
   - `check_env.py` all met;
   - export self-test 600/600 with visual tests, run on LibreOfficeDev 26.8.
 - **Here, as an unprivileged user:**
-  - `host` mode with the machine's LibreOffice 24.2: setup exit 0 in 72 s (cached downloads), the check passes, Chromium checks pass, `check_env.py` all met;
+  - `host` mode with the machine's LibreOffice 24.2: setup exit 0 in 72 s (cached downloads), the check passes, Chromium checks pass, `check_env.py` all met, export self-test 600/600 with visual tests;
   - under the bind-blocking filter, the same mode fails the check with exit 1 and keeps the evidence.
 
 ### PDF conversion without the IPC socket
