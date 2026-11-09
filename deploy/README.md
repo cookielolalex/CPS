@@ -51,6 +51,33 @@ What goes where:
 
 `env.sh` puts `~/cps-tools/venv/bin`, `~/cps-tools/node/bin` and `~/cps-tools/bin` first on `PATH`, so a Node 24 elsewhere on `PATH` is no longer used. It sets `FONTCONFIG_FILE` and `PLAYWRIGHT_BROWSERS_PATH`, and it sets `NODE_PATH` to `~/cps-tools/playwright/node_modules`, so `source_prep/screenshot_views.cjs` (via `render_views.py`) resolves `require('playwright')`. The export writer and saved QA remove every `NODE_*` variable from node's environment, so `NODE_PATH` does not reach them. `env.sh` sets no `LD_LIBRARY_PATH`.
 
+### The host's own LibreOffice (`CPS_WITH_LIBREOFFICE=host`): the Dot's light setup
+
+Some agent VMs already ship a LibreOffice that works in their sandbox, and lose everything else at each reset. The Dot's VM is one (Debian 13, glibc 2.41; `soffice` is the Codex runtime's LibreOfficeDev 26.8). The owner chose this light setup on 2026-11-09.
+
+With `CPS_WITH_LIBREOFFICE=host`, the setup installs everything else as usual (pinned) and does not install LibreOffice:
+- the checker's Node v22;
+- the Python packages;
+- the Noto CJK fonts and their `fonts.conf`;
+- poppler;
+- Chromium and Playwright.
+
+Instead it uses the first `soffice` on `PATH` outside the prefix:
+- **Wrappers.** It writes `~/cps-tools/bin/soffice` and `libreoffice` as wrappers that run it, with the prefix's `FONTCONFIG_FILE` when none is set.
+- **Check.** It runs the same LibreOffice check: an invented workbook with Chinese text to PDF, the text extractable, Noto Sans CJK embedded, and `--version`. It records the route `host` and the path.
+- **Failure.** If the check fails, the setup stops with exit 1 and keeps the evidence in `~/cps-tools/var/lo_smoke/host/`. It does not switch to another route by itself.
+
+The runner records the LibreOffice version of every job (`external_tools`) but does not pin it. The checker's Node is pinned by sha256 as before.
+
+**Checked on 2026-11-09:**
+- **On the Dot's VM** (with `CPS_WITH_LIBREOFFICE=0`, so the Codex `soffice` was used from `PATH`):
+  - setup in 73 s;
+  - `check_env.py` all met;
+  - export self-test 600/600 with visual tests, run on LibreOfficeDev 26.8.
+- **Here, as an unprivileged user:**
+  - `host` mode with the machine's LibreOffice 24.2: setup exit 0 in 72 s (cached downloads), the check passes, Chromium checks pass, `check_env.py` all met;
+  - under the bind-blocking filter, the same mode fails the check with exit 1 and keeps the evidence.
+
 ### PDF conversion without the IPC socket
 
 `soffice` starts by binding a Unix socket in `/tmp` (`OSL_PIPE_<uid>_SingleOfficeIPC_<hash>`), so that a second start can pass its arguments to the first. Some agent sandboxes refuse `bind()` for every process. LibreOffice then exits 1 at once, prints nothing and writes no file, while `soffice --version` still works. That happened on the Dot's VM on 2026-11-09 (Debian 13, glibc 2.41), and it was reproduced here with a seccomp filter that refuses `bind`, `listen` and `accept`.
@@ -87,4 +114,4 @@ Source-prep builders: `build_inventory_xlsx_v2.py` and `build_inventory_v2.py` r
 
 Hosts used: nodejs.org, conda.anaconda.org, pypi.org, files.pythonhosted.org, archive.ubuntu.com, security.ubuntu.com, registry.npmjs.org and storage.googleapis.com. Fallbacks, used only when a file is missing: snapshot.ubuntu.com (the dated snapshot in the deb locks), launchpad.net (which redirects to launchpadlibrarian.net) and cdn.playwright.dev. The Ubuntu archive drops superseded package versions, so after an Ubuntu update the dated snapshot or Launchpad supplies the locked file, with the same sha256. To re-lock, re-run the apt resolution and micromamba solve recorded in each lock's header, then update the lock hashes pinned in the script.
 
-Options: `CPS_TOOLS`, `CPS_DOWNLOADS` (download cache, default `~/cps-tools/downloads`; safe to delete after a successful run), `CPS_PYTHON=/abs/python3`, `CPS_PYTHON_FROM=conda`, `CPS_LO_LOCK=noble|jammy`, `CPS_WITH_LIBREOFFICE=0`, `CPS_WITH_CHROMIUM=0` (the phase-1 self-test does not use Chromium; source prep does), `CPS_DEB_EXTRACT=python` (no `dpkg-deb`). The script ends with `~/cps-tools/INSTALL_SUMMARY.txt`. It lists each tool's path and version, the node sha256, the builder deps bundle, `NODE_PATH`, the LibreOffice smoke test and the `lok_convert.py` sha256, the Chromium checks (one headless launch, plus `screenshot_views.cjs` on an invented page), any missing system libraries, the hosts contacted and the sizes. Outside the prefix it writes only micromamba's `~/.conda/environments.txt` and LibreOffice's and Chromium's usual per-user caches.
+Options: `CPS_TOOLS`, `CPS_DOWNLOADS` (download cache, default `~/cps-tools/downloads`; safe to delete after a successful run), `CPS_PYTHON=/abs/python3`, `CPS_PYTHON_FROM=conda`, `CPS_LO_LOCK=noble|jammy`, `CPS_WITH_LIBREOFFICE=0` or `=host` (next section), `CPS_WITH_CHROMIUM=0` (the phase-1 self-test does not use Chromium; source prep does), `CPS_DEB_EXTRACT=python` (no `dpkg-deb`). The script ends with `~/cps-tools/INSTALL_SUMMARY.txt`. It lists each tool's path and version, the node sha256, the builder deps bundle, `NODE_PATH`, the LibreOffice smoke test and the `lok_convert.py` sha256, the Chromium checks (one headless launch, plus `screenshot_views.cjs` on an invented page), any missing system libraries, the hosts contacted and the sizes. Outside the prefix it writes only micromamba's `~/.conda/environments.txt` and LibreOffice's and Chromium's usual per-user caches.

@@ -23,7 +23,7 @@
 #
 # Options (environment): CPS_TOOLS=<prefix>   CPS_DOWNLOADS=<dir> (default <prefix>/downloads, kept for re-runs)
 #   CPS_PYTHON=/abs/python3 (use this base Python)   CPS_PYTHON_FROM=conda (force the conda Python)
-#   CPS_WITH_LIBREOFFICE=0 (skip)   CPS_LO_LOCK=noble|jammy (default: by host glibc)   CPS_WITH_CHROMIUM=0 (skip)   CPS_DEB_EXTRACT=python (no dpkg-deb)
+#   CPS_WITH_LIBREOFFICE=0 (skip) | host (use the host's own soffice, checked like the bundle)   CPS_LO_LOCK=noble|jammy (default: by host glibc)   CPS_WITH_CHROMIUM=0 (skip)   CPS_DEB_EXTRACT=python (no dpkg-deb)
 # The script is idempotent: a finished component (stamp = sha256 of its pins) is checked and skipped.
 set -euo pipefail
 umask 022
@@ -365,8 +365,33 @@ LO_STATUS="not installed"
 LR=$P/libreoffice/root
 glibc_version() { getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}' || ldd --version 2>/dev/null | head -n1 | awk '{print $NF}'; }
 version_ge() { [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]; }
+HOST_SOFFICE=""
 if [ "${CPS_WITH_LIBREOFFICE:-1}" = 0 ]; then
   LO_STATUS="skipped (CPS_WITH_LIBREOFFICE=0)"
+  rm -f "$P/bin/soffice" "$P/bin/libreoffice"   # no wrapper left from an earlier mode
+elif [ "${CPS_WITH_LIBREOFFICE:-1}" = host ]; then
+  # The host's own LibreOffice (an agent VM may ship one that works where the bundle's soffice cannot): the first
+  # soffice on PATH outside this prefix. The check at the end converts the invented workbook with it, as for the bundle.
+  component "libreoffice (the host's own soffice, CPS_WITH_LIBREOFFICE=host)"
+  while IFS= read -r d; do
+    case "$d" in ''|"$P"|"$P"/*) continue ;; esac
+    if [ -x "$d/soffice" ] && [ ! -d "$d/soffice" ]; then HOST_SOFFICE=$d/soffice; break; fi
+  done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+  if [ -z "$HOST_SOFFICE" ]; then
+    LO_STATUS="FAILED: CPS_WITH_LIBREOFFICE=host, but there is no soffice on PATH outside $P"
+    warn "$LO_STATUS"
+  else
+    for name in soffice libreoffice; do
+      cat > "$P/bin/$name.new" <<EOF
+#!/bin/sh
+# CPS: the host's own LibreOffice (CPS_WITH_LIBREOFFICE=host, written by deploy/setup_vm_user.sh): $HOST_SOFFICE
+if [ -z "\${FONTCONFIG_FILE:-}" ]; then FONTCONFIG_FILE="$P/etc/fonts/fonts.conf"; export FONTCONFIG_FILE; fi
+exec "$HOST_SOFFICE" "\$@"
+EOF
+      chmod 755 "$P/bin/$name.new"; mv "$P/bin/$name.new" "$P/bin/$name"
+    done
+    LO_STATUS="host"
+  fi
 else
   GLIBC=$(glibc_version)
   LO_LOCK="" LO_LOCK_SHA256="" LO_MIN=""
@@ -557,10 +582,18 @@ smoke_pdf() {  # converts the invented workbook in folder $1 through the current
   SMOKE_DESC="exit $rc after $secs s"
   [[ "$txt" == *控制盤* && "$fonts" == *NotoSansCJK* ]]
 }
-if [ "$LO_STATUS" = installed ]; then
+if [ "$LO_STATUS" = installed ] || [ "$LO_STATUS" = host ]; then
   "$VENV/bin/python" -I -c 'import sys, openpyxl
 wb = openpyxl.Workbook(); ws = wb.active; ws.title = "測試"
 ws.append(["品名", "規格"]); ws.append(["控制盤 箱體", "不鏽鋼 600x800"]); wb.save(sys.argv[1])' "$LO_SMOKE_DIR/cjk.xlsx"
+fi
+if [ "$LO_STATUS" = host ]; then
+  if smoke_pdf "$LO_SMOKE_DIR/host"; then
+    LO_ROUTE=host LO_ROUTE_NOTE="the host's own soffice ($HOST_SOFFICE; CPS_WITH_LIBREOFFICE=host)"
+  else
+    LO_ROUTE_NOTE="none: the host's own soffice ($HOST_SOFFICE) failed ($SMOKE_DESC; files in $LO_SMOKE_DIR/host)"
+  fi
+elif [ "$LO_STATUS" = installed ]; then
   if smoke_pdf "$LO_SMOKE_DIR/soffice"; then
     LO_ROUTE=soffice LO_ROUTE_NOTE="soffice (its conversion works on this host)"
   else
@@ -586,12 +619,14 @@ finally:
       LO_ROUTE_NOTE="none: soffice failed ($soffice_desc; $ipc_probe) and LibreOfficeKit failed ($SMOKE_DESC)"
     fi
   fi
+fi
+if [ "$LO_STATUS" = installed ] || [ "$LO_STATUS" = host ]; then
   lo_ver=$(HOME=$LO_SMOKE_DIR/home timeout 120 soffice --version 2>/dev/null | head -n1 || true)
   echo "route=${LO_ROUTE:-none}; version '$lo_ver'" > "$LO_SMOKE_DIR/ROUTE.txt"
   if [ -n "$LO_ROUTE" ] && [[ "$lo_ver" == LibreOffice* ]]; then
     LO_SMOKE="ok (invented xlsx with Chinese text -> PDF through the $LO_ROUTE route, text extractable, Noto Sans CJK embedded; soffice --version ok)"
   else
-    LO_SMOKE="FAILED (route ${LO_ROUTE:-none}; version '$lo_ver'; files kept in $LO_SMOKE_DIR: soffice/ and lok/ with lo.status, lo.out, lo.err; ipc_probe.txt)"
+    LO_SMOKE="FAILED (route ${LO_ROUTE:-none}; version '$lo_ver'; files kept in $LO_SMOKE_DIR: one folder per route tried with lo.status, lo.out, lo.err; ipc_probe.txt)"
     LO_STATUS="FAILED: smoke test"
   fi
 fi
@@ -658,6 +693,8 @@ PYEOF
   printf '  %-10s %s\n' packages "$(python3 -I -c 'import openpyxl, xlrd, PIL, lxml.etree as e; print("openpyxl", openpyxl.__version__, "xlrd", xlrd.__version__, "lxml", ".".join(map(str, e.LXML_VERSION)), "pillow", PIL.__version__)')"
   if [ "$LO_STATUS" = installed ]; then
     printf '  %-10s %s  [%s] (%s)\n' soffice "$(command -v soffice)" "$(soffice --version 2>/dev/null | head -n1)" "$LO_LOCK"
+  elif [ "$LO_STATUS" = host ]; then
+    printf '  %-10s %s  [%s] (the host'"'"'s own: %s)\n' soffice "$(command -v soffice)" "$(soffice --version 2>/dev/null | head -n1)" "$HOST_SOFFICE"
   else
     printf '  %-10s %s\n' soffice "$LO_STATUS"
   fi
@@ -683,5 +720,5 @@ PYEOF
   echo "size: $(du -sh "$P" 2>/dev/null | cut -f1) total; downloads $(du -sh "$DL" 2>/dev/null | cut -f1) (kept for re-runs, safe to delete); without downloads $(du -sh --exclude=downloads "$P" 2>/dev/null | cut -f1)"
 } | tee "$P/INSTALL_SUMMARY.txt"
 rm -rf "$P/.tmp"
-case "$LO_STATUS" in installed|skipped*) ;; *) die "LibreOffice: $LO_STATUS" ;; esac
+case "$LO_STATUS" in installed|host|skipped*) ;; *) die "LibreOffice: $LO_STATUS" ;; esac
 log "done. Next: source $P/env.sh"

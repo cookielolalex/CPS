@@ -1,3 +1,27 @@
+# Status addendum — 2026-11-09 (later): the Dot's VM resets; the owner chose the light setup
+
+- **The Dot's VM keeps nothing across resets.** Its home and `/tmp` are in-memory filesystems. A later session found `~/cps*` gone, and the Dot cannot configure a start-up script or snapshot. Only Google Drive persists.
+- **The VM ships its own tools.**
+  - Python 3.12 with openpyxl 3.1.5, xlrd, lxml and Pillow;
+  - Node 24;
+  - the Codex runtime's LibreOfficeDev 26.8, which converts in its sandbox (10 s);
+  - poppler and Noto CJK;
+  - Chromium 156 with Playwright 1.62.1.
+- **Light trial on the Dot** (`CPS_WITH_LIBREOFFICE=0 CPS_WITH_CHROMIUM=0`, the VM's own `soffice`):
+  - setup in 73 s;
+  - `check_env.py` all met;
+  - export self-test 600/600 with visual tests, in 12 min 57 s.
+
+  Evidence: Drive "CPS" → `reports/` (light setup trial).
+- **Owner decision (2026-11-09).** Use the light setup first, and reassess if operators have problems.
+  - New option `CPS_WITH_LIBREOFFICE=host`: the VM's own LibreOffice, checked by the setup like the bundle. Everything else stays pinned, Chromium included.
+  - A fully VM-native mode (no pinned fonts or PDF tools) was considered and set aside for now.
+- **Before qualification.**
+  - A one-command session start: setup about 2 minutes, plus the self-test when the VM's LibreOffice version changes.
+  - Saving every job record to Drive as it is made, so that a reset loses nothing.
+
+---
+
 # Status addendum — 2026-11-09: the Dot's Phase 1 failed on LibreOffice; fixed
 
 - **What happened.** On the Dot's VM (Debian 13, glibc 2.41, an agent sandbox), the no-root setup at `b79a14e` installed everything, then failed its LibreOffice check. `soffice --convert-to pdf` exits 1 in 0 s with no output, while `soffice --version` works.
