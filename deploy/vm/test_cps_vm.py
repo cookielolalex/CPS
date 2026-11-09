@@ -11,10 +11,14 @@ boot id.
 Usage (from a clean clone: the runner refuses a dirty tracked tree and cached bytecode):
   git clone -q <repo> W/repo && cp deploy/vm/* W/repo/deploy/vm/ && \
   python3 -I -B W/repo/deploy/vm/test_cps_vm.py --work W/run [--node /opt/node22/bin/node] [--node-sha256 HEX]
-      [--node-path /opt/node-tools/node_modules] [--only NAME,...] [--keep]
+      [--node-path /opt/node-tools/node_modules] [--only NAME,...] [--keep] [--jobs N]
 Prints the summary JSON (cps.vm-helper-tests.v1) and writes <work>/TEST_RESULTS.json. Exit 0 when every test passes.
+--jobs N (r3 tests-R3-06) runs every scenario in its own process and work folder (<work>/<scenario>), at most N at a time,
+longest first, and merges the results; use N >= 4 to stay inside spec 11.5's 30-minute limit (measured on a 4-CPU
+machine, round 4: 1,678 tests in 749 s with --jobs 4; the scenario times sum to 2,768 s, which the serial run, --jobs 1,
+needs; e4_e18_qualification_world, about 540 s, is the critical path).
 """
-import argparse, hashlib, importlib.util, json, os, re, shlex, shutil, signal, stat, subprocess, sys, time, traceback, zipfile
+import argparse, fcntl, hashlib, importlib.util, json, os, re, shlex, shutil, signal, stat, subprocess, sys, time, traceback, zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -56,6 +60,7 @@ class T:
         self.results, self.outputs = [], []
         self.titles = set()
         self.deliverables = set()       # r2 R2-07: basenames of every deliverable written in a world (leak scan)
+        self.quiet = 0                  # r3 tests-R3-07: >0 while an expected-failure probe runs (no FAIL line printed)
 
     def check(self, name, cond, detail=''):
         try:
@@ -68,7 +73,7 @@ class T:
             except Exception as e:                          # noqa: BLE001
                 detail = f'detail raised {type(e).__name__}'
         self.results.append({'test': name, 'passed': ok, 'detail': '' if ok else str(detail)[:2000]})
-        if not ok:
+        if not ok and not self.quiet:
             print('FAIL', name, str(detail)[:600], file=sys.stderr, flush=True)
         return ok
 
@@ -119,7 +124,7 @@ class Drive:
     def by_name(self, folder, name):
         return [f for f in self.files(folder) if f['name'] == name]
 
-    def listing(self, folder, to, name=None):
+    def listing(self, folder, to, name=None, mkdir=True):
         fs = [{'name': f['name'], 'id': f['id'], 'createdTime': f['created'], 'md5Checksum': f['md5'], 'size': str(f['size']),
                **({'mimeType': f['mimeType']} if f.get('mimeType') else {'mimeType': 'application/octet-stream'})}
               for f in self.files(folder, name)]
@@ -131,7 +136,8 @@ class Drive:
         if self.drop_last_page and len(pages) > 1:
             pages = pages[:-1]
         d = {'schema': 'cps.vm-drive-listing.v1', 'folder': folder, 'name_filter': name, 'pages': pages}
-        Path(to).parent.mkdir(parents=True, exist_ok=True)
+        if mkdir:
+            Path(to).parent.mkdir(parents=True, exist_ok=True)
         Path(to).write_text(json.dumps(d))
 
     def copy_to(self, root):
@@ -172,7 +178,13 @@ def default_config(sentinels):
             'audit_clock_tolerance_seconds': 60, 'listing_page_marker': 'required', 'sentinels': sentinels,
             'expected_genesis': None, 'confirm_package_before_start': True, 'confirm_ai_before_consume': True,
             'transcript_export': True, 'max_upload_bytes': 45_000_000, 'max_review_revisions': 2,
-            'clock_wait_max_seconds': 600, 'wrap_foreground_seconds': 240}
+            'clock_wait_max_seconds': 600, 'wrap_foreground_seconds': 240,
+            'release_gates': dict(GATES_ANSWERED)}
+
+
+# r4 F8: the release gates of an answered kit (probe P5 passed, transcript export confirmed); invented values
+GATES_ANSWERED = {'p5_detached_survival': 'PASS', 'p5_tool_call_seconds': 600, 'transcript_policy': 'EXPORT_CONFIRMED',
+                  'transcript_owner_decision': None}
 
 
 class World:
@@ -424,6 +436,8 @@ class Dot:
         self.stop_before_upload = None  # (prefix, cmd part): the VM is wiped before these uploads happen
         self.stop_after_upload = None   # (prefix, cmd part): stop the autopilot right after these uploads
         self.halted = None
+        self.export_g = False           # r3 tests-R3-01: the generator transcript exports; the record says exported
+        self.last_transcript = None
 
     # ---- raw execution
     def call(self, argv, check_grammar=True):
@@ -505,14 +519,20 @@ class Dot:
         return o
 
     def fetch(self, o):
+        # r3 tests-R3-03: the Dot saves at the printed path and creates no folder: the helper must have made it
         for ln in o.fetch:
             m = LINE_RE['SAVE'].match(ln)
             if m:
-                self.w.drive.listing(m.group(1), m.group(2), m.group(3))
+                if not Path(m.group(2)).parent.is_dir():
+                    self.t.check('r3: the folder of a printed listing path exists: ' + m.group(2)[-80:], False)
+                    Path(m.group(2)).parent.mkdir(parents=True, exist_ok=True)
+                self.w.drive.listing(m.group(1), m.group(2), m.group(3), mkdir=False)
                 continue
             m = LINE_RE['DOWNLOAD'].match(ln)
             fid, name, to = m.group(1), m.group(2), Path(m.group(3))
-            to.parent.mkdir(parents=True, exist_ok=True)
+            if not to.parent.is_dir():
+                self.t.check('r3: the folder of a printed download path exists: ' + str(to)[-80:], False)
+                to.parent.mkdir(parents=True, exist_ok=True)
             if fid == 'CPS_FOLDER_PATH':
                 shutil.copyfile(self.w.static / name, to)
             else:
@@ -607,12 +627,24 @@ class Dot:
                 if a.startswith('WRITE_GENERATION_RECORD'):
                     jd = self.find_job(a.split('path=')[1].split(' ')[0])
                     rec = json.loads((jd / 'RUN_RECORD.json').read_text(encoding='utf-8'))
-                    tcj.generation_record(jd, rec['case_id'], reader=rec['reader'])
+                    tp = self.last_transcript
+                    if self.export_g and tp is not None and Path(tp).is_file():
+                        tcj.generation_record(jd, rec['case_id'], reader=rec['reader'], transcript_status='exported',
+                                              transcript_sha256=sha_file(tp), transcript_not_available_reason=None)
+                        g = json.loads((jd / 'run' / 'GENERATION_RECORD.json').read_text())
+                        g.pop('transcript_not_available_reason', None)
+                        (jd / 'run' / 'GENERATION_RECORD.json').write_text(json.dumps(g, ensure_ascii=False, indent=1) + '\n')
+                    else:
+                        tcj.generation_record(jd, rec['case_id'], reader=rec['reader'])
                     continue
                 if a.startswith('EXPORT_TRANSCRIPT'):
                     to = Path(a.split('to=')[1])
                     to.parent.mkdir(parents=True, exist_ok=True)
-                    to.write_text('invented transcript: the conversation wrote nothing\n')
+                    if self.export_g and to.stem.split('_')[-1].startswith('G'):
+                        to.write_text('invented generator transcript: one prompt, one response written\n')
+                    else:
+                        to.write_text('invented transcript: the conversation wrote nothing\n')
+                    self.last_transcript = to
                     continue
                 if a.startswith('WAIT until='):
                     self.wait_until(a.split('=', 1)[1])
@@ -720,6 +752,7 @@ def main():
     ap.add_argument('--writer-dir', default=str(REPO / 'deploy/writer_route/writer'))
     ap.add_argument('--only', default='')
     ap.add_argument('--keep', action='store_true')
+    ap.add_argument('--jobs', type=int, default=1, help='run the scenarios in N parallel processes (r3 tests-R3-06)')
     a = ap.parse_args()
     if not Path(a.work).is_absolute():
         ap.error('--work must be absolute')
@@ -732,6 +765,8 @@ def main():
         print(json.dumps({'error': 'cached bytecode in a runner-scanned folder (PYCACHE_PRESENT): run from a clean clone', 'first': pyc[:3]}))
         return 2
     before = subprocess.run(['git', '-C', str(REPO), 'status', '--porcelain', '--untracked-files=all'], capture_output=True, text=True).stdout
+    if a.jobs > 1:
+        return run_parallel(a)
     t = T(a)
     t.work.mkdir(parents=True, exist_ok=False)
     started = time.time()
@@ -761,6 +796,59 @@ def main():
                'seconds': round(time.time() - started, 1), 'scenario_seconds': timings}
     (t.work / 'TEST_RESULTS.json').write_text(json.dumps(dict(summary, results=[r['test'] for r in t.results]), ensure_ascii=False, indent=1) + '\n')
     print(json.dumps({k: summary[k] for k in ('tests', 'passed_count', 'failed', 'seconds')}, ensure_ascii=False, indent=1))
+    return 0 if not failed else 1
+
+
+# measured seconds per scenario on a 4-CPU machine (longest first keeps the parallel run short)
+ESTIMATE = {'e4_e18_qualification_world': 520, 'e11_restore_refusals': 360, 'e14_everyday': 330, 'r3_revision_world': 420,
+            't02_fork_after_e22': 255, 'e3_full_run_with_wipes': 235, 'r2_fixes_a': 205, 't06_evict_and_literal': 195,
+            'r2_fixes_e': 190, 'r2_fixes_c': 186, 'r3_tokens_and_freeze': 200, 'e15_guards': 160, 't17_selftest_e18': 155,
+            'r2_fixes_b': 148, 't05_bound_refused': 124, 't01_ai_rejected': 117, 'r2_fixes_d': 110, 'r3_everyday_local': 150,
+            'e1_fresh_genesis_nonattempts': 88, 't11_t12_listings': 75, 't14_scope_e10': 70, 't15_no_conversation': 66,
+            'r3_symlink_output': 120, 't08_everyday_inputs': 46, 'r3_worker_lock': 90, 'r4_fingerprint_gates': 80,
+            'r4_restore_refusals': 75, 'r4_kit_parts_route': 15, 'r4_release_gates_probe': 20, 'r4_frozen_flags': 1}
+
+
+def run_parallel(a):
+    """r3 tests-R3-06: every scenario in its own process and work folder (at most a.jobs at a time), results merged."""
+    work = Path(a.work)
+    work.mkdir(parents=True, exist_ok=False)
+    only = [x for x in a.only.split(',') if x]
+    todo = [fn.__name__ for fn in SCENARIOS if not only or fn.__name__ in only]
+    todo.sort(key=lambda n: -ESTIMATE.get(n, 60))
+    started = time.time()
+    running, done = {}, {}
+    common = ['--node', a.node, '--node-sha256', a.node_sha256, '--node-path', a.node_path, '--writer-dir', a.writer_dir]
+    while todo or running:
+        while todo and len(running) < a.jobs:
+            n = todo.pop(0)
+            err = open(work / f'{n}.err', 'wb')
+            argv = [sys.executable, '-I', '-B', str(Path(__file__).resolve()), '--work', str(work / n), '--only', n, *common,
+                    *(['--keep'] if a.keep else [])]
+            running[n] = (subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=err), err, time.time())
+        for n, (pr, err, t0) in list(running.items()):
+            if pr.poll() is not None:
+                err.close()
+                done[n] = (pr.returncode, round(time.time() - t0, 1))
+                del running[n]
+        time.sleep(1)
+    tests, passed, failed, timings, results = 0, 0, [], {}, []
+    for n, (rc, secs) in done.items():
+        r = read_json(work / n / 'TEST_RESULTS.json')
+        if not r:
+            failed.append({'test': n + ' (no results)', 'passed': False, 'detail': f'exit {rc}'})
+            tests += 1
+            continue
+        tests += r['tests']
+        passed += r['passed_count']
+        failed += r['failed']
+        results += r.get('results', [])
+        timings.update(r.get('scenario_seconds') or {})
+    summary = {'schema': 'cps.vm-helper-tests.v1', 'helper_sha256': sha_file(HELPER), 'runner_sha256': sha_file(RUNNER),
+               'tests': tests, 'passed_count': passed, 'failed': failed, 'seconds': round(time.time() - started, 1),
+               'scenario_seconds': timings, 'jobs': a.jobs, 'serial_seconds_sum': round(sum(timings.values()), 1)}
+    (work / 'TEST_RESULTS.json').write_text(json.dumps(dict(summary, results=results), ensure_ascii=False, indent=1) + '\n')
+    print(json.dumps({k: summary[k] for k in ('tests', 'passed_count', 'failed', 'seconds', 'serial_seconds_sum')}, ensure_ascii=False, indent=1))
     return 0 if not failed else 1
 
 
@@ -889,11 +977,13 @@ def e3_full_run_with_wipes(t):
     t.check('E3 W3: ai-archive uploaded AI-G', lambda: names(w.drive, w.records, 'AI_A_G1_'), o)
     o, sn = restore_cycle(t, dot, w, 'E3 W3', 'AI_ARCHIVED')
     t.check('E3 W3: AI-G placed at its path byte for byte', lambda: sn['restored']['ai_archives_placed'] and (jd / 'run/A/output/response.json').is_file(), sn)
-    t.check('E3 W3: the record was lost: status prints WRITE_GENERATION_RECORD first', lambda: o.actions[0].startswith('WRITE_GENERATION_RECORD'), o)
+    t.check('E3 W3: the record was lost: status prints EXPORT_TRANSCRIPT, then WRITE_GENERATION_RECORD (r3 tests-R3-01 order)',
+            lambda: o.actions[0].startswith('EXPORT_TRANSCRIPT') and o.actions[1].startswith('WRITE_GENERATION_RECORD'), o)
     o4 = dot.vm('wrap', 'finish', '--job-dir', jd, '--response', jd / 'run/A/output/response.json', '--generator-model', 'x',
                 '--generation-record', jd / 'run/GENERATION_RECORD.json', '--operator-model', MODEL)
     t.check('E3: wrap finish without the generation record is refused WRAP_GENERATION_RECORD_MISSING', lambda: o4.refused is None
-            and o4.result.get('code') == 'WRAP_GENERATION_RECORD_MISSING' and o4.actions[0].startswith('WRITE_GENERATION_RECORD'), o4)
+            and o4.result.get('code') == 'WRAP_GENERATION_RECORD_MISSING' and o4.actions[0].startswith('EXPORT_TRANSCRIPT')
+            and o4.actions[1].startswith('WRITE_GENERATION_RECORD'), o4)
     # W5: during finish (CP-F built, not uploaded), twice
     dot.stop_before_upload = ('PNG_', None)
     o = dot.auto(o)
@@ -1077,8 +1167,14 @@ def e4_e18_qualification_world(t):
     flags = {(r['case_id'], r['tag']): r['flags'] for r in af.get('runs', [])}
     t.check('E5/E6/E9 final: ALL_FROZEN flags carry AI_OUTPUT_LOST, RESET_DIVERGED, REVIEWER_REPLACED/LOST, RESTARTED, REVIEW_REVISED',
             lambda: 'AI_OUTPUT_LOST' in flags[(c3, 'A')] and 'RESET_DIVERGED' in flags[(c4, 'A')] and 'REVIEWER_REPLACED' in flags[(c7, 'A')]
-            and 'REVIEWER_LOST' in flags[(c7, 'A')] and 'RESTARTED' in flags[(c2, 'A-restart1')] and 'REVIEW_REVISED' in flags[(c5, 'A')]
+            and 'VISUAL_QA_FAILED_BY_RESET' in flags[(c7, 'A')] and 'RESTARTED' in flags[(c2, 'A-restart1')] and 'REVIEW_REVISED' in flags[(c5, 'A')]
             and names(w.drive, w.records, 'ALL_FROZEN') == ['ALL_FROZEN.json'], flags)
+    jd7 = next((r['job_dir'] for r in af.get('runs', []) if (r['case_id'], r['tag']) == (c7, 'A')), None)
+    t.check('r4 F3 (O46, design E4): a run whose reviewers were both lost is failed visual QA, not a failed run: listed under '
+            'runs_visual_qa_failed_by_reset, never under runs_failed_by_reset; REVIEWER_LOST is gone',
+            lambda: jd7 in af['runs_visual_qa_failed_by_reset'] and jd7 not in af['runs_failed_by_reset']
+            and not any('REVIEWER_LOST' in r['flags'] for r in af['runs']) and isinstance(af.get('runs_needing_owner'), list),
+            lambda: {k: af.get(k) for k in ('runs_failed_by_reset', 'runs_visual_qa_failed_by_reset', 'runs_needing_owner')})
     t.check('final: uploads LEDGER_FINAL then ALL_FROZEN.json last', lambda: [Path(u.split(' -> ')[0][7:]).name[:7] for u in o.uploads] == ['LEDGER_', 'ALL_FRO'], o)
     e12_assemble_audit(t, w, dot)
 
@@ -1127,14 +1223,52 @@ def e12_assemble_audit(t, w, dot):
     p = subprocess.run([sys.executable, '-I', '-B', str(HELPER), *args, '--allow-test-overrides'], capture_output=True, text=True, timeout=3600)
     ar = json.loads((flat / 'AUDIT_REPORT.json').read_text()) if (flat / 'AUDIT_REPORT.json').is_file() else {}
     t.check('E12: audit --allow-test-overrides reports no anomaly and lists the failed-by-reset runs', lambda: p.returncode == 0
-            and not ar['anomalies'] and len(ar['runs_failed_by_reset']) >= 3, lambda: (p.stdout[-500:], p.stderr[-800:], ar.get('anomalies', [])[:6]))
+            and not ar['anomalies'] and len(ar['runs_failed_by_reset']) >= 2 and len(ar['runs_visual_qa_failed_by_reset']) >= 1
+            and not set(ar['runs_failed_by_reset']) & set(ar['runs_visual_qa_failed_by_reset']), lambda: (p.stdout[-500:], p.stderr[-800:], ar.get('anomalies', [])[:6]))
     t.check('r2 M3: AUD_START_SUPERSEDED never names a reviewer START (the replacement reviewer replaces, it does not supersede)',
             lambda: not any(x.get('code') == 'AUD_START_SUPERSEDED' and any(re.match(r'^START_[^_]+_V', n) for n in x.get('names', []))
                             for x in ar.get('listed', [])), ar.get('listed'))
     o52 = json.loads((flat / 'O52_COMPARISON.json').read_text()) if (flat / 'O52_COMPARISON.json').is_file() else {}
     t.check('E12: O52_COMPARISON lists every START and marks nothing-written ones open_and_check', lambda: len(o52['rows']) == len(names(w.drive, w.records, 'START_'))
             and any(r['open_and_check'] for r in o52['rows']), o52)
+    e12_frozen_flags(t, w, flat, af)
     e13_anomalies(t, w, flat, sflat, rel)
+
+
+def e12_frozen_flags(t, w, flat, af):
+    """r4 F4: the real ALL_FROZEN.json of the E4-E9 world through apply_frozen_flags.py: a gate manifest that puts every failed
+    run and nonattempt on the empty carrier is consistent; one that scores the RESET_DIVERGED run on its own carrier is not."""
+    empty = 'e' * 64
+    readers = {'A': {}, 'B': {}}
+    newest = {}
+    for r in af['runs']:
+        R = {'A': 'A', 'B': 'B', 'A-restart1': 'A', 'B-restart1': 'B', 'NA-A': 'A', 'NA-B': 'B'}[r['tag']]
+        newest.setdefault((r['case_id'], R), []).append(r)
+    div = None
+    for (case, R), rs in newest.items():
+        fl = {f for r in rs for f in r['flags']}
+        failed = bool({'RESET_DIVERGED', 'AI_OUTPUT_LOST'} & fl) or all(r['kind'] == 'nonattempt' for r in rs)
+        readers[R][case] = {'path': f'/invented/{R}/{case}.json', 'sha256': '4' * 64, 'carrier_sha256': empty if failed else sha(rs[-1]['job_dir'].encode())}
+        if 'RESET_DIVERGED' in fl:
+            div = (R, case)
+    d = w.root / 'maint' / 'flags'
+    d.mkdir()
+    (d / 'M.json').write_text(json.dumps({'readers': readers}))
+    p = subprocess.run([sys.executable, '-I', '-B', str(HERE / 'apply_frozen_flags.py'), '--all-frozen', str(flat / 'ALL_FROZEN.json'),
+                        '--manifest', str(d / 'M.json'), '--empty-carrier-sha', empty, '--out', str(d / 'OUT.json')], capture_output=True, text=True)
+    rep = read_json(d / 'OUT.json')
+    t.check('r4 F4: the world\'s ALL_FROZEN.json with every failed run on the empty carrier is consistent; the lost reviewer is listed as '
+            'failed visual QA', lambda: p.returncode == 0 and rep.get('consistent') is True and rep.get('visual_qa_failed_by_reset'),
+            lambda: (p.stdout, p.stderr[-500:], rep.get('problems')))
+    if t.check('r4 F4 setup: the world has a RESET_DIVERGED run', lambda: div is not None):
+        readers[div[0]][div[1]]['carrier_sha256'] = '1' * 64
+        (d / 'M2.json').write_text(json.dumps({'readers': readers}))
+        p = subprocess.run([sys.executable, '-I', '-B', str(HERE / 'apply_frozen_flags.py'), '--all-frozen', str(flat / 'ALL_FROZEN.json'),
+                            '--manifest', str(d / 'M2.json'), '--empty-carrier-sha', empty, '--out', str(d / 'OUT2.json')],
+                           capture_output=True, text=True)
+        rep = read_json(d / 'OUT2.json')
+        t.check('r4 F4: scoring the diverged run on its own carrier is FLAG_NOT_APPLIED (exit 1)', lambda: p.returncode == 1
+                and any(x['code'] == 'FLAG_NOT_APPLIED' and x['case_id'] == div[1] for x in rep.get('problems', [])), rep)
 
 
 def stat_mode(p):
@@ -1157,6 +1291,7 @@ def e13_anomalies(t, w, flat, sflat, rel):
         ar = json.loads((d / 'AUDIT_REPORT.json').read_text()) if (d / 'AUDIT_REPORT.json').is_file() else {}
         codes = {x['code'] for x in ar.get('anomalies', [])}
         t.check(f'E13: {label} fires {code}', lambda: p.returncode == 3 and code in codes, lambda: (sorted(codes), p.stderr[-600:]))
+        return ar
 
     def files(L):
         return [f for pg in L['pages'] for f in pg['files']]
@@ -1196,7 +1331,51 @@ def e13_anomalies(t, w, flat, sflat, rel):
         (d / n2).write_bytes(data)
         f0 = next(f for f in files(L) if f['name'] == fz.name)
         L['pages'][-1]['files'].append(dict(f0, name=n2, id='fid999999', md5Checksum=md5(data), size=str(len(data))))
-    run_case('fork', 'AUD_FORK', fork)
+    ar_f = run_case('fork', 'AUD_FORK', fork)
+    t.check('r4 F7: the fork is also listed AUD_LATE_UPLOAD_PAIR with both names and their createdTime',
+            lambda: any(x.get('code') == 'AUD_LATE_UPLOAD_PAIR' and len(x.get('names', [])) == 2 and len(x.get('created', [])) == 2
+                        for x in ar_f.get('listed', [])), ar_f.get('listed'))
+    # r4 F7: the after-the-fact backstop for "AI output on Drive before anything reads it" (design F, E5)
+    def ai_time(when):
+        def ch(d, L):
+            g1 = sorted(x.name for x in d.glob('AI_A_G1_*') if (vm.ai_manifest(x) or {}).get('response_present'))[0]
+            for f in files(L):
+                if f['name'] == g1:
+                    f['createdTime'] = when
+        return ch
+    ar_a = run_case('ai_after_its_consumer', 'AUD_AI_AFTER_CONSUMER', ai_time('2099-01-01T00:00:00.000Z'))
+    t.check('r4 F7: AUD_AI_AFTER_CONSUMER names the AI archive and the first package that consumed it',
+            lambda: any(x['code'] == 'AUD_AI_AFTER_CONSUMER' and len(x['names']) == 2 and x['names'][1][:3] in ('CP_', 'FZ_')
+                        for x in ar_a['anomalies']), ar_a.get('anomalies'))
+    ar_b = run_case('ai_before_its_start', 'AUD_AI_AFTER_CONSUMER', ai_time('2000-01-01T00:00:00.000Z'))
+    t.check('r4 F7: an AI archive created before its START is AUD_AI_AFTER_CONSUMER (before its START)',
+            lambda: any(x['code'] == 'AUD_AI_AFTER_CONSUMER' and (x.get('detail') or {}).get('why') == 'before its START'
+                        for x in ar_b['anomalies']), ar_b.get('anomalies'))
+
+    def late_dup(d, L):                             # a retried upload of an existing package: same bytes, a later copy
+        fz = sorted(d.glob('FZ_A_*'))[0]
+        f0 = next(f for f in files(L) if f['name'] == fz.name)
+        L['pages'][-1]['files'].append(dict(f0, id='fid999990', createdTime='2099-01-01T00:00:00.000Z'))
+    d_ld = w.root / 'maint' / 'e13_late_duplicate'
+    shutil.copytree(flat, d_ld, copy_function=os.link)
+    L_ld = json.loads(json.dumps(lst))
+    late_dup(d_ld, L_ld)
+    (w.root / 'maint' / 'e13_late_duplicate_LISTING.json').write_text(json.dumps(L_ld))
+    p_ld = subprocess.run([sys.executable, '-I', '-B', str(HELPER), 'audit', '--drive-dir', str(d_ld), '--listing',
+                           str(w.root / 'maint' / 'e13_late_duplicate_LISTING.json'), *base_args, '--allow-test-overrides'],
+                          capture_output=True, text=True, timeout=3600)
+    ar_ld = read_json(d_ld / 'AUDIT_REPORT.json')
+    t.check('r4 F7: a late duplicate copy of a package (same bytes) is no fork and no anomaly',
+            lambda: p_ld.returncode == 0 and not ar_ld.get('anomalies'), lambda: (p_ld.stderr[-400:], ar_ld.get('anomalies')))
+
+    def fp_changed(d, L):                           # r4 F2: a CP whose stage ended on another toolchain
+        cp = sorted(d.glob('CP_A_*'))[0]
+        n2 = repack(cp, d, manifest_fn=lambda man: man.update(fingerprint_after_sha256='f' * 64), orig_name=cp.name)
+        f0 = next(f for f in files(L) if f['name'] == cp.name)
+        b2 = (d / n2).read_bytes()
+        f0.update(name=n2, md5Checksum=md5(b2), size=str(len(b2)))
+        cp.unlink()
+    run_case('fingerprint_changed_during_stage', 'AUD_FINGERPRINT_CHANGED_DURING_STAGE', fp_changed)
 
     def no_pass(d, L):
         pass
@@ -1247,6 +1426,66 @@ def e13_anomalies(t, w, flat, sflat, rel):
         (d / 'ALL_FROZEN.json').unlink()
         (d / 'ALL_FROZEN.json').write_text(json.dumps(af_))
     run_case('diverged_not_failed', 'AUD_BINDING_MISMATCH', not_failed)
+
+    # r3 tests-R3-02: one planted anomaly each for AUD_GENESIS, AUD_FROZEN_MISSING, AUD_INTERRUPT_OUTPUT_WRITTEN; AUD_CLOCK_SKEW listed
+    def two_genesis(d, L):
+        g = sorted(d.glob('GENESIS_*.json'))[0]
+        n = 'GENESIS_0f0f0f0f_20990101T000000Z.json'
+        (d / n).write_bytes(g.read_bytes())
+        f0 = next(f for f in files(L) if f['name'] == g.name)
+        L['pages'][-1]['files'].append(dict(f0, name=n, id='fid999997'))
+    run_case('two_genesis', 'AUD_GENESIS', two_genesis)
+    run_case('fz_deleted', 'AUD_FROZEN_MISSING', drop('FZ_A_'))
+
+    def skewed(d, L):
+        sp = sorted(d.glob('SESSION_*.json'))[0]
+        for f in files(L):
+            if f['name'] == sp.name:
+                f['createdTime'] = vm.iso(vm.parse_utc(json.loads(sp.read_text())['created_utc']) + vm.datetime.timedelta(seconds=900))
+    d_sk = w.root / 'maint' / 'e13_clock_skew'
+    shutil.copytree(flat, d_sk, copy_function=os.link)
+    L_sk = json.loads(json.dumps(lst))
+    skewed(d_sk, L_sk)
+    (w.root / 'maint' / 'e13_clock_skew_LISTING.json').write_text(json.dumps(L_sk))
+    p_sk = subprocess.run([sys.executable, '-I', '-B', str(HELPER), 'audit', '--drive-dir', str(d_sk), '--listing',
+                           str(w.root / 'maint' / 'e13_clock_skew_LISTING.json'), *base_args, '--allow-test-overrides'],
+                          capture_output=True, text=True, timeout=3600)
+    ar_sk = read_json(d_sk / 'AUDIT_REPORT.json')
+    t.check('E13: a SESSION note uploaded 15 minutes after its own clock is listed AUD_CLOCK_SKEW',
+            lambda: any(x.get('code') == 'AUD_CLOCK_SKEW' for x in ar_sk.get('listed', [])), lambda: (p_sk.stdout[-400:], ar_sk.get('listed')))
+    af0 = json.loads((flat / 'ALL_FROZEN.json').read_text())
+    rr = next((r for r in af0['runs'] if read_json(Path(r['job_dir']) / 'RUN_RECORD.json').get('stages') and
+               any(s_['stage'] == 'interrupt' for s_ in read_json(Path(r['job_dir']) / 'RUN_RECORD.json')['stages'])), None)
+    if t.check('E13 setup: an assembled run with an interrupt entry exists', lambda: rr is not None):
+        rp = Path(rr['job_dir']) / 'RUN_RECORD.json'
+        raw0, mode0 = rp.read_bytes(), stat_mode(rp)
+        rec_ = json.loads(raw0)
+        for s_ in rec_['stages']:
+            if s_['stage'] == 'interrupt':
+                s_['facts']['interruption']['response_file_present'] = True
+        os.chmod(rp, 0o644)
+        rp.write_text(json.dumps(rec_, ensure_ascii=False))
+        try:
+            run_case('interrupt_wrote', 'AUD_INTERRUPT_OUTPUT_WRITTEN', lambda d, L: None)
+        finally:
+            rp.write_bytes(raw0)
+            os.chmod(rp, mode0)
+    # r4 F7: an r1 VISUAL_REVIEW.json (the attempt a reviewer revision replaced) altered in the assembled folder
+    rv = next((r for r in af0['runs'] if 'REVIEW_REVISED' in r['flags']), None)
+    va = sorted((Path(rv['job_dir']) / 'qa' / 'visual_review_attempts').glob('*.json')) if rv else []
+    if t.check('r4 F7 setup: an assembled run with a reviewer revision and its kept attempt exists', lambda: bool(va)):
+        vp = va[0]
+        raw1, mode1 = vp.read_bytes(), stat_mode(vp)
+        pmode = stat_mode(vp.parent)
+        os.chmod(vp.parent, 0o755)
+        os.chmod(vp, 0o644)
+        vp.write_bytes(raw1.replace(b'{', b'{"invented_alteration": true, ', 1))
+        try:
+            run_case('revision_mismatch', 'AUD_REVISION_MISMATCH', lambda d, L: None)
+        finally:
+            vp.write_bytes(raw1)
+            os.chmod(vp, mode1)
+            os.chmod(vp.parent, pmode)
     r2 = json.loads(rel.read_text())
     r2['pinned_files_sha256']['deploy/vm/cps_vm.py'] = '0' * 64
     rel2 = w.root / 'maint' / 'RELEASE_other_pin.json'
@@ -1615,13 +1854,19 @@ def e11_restore_refusals(t):
         w.wipe()
         if plant:
             plant()
+        # r3 tests-R3-07: no target written: the base tree outside the helper's outbox, the Dot's inbox and the session
+        # kit's runtime/ is unchanged byte for byte (the empty layout folders a session makes are no target)
+        keep = lambda k, v: not k.startswith(('outbox', 'inbox', 'runtime')) and not (v == 'dir' and '/' not in k)
+        before = {k: v for k, v in w.snapshot().items() if keep(k, v)}
         o = dot.session()
         got = o.codeword
-        clean = not (w.base / 'ledger').exists() and not any((w.base / 'qual').glob('*/*'))
+        after = {k: v for k, v in w.snapshot().items() if keep(k, v)}
+        clean = after == before
         if expect_ok:
             t.check(f'E11: {label}', lambda: o.code == 0 and code(o), o)
         else:
-            t.check(f'E11: {label} -> {code}', lambda: got == code and (clean or code == 'RESTORE_TARGET_NOT_EMPTY'), (o, clean))
+            t.check(f'E11: {label} -> {code}', lambda: got == code and (clean or code == 'RESTORE_TARGET_NOT_EMPTY'),
+                    lambda: (o, sorted(set(before.items()) ^ set(after.items()))[:6]))
         w.drive = orig
         vm.remove_tree(w.root / f'drive_{k[0]}')
         return o
@@ -2164,7 +2409,11 @@ def e15_guards(t):
     t.check('E15: HELPER_BUSY while another helper process holds the lock', lambda: r.refused == 'HELPER_BUSY', r)
     bad = Out(0, 'RESULT: {}\nNEXT: RUN /x/vm.sh incident --seen {FOO}\n', 'synthetic')
     n0 = len(t.results)
-    Dot(w).grammar(bad, '')
+    t.quiet += 1                                # r3 tests-R3-07: the expected failure is popped, so it prints nothing
+    try:
+        Dot(w).grammar(bad, '')
+    finally:
+        t.quiet -= 1
     flagged = len(t.results) > n0 and not t.results[-1]['passed']
     if flagged:
         t.results.pop()
@@ -2359,7 +2608,7 @@ def t01_ai_rejected(t):
     dl = [h for h in dot.history[-12:] if any(f'name={ai[0]}' in x for x in h.fetch)]
     t.check('T-03: a cut-off local download is printed again (same id), the copy on Drive is not rejected, AI-G is placed and AI_ARCHIVED offered',
             lambda: o.code == 0 and cut['n'] == 1 and len(dl) >= 2 and sn['restored']['ai_archives_placed'] == ai
-            and not sn['restored']['rejected_copies'] and 'CHOOSE_SEEN_TOKENS' in o.actions, lambda: (o, sn.get('restored')))
+            and not sn['restored']['rejected_copies'] and any(a_.startswith('CHOOSE_SEEN_TOKENS') for a_ in o.actions), lambda: (o, sn.get('restored')))
     # T-01: the only copy of AI-G on Drive is damaged
     d2 = orig.copy_to(w.root / 'drive_t01')
     f0 = next(f for f in d2.files(w.records) if f['name'] == ai[0])
@@ -2474,7 +2723,8 @@ def t05_bound_refused(t):
     w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
     o = dot.vm('recheck')
     dot.pending_tokens = []
-    t.check('T-05 setup: after the restore status asks for the generation record (lost with CP-F)', lambda: o.actions[0].startswith('WRITE_GENERATION_RECORD'), o)
+    t.check('T-05 setup: after the restore status asks for the generation record (lost with CP-F)', lambda: o.actions[0].startswith('EXPORT_TRANSCRIPT')
+            and o.actions[1].startswith('WRITE_GENERATION_RECORD'), o)
     tcj.generation_record(jd, c, started_utc='2000-01-01T00:00:00.000Z', ended_utc='2000-01-01T00:00:01.000Z')
     o = dot.vm('status')
     line = next(a for a in o.actions if 'wrap finish' in a)[4:]
@@ -2900,19 +3150,28 @@ s = {'suite': 'invented stub', 'tests': 600, 'passed_count': 600, 'failed_count'
 
 def repo_copy(t, name):
     """A clone of the checkout with deploy/vm copied, a stub export suite, and a runner whose FROZEN.json write fails when
-    CPS_TEST_FAIL_FROZEN_WRITE=1 (only in this copy; runner v4 itself is never changed)."""
+    CPS_TEST_FAIL_FROZEN_WRITE=1 and which appends to the file CPS_TEST_TOUCH_FILE names (only in this copy; runner v4
+    itself is never changed)."""
     d = t.work / name
     subprocess.run(['git', 'clone', '-q', str(REPO), str(d)], check=True, capture_output=True)
     (d / 'deploy' / 'vm').mkdir(exist_ok=True)
-    for f in ('cps_vm.py', 'session_start.sh', 'test_cps_vm.py', 'README.md'):
-        shutil.copyfile(HERE / f, d / 'deploy' / 'vm' / f)
+    for f in sorted(HERE.iterdir()):                # r4: every file of deploy/vm (apply_frozen_flags.py included)
+        if f.is_file():
+            shutil.copyfile(f, d / 'deploy' / 'vm' / f.name)
     (d / 'research' / 'export' / 'tests' / 'run_export_tests.py').write_text(STUB_SUITE)
     rp = d / 'deploy' / 'run' / 'cps_job.py'
     src = rp.read_text(encoding='utf-8')
     old = "        write_new(tmp, b)\n        os.replace(tmp, jd.p('FROZEN.json'))\n"
     assert src.count(old) == 1
-    rp.write_text(src.replace(old, "        if os.environ.get('CPS_TEST_FAIL_FROZEN_WRITE') == '1':\n"
-                                   "            raise OSError(28, 'invented injected fault (test copy)')\n" + old), encoding='utf-8')
+    src = src.replace(old, "        if os.environ.get('CPS_TEST_FAIL_FROZEN_WRITE') == '1':\n"
+                           "            raise OSError(28, 'invented injected fault (test copy)')\n" + old)
+    # r4 F2: CPS_TEST_TOUCH_FILE=<path> makes the copy's runner append a line to that file (a toolchain change during a stage)
+    anchor = "def main(argv=None):\n"
+    assert src.count(anchor) == 1
+    src = src.replace(anchor, anchor + "    if os.environ.get('CPS_TEST_TOUCH_FILE'):\n"
+                      "        with open(os.environ['CPS_TEST_TOUCH_FILE'], 'a') as _f:\n"
+                      "            _f.write('# invented: changed during a stage (test copy)\\n')\n")
+    rp.write_text(src, encoding='utf-8')
     # the runner refuses a dirty tracked tree: the copy's changes are committed in the copy (its own HEAD)
     subprocess.run(['git', '-C', str(d), '-c', 'user.name=invented test', '-c', 'user.email=invented@example.invalid', 'commit', '-q', '-am',
                     'invented test copy: stub export suite, injectable FROZEN.json write fault'], check=True, capture_output=True)
@@ -3146,6 +3405,10 @@ def r2_fixes_b(t):
     o = dot.vm('recheck')
     dot.pending_tokens = []
     o = dot.auto(o, halt=lambda a, o_: o_.stop is not None)
+    # r3 R3-07: the bound freeze that differs is itself STOP RESET_DIVERGED (NEXT evict); after the evict, status stops
+    t.check('r3 R3-07: the diverged bound freeze STOPs RESET_DIVERGED with NEXT evict', lambda: o.stop == 'RESET_DIVERGED'
+            and o.actions and o.actions[0].endswith(f'evict --job-dir {jd}'), o)
+    o = dot.auto(dot.vm('status'), halt=lambda a, o_: o_.stop is not None)
     t.check('r2 R2-04: reader A failed by divergence after a stop the runner would restart: STOP QUALIFICATION_DIVERGED_RESTART_CONFLICT',
             lambda: o.stop == 'QUALIFICATION_DIVERGED_RESTART_CONFLICT'
             and json.loads((w.base / 'outbox/frozen_json' / f'A_{c}_FLAGS.json').read_text())['reset_diverged'] is True, o)
@@ -3336,12 +3599,32 @@ def r2_fixes_e(t):
     dot3.skip_upload = None
     o = dot3.auto(o, halt=lambda a, o_: o_.stop is not None, max_steps=20)
     t.check('r2 R2-04: no intact copy on Drive and no local source: evict STOPs VERIFY_PART_MISMATCH', lambda: o.stop == 'VERIFY_PART_MISMATCH', o)
+    # RESTORE_DOWNLOAD_FAILED: every download of the restored FZ arrives cut short by one byte
+    w4 = World(t, 'r2_fixes_e_w4', nonattempts=[na])
+    dot4 = Dot(w4)
+    o = start_world(t, dot4, w4)
+    o = dot4.auto(o, halt=at_action(f'RUN {w4.V} final'))
+    orig_fetch = dot4.fetch
+
+    def cut_fetch(o_):
+        orig_fetch(o_)
+        for ln in o_.fetch:
+            m = LINE_RE['DOWNLOAD'].match(ln)
+            if m and m.group(2).startswith('FZ_NA-B_'):
+                q_ = Path(m.group(3))
+                q_.write_bytes(q_.read_bytes()[:-1])
+    dot4.fetch = cut_fetch
+    w4.wipe()
+    o = dot4.session()
+    dls = [ln for h in dot4.history if h.result.get('command') == 'session' or 'session' in h.cmd for ln in h.fetch if 'FZ_NA-B_' in ln]
+    t.check('r2 R2-04: a restore download that keeps arriving damaged is asked again 3 times, then STOP RESTORE_DOWNLOAD_FAILED',
+            lambda: o.stop == 'RESTORE_DOWNLOAD_FAILED' and len(dls) == 4 and len(set(dls)) == 1, (o, dls))
 
 
 @scenario
 def r2_units(t):
     """r2 R2-03 tests (a Drive default-fields listing names the missing field), R2-07 (packing refuses names restore refuses),
-    R2-08 (session_start uploads only non-empty files), R2-02 (a cut-off note download is downloaded again)."""
+    R2-08 (session_start uploads only non-empty files). The cut-off note download (R2-02) is tested in r3_final_downloads."""
     root = t.work / 'r2_units_w'
     root.mkdir()
     lp = root / 'L.json'
@@ -3394,6 +3677,1098 @@ def r2_units(t):
             and os.path.getsize(ups[0]) > 0, r2.stdout[-600:])
     t.check('r2 R2-08: every line session_start printed has the helper grammar', lambda: all(ln.startswith(PREFIXES) for ln in
             (r1.stdout + r2.stdout).splitlines() if ln.strip()), (r1.stdout + r2.stdout)[-800:])
+
+
+# ------------------------------------------------------------------ revision 5: fixes after review round 3 (confirmed r3 findings)
+def flat_recorded(drive, folder, dest, af):
+    """r3 tests-R3-04: the maintainer's download of a folder: every FZ archive and PNG part by the Drive id ALL_FROZEN.json
+    records; every other name as its newest copy."""
+    want = {}
+    for r in af.get('runs') or []:
+        want[r['archive']['name']] = r['archive']['id']
+        for p_ in r.get('png_parts') or []:
+            want[p_['name']] = p_['id']
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    for f in drive.files(folder):
+        if f['name'] in want and f['id'] != want[f['name']]:
+            continue
+        shutil.copyfile(drive.root / f['id'], dest / f['name'])
+    return dest
+
+
+def assemble_run(t, w, flat):
+    w.wipe()
+    p = subprocess.run([sys.executable, '-I', '-B', str(HELPER), 'assemble', '--drive-dir', str(flat)], capture_output=True, text=True, timeout=1200)
+    t.outputs.append(p.stdout)
+    return Out(p.returncode, p.stdout, 'assemble')
+
+
+@scenario
+def r3_revision_world(t):
+    """r3 R3-01 (E16: a wipe after the reviewer's revision archive AI-V1r2, before visual-record's package, restores the
+    refusal's CP and places the revision), tests-R3-01 (the generator transcript is exported first, the record says
+    exported, finish passes --transcript and the FZ holds response/GENERATOR_TRANSCRIPT.*), tests-R3-04 (a damaged copy of
+    an FZ archive or a PNG part listed after the intact one makes assemble refuse; the ids ALL_FROZEN.json records
+    assemble)."""
+    c = '9991101'
+    w = World(t, 'r3_revision_world_w', cases=[c])
+    dot = Dot(w)
+    dot.export_g = True
+    jd = w.job_dir('A', c)
+    seen_v = {'n': 0}
+
+    def vconv(jd_, case, role, reader):
+        seen_v['n'] += 1
+        tcj.stand_in_review(jd_, drop_page=(jd_ == jd and seen_v['n'] == 1),
+                            reviewer=dict(tcj.REVIEWER, conversation_id=dot.values['CONVERSATION_ID']))
+    dot.conv['V'] = vconv
+    dot.conv['V-continue'] = lambda: tcj.stand_in_review(jd, reviewer=dict(tcj.REVIEWER, conversation_id=dot.values['CONVERSATION_ID']))
+    o = to_prepare(t, dot, w)
+    dot.stop_after_upload = ('AI_A_V1r2_', None)
+    o = dot.auto(o, max_steps=200)
+    gen_rec = read_json(jd / 'run' / 'GENERATION_RECORD.json')
+    fin = [h for h in dot.history if 'wrap finish' in h.cmd and h.result.get('command') == 'wrap']
+    t.check('r3 tests-R3-01: status printed EXPORT_TRANSCRIPT before WRITE_GENERATION_RECORD; the record says exported and wrap finish '
+            'passed --transcript', lambda: gen_rec.get('transcript_status') == 'exported' and fin and '--transcript ' in fin[-1].cmd
+            and any(a_.startswith('EXPORT_TRANSCRIPT') and h.actions[i + 1].startswith('WRITE_GENERATION_RECORD')
+                    for h in dot.history for i, a_ in enumerate(h.actions[:-1])), lambda: (gen_rec, fin[-1:] if fin else None))
+    t.check('r3 tests-R3-01: the runner froze the transcript (response/GENERATOR_TRANSCRIPT.txt, isolation transcript_exported)',
+            lambda: (jd / 'response' / 'GENERATOR_TRANSCRIPT.txt').is_file()
+            and any((s.get('facts') or {}).get('generation_record', {}) and s['facts']['generation_record'].get('isolation_evidence') == 'transcript_exported'
+                    for s in read_json(jd / 'RUN_RECORD.json').get('stages', []) if s['stage'] == 'finish'), lambda: sorted(p.name for p in (jd / 'response').iterdir()))
+    t.check('r3 setup: the revision archive AI-V1r2 reached Drive after the refusal\'s CP, nothing after it',
+            lambda: names(w.drive, w.records, 'AI_A_V1r2_') and o.result.get('command') == 'ai-archive'
+            and o.result.get('revision') == 2, o)
+    rv = (jd / 'qa' / 'visual_review' / 'VISUAL_REVIEW.json').read_bytes()
+    o, sn = restore_cycle(t, dot, w, 'r3 R3-01', 'AI_ARCHIVED')
+    t.check('r3 R3-01: the restore places the refusal\'s CP and then the revision (no RESTORE_AI_CONFLICT), byte for byte',
+            lambda: sn['restored']['ai_archives_placed'] == names(w.drive, w.records, 'AI_A_V1r2_')[:1]
+            and (jd / 'qa' / 'visual_review' / 'VISUAL_REVIEW.json').read_bytes() == rv, sn.get('restored'))
+    t.check('r3 R3-01: after recheck status prints the second visual-record', lambda: o.actions and 'wrap visual-record' in o.actions[0], o)
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap freeze'))
+    t.check('r3 R3-01: the second visual-record passes on the restored revision', lambda: o.result.get('runner_subcommand') == 'visual-record'
+            and o.result.get('runner_exit') == 0, o)
+    o = dot.auto(o, halt=at_action('HANDBACK'), max_steps=300)
+    af = read_json(w.base / 'outbox' / 'ALL_FROZEN.json')
+    t.check('r3 setup: both runs frozen, final made ALL_FROZEN.json', lambda: o.actions == ['HANDBACK case=B'] and len(af.get('runs', [])) == 2, o)
+    t.check('r3 R3-08: ALL_FROZEN.json gives each FINGERPRINT_PASS its Drive createdTime',
+            lambda: af['fingerprint_passes'] and all(x['created'] == w.drive.by_name(FOLDERS['setup'], x['name'])[0]['created']
+                                                     for x in af['fingerprint_passes']), af.get('fingerprint_passes'))
+    # tests-R3-04: a damaged copy listed after the intact one
+    run = next(r for r in af['runs'] if r['tag'] == 'A')
+    part = run['png_parts'][0]
+    fzb = w.drive.data(run['archive']['id'])
+    w.drive.put(w.records, run['archive']['name'], fzb[:len(fzb) // 2])
+    o = assemble_run(t, w, w.drive.flat(w.records, w.root / 'maint_newest_fz'))
+    t.check('r3 tests-R3-04: the newest-copy download of a damaged FZ copy: assemble STOPs ASSEMBLE_ARCHIVE (never accepts it)',
+            lambda: o.stop == 'ASSEMBLE_ARCHIVE', o)
+    w.drive.put(w.records, part['name'], w.drive.data(part['id'])[:100])
+    o = assemble_run(t, w, flat_recorded(w.drive, w.records, w.root / 'maint_parts_newest', {'runs': [dict(r, png_parts=[]) for r in af['runs']]}))
+    t.check('r3 tests-R3-04: a damaged PNG part copy listed last: assemble STOPs ASSEMBLE_PARTS', lambda: o.stop == 'ASSEMBLE_PARTS', o)
+    o = assemble_run(t, w, flat_recorded(w.drive, w.records, w.root / 'maint_recorded', af))
+    t.check('r3 tests-R3-04: downloading by the ids ALL_FROZEN.json records: assemble writes every folder (exit 0)', lambda: o.code == 0
+            and o.result.get('runs') == 2, o)
+
+
+@scenario
+def r3_tokens_and_freeze(t):
+    """r3 R3-02 / R3-07 (a seen token of a stage the restored package holds is harmless; a token of another stage is refused;
+    CHOOSE_SEEN_TOKENS names the restored package and a dead one; a bound freeze that differs STOPs RESET_DIVERGED with
+    NEXT evict) and R3-04 (a forced divergence of a folder-less prepare STOPs PENDING_JOB_DIVERGED, and status repeats
+    that STOP instead of the refused prepare)."""
+    c = '9991201'
+    w = World(t, 'r3_tokens_and_freeze_w', cases=[c])
+    dot = Dot(w)
+    jd = w.job_dir('A', c)
+    o = to_prepare(t, dot, w)
+    # (d) CP-V reaches Drive damaged only (its retry never lands): the restore takes CP-F and names CP-V as dead
+    dot.stop_before_upload = ('CP_', 'visual-record')
+    o = dot.auto(o, max_steps=200)
+    vr_tok = o.bind
+    cpv = Path([LINE_RE['UPLOAD'].match(u).group(1) for u in o.uploads if Path(LINE_RE['UPLOAD'].match(u).group(1)).name.startswith('CP_')][-1])
+    t.check('r3 setup: visual-record completed and printed its token; CP-V not uploaded', lambda: vr_tok and vr_tok.startswith(f'B1/visual-record/A/{c}/')
+            and not names(w.drive, w.records, cpv.name), o)
+    cpf = newest_pkg(w, c)
+    w.drive.put(w.records, cpv.name, cpv.read_bytes()[:500])
+    w.wipe()
+    o = dot.session()
+    ch = [a_ for a_ in o.actions if a_.startswith('CHOOSE_SEEN_TOKENS')]
+    t.check('r3 R3-02: CHOOSE_SEEN_TOKENS names the restored package (since=) and the dead CP-V (dead=)',
+            lambda: ch and f'since={cpf}' in ch[0] and f'dead={cpv.name}' in ch[0], o)
+    other = vm.token_text('finish', 'A', c, {'next': 'VISUAL_REVIEW', 'result': 'INVENTED', 'codes': []}, '0', False)
+    bad = dot.vm('incident', '--classification', 'AI_ARCHIVED', '--job-dir', jd, '--role', 'V', '--seen', other)
+    t.check('r3 R3-02: a token of another stage that the restored package does not hold is refused INCIDENT_SEEN_INVALID',
+            lambda: bad.refused == 'INCIDENT_SEEN_INVALID' and bad.result.get('detail', {}).get('token_subcommand') == 'finish', bad)
+    fin_tok = next((h.bind for h in dot.history if h.bind and h.bind.startswith(f'B1/finish/A/{c}/')), None)
+    dot.pending_tokens = [vr_tok, fin_tok]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    inc = read_json(w.base / 'outbox' / o.result.get('incident', 'x'))
+    t.check('r3 R3-02: the finish token (a stage CP-F holds) is recorded as harmless; the visual-record token binds the re-run',
+            lambda: inc.get('seen') == [vr_tok] and inc.get('seen_ignored') == [fin_tok] and inc.get('forces_reset_diverged') is False, inc)
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    dot.pending_tokens = []
+    dot.stop_after_upload = ('CP_', 'visual-record')
+    o = dot.auto(o)
+    t.check('r3 R3-02: the bound re-run of visual-record after the dead CP-V matched its token', lambda: (o.result.get('binding') or {}).get('matched') is True
+            and o.result.get('reset_diverged') is False, o)
+    # (a) a wipe after CP-V; the Dot gives the visual-record token printed just before CP-V's upload: harmless, freeze binds nothing
+    w.wipe()
+    o = dot.session()
+    dot.pending_tokens = [vr_tok]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    inc = read_json(w.base / 'outbox' / o.result.get('incident', 'x'))
+    t.check('r3 R3-02: after a wipe after CP-V the visual-record token is harmless (seen_ignored, no divergence, not_seen)',
+            lambda: o.code == 0 and inc.get('next_subcommand') == 'freeze' and inc.get('seen') == [] and inc.get('seen_ignored') == [vr_tok]
+            and inc.get('not_seen') is True and inc.get('forces_reset_diverged') is False, (o, inc))
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    dot.pending_tokens = []
+    # (c) the freeze runs, its FZ is lost; the token seen differs: the bound freeze STOPs RESET_DIVERGED with NEXT evict
+    dot.stop_before_upload = ('FZ_', None)
+    o = dot.auto(o)
+    fz_tok = o.bind
+    t.check('r3 setup: freeze ran and printed its token; FZ held back', lambda: fz_tok and fz_tok.startswith(f'B1/freeze/A/{c}/') and not names(w.drive, w.records, 'FZ_A_'), o)
+    w.wipe()
+    o = dot.session()
+    dot.pending_tokens = [forge_token(fz_tok)]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.vm('recheck')
+    dot.pending_tokens = []
+    o = dot.auto(o, halt=lambda a_, o_: o_.stop is not None)
+    t.check('r3 R3-07: a bound freeze that differs from its seen token: STOP RESET_DIVERGED, the FZ marked, NEXT evict',
+            lambda: o.stop == 'RESET_DIVERGED' and o.result.get('runner_subcommand') == 'freeze' and o.result.get('reset_diverged') is True
+            and o.actions and o.actions[0].endswith(f'evict --job-dir {jd}') and (o.result.get('package') or '').startswith('FZ_A_'), o)
+    o = dot.auto(dot.vm('status'), halt=at_action(f'RUN {w.V} wrap prepare'))
+    t.check('r3 R3-07: after the evict status moves to reader B; A is flagged reset_diverged', lambda: '--reader B' in o.actions[0]
+            and read_json(w.base / 'outbox/frozen_json' / f'A_{c}_FLAGS.json').get('reset_diverged') is True, o)
+    # (e) R3-04: B's prepare ran, its CP-P never landed; two disagreeing tokens force the divergence of a folder-less run
+    dot.stop_before_upload = ('CP_', 'prepare')
+    o = dot.auto(o)
+    if dot.halted is None and o.result.get('runner_subcommand') != 'prepare':
+        o = dot.auto(o)
+    tokb = o.bind
+    t.check('r3 setup: B\'s prepare ran and printed its token, CP-P not uploaded', lambda: tokb and tokb.startswith(f'B1/prepare/B/{c}/'), o)
+    w.wipe()
+    o = dot.session()
+    fza_tok = [h.bind for h in dot.history if h.bind and h.bind.startswith(f'B1/freeze/A/{c}/')][-1]
+    dot.pending_tokens = [fza_tok, tokb, forge_token(tokb)]
+    o = dot.auto(o, choose=lambda o_: 'SEEN', halt=at_action(f'RUN {w.V} recheck'))
+    t.check('r3 R3-04: disagreeing tokens of a folder-less prepare: STOP PENDING_JOB_DIVERGED (NEXT recheck, no freeze, no status loop)',
+            lambda: o.stop == 'PENDING_JOB_DIVERGED' and o.actions == [f'RUN {w.V} recheck'], o)
+    inc = read_json(w.base / 'outbox' / (o.result.get('incident') or 'x'))
+    t.check('r3 R3-02: the token of A\'s freeze (its FZ is on Drive) given with B\'s tokens is recorded as harmless',
+            lambda: inc.get('seen_ignored') == [fza_tok] and inc.get('seen') == [tokb, forge_token(tokb)], inc)
+    w.drive.listing(w.records, w.base / 'inbox' / 'DRIVE_LISTING.json')
+    o = dot.auto(dot.vm('recheck'), halt=lambda a_, o_: o_.stop is not None)     # the verification evict of A's FZ first
+    o2 = dot.vm('status')
+    t.check('r3 R3-04: after the verification evict, status STOP PENDING_JOB_DIVERGED instead of printing a prepare that wrap refuses',
+            lambda: o.stop == 'PENDING_JOB_DIVERGED' and o2.stop == 'PENDING_JOB_DIVERGED' and not any('wrap prepare' in a_ for a_ in o2.actions), (o, o2))
+
+
+@scenario
+def r3_everyday_local(t):
+    """r3 R3-03 (a new chat on the same VM between everyday jobs is local mode: no restore and no reset incident; an
+    INPUTS archive whose upload never happened is re-offered and confirmed before the prepare) and failure-R3-05
+    (job-start refuses a linked input; the INPUTS archive is read back before it is named)."""
+    c1 = '9991301'
+    w = World(t, 'r3_everyday_local_w', mode='everyday', cases=[c1])
+    dot = Dot(w)
+    o = start_world(t, dot, w)
+    everyday_inputs(w, c1)
+    d = w.base / 'everyday_inputs' / c1
+    real = w.root / 'elsewhere_source.xlsx'
+    shutil.move(str(d / 'source.xlsx'), str(real))
+    (d / 'source.xlsx').symlink_to(real)
+    dot.values['CASE'] = c1
+    js = o.actions[1][4:]
+    ol = dot.run_line(js)
+    t.check('r3 failure-R3-05: job-start refuses a linked input file (JOB_START_INPUT_NOT_REGULAR)', lambda: ol.refused == 'JOB_START_INPUT_NOT_REGULAR', ol)
+    (d / 'source.xlsx').unlink()
+    shutil.move(str(real), str(d / 'source.xlsx'))
+    dot.skip_upload = lambda n: n.startswith('INPUTS_')
+    oj = dot.run_line(js)
+    inputs = oj.result.get('inputs') or 'none'
+    t.check('r3 setup: job-start made INPUTS; its upload did not happen', lambda: oj.code == 0 and not names(w.drive, w.records, 'INPUTS_'), oj)
+    dot.skip_upload = None
+    n_inc = len(names(w.drive, w.records, 'INCIDENT_'))
+    o = dot.session()
+    sn = session_note(w, o)
+    t.check('r3 R3-03: a new chat on the same VM before the prepare is local mode (no restore, no incident) and re-offers the INPUTS upload',
+            lambda: o.code == 0 and sn.get('mode') == 'local' and o.state.get('pending_incident') == 'no'
+            and any(inputs in u for u in o.uploads) and o.actions and 'wrap prepare' in o.actions[0], o)
+    t.check('r3 R3-03: the re-offered INPUTS reached Drive', lambda: names(w.drive, w.records, inputs) == [inputs])
+    run_tag = oj.result['run_id']
+    jd = w.base / 'jobs' / run_tag[1:] / c1
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} start-note'))
+    pre = [h for h in dot.history if 'wrap prepare' in h.cmd]
+    t.check('r3 R3-03: the prepare first confirms the re-offered INPUTS by a narrow listing (exit 10), then runs',
+            lambda: pre and pre[0].code == 10 and any(f'name={inputs}' in f for f in pre[0].fetch) and jd.is_dir(), pre[:2])
+    o = dot.auto(o, halt=at_action('WAIT_FOR_USER_REQUEST'))
+    if 'NOT_NOW' in dict(o.options):
+        o = dot.auto(dot.run_line(dict(o.options)['NOT_NOW'][4:]), halt=at_action('WAIT_FOR_USER_REQUEST'))
+    t.check('r3 setup: the job was frozen and evicted; status waits for the next request', lambda: o.actions[:1] == ['WAIT_FOR_USER_REQUEST']
+            and not jd.exists() and newest_pkg(w, c1).startswith('FZ_'), o)
+    n_inc = len(names(w.drive, w.records, 'INCIDENT_'))
+    o = dot.session()
+    sn = session_note(w, o)
+    t.check('r3 R3-03: a new chat on the same VM after a finished job is local mode: no restore, no incident, the next request',
+            lambda: o.code == 0 and sn.get('mode') == 'local' and sn.get('restored') is None and o.state.get('pending_incident') == 'no'
+            and o.actions[:1] == ['WAIT_FOR_USER_REQUEST'] and len(names(w.drive, w.records, 'INCIDENT_')) == n_inc, o)
+
+
+@scenario
+def r3_symlink_output(t):
+    """r3 failure-R3-01 (an output link is archived as data and uploaded; the runner records
+    RUN_OUTPUT_SYMLINK_OR_SPECIAL_FILE; the package records it; restore refuses to place it), R3-05 (wrap interrupt STOPs
+    when the output folder holds files the incident says were never written) and tests-R3-02 (E20 with transcript_export
+    false: no NOTHING_WRITTEN option, AI_NOTHING_WRITTEN refused)."""
+    c = '9991401'
+    w = World(t, 'r3_symlink_output_w', cases=[c])
+    dot = Dot(w)
+    jd = w.job_dir('A', c)
+
+    def gconv(jd_, case, role, reader):
+        tcj.stand_in_response(None, jd_, case, reader=reader)
+        out = [p for p in jd_.glob('run/*/output')][0]
+        (out / 'scratch').mkdir(exist_ok=True)
+        (out / 'scratch' / 'venv_python').symlink_to('/usr/bin/python3')
+    dot.conv['G'] = gconv
+    o = to_prepare(t, dot, w)
+    o = dot.auto(o, halt=at_action('EXPORT_TRANSCRIPT'))
+    ai = names(w.drive, w.records, 'AI_A_G1_')
+    man = vm.ai_manifest(w.base / 'outbox' / ai[0]) if ai else {}
+    t.check('r3 failure-R3-01: the AI archive with an output link is made and uploaded; the link is recorded as data, unexpected',
+            lambda: ai and man.get('unsupported') and man['unsupported'][0][0] == 'scratch/venv_python'
+            and man['unsupported'][0][4] == {'type': 'symlink', 'why': 'type', 'target': '/usr/bin/python3'}
+            and 'scratch/venv_python' in man.get('unexpected', []) and man.get('response_present') is True, (o, man.get('unsupported')))
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap freeze'))
+    rec = read_json(jd / 'RUN_RECORD.json')
+    fin = [s for s in rec.get('stages', []) if s['stage'] == 'finish']
+    pk = o.result.get('package') or 'none'
+    pman = vm.pkg_manifest(w.base / 'outbox', pk) if (w.base / 'outbox' / pk).is_file() else {}
+    t.check('r3 failure-R3-01: finish records RUN_OUTPUT_SYMLINK_OR_SPECIAL_FILE and its CP-F records the link (not packed)',
+            lambda: fin and 'RUN_OUTPUT_SYMLINK_OR_SPECIAL_FILE' in fin[-1].get('codes', []) and pk.startswith('CP_A_')
+            and [e[0] for e in pman.get('unsupported') or []] == ['run/A/output/scratch/venv_python']
+            and not any(m['path'].endswith('venv_python') for m in pman.get('members', [])), (o, fin[-1:] if fin else None))
+    w.wipe()
+    o = dot.session()
+    t.check('r3 failure-R3-01: restore refuses to place a package that records a link (RESTORE_UNSUPPORTED_ENTRY), nothing placed',
+            lambda: o.stop == 'RESTORE_UNSUPPORTED_ENTRY' and not jd.exists() and not (w.base / 'ledger').exists(), o)
+    # R3-05: output written after the AI_NOTHING_WRITTEN incident
+    c2 = '9991402'
+    w2 = World(t, 'r3_symlink_output_w2', cases=[c2])
+    d2 = Dot(w2)
+    d2.conv['G'] = lambda jd_, case, role, reader: None
+    o = to_prepare(t, d2, w2)
+    d2.stop_after_upload = ('LINK_', None)
+    o = d2.auto(o)
+    o, sn = restore_cycle(t, d2, w2, 'r3 R3-05', 'AI_NOTHING_WRITTEN')
+    jd2 = w2.job_dir('A', c2)
+    t.check('r3 setup: status prints wrap interrupt after the AI_NOTHING_WRITTEN incident', lambda: o.actions and 'wrap interrupt' in o.actions[0], o)
+    tcj.stand_in_response(None, jd2, c2, reader='A')
+    oi = d2.run_line(o.actions[0][4:])
+    t.check('r3 R3-05: wrap interrupt with a response in the output folder STOPs INTERRUPT_OUTPUT_WRITTEN (the runner is not called)',
+            lambda: oi.stop == 'INTERRUPT_OUTPUT_WRITTEN' and 'response.json' in str(oi.result.get('detail'))
+            and not any(s['stage'] == 'interrupt' for s in read_json(jd2 / 'RUN_RECORD.json').get('stages', [])), oi)
+    # E20: transcripts cannot be exported (transcript_export false)
+    c3 = '9991403'
+    w3 = World(t, 'r3_symlink_output_w3', cases=[c3], cfg={'transcript_export': False, 'release_gates': dict(
+        GATES_ANSWERED, transcript_policy='OWNER_DECISION', transcript_owner_decision='O99')})
+    d3 = Dot(w3)
+    d3.conv['G'] = lambda jd_, case, role, reader: None
+    o = to_prepare(t, d3, w3)
+    d3.stop_after_upload = ('LINK_', None)
+    o = d3.auto(o)
+    w3.wipe()
+    o = d3.session()
+    jd3 = w3.job_dir('A', c3)
+    codes = [c_ for c_, _ in o.options]
+    bad = d3.vm('incident', '--classification', 'AI_NOTHING_WRITTEN', '--job-dir', jd3, '--role', 'G', '--conversation', 'invented-conv',
+                '--conversation-ended', '--transcript', str(w3.root / 'none.txt'))
+    t.check('r3 tests-R3-02 (E20): with transcript_export false the restore offers no NOTHING_WRITTEN; AI_NOTHING_WRITTEN is refused',
+            lambda: 'WRITTEN_OR_DOUBT' in codes and 'NOTHING_WRITTEN' not in codes and bad.refused == 'INCIDENT_CLASSIFICATION', (o, bad))
+
+
+@scenario
+def r3_worker_lock(t):
+    """r3 failure-R3-03: a waiting helper command never takes the lock between a detached wrap's checks and its worker; a
+    worker that died before its job folder existed points to status, never to package."""
+    c = '9991501'
+    w = World(t, 'r3_worker_lock_w', cases=[c])
+    dot = Dot(w)
+    o = to_prepare(t, dot, w)
+    line = o.actions[0][4:]
+    fd = os.open(w.base / 'outbox' / '.lock', os.O_RDWR)
+    p = subprocess.Popen(shlex.split(line), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=w.env)
+    held, stolen = False, False
+    t0 = time.time()
+    while p.poll() is None and time.time() - t0 < 900:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            d = read_json(w.base / 'outbox' / 'DETACHED.json')
+            if held and d and d.get('exit') is None:
+                stolen = True
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            if stolen:
+                break
+        except BlockingIOError:
+            held = True
+        time.sleep(0.002)
+    out, err = p.communicate(timeout=900)
+    os.close(fd)
+    o = Out(p.returncode, out.decode('utf-8', 'replace'), line)
+    t.outputs.append(o.text)
+    t.check('r3 failure-R3-03: the lock is held from the checks through the worker (never free to another command); the prepare ran',
+            lambda: held and not stolen and o.code == 0 and o.result.get('runner_subcommand') == 'prepare' and w.job_dir('A', c).is_dir(),
+            lambda: (held, stolen, o, err.decode()[-800:]))
+    dot.do(o)
+    jb = w.base / 'qual' / 'B' / c
+    fake = {'id': '20261109T000000Z_00000000', 'kind': 'wrap', 'info': {'sub': 'prepare', 'job_dir': str(jb)}, 'pid': 1,
+            'started_utc': '2026-11-09T00:00:00.000Z', 'boot_id': w.boot, 'log': str(w.base / 'outbox' / 'x.log'),
+            'out': str(w.base / 'outbox' / 'x.out'), 'exit': None}
+    (w.base / 'outbox' / 'DETACHED.json').write_text(json.dumps(fake))
+    ow = dot.vm('wait')
+    t.check('r3 failure-R3-03: a worker that died before its job folder existed: STOP WORKER_DIED with NEXT status (not package)',
+            lambda: ow.stop == 'WORKER_DIED' and ow.actions == [f'RUN {w.V} status'] and not (w.base / 'outbox' / 'DETACHED.json').exists(), ow)
+    readme = (HERE / 'README.md').read_text()
+    t.check('r3 tests-R3-05: README names the self-test WORKER_DIED as the STOP whose NEXT is run (no handback)',
+            lambda: 'STOP: WORKER_DIED` of a self-test' in readme)
+
+
+@scenario
+def r3_units(t):
+    """r3 failure-R3-02 (one partial duplicate slice never kills an intact SPLIT set), failure-R3-01 (lenient tree
+    listing), failure-R3-05 (packing never follows a link), failure-R3-06 (DISK_FULL: free-space check, ENOSPC mapping,
+    the PNG tar streamed into parts)."""
+    root = t.work / 'r3_units_w'
+    root.mkdir()
+    inbox = root / 'inbox'
+    inbox.mkdir()
+    whole = os.urandom(3000)
+    h = sha(whole)
+    orig = f'CP_A_L00007_00000000_11111111_00000000_22222222_{h[:8]}_c1.tgz'
+    sl = [whole[i * 1000:(i + 1) * 1000] for i in range(3)]
+    sn = [f'SPLIT_{h[:8]}_{k:02d}of03__{orig}' for k in (1, 2, 3)]
+    blobs, files = {}, []
+
+    def put(n, data, tm):
+        fid = f'id{len(blobs)}'
+        blobs[fid] = data
+        files.append({'name': n, 'id': fid, 'created': tm, 'md5': md5(data), 'size': len(data)})
+    put(sn[0], sl[0], '2026-11-09T10:00:01.000Z')
+    put(sn[1], sl[1][:400], '2026-11-09T10:00:02.000Z')         # a partial copy of slice 2 landed first
+    put(sn[1], sl[1], '2026-11-09T10:00:03.000Z')               # the retry landed whole
+    put(sn[2], sl[2], '2026-11-09T10:00:04.000Z')
+    lst = vm.Listing('CPS/qualification', None, files, 1)
+    ctx = type('C', (), {})()
+    ctx.index = vm.Index(root / 'INDEX.jsonl')
+    plan, res = {}, None
+    for _ in range(6):
+        blk = vm.Block()
+        res = vm.Fetcher(ctx, lst, inbox, blk, plan).get(orig, lambda p_: None if vm.h8(vm.sha_file(p_)) == h[:8] else 'sha8')
+        if res is not None:
+            break
+        for ln in blk.fetch:
+            m = LINE_RE['DOWNLOAD'].match(ln)
+            Path(m.group(3)).write_bytes(blobs[m.group(1)])
+    t.check('r3 failure-R3-02: a partial duplicate of one SPLIT slice: the intact set joins (never DEAD), no copy rejected',
+            lambda: res is not None and res is not vm.DEAD and Path(res).read_bytes() == whole and not plan.get('rejected_why'),
+            lambda: (res, plan.get('rejected_why')))
+    plan2, res2 = {}, None
+    files2 = [dict(f) for f in files if f['id'] != 'id2']
+    blobs['id1'] = sl[1][:400]
+    lst2 = vm.Listing('CPS/qualification', None, files2, 1)
+    inbox2 = root / 'inbox2'
+    inbox2.mkdir()
+    for _ in range(6):
+        blk = vm.Block()
+        res2 = vm.Fetcher(ctx, lst2, inbox2, blk, plan2).get(orig, lambda p_: None if vm.h8(vm.sha_file(p_)) == h[:8] else 'sha8')
+        if res2 is not None:
+            break
+        for ln in blk.fetch:
+            m = LINE_RE['DOWNLOAD'].match(ln)
+            Path(m.group(3)).write_bytes(blobs[m.group(1)])
+    t.check('r3 failure-R3-02: with only the partial copy of a slice the set is DEAD and its copies rejected', lambda: res2 is vm.DEAD
+            and len(plan2.get('rejected_why') or []) == 3, lambda: (res2, plan2.get('rejected_why')))
+    # lenient tree listing
+    tr = root / 'tree'
+    (tr / 'scratch').mkdir(parents=True)
+    (tr / 'response.json').write_text('{}')
+    (tr / 'scratch' / 'link').symlink_to('/usr/bin/python3')
+    os.mkfifo(tr / 'scratch' / 'fifo')
+    (tr / 'scratch' / 'a\\b.txt').write_text('x')
+    full = vm.tree_list(tr, 'AI_OUTPUT_UNSUPPORTED_ENTRY', lenient=True)
+    ok_, uns = vm.split_unsupported(full)
+    t.check('r3 failure-R3-01: the lenient listing keeps a link, a FIFO and an unsafe name as data, the rest as entries',
+            lambda: sorted(e[4]['type'] for e in uns) == ['fifo', 'file', 'symlink'] and [e[0] for e in ok_] == ['response.json', 'scratch']
+            and halt_code(vm.tree_list, tr, 'AI_OUTPUT_UNSUPPORTED_ENTRY') == 'AI_OUTPUT_UNSUPPORTED_ENTRY'
+            and vm.unexpected_entries(full, 'G') == [e[0] for e in uns], lambda: (full, vm.unexpected_entries(full, 'G')))
+    # packing never follows a link
+    target = root / 'big.bin'
+    target.write_bytes(os.urandom(50000))
+    (root / 'ln.bin').symlink_to(target)
+    try:
+        vm.write_tgz(root / 'x.tgz', [('inputs', 'dir', 0o755, 0, None), ('inputs/ln.bin', 'file', 0o644, 0, str(root / 'ln.bin'))])
+        refused = False
+    except OSError:
+        refused = True
+    t.check('r3 failure-R3-05: write_tgz refuses a linked member (O_NOFOLLOW), never a cut-short copy', lambda: refused)
+    # PNG tar streamed into parts equals the whole tar
+    pd = root / 'png'
+    pd.mkdir()
+    for i in range(3):
+        (pd / f'p{i}.png').write_bytes(os.urandom(7000))
+    mem = vm.png_tar_members(pd, [f'p{i}.png' for i in range(3)])
+    with open(root / 'whole.tar', 'xb') as f:
+        vm.write_tar_stream(f, mem)
+    pw = vm.PartWriter(root, 5000, '.t_')
+    vm.write_tar_stream(pw, mem)
+    parts, psha = pw.finish()
+    wb = (root / 'whole.tar').read_bytes()
+    t.check('r3 failure-R3-06: the PNG tar streamed into parts joins to the whole tar (same sha256), parts of part_bytes',
+            lambda: psha == sha(wb) and b''.join(Path(x[0]).read_bytes() for x in parts) == wb and all(x[1] == 5000 for x in parts[:-1]))
+    # DISK_FULL
+    lay = type('L', (), {})()
+    lay.outbox, lay.inbox, lay.base = root, inbox, root
+    real_du = vm.shutil.disk_usage
+    vm.shutil.disk_usage = lambda p_: type('U', (), {'free': 1024, 'total': 2048, 'used': 1024})()
+    try:
+        code = halt_code(vm.require_space, lay, 10 * 1024 * 1024, 'package')
+    finally:
+        vm.shutil.disk_usage = real_du
+    t.check('r3 failure-R3-06: require_space STOPs DISK_FULL when the free space cannot hold the step', lambda: code == 'DISK_FULL')
+    p = subprocess.run([sys.executable, '-I', '-B', '-c',
+                        'import importlib.util,sys,errno\n'
+                        f's=importlib.util.spec_from_file_location("v",{str(HELPER)!r});m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\n'
+                        'def boom(a):\n    raise OSError(errno.ENOSPC, "No space left on device")\n'
+                        'm.COMMANDS["status"]=boom\nsys.exit(m.main(["status"]))\n'],
+                       capture_output=True, text=True, env=dict(os.environ, CPS_VM_BASE=str(root / 'nobase')))
+    t.check('r3 failure-R3-06: an ENOSPC anywhere is STOP DISK_FULL (exit 3), never INTERNAL_ERROR', lambda: p.returncode == 3
+            and 'STOP: DISK_FULL' in p.stdout and 'INTERNAL_ERROR' not in p.stdout, (p.stdout[-600:], p.stderr[-600:]))
+
+
+@scenario
+def r3_final_downloads(t):
+    """r3 failure-R3-04 (a cut-off SESSION note download is downloaded again, never skipped), tests-R3-02 (final:
+    FINAL_DOWNLOAD_FAILED and FINAL_FROZEN_ARCHIVE_MISSING; assemble: ASSEMBLE_ARCHIVE for a damaged newest copy)."""
+    na, nb = '9991691', '9991692'
+    w = World(t, 'r3_final_downloads_w', nonattempts=[na])
+    dot = Dot(w)
+    o = start_world(t, dot, w)
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} final'))
+    orig_fetch = dot.fetch
+    cuts = []
+
+    def cut(o_):
+        orig_fetch(o_)
+        for ln in o_.fetch:
+            m = LINE_RE['DOWNLOAD'].match(ln)
+            if m and m.group(2).startswith('SESSION_') and not cuts:
+                q_ = Path(m.group(3))
+                q_.write_bytes(q_.read_bytes()[:-1])
+                cuts.append(m.group(2))
+            if m and m.group(2).startswith('FZ_NA-A_') and dot.cut_fz:
+                q_ = Path(m.group(3))
+                q_.write_bytes(q_.read_bytes()[:-1])
+    dot.cut_fz = False
+    dot.fetch = cut
+    w.wipe()
+    o = dot.session()
+    dl = [ln for h in dot.history[-6:] for ln in h.fetch if cuts and cuts[0] in ln and ln.startswith('DOWNLOAD')]
+    t.check('r3 failure-R3-04: a SESSION note download cut short is asked again (the same id), and the session completes',
+            lambda: cuts and len(dl) == 2 and len(set(dl)) == 1 and o.code == 0 and session_note(w, o).get('mode') == 'restore', (o, dl))
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} final'))
+    dot.cut_fz = True
+    o = dot.auto(o, halt=lambda a_, o_: o_.stop is not None, max_steps=20)
+    t.check('r3 tests-R3-02: final: an FZ download that keeps arriving damaged STOPs FINAL_DOWNLOAD_FAILED', lambda: o.stop == 'FINAL_DOWNLOAD_FAILED', o)
+    # FINAL_FROZEN_ARCHIVE_MISSING: only a damaged copy of an FZ is listed
+    w2 = World(t, 'r3_final_downloads_w2', nonattempts=[nb])
+    d2 = Dot(w2)
+    o = start_world(t, d2, w2)
+    o = d2.auto(o, halt=at_action(f'RUN {w2.V} final'))
+    fza = [f for f in w2.drive.files(w2.records) if f['name'].startswith('FZ_NA-A_')]
+    w2.drive.put(w2.records, fza[0]['name'], w2.drive.data(fza[0]['id'])[:300])
+    w2.drive.hide.add(fza[0]['id'])
+    w2.wipe()
+    o = d2.session()
+    o = d2.auto(o, halt=lambda a_, o_: o_.stop is not None or a_.startswith('HANDBACK'), max_steps=40)
+    t.check('r3 tests-R3-02: final: no copy of an FZ passes its hash: STOP FINAL_FROZEN_ARCHIVE_MISSING', lambda: o.stop == 'FINAL_FROZEN_ARCHIVE_MISSING', o)
+
+
+# ------------------------------------------------------------------ round 4 (r4): completeness gaps F1-F8
+MAKE_KIT = REPO / 'deploy' / 'make_kit.py'
+
+
+def kit_zip_members(kp):
+    with zipfile.ZipFile(kp) as z:
+        return {n: z.read(n) for n in z.namelist() if n != 'SHA256SUMS'}
+
+
+def parts_route(w, part_bytes=6000):
+    """r4 F1: the maintainer's make_kit route for the world's current kit: `pack` writes the bundle parts (copies A and B)
+    under cps_runtime/kit/<stem>/, the binary members are 'copied inside Drive' to cps_runtime/kit/<stem>/bin/, and
+    FOLDER_MANIFEST.md gets their rows plus one kit-sha256 line and no zip row. Returns what the tests need."""
+    mem = kit_zip_members(w.static / 'cps_runtime' / f'SESSION_KIT_TEST{w.kit_n}.zip')
+    tree = w.root / f'kit_tree_{w.kit_n}'
+    out = w.root / f'kit_pack_{w.kit_n}'
+    for k, v in mem.items():
+        (tree / k).parent.mkdir(parents=True, exist_ok=True)
+        (tree / k).write_bytes(v)
+    kname = f'SESSION_KIT_R4P{w.kit_n}.zip'
+    binn = {k: k.split('/')[-2] + '_' + k.split('/')[-1] for k in mem if k.endswith('.xlsx')}
+    args = [sys.executable, '-I', '-B', str(MAKE_KIT), 'pack', str(tree), str(out), '--kit-name', kname, '--part-bytes', str(part_bytes)]
+    for k, n in binn.items():
+        args += ['--binary-name', f'{k}={n}']
+    subprocess.run(args, check=True, capture_output=True)
+    stem = kname[:-4]
+    kdir = w.static / 'cps_runtime' / 'kit' / stem
+    (kdir / 'bin').mkdir(parents=True, exist_ok=True)
+    parts = sorted(p.name for p in out.glob(f'{stem}_part*.txt'))
+    for n in parts:
+        shutil.copyfile(out / n, kdir / n)
+    for k, n in binn.items():
+        (kdir / 'bin' / n).write_bytes(mem[k])
+    kb = (out / kname).read_bytes()
+    info = {'name': kname, 'stem': stem, 'sha': sha(kb), 'bytes': len(kb), 'zip': out / kname, 'parts': parts,
+            'bins': sorted(binn.values()), 'kdir': kdir}
+    write_kit_manifest(w, info)
+    return info
+
+
+def write_kit_manifest(w, info, drop_b=False, zip_row=None, kit_line=True):
+    rows = []
+    for n in info['parts']:
+        if drop_b and n.endswith('_B.txt'):
+            continue
+        b = (info['kdir'] / n).read_bytes()
+        rows.append((f'cps_runtime/kit/{info["stem"]}/{n}', len(b), sha(b)))
+    for n in info['bins']:
+        b = (info['kdir'] / 'bin' / n).read_bytes()
+        rows.append((f'cps_runtime/kit/{info["stem"]}/bin/{n}', len(b), sha(b)))
+    if zip_row:
+        rows.append(zip_row)
+    text = '# Folder manifest (invented test, parts route)\n\n'
+    if kit_line:
+        text += f'kit-sha256: {info["name"]} {info["bytes"]} {info["sha"]}\n\n'
+    text += '| Path | Bytes | sha256 |\n|---|---:|---|\n' + ''.join(f'| `{p}` | {n} | `{h}` |\n' for p, n, h in rows)
+    (w.static / 'FOLDER_MANIFEST.md').write_text(text)
+
+
+def damage_part(path, member_no=1):
+    """One slip in the content of the member_no-th text member of a bundle part (the line after its header)."""
+    lines = path.read_bytes().split(b'\n')
+    idx = [i for i, ln in enumerate(lines) if ln.startswith(b'@@ text ')]
+    i = idx[member_no - 1] + 1
+    lines[i] = (b'#' + lines[i][1:]) if lines[i][:1] != b'#' else (b'%' + lines[i][1:])
+    path.write_bytes(b'\n'.join(lines))
+
+
+@scenario
+def r4_kit_parts_route(t):
+    """r4 F1: the make_kit route wired into session: the kit is rebuilt from bundle parts (a slip in one copy skipped)
+    and Drive-copied binaries, uploaded once to the setup folder for the maintainer to copy into cps_runtime/, then the
+    zip route; every route refusal leaves runtime/ without a release."""
+    c = '9994101'
+    w = World(t, 'r4_kit_parts_route_w', cases=[c])
+    dot = Dot(w)
+    info = parts_route(w)
+    n_parts = len(info['parts'])
+    t.check('r4 F1 setup: make_kit pack split the kit into several parts (two copies each) and one binary per case',
+            lambda: n_parts >= 4 and n_parts % 2 == 0 and info['bins'] == [f'{c}_source.xlsx'], info['parts'])
+    pa = info['kdir'] / info['parts'][0]                    # part 1, copy A
+    good_a = pa.read_bytes()
+    damage_part(pa)
+    write_kit_manifest(w, info)                             # the manifest lists the slipped copy's own bytes (as uploaded)
+    o = dot.session()
+    first = next((h for h in dot.history if h.codeword == 'NEED_KIT_PARTS'), None)
+    kdl = [ln for ln in (first.fetch if first else []) if 'name=cps_runtime/kit/' in ln]
+    t.check('r4 F1: the parts route asks for every part copy and binary by its CPS folder path (exit 10 NEED_KIT_PARTS)',
+            lambda: first is not None and first.code == 10 and len(kdl) == n_parts + len(info['bins'])
+            and all(ln.startswith('DOWNLOAD id=CPS_FOLDER_PATH ') for ln in kdl), first)
+    rt_rel = (w.base / 'runtime' / 'RELEASE.json').read_bytes() if (w.base / 'runtime' / 'RELEASE.json').is_file() else b''
+    t.check('r4 F1: make_kit assemble rebuilt the kit (copy A of part 1 has a slip; copy B is used) and the runtime holds its members',
+            lambda: o.code == 0 and o.result['kit'] == {'name': info['name'], 'route': 'parts', 'uploaded_to_setup': True}
+            and rt_rel == kit_zip_members(info['zip'])['RELEASE.json'], o)
+    up = [ln for ln in o.uploads if info['name'] in ln]
+    t.check('r4 F1: the rebuilt zip is uploaded to the setup folder (before the SESSION note) and the maintainer is asked to copy it',
+            lambda: len(up) == 1 and up[0].endswith(' -> ' + FOLDERS['setup']) and o.uploads.index(up[0]) < len(o.uploads) - 1
+            and o.actions[0].startswith(f'TELL_MAINTAINER kit={info["name"]} sha256={info["sha"]}') and o.actions[1].endswith(' selftest')
+            and [sha(w.drive.data(f['id'])) for f in w.drive.by_name(FOLDERS['setup'], info['name'])] == [info['sha']], o)
+    sn = session_note(w, o)
+    t.check('r4 F1: the SESSION note records the kit route', lambda: sn['kit']['route'] == 'parts' and sn['kit']['sha256'] == info['sha'], sn)
+    fake_selftest(w)
+    o = dot.vm('fingerprint-pass')
+    t.check('r4 F1: the rebuilt kit works: fingerprint-pass prints genesis', lambda: o.code == 0 and o.actions[0].endswith('genesis --first-ledger'), o)
+    # after a reset: rebuilt again (the timing cost), never uploaded a second time
+    w.wipe()
+    n0 = len(dot.history)
+    o = dot.session()
+    again = [h for h in dot.history[n0:] if h.codeword == 'NEED_KIT_PARTS']
+    t.check('r4 F1: after a reset the kit is rebuilt from the parts again, and not uploaded again (the setup listing shows its md5)',
+            lambda: o.code == 0 and len(again) == 1 and o.result['kit']['uploaded_to_setup'] is False
+            and not any(info['name'] in ln for ln in o.uploads) and not o.actions[0].startswith('TELL_MAINTAINER')
+            and len(w.drive.by_name(FOLDERS['setup'], info['name'])) == 1, o)
+    # the maintainer copies the zip into cps_runtime/ and adds its row: the zip route (one download)
+    zb = w.drive.data(w.drive.by_name(FOLDERS['setup'], info['name'])[0]['id'])
+    (w.static / 'cps_runtime' / info['name']).write_bytes(zb)
+    zrow = (f'cps_runtime/{info["name"]}', len(zb), sha(zb))
+    write_kit_manifest(w, info, zip_row=zrow)
+    w.wipe()
+    n0 = len(dot.history)
+    o = dot.session()
+    dls = [ln for h in dot.history[n0:] for ln in h.fetch if ln.startswith('DOWNLOAD id=CPS_FOLDER_PATH')]
+    t.check('r4 F1: once the zip row exists the session takes the zip route: one kit download, no part downloads',
+            lambda: o.code == 0 and o.result['kit']['route'] == 'zip' and dls == [f'DOWNLOAD id=CPS_FOLDER_PATH name={zrow[0]} -> '
+                                                                                   f'{w.base / "inbox" / "cps" / zrow[0]}'], (o, dls))
+
+    def refused_route(label, code, prepare):
+        prepare()
+        w.wipe()
+        o_ = dot.session()
+        t.check(f'r4 F1: {label} -> {code}; runtime/ holds no release', lambda: o_.stop == code
+                and not (w.base / 'runtime' / 'RELEASE.json').exists(), o_)
+    refused_route('the zip row and the kit-sha256 line disagree', 'KIT_NOT_IN_MANIFEST',
+                  lambda: write_kit_manifest(w, info, zip_row=(zrow[0], zrow[1], '0' * 64)))
+    refused_route('copy B of every part missing from the manifest', 'KIT_PARTS_NOT_IN_MANIFEST', lambda: write_kit_manifest(w, info, drop_b=True))
+    refused_route('no kit at all in the manifest', 'KIT_NOT_IN_MANIFEST', lambda: write_kit_manifest(w, info, kit_line=False))
+    pb = info['kdir'] / info['parts'][1]                    # part 1, copy B: now both copies slipped in the same member
+    good_b = pb.read_bytes()
+
+    def both():
+        damage_part(pb)
+        write_kit_manifest(w, info)
+    refused_route('both copies of one member slipped', 'KIT_NOT_REBUILT', both)
+    pb.write_bytes(good_b)
+    pa.write_bytes(good_a)
+    bp = info['kdir'] / 'bin' / info['bins'][0]
+    good_bin = bp.read_bytes()
+
+    def bin_bad():
+        bp.write_bytes(good_bin + b'\0')
+        write_kit_manifest(w, info)
+    refused_route('a binary member that differs from its sha256', 'KIT_NOT_REBUILT', bin_bad)
+    bp.write_bytes(good_bin)
+    write_kit_manifest(w, info)
+    w.wipe()
+    o = dot.session()
+    t.check('r4 F1: with intact parts the parts route works again after the refusals', lambda: o.code == 0 and o.result['kit']['route'] == 'parts', o)
+
+
+def fake_results(w, k, summary_fn=None, run_fn=None, results=True, exp_root=None):
+    """r4 F5: one self-test results folder (as the suite would leave it), mutated by summary_fn / run_fn."""
+    st = state(w)
+    d = w.base / 'outbox' / f'selftest_{vm.utc14()}_{k:02d}'
+    (d / 'work').mkdir(parents=True)
+    exp = Path(exp_root or w.repo) / 'research' / 'export'
+    summary = {'suite': 'cps-export-portable-writer-tests.v6', 'tests': 600, 'passed_count': 600, 'failed_count': 0, 'failed': [],
+               'visual_skipped': False, 'writer_portable_sha256': sha_file(exp / 'writer_portable.py'),
+               'saved_qa_sha256': sha_file(exp / 'saved_qa.py'), 'visual_qa_sha256': sha_file(exp / 'visual_qa.py'),
+               'checker_node': {'realpath': os.path.realpath(w.t.a.node), 'sha256': w.t.a.node_sha256}}
+    if summary_fn:
+        summary_fn(summary)
+    if results:
+        (d / 'work' / 'EXPORT_TEST_RESULTS.json').write_text(json.dumps({'summary': summary, 'results': []}))
+    run = {'fingerprint_before_sha256': st['fingerprint_sha256'], 'commit': w.head, 'session_note': st['session_note'],
+           'started_utc': vm.utc(), 'work_dir': str(d / 'work'), 'exit': 0, 'ended_utc': vm.utc(), 'pid': 1}
+    if run_fn:
+        run_fn(run)
+    (d / 'RUN.json').write_text(json.dumps(run))
+
+
+@scenario
+def r4_fingerprint_gates(t):
+    """r4 F5: every way the O47 self-test gate must refuse (no PASS written); r4 F2: the fingerprint is recomputed in every
+    wrap and start-note, a change between two commands stops every job, a change during a stage is recorded in the CP
+    (fingerprint_after) and stops after its upload; the new fingerprint's self-test lets the run go on under its fp8."""
+    rc = repo_copy(t, 'r4_fingerprint_gates_repo')
+    c = '9994201'
+    w = World(t, 'r4_fingerprint_gates_w', cases=[c], repo=rc)
+    dot = Dot(w)
+    env_sh = w.tools / 'env.sh'
+    env0 = env_sh.read_bytes()
+
+    def touch():
+        env_sh.write_bytes(env0 + b'# invented: a re-run setup changed env.sh\n')
+
+    def untouch():
+        env_sh.write_bytes(env0)
+
+    def no_pass(label, o):
+        t.check(f'r4 F5: {label}: no FINGERPRINT_PASS is written, offered or recorded', lambda: not list((w.base / 'outbox').glob('FINGERPRINT_PASS_*'))
+                and not any('FINGERPRINT_PASS_' in u for u in o.uploads) and not state(w).get('fingerprint_pass')
+                and not names(w.drive, FOLDERS['setup'], 'FINGERPRINT_PASS_'), o)
+    o = dot.session()
+    t.check('r4 F5 setup: a fresh session prints the self-test', lambda: o.code == 0 and o.actions[0].endswith(' selftest'), o)
+    touch()
+    o = dot.vm('selftest')
+    t.check('r4 F5: the toolchain changed after session start: selftest STOPs FINGERPRINT_CHANGED and starts nothing',
+            lambda: o.stop == 'FINGERPRINT_CHANGED' and not (w.base / 'outbox' / 'DETACHED.json').exists()
+            and not list((w.base / 'outbox').glob('selftest_*')), o)
+    untouch()
+    variants = [('failed_count 1', lambda s_: s_.update(passed_count=599, failed_count=1), None, True),
+                ('599 tests (the config expects 600)', lambda s_: s_.update(tests=599, passed_count=599), None, True),
+                ('the visual tests skipped', lambda s_: s_.update(visual_skipped=True), None, True),
+                ('visual_skipped missing', lambda s_: s_.pop('visual_skipped'), None, True),
+                ('a results file from another writer', lambda s_: s_.update(writer_portable_sha256='0' * 64), None, True),
+                ('a results file from another saved QA', lambda s_: s_.update(saved_qa_sha256='0' * 64), None, True),
+                ('a results file from another visual QA', lambda s_: s_.update(visual_qa_sha256='0' * 64), None, True),
+                ('the checker node differs from this VM\'s node', lambda s_: s_['checker_node'].update(sha256='0' * 64), None, True),
+                ('the suite exited 1', None, lambda r: r.update(exit=1), True),
+                ('no results file', None, None, False)]
+    for k, (label, sf, rf, res) in enumerate(variants, 1):
+        fake_results(w, k, sf, rf, res)
+        o = dot.vm('fingerprint-pass')
+        t.check(f'r4 F5: {label}: fingerprint-pass STOPs SELFTEST_FAILED', lambda: o.stop == 'SELFTEST_FAILED', o)
+        no_pass(label, o)
+    fake_results(w, 20)
+    touch()
+    o = dot.vm('fingerprint-pass')
+    t.check('r4 F5: the toolchain changed between the self-test and fingerprint-pass: STOP FINGERPRINT_CHANGED', lambda: o.stop == 'FINGERPRINT_CHANGED', o)
+    no_pass('changed after the self-test', o)
+    untouch()
+    fake_results(w, 21, run_fn=lambda r: r.update(fingerprint_before_sha256='0' * 64))
+    o = dot.vm('fingerprint-pass')
+    t.check('r4 F5: a self-test that started on another fingerprint: STOP FINGERPRINT_CHANGED', lambda: o.stop == 'FINGERPRINT_CHANGED', o)
+    no_pass('started on another fingerprint', o)
+    # the real (stub) suite, detached; env.sh changes while it runs
+    p = subprocess.Popen([w.V, 'selftest'], env=dict(w.env, CPS_TEST_STUB_SLEEP='5'), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    time.sleep(2.5)
+    touch()
+    out, _ = p.communicate(timeout=600)
+    ow = Out(p.returncode, out.decode('utf-8', 'replace'), 'selftest')
+    if ow.code == 11:
+        ow = wait_done(dot, dot.vm('wait'))
+    o = dot.vm('fingerprint-pass')
+    t.check('r4 F5: env.sh changed while the self-test ran: the self-test ends, fingerprint-pass STOPs FINGERPRINT_CHANGED',
+            lambda: ow.result.get('command') == 'selftest' and o.stop == 'FINGERPRINT_CHANGED', (ow, o))
+    no_pass('changed during the self-test', o)
+    untouch()
+    fake_results(w, 22)
+    o = dot.vm('fingerprint-pass')
+    t.check('r4 F5: a complete passing self-test of this fingerprint is accepted (the negative cases are not stuck)',
+            lambda: o.code == 0 and any('FINGERPRINT_PASS_' in u for u in o.uploads), o)
+    fp_old = state(w)['fingerprint_sha256']
+    # ---- F2: start-note and wrap recompute the fingerprint
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} start-note'))
+    sline = next(a for a in o.actions if a.startswith(f'RUN {w.V} start-note'))[4:]
+    touch()
+    o2 = dot.run_line(sline)
+    for _ in range(4):                              # the narrow listing of CP-P first (exit 10), then the gate
+        if o2.code != 10:
+            break
+        o2 = dot.run_line(sline)
+    t.check('r4 F2: env.sh changed before start-note: STOP FINGERPRINT_CHANGED, no START made, NEXT is a new session start',
+            lambda: o2.stop == 'FINGERPRINT_CHANGED' and not list((w.base / 'outbox').glob('START_*'))
+            and o2.actions and 'deploy/vm/session_start.sh --operator-model' in o2.actions[0], o2)
+    untouch()
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap finish'))
+    jd = w.job_dir('A', c)
+    fline = next(a for a in o.actions if a.startswith(f'RUN {w.V} wrap finish'))[4:]
+    rec0 = sha_file(jd / 'RUN_RECORD.json')
+    pk0 = names(w.drive, w.records, 'CP_')
+    touch()
+    o2 = dot.run_line(fline)
+    t.check('r4 F2: env.sh changed between two wraps: wrap finish STOPs FINGERPRINT_CHANGED before the runner (record and packages unchanged)',
+            lambda: o2.stop == 'FINGERPRINT_CHANGED' and sha_file(jd / 'RUN_RECORD.json') == rec0 and names(w.drive, w.records, 'CP_') == pk0
+            and not (w.base / 'outbox' / 'DETACHED.json').exists(), o2)
+    untouch()
+    # a change during the stage (the copy's runner appends to env.sh): the CP is made and uploaded, then every job waits
+    dot.env_extra = {'CPS_TEST_TOUCH_FILE': str(env_sh)}
+    o2 = dot.run_line(fline)
+    for _ in range(4):                              # the narrow listing of AI-G first (exit 10), then the stage
+        if o2.code != 10:
+            break
+        o2 = dot.run_line(fline)
+    dot.env_extra = {}
+    if o2.code == 11:
+        o2 = wait_done(dot, dot.vm('wait'))
+        dot.do(o2)
+    cpf = o2.result.get('package') or ''
+    m = vm.pkg_manifest(w.base / 'outbox', cpf) if cpf else None
+    t.check('r4 F2: the toolchain changed during wrap finish: the CP is uploaded, labelled with the fingerprint the stage started on, its '
+            'manifest records fingerprint_after; STOP FINGERPRINT_CHANGED',
+            lambda: o2.stop == 'FINGERPRINT_CHANGED' and cpf.startswith('CP_') and cpf in names(w.drive, w.records, 'CP_')
+            and vm.parse_name(cpf)['fp8'] == fp_old[:8] and m['fingerprint_sha256'] == fp_old and m['fingerprint_after_sha256'] != fp_old
+            and o2.result.get('fingerprint_changed_during_stage') is True, (o2, m and {k: m.get(k) for k in ('fingerprint_sha256', 'fingerprint_after_sha256')}))
+    o = dot.session()
+    t.check('r4 F2: the next session start sees the new fingerprint without a PASS and prints the self-test (every job waits)',
+            lambda: o.code == 0 and o.result['fingerprint8'] != fp_old[:8] and not o.result['fingerprint_pass']
+            and o.actions[0].endswith(' selftest'), o)
+    o3 = dot.vm('start-note', '--job-dir', jd, '--role', 'V')
+    t.check('r4 F2: before the new self-test a job command is refused (FINGERPRINT_NOT_PASSED or the fingerprint gate)',
+            lambda: o3.refused == 'FINGERPRINT_NOT_PASSED' or o3.stop == 'FINGERPRINT_CHANGED' or o3.code != 0, o3)
+    fake_selftest(w)
+    o = dot.vm('fingerprint-pass')
+    fp_new = state(w)['fingerprint_sha256']
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} wrap freeze'))
+    later = [n for n in names(w.drive, w.records, 'CP_') if n not in pk0 and n != cpf]
+    t.check('r4 F2: after the new fingerprint passed, the run goes on (O47: a run may span passed fingerprints) and its next packages carry the new fp8',
+            lambda: fp_new != fp_old and later and all(vm.parse_name(n)['fp8'] == fp_new[:8] for n in later)
+            and len(names(w.drive, FOLDERS['setup'], 'FINGERPRINT_PASS_')) == 2, (o, later))
+
+
+@scenario
+def r4_restore_refusals(t):
+    """r4 F6: one planted case for each restore refusal that had no test (RESTORE_GENESIS_UNEXPECTED, RESTORE_WRONG_COPY,
+    RESTORE_MANIFEST_MISMATCH, RESTORE_RECORD_CHAIN_BROKEN, RESTORE_PARTS_MISMATCH with RESTORE_NEED_PARTS,
+    RESTORE_EVERYDAY_TWO_UNFINISHED, RESTORE_RESUME_INVALID); the base tree is unchanged byte for byte by each."""
+    c = '9994301'
+    w = World(t, 'r4_restore_refusals_w', cases=[c])
+    dot = Dot(w)
+    o = to_prepare(t, dot, w)
+    o = dot.auto(o, halt=at_action(f'RUN {w.V} start-note --job-dir {w.base / "qual/A" / c} --role V'))
+    t.check('r4 F6 setup: CP-F uploaded with its parts', lambda: newest_pkg(w, c).startswith('CP_A_') and names(w.drive, w.records, 'PNG_A_'), o)
+    orig, folder = w.drive, w.records
+    cpf = newest_pkg(w, c)
+    meta = {f['name']: f for f in orig.files(folder)}
+    tmp = w.root / 'repacks'
+    tmp.mkdir()
+    k = [0]
+    keep = lambda k_, v: not k_.startswith(('outbox', 'inbox', 'runtime')) and not (v == 'dir' and '/' not in k_)
+
+    def attempt(label, code, mutate, plant=None, check=None):
+        k[0] += 1
+        d2 = orig.copy_to(w.root / f'drive_{k[0]}')
+        mutate(d2)
+        w.drive = d2
+        w.wipe()
+        if plant:
+            plant()
+        before = {k_: v for k_, v in w.snapshot().items() if keep(k_, v)}
+        n0 = len(dot.history)
+        o_ = dot.session()
+        after = {k_: v for k_, v in w.snapshot().items() if keep(k_, v)}
+        t.check(f'r4 F6: {label} -> {code}; the base tree is unchanged', lambda: o_.codeword == code and after == before
+                and (check is None or check(o_, dot.history[n0:])), lambda: (o_, sorted(set(before.items()) ^ set(after.items()))[:6]))
+        w.drive = orig
+        vm.remove_tree(w.root / f'drive_{k[0]}')
+        return o_
+
+    def add(d2, name, data, created=None):
+        e = d2.put(folder, name, data)
+        if created:
+            for f in d2.meta['files']:
+                if f['id'] == e['id']:
+                    f['created'] = created
+            d2.save()
+
+    def with_repack(members_fn=None, manifest_fn=None):
+        def m_(d2):
+            n = repack(orig.root / meta[cpf]['id'], tmp, members_fn, manifest_fn, 0, orig_name=cpf)
+            d2.hide.update(f['id'] for f in d2.files(folder) if f['name'] == cpf)
+            add(d2, n, (tmp / n).read_bytes())
+        return m_
+    # RESTORE_GENESIS_UNEXPECTED: the kit's expected_genesis names a file the folder holds, but not the GENESIS restore uses
+    w.cfg['expected_genesis'] = 'GENESIS_planted_by_hand.json'
+    w.build_kit(cfg_only=True)
+    attempt('the GENESIS on Drive is not the one the kit records', 'RESTORE_GENESIS_UNEXPECTED',
+            lambda d2: add(d2, 'GENESIS_planted_by_hand.json', b'{"invented": "planted"}\n'))
+    w.cfg['expected_genesis'] = None
+    w.build_kit(cfg_only=True)
+    # RESTORE_WRONG_COPY: two copies of CP-F on Drive; the Dot saved the second copy's bytes under the first copy's download
+    cut = orig.data(meta[cpf]['id'])[:2000]
+
+    def plant_wrong():
+        (w.base / 'inbox').mkdir(parents=True, exist_ok=True)
+        (w.base / 'inbox' / cpf).write_bytes(cut)
+    attempt('a download saved from the wrong Drive id', 'RESTORE_WRONG_COPY', lambda d2: add(d2, cpf, cut), plant=plant_wrong,
+            check=lambda o_, h: not (w.base / 'inbox' / cpf).exists())
+    attempt('a CP whose manifest says FZ', 'RESTORE_MANIFEST_MISMATCH',
+            with_repack(manifest_fn=lambda man: man.update(kind='FZ')))
+    import tarfile
+    with tarfile.open(orig.root / meta[cpf]['id'], 'r:gz') as tf:
+        rec_raw = tf.extractfile('job/RUN_RECORD.json').read()
+
+    def rec_to(data):
+        def f_(body, man):
+            set_member(body, man, 'job/RUN_RECORD.json', data)
+            man['record']['sha256'] = sha(data)
+        return f_
+    attempt('a record that is not the runner\'s serialization', 'RESTORE_RECORD_CHAIN_BROKEN', with_repack(rec_to(rec_raw + b' ')))
+    attempt('a record that does not parse', 'RESTORE_RECORD_CHAIN_BROKEN', with_repack(rec_to(b'{"invented": not json')))
+    # RESTORE_NEED_PARTS then RESTORE_PARTS_MISMATCH: re-render fails, the parts are asked for, one differs from the manifest
+    part = sorted(names(orig, folder, 'PNG_A_'))[0]
+    pbytes = orig.data(meta[part]['id'])
+    other = bytes(b ^ 0x5a for b in pbytes[:64]) + pbytes[64:]
+
+    def swap_part(d2):
+        d2.hide.update(f['id'] for f in d2.files(folder) if f['name'] == part)
+        add(d2, part, other, created=meta[part]['created'])
+    fake = w.root / 'fakebin'
+    fake.mkdir()
+    (fake / 'pdftoppm').write_text('#!/bin/sh\nexit 1\n')
+    os.chmod(fake / 'pdftoppm', 0o755)
+    dot.env_extra = {'PATH': f'{fake}:{os.environ.get("PATH", "")}'}
+    attempt('a PNG part whose bytes differ from the manifest (its listing md5 matches those bytes)', 'RESTORE_PARTS_MISMATCH', swap_part,
+            check=lambda o_, h: any(x.code == 10 and x.result.get('code') == 'RESTORE_NEED_PARTS'
+                                    and any(f'name={part} ' in ln for ln in x.fetch) for x in h))
+    dot.env_extra = {}
+
+    def plant_resume():
+        (w.base / 'outbox').mkdir(parents=True, exist_ok=True)
+        (w.base / 'outbox' / 'RESTORE_IN_PROGRESS.json').write_bytes(b'{"invented": damaged')
+    attempt('a damaged RESTORE_IN_PROGRESS.json', 'RESTORE_RESUME_INVALID', lambda d2: None, plant=plant_resume)
+    # everyday: two unfinished runs on Drive
+    we = World(t, 'r4_restore_refusals_we', mode='everyday', cases=[])
+    de = Dot(we)
+    for tag in ('E20261109T000001Z', 'E20261109T000002Z'):
+        we.drive.put(we.records, f'INPUTS_{tag}_E0_0a0b0c0d_9994302.tgz', b'invented inputs bytes ' + tag.encode())
+    before = {k_: v for k_, v in we.snapshot().items() if keep(k_, v)}
+    o = de.session()
+    after = {k_: v for k_, v in we.snapshot().items() if keep(k_, v)}
+    t.check('r4 F6: two unfinished everyday runs on Drive -> RESTORE_EVERYDAY_TWO_UNFINISHED; nothing placed',
+            lambda: o.stop == 'RESTORE_EVERYDAY_TWO_UNFINISHED' and after == before, o)
+
+
+@scenario
+def r4_release_gates_probe(t):
+    """r4 F8: a released kit whose release gates (probe P5, the transcript question) are open runs nothing; invalid gate
+    values are CONFIG_INVALID; probe-p5 start/check/hold measure whether a detached process outlives the tool call."""
+    c = '9994401'
+    open_g = {'p5_detached_survival': 'OPEN', 'p5_tool_call_seconds': None, 'transcript_policy': 'OPEN', 'transcript_owner_decision': None}
+    w = World(t, 'r4_release_gates_probe_w', cases=[c], cfg={'release_gates': dict(open_g)})
+    dot = Dot(w)
+    o = dot.session()
+    t.check('r4 F8: open release gates: session STOPs RELEASE_GATE_OPEN naming both, and makes no SESSION note',
+            lambda: o.stop == 'RELEASE_GATE_OPEN' and o.result.get('detail', {}).get('gates') == ['P5_OPEN', 'TRANSCRIPT_OPEN']
+            and not names(w.drive, w.records, 'SESSION_') and not list((w.base / 'outbox').glob('SESSION_*')), o)
+
+    def with_gates(label, code, gates, extra=None):
+        w.cfg['release_gates'] = gates
+        w.cfg.update(extra or {})
+        w.build_kit(cfg_only=True)
+        o_ = dot.session()
+        t.check(f'r4 F8: {label} -> {code}', lambda: o_.codeword == code if code else o_.code == 0, o_)
+        return o_
+    with_gates('P5 FAIL (detached processes die with the tool call; O50)', 'RELEASE_GATE_OPEN', dict(GATES_ANSWERED, p5_detached_survival='FAIL'))
+    with_gates('P5 passed but the transcript question is open', 'RELEASE_GATE_OPEN', dict(GATES_ANSWERED, transcript_policy='OPEN'))
+    with_gates('a P5 PASS whose tool-call limit is below wrap_foreground_seconds + 60', 'CONFIG_INVALID',
+               dict(GATES_ANSWERED, p5_tool_call_seconds=200))
+    with_gates('a P5 PASS without the measured tool-call limit', 'CONFIG_INVALID', dict(GATES_ANSWERED, p5_tool_call_seconds=None))
+    with_gates('EXPORT_CONFIRMED while transcript_export is false', 'CONFIG_INVALID', dict(GATES_ANSWERED), {'transcript_export': False})
+    with_gates('OWNER_DECISION without its decision id', 'CONFIG_INVALID', dict(GATES_ANSWERED, transcript_policy='OWNER_DECISION'),
+               {'transcript_export': False})
+    with_gates('a gate key missing', 'CONFIG_INVALID', {k: v for k, v in GATES_ANSWERED.items() if k != 'transcript_owner_decision'})
+    o = with_gates('OWNER_DECISION with its decision id (transcripts not exportable)', None,
+                   dict(GATES_ANSWERED, transcript_policy='OWNER_DECISION', transcript_owner_decision='O99'))
+    o = with_gates('answered gates: the session runs', None, dict(GATES_ANSWERED), {'transcript_export': True})
+    t.check('r4 F8: answered gates: a fresh session prints the self-test', lambda: o.actions[0].endswith(' selftest'), o)
+    # probe P5 (no kit or session needed; it runs from BASE/repo)
+    probe = [sys.executable, '-I', '-B', str(w.base / 'repo' / 'deploy' / 'vm' / 'cps_vm.py'), 'probe-p5']
+    o = dot.call(probe + ['start', '--seconds', '9', '--min-gap', '3'])
+    st0 = read_json(w.base / 'outbox' / 'probe_p5' / 'START.json')
+    t.check('r4 F8: probe-p5 start returns at once with a detached worker and prints END_TOOL_CALL, WAIT and the check',
+            lambda: o.code == 0 and o.actions[0] == 'END_TOOL_CALL' and o.actions[1].startswith('WAIT until=')
+            and o.actions[2].endswith('probe-p5 check --min-gap 3') and st0.get('pid'), o)
+    o = dot.call(probe + ['start', '--seconds', '9'])
+    t.check('r4 F8: a second start while the worker lives is refused PROBE_RUNNING', lambda: o.refused == 'PROBE_RUNNING', o)
+    o = dot.call(probe + ['check', '--min-gap', '3'])
+    t.check('r4 F8: a check before the gap is refused PROBE_TOO_EARLY with the WAIT and check lines', lambda: o.code == 4
+            and o.result.get('code') == 'PROBE_TOO_EARLY' and o.actions[0].startswith('WAIT until='), o)
+    time.sleep(4.5)
+    o = dot.call(probe + ['check', '--min-gap', '3'])
+    rp = w.base / 'outbox' / o.result.get('report', '-')
+    rep = read_json(rp)
+    t.check('r4 F8: the worker outlived the starting call: detached_survives_tool_call true (a gap under 60 s is INCONCLUSIVE, never PASS); '
+            'the report is uploaded to reports/', lambda: o.code == 0 and rep.get('detached_survives_tool_call') is True
+            and rep.get('verdict') == 'INCONCLUSIVE_SHORT_GAP' and rep.get('heartbeats', 0) >= 3
+            and o.uploads == [f'UPLOAD {rp} -> CPS/reports'] and o.actions[0].startswith('TELL_MAINTAINER probe=P5'), (o, rep))
+    try:
+        os.killpg(st0['pid'], signal.SIGKILL)
+    except (KeyError, ProcessLookupError, PermissionError):
+        pass
+    time.sleep(0.5)
+    o = dot.call(probe + ['start', '--seconds', '9', '--min-gap', '3'])
+    st1 = read_json(w.base / 'outbox' / 'probe_p5' / 'START.json')
+    time.sleep(0.3)
+    try:
+        os.killpg(st1['pid'], signal.SIGKILL)
+    except (KeyError, ProcessLookupError, PermissionError):
+        pass
+    time.sleep(4)
+    o = dot.call(probe + ['check', '--min-gap', '3'])
+    rep = read_json(w.base / 'outbox' / o.result.get('report', '-'))
+    t.check('r4 F8: a worker killed with its tool call: detached_survives_tool_call false, verdict FAIL',
+            lambda: o.code == 0 and rep.get('detached_survives_tool_call') is False and rep.get('verdict') == 'FAIL', (o, rep))
+    o = dot.call(probe + ['hold', '--seconds', '1'])
+    t.check('r4 F8: hold stays in the foreground, records completion and prints the next hold', lambda: o.code == 0
+            and o.result.get('completed') is True and o.actions[0].endswith('probe-p5 hold --seconds 60'), o)
+    old = (vm.now_dt() - vm.datetime.timedelta(hours=2))
+    (w.base / 'outbox' / 'probe_p5' / f'HOLD_00240_{vm.utc14(old)}_0000.json').write_text(json.dumps(
+        {'seconds': 240, 'started_utc': vm.iso(old), 'completed_utc': None, 'pid': 1}))
+    o = dot.call(probe + ['check', '--min-gap', '3'])
+    rep = read_json(w.base / 'outbox' / o.result.get('report', '-'))
+    t.check('r4 F8: the report gives the longest completed hold and the shortest killed one (the tool-call limit)',
+            lambda: rep.get('longest_completed_hold_seconds') == 1 and rep.get('shortest_killed_hold_seconds') == 240, rep)
+    readme = (HERE / 'README.md').read_text()
+    t.check('r4 F8: README documents the probe, END_TOOL_CALL and the release gates', lambda: 'probe-p5 start' in readme
+            and 'END_TOOL_CALL' in readme and 'RELEASE_GATE_OPEN' in readme)
+
+
+@scenario
+def r4_frozen_flags(t):
+    """r4 F4: apply_frozen_flags.py (G3 candidate) on invented ALL_FROZEN.json v2 files and gate manifests."""
+    tool = HERE / 'apply_frozen_flags.py'
+    d = t.work / 'r4_frozen_flags_x'
+    d.mkdir()
+    empty, x1, x2, x3, x4 = 'e' * 64, '1' * 64, '2' * 64, '3' * 64, '4' * 64
+
+    def run_(r):
+        return {'case_id': r[0], 'reader': r[1], 'tag': r[2], 'kind': r[3], 'job_dir': f'/invented/qual/{r[2]}/{r[0]}', 'flags': r[4]}
+    base_runs = [('c1', 'A', 'A', 'run', []), ('c2', 'A', 'A', 'run', ['RESET_DIVERGED']), ('c1', 'B', 'B', 'run', []),
+                 ('c2', 'B', 'B', 'run', ['VISUAL_QA_FAILED_BY_RESET', 'REVIEWER_REPLACED']), ('c3', 'A', 'NA-A', 'nonattempt', []),
+                 ('c3', 'B', 'B', 'run', ['AI_OUTPUT_LOST'])]
+    base_man = {'A': {'c1': x1, 'c2': empty, 'c3': empty}, 'B': {'c1': x2, 'c2': x3, 'c3': empty}}
+    n = [0]
+
+    def case(label, expect_exit, codes=(), runs=base_runs, man=base_man, af_fn=None, rulings=None, out_exists=False):
+        n[0] += 1
+        rs = [run_(r) for r in runs]
+        af = {'schema': 'cps.all-frozen.v2', 'runs': rs,
+              'runs_failed_by_reset': sorted(r['job_dir'] for r in rs if {'RESET_DIVERGED', 'AI_OUTPUT_LOST'} & set(r['flags'])),
+              'runs_visual_qa_failed_by_reset': sorted(r['job_dir'] for r in rs if 'VISUAL_QA_FAILED_BY_RESET' in r['flags'])}
+        if af_fn:
+            af_fn(af)
+        ap, mp, op = d / f'af{n[0]}.json', d / f'm{n[0]}.json', d / f'out{n[0]}.json'
+        ap.write_text(json.dumps(af))
+        mp.write_text(json.dumps({'pool': ['c1', 'c2', 'c3'], 'readers': {R: {c_: {'path': f'/invented/{R}/{c_}.json', 'sha256': x4,
+                                                                                'carrier_sha256': v} for c_, v in m_.items()}
+                                                                           for R, m_ in man.items()}}))
+        args = [sys.executable, '-I', '-B', str(tool), '--all-frozen', str(ap), '--manifest', str(mp), '--empty-carrier-sha', empty, '--out', str(op)]
+        if rulings is not None:
+            rp_ = d / f'r{n[0]}.json'
+            rp_.write_text(json.dumps({'schema': 'cps.frozen-flags-owner-rulings.v1', 'rulings': rulings}))
+            args += ['--owner-rulings', str(rp_)]
+        if out_exists:
+            op.write_text('{}')
+        p = subprocess.run(args, capture_output=True, text=True)
+        rep = read_json(op) if not out_exists else {}
+        got = {x['code'] for x in rep.get('problems', [])}
+        t.check(f'r4 F4: {label}: exit {expect_exit}' + (f', {sorted(codes)}' if codes else ''),
+                lambda: p.returncode == expect_exit and set(codes) <= got and (codes or expect_exit != 1 or got), (p.stdout, p.stderr[-300:], rep))
+        return rep
+    rep = case('flags applied (failed runs and the nonattempt on the empty carrier)', 0)
+    t.check('r4 F4: failed visual QA by reset is listed for the visual-QA obligation, not as a failed run',
+            lambda: rep['visual_qa_failed_by_reset'] == [{'case_id': 'c2', 'reader': 'B'}] and rep['scored']['B/c2']['failed_by_reset'] is False
+            and rep['status'] == 'CANDIDATE_NOT_ADMITTED', rep)
+    case('a RESET_DIVERGED run scored on its own carrier', 1, {'FLAG_NOT_APPLIED'}, man=dict(base_man, A=dict(base_man['A'], c2=x3)))
+    case('an AI_OUTPUT_LOST run scored on its own carrier', 1, {'FLAG_NOT_APPLIED'}, man=dict(base_man, B=dict(base_man['B'], c3=x3)))
+    case('a nonattempt with a carrier', 1, {'FLAG_NOT_APPLIED'}, man=dict(base_man, A=dict(base_man['A'], c3=x3)))
+    case('a normal run on the empty carrier', 1, {'EMPTY_CARRIER_FOR_SCORED_RUN'}, man=dict(base_man, A=dict(base_man['A'], c1=empty)))
+    case('a manifest case with no run in ALL_FROZEN.json', 1, {'RUN_MISSING'}, man=dict(base_man, A=dict(base_man['A'], c9=x1)))
+    case('runs_failed_by_reset that omits a flagged run', 1, {'ALL_FROZEN_FAILED_LIST_INCONSISTENT'},
+         af_fn=lambda af: af.update(runs_failed_by_reset=[]))
+    case('runs_visual_qa_failed_by_reset that omits a flagged run', 1, {'ALL_FROZEN_VISUAL_LIST_INCONSISTENT'},
+         af_fn=lambda af: af.update(runs_visual_qa_failed_by_reset=[]))
+    unv = [r if r[0] != 'c1' or r[1] != 'B' else ('c1', 'B', 'B', 'run', ['FROZEN_UNVERIFIED']) for r in base_runs]
+    case('FROZEN_UNVERIFIED without an owner ruling', 1, {'OWNER_RULING_REQUIRED'}, runs=unv)
+    case('FROZEN_UNVERIFIED ruled "score" by the owner', 0, runs=unv, rulings={'/invented/qual/B/c1': 'score'})
+    case('FROZEN_UNVERIFIED ruled "fail" but scored on its carrier', 1, {'FLAG_NOT_APPLIED'}, runs=unv, rulings={'/invented/qual/B/c1': 'fail'})
+    case('a v1 ALL_FROZEN.json', 1, {'ALL_FROZEN_SCHEMA'}, af_fn=lambda af: af.update(schema='cps.all-frozen.v1'))
+    case('OUT exists', 2, out_exists=True)
 
 
 def read_json(p):

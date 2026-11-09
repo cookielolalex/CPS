@@ -2,7 +2,7 @@
 
 For the Dot. The VM can be reset at any moment; only Google Drive persists. The helper `cps_vm.py` saves everything
 that matters as files you upload, and puts it back after a reset. It never touches Drive or the network: it prints
-what you do. Specification: G1 implementation specification revision 2; design `docs/handoff/RESET_PROOF_DESIGN_DRAFT.md`;
+what you do. Specification: G1 implementation specification revision 6 (its sections 16-19 override earlier text); design `docs/handoff/RESET_PROOF_DESIGN_DRAFT.md`;
 owner decisions O43-O52.
 
 `$V` below is `~/cps/vm.sh` (the helper prints its absolute path in every RUN line).
@@ -28,7 +28,9 @@ Each command prints, in order: `RESULT: {...}` (keep it in your notes), sometime
    "createdTime": "2026-11-09T12:00:05.123Z", "md5Checksum": "0123456789abcdef0123456789abcdef", "size": "1024",
    "mimeType": "application/json"}]}]}`;
 3. every `DOWNLOAD id=<Drive id> name=<file name> -> <local path>`: download **that id** to that exact path
-   (`id=CPS_FOLDER_PATH` means: the file at `<name>` in the static CPS folder);
+   (`id=CPS_FOLDER_PATH` means: the file at `<name>` in the static CPS folder). The local path may end in a name other
+   than `<name>` (a second copy of one file): save it under the printed path all the same. The helper creates the folder
+   of every printed listing and download path; if it is missing anyway, create it (`mkdir -p`) and save there;
 4. then `NEXT:` and each `THEN:` in order. **A `RUN` line replaces everything still pending:** once you have run it, the
    lines after it in the earlier output are void; follow only the new output (its UPLOADs, listings, downloads and its
    own NEXT and THEN lines). Then the command is finished.
@@ -38,7 +40,11 @@ Other endings:
   lines, follow that chain (each RUN line's output replaces the pending lines as usual) only through the freeze of this
   job, its upload, its verification and `evict`; never run a command of another job (a `prepare`, `nonattempt`,
   `job-start`, `final`, or a `start-note` of another job). Then stop and tell the owner the STOP code (handback case C
-  unless the hint says otherwise). `STOP_AFTER_FREEZE code=X` means the same.
+  unless the hint says otherwise). `STOP_AFTER_FREEZE code=X` means the same. Two STOPs are not handbacks:
+  `STOP: WORKER_DIED` of a self-test (its NEXT is `$V selftest`): run that line and go on (a new self-test, not a retry);
+  `STOP: FINGERPRINT_CHANGED` (the toolchain changed since session start, O47): do its UPLOAD lines, note the code for the
+  owner, then run its NEXT (session start again, section 1.4), which prints the self-test of the new fingerprint; every
+  job waits until that self-test has passed.
 - `REFUSED: <CODE>` (or exit 4 with a code in RESULT): nothing changed and nothing is to be uploaded. If it printed NEXT
   lines, do them. Otherwise read `hint` in RESULT, fix the cause, run the same command again. **If you cannot fix the
   cause, run `$V status` once; if status prints the same refused command again, stop and hand back case C** with the
@@ -64,15 +70,17 @@ Actions you will see:
 | `WAIT_FOR_CONVERSATION role=R` | wait until that conversation has ended (or broke); then go on at once |
 | `CONTINUE_CONVERSATION role=V` | ask the same reviewer, in the same conversation, to complete `qa/visual_review/VISUAL_REVIEW.json` |
 | `CONFIRM_CONVERSATION_ENDED role=R` | stop the conversation if it still runs; confirm in the platform that it has ended |
-| `EXPORT_TRANSCRIPT to=P` | export that conversation's transcript to P (if the platform cannot, skip; the next line handles it) |
+| `EXPORT_TRANSCRIPT to=P` | export that conversation's transcript to P (if the platform cannot, skip it: the options that follow have a line without a transcript, `WRITTEN_OR_DOUBT`) |
 | `WRITE_GENERATION_RECORD path=P example=E` | write the generation record at P, following E (deploy/run/RUN_JOB_COMMANDS.md) |
-| `CHOOSE_FROM_TRANSCRIPT` + `OPTION:` lines | read the transcript; do exactly one OPTION: `NO_CONVERSATION` (no conversation exists in your conversation list after the START upload), `NOTHING_WRITTEN` (the transcript shows nothing was written), `WRITTEN_OR_DOUBT` (written, partly written, maybe written, or no transcript) |
-| `CHOOSE_SEEN_TOKENS` + `OPTION:` lines | `SEEN` when you saw any `BIND=` token since the job's last package upload: put **all** of them, comma-separated, in `{SEEN}`; else `NOT_SEEN` |
+| `CHOOSE_FROM_TRANSCRIPT` + `OPTION:` lines | read the transcript; do exactly one OPTION: `NO_CONVERSATION` (no conversation exists in your conversation list after the START upload), `NOTHING_WRITTEN` (the transcript shows nothing was written), `WRITTEN_OR_DOUBT` (written, partly written, maybe written, or no transcript: the export failed or came out empty) |
+| `CHOOSE_SEEN_TOKENS since=P [dead=D1,D2]` + `OPTION:` lines | `SEEN` when you saw any `BIND=` token of this job printed after you uploaded package P (the token printed just before P's own upload may be included: it is recorded and ignored), or printed by the command that made a package named in `dead=` (it reached Drive damaged): put **all** of them, comma-separated, in `{SEEN}`; else `NOT_SEEN`. A token of another stage is refused `INCIDENT_SEEN_INVALID`: copy the tokens again |
 | `ASK_USER_IF_RECEIVED` / `ASK_USER_IF_SEND_NOW` + `OPTION:` | ask the user; do the matching OPTION |
 | `WAIT until=T` | run nothing until T (UTC), then the THEN lines |
 | `DELIVER folder=F sha256=S` | the deliverable is the `.xlsx` in F whose sha256 is S: make the personal copy (09_PERSONAL_COPY.md) |
 | `STOP_AFTER_FREEZE code=X` | after the freeze line before it (and its verification and evict) is done, stop and tell the owner X |
 | `SEND_PREPARED_COPY_AGAIN` (in an OPTION) | send the prepared copy again from the profile's `deliveries/`, then the RUN line of that option |
+| `END_TOOL_CALL` | (probe P5 only) end the tool call now and run nothing more in it; the next line runs in a new tool call |
+| `TELL_MAINTAINER kit=K sha256=S copy_from=F copy_to=cps_runtime/` | tell the maintainer that the kit K you rebuilt is in F, and that it should be copied (a Drive copy) into `cps_runtime/` with its row added to `FOLDER_MANIFEST.md`; then go on at once |
 | `SEND_COPY`, `TELL_MAINTAINER`, `TELL_OWNER`, `HANDBACK case=B/C`, `FIX code=X`, `WAIT_FOR_USER_REQUEST`, `DONE` | as named; `FIX` means what RUN_JOB_COMMANDS.md says that runner code needs |
 
 ## 1. Session start (after every reset, and at the start of every new chat)
@@ -93,7 +101,20 @@ Actions you will see:
    ```
    If the checkout fails after a partial clone, remove `~/cps/repo` (it holds no state) and repeat once.
 5. While it exits 10: do its UPLOAD lines (a folder sentinel, for example), then its SAVE_DRIVE_LISTING and DOWNLOAD
-   lines, and run the same `session_start.sh` command again.
+   lines, and run the same `session_start.sh` command again. The session kit comes one of two ways, chosen by
+   `FOLDER_MANIFEST.md`; you only follow the printed lines:
+   - **zip route** (a `cps_runtime/SESSION_KIT_<v>.zip` row): one `DOWNLOAD id=CPS_FOLDER_PATH` of the zip, about 20 s;
+   - **parts route** (no zip row, one line `kit-sha256: SESSION_KIT_<v>.zip <bytes> <sha256>`): the maintainer uploaded
+     the kit as text bundle parts (copies A and B, `cps_runtime/kit/<stem>/`) and copied its workbooks inside Drive
+     (`cps_runtime/kit/<stem>/bin/`). The first run exits 10 `NEED_KIT_PARTS` with one DOWNLOAD per part copy and
+     binary; the next run rebuilds the zip with `deploy/make_kit.py assemble` (a slip in one copy is skipped) and checks
+     its sha256 against that line (`STOP: KIT_NOT_REBUILT` otherwise; tell the maintainer). The first session that
+     rebuilt a kit also uploads it to `CPS/setup` and prints `TELL_MAINTAINER kit=...`; once the maintainer has copied it
+     into `cps_runtime/` and added its row, every later session takes the zip route.
+   Rebuilding costs about 2 Drive calls per bundle part plus 1 per workbook after **every** reset (estimate for the
+   qualification kit, about 4.7 MB with 36 workbooks: at 30 KB parts about 10 parts, so about 20 + 36 + 1 = 57 calls,
+   about 19 minutes at 20 s per call; with 300 KB parts about 40 calls, about 13 minutes; the rebuild itself takes under
+   2 s). The zip route costs one call, so ask the maintainer for the copy at once.
 6. Do its UPLOADs (the SESSION note last), then its NEXT:
    - `$V selftest` on a new fingerprint, then `$V wait` until it prints `fingerprint-pass` (about 13 minutes);
    - after a restore: the incident line or options (section 4), then the second listing and `$V recheck`;
@@ -102,7 +123,9 @@ Actions you will see:
 ## 2. One qualification run
 
 Uploads go to `CPS/qualification`, in the printed order. Always take the next command from the previous output or
-from `$V status`; never type runner arguments yourself.
+from `$V status`; never type runner arguments yourself. Every `wrap` and `start-note` recomputes the toolchain
+fingerprint (2-4 s) and STOPs `FINGERPRINT_CHANGED` (rule 0) when it differs from the session's; a change during a stage
+is recorded in its package and STOPs after the package's upload.
 
 1. `$V wrap prepare ...` (the line status printed; `$V wait` while it prints that). Upload CP-P.
 2. `$V start-note --job-dir D --role G`. It first asks for a narrow listing of CP-P (exit 10): save it, run it again.
@@ -115,7 +138,9 @@ from `$V status`; never type runner arguments yourself.
 4. `$V link-note --job-dir D --role G --conversation {CONVERSATION_ID}` (start-note's last line). Upload LINK-G; its
    output prints the wait and the `ai-archive` line.
 5. When the conversation has ended: at once `$V ai-archive --job-dir D --role G`. Upload AI-G.
-6. Write `run/GENERATION_RECORD.json`; export the transcript if possible; `$V status`.
+6. Export the transcript if the platform can (`EXPORT_TRANSCRIPT`), then write `run/GENERATION_RECORD.json`
+   (`WRITE_GENERATION_RECORD`): `transcript_status: exported` with the exported file's sha256, or `not_available` with
+   the reason. Then `$V status` (its `wrap finish` passes the transcript when the record says `exported`).
 7. `$V wrap finish ...` (printed by status; first the narrow listing of AI-G it asks for). Upload the PNG parts, then CP-F.
 8. `start-note --role V` (narrow listing of CP-F first), the new reviewer conversation, `link-note`, `ai-archive`.
    Upload START-V, LINK-V, AI-V.
@@ -161,21 +186,22 @@ Before qualification: `$V genesis --first-ledger` once (status prints it), uploa
 Session start restores the newest package and prints **one** incident line, or, for a conversation that was open,
 `CONFIRM_CONVERSATION_ENDED`, `EXPORT_TRANSCRIPT` and the options. First stop that conversation if it still runs.
 Classify **from the transcript**, never from the VM; doubt (or no transcript) counts as written. Give every `BIND=`
-token you saw since the job's last package upload (`SEEN`), or `NOT_SEEN`. Then save the second listing and run
-`$V recheck`.
+token of the job you saw after the upload of the package `CHOOSE_SEEN_TOKENS` names (`since=`), and every token of a
+command whose package it names in `dead=` (`SEEN`), or `NOT_SEEN`. Then save the second listing and run `$V recheck`.
 
 | Where the reset hit | Classification | Then |
 |---|---|---|
 | during or after a runner command whose package did not reach Drive | `NON_AI_STAGE_LOST` (seen or not) | the same `wrap` again, bound to the token; a mismatch is `STOP: RESET_DIVERGED`, then `wrap freeze` (a failed run) |
 | after START, no conversation in your list | `AI_NO_CONVERSATION` (once per START) | `start-note` (same attempt) |
 | conversation open or broken, transcript shows nothing written | `AI_NOTHING_WRITTEN` | `wrap interrupt ...` (qualification S/G), the replacement reviewer (V), or freeze |
-| written, partly written, maybe written, or no transcript | `AI_WRITTEN_LOST` | `wrap freeze` (failed run, never regenerated) |
+| written, partly written, maybe written, or no transcript | `AI_WRITTEN_LOST` | `wrap freeze`: for S or G a failed run, for V failed visual QA (O46); never regenerated |
 | after the AI archive upload | `AI_ARCHIVED` (seen or not) | the consuming wrap (finish after re-writing the generation record) |
 | after the FZ upload, nothing printed after it but `evict` or `final` | `NONE_IN_FLIGHT` | verification and `evict` |
 | after the FZ upload, while the next runner command was printed (a `prepare` or `nonattempt`) | `NON_AI_STAGE_LOST` (seen or not: `NOT_SEEN` if it never ran) | verification and `evict`, then that command again, bound to the token |
 | an AI archive that reached Drive damaged (every copy fails its check) | `AI_WRITTEN_LOST` only (printed alone) | `wrap freeze` (failed run) |
 | everyday: after job-start, before the prepare's package | `NON_AI_STAGE_LOST` | the run's `wrap prepare` (once) |
 | a START on Drive whose package is not | — | `STOP: RESTORE_NOTES_AHEAD_OF_PACKAGE` (case C) |
+| a `prepare`/`nonattempt` that left no job folder, with tokens that disagree | `NON_AI_STAGE_LOST` (`SEEN`) | `STOP: PENDING_JOB_DIVERGED` (case C; nothing to freeze) |
 
 `RESTORE_TARGET_NOT_EMPTY`: **do not delete anything**; upload the STRAY archive and hand back case C. It is also printed
 at session start when a job folder or ledger exists that this VM did not make or restore (for example a conversation
@@ -185,7 +211,11 @@ still writing after a reset).
 
 After `ALL_FROZEN.json` is on Drive, download the qualification folder flat into `DIR` and the setup folder into `SDIR`,
 with their saved listings (the same wrapper), in a container where the original absolute paths can be created
-(`/home/agent/...`), from a clean checkout at the release commit:
+(`/home/agent/...`), from a clean checkout at the release commit. Drive may hold several copies of one name (a retried
+upload): for every FZ archive and PNG part that `ALL_FROZEN.json` names, download **the Drive id it records**
+(`runs[].archive.id`, `runs[].png_parts[].id`), never "the newest copy"; for any other name with several copies, keep the
+one whose md5 the listing shows for the copy you use. `assemble` refuses a wrong copy (`ASSEMBLE_ARCHIVE`,
+`ASSEMBLE_PARTS`), it never accepts one:
 
 ```sh
 python3 -I -B deploy/vm/cps_vm.py assemble --drive-dir DIR --verify-frozen --report DIR/ASSEMBLE_REPORT.json
@@ -200,6 +230,41 @@ START; fill `owner_platform_created` from the platform's conversation list befor
 FINGERPRINT_PASS and SELFTEST note in SDIR (a pass that does not validate counts as none) and takes the clock tolerance
 and the expected test count from `--config` (the kit's `VM_HELPER_CONFIG.json`; default: next to `--release`).
 Exit 0 means no anomaly.
-Runs flagged `RESET_DIVERGED`, `AI_OUTPUT_LOST` or `REVIEWER_LOST` in `ALL_FROZEN.json` count as failed runs.
+Runs flagged `RESET_DIVERGED` or `AI_OUTPUT_LOST` in `ALL_FROZEN.json` (listed in `runs_failed_by_reset`) count as failed
+runs (O44, O46). A run flagged `VISUAL_QA_FAILED_BY_RESET` (its reviewer output was lost, or the replacement reviewer
+also wrote nothing; listed in `runs_visual_qa_failed_by_reset`) has failed visual QA; its frozen output is scored as it is
+(O46, design E4). `FROZEN_UNVERIFIED` runs (`runs_needing_owner`) are not scored until the owner rules on them.
 
-Tests: `python3 -I -B deploy/vm/test_cps_vm.py --work /abs/NEW_DIR` from a clean clone (see the test file's docstring).
+Before the frozen O31 aggregator runs, check its manifest against these flags:
+```sh
+python3 -I -B deploy/vm/apply_frozen_flags.py --all-frozen DIR/ALL_FROZEN.json --manifest GATE_MANIFEST.json \
+    --empty-carrier-sha <sha256 of the empty carrier> [--owner-rulings RULINGS.json] --out DIR/FLAGS_CHECK.json
+```
+Exit 0 only when every failed run and nonattempt is scored as the empty carrier (score 0, in the reader's denominators),
+no other run is, and every `FROZEN_UNVERIFIED` run has an owner ruling. **This check is a G3 candidate, not admitted:
+until it (or an admitted aggregator change that does the same) is reviewed and admitted, qualification scoring is
+blocked**, because the frozen aggregators do not read `ALL_FROZEN.json`.
+
+## 6. Release gates and probe P5 (before the first released kit)
+
+A released kit (`RELEASED_FOR_QUALIFICATION` or `RELEASED_FOR_USE`) runs nothing until its `VM_HELPER_CONFIG.json`
+`release_gates` are answered; session start STOPs `RELEASE_GATE_OPEN` (case C) otherwise:
+- `p5_detached_survival` `PASS` with `p5_tool_call_seconds` (the longest tool call that completed) at least
+  `wrap_foreground_seconds` + 60. `FAIL` means every job waits (O50-like) until the design is changed;
+- `transcript_policy`: `EXPORT_CONFIRMED` (probe P1 showed a transcript can be exported; needs `transcript_export: true`)
+  or `OWNER_DECISION` with its decision id (`transcript_owner_decision`, for example whether an owner check of the
+  conversation may replace the transcript; without one, every interrupted conversation counts as written).
+
+Probe P5 (the maintainer asks for it with P1-P4; no kit or session is needed, only the repository at `~/cps/repo`):
+1. `python3 -I -B ~/cps/repo/deploy/vm/cps_vm.py probe-p5 start`. It starts a detached worker and prints
+   `END_TOOL_CALL`, a `WAIT` and the check line: end the tool call, wait, then run the check in a **new** tool call.
+2. `python3 -I -B ~/cps/repo/deploy/vm/cps_vm.py probe-p5 hold --seconds 60`, then each printed `hold` line (240, 600,
+   1200 s), each in its own tool call. When a call is killed or never returns, stop holding.
+3. `python3 -I -B ~/cps/repo/deploy/vm/cps_vm.py probe-p5 check` (at least 60 s after start): upload the printed
+   `PROBE_P5_*.json` to `CPS/reports` and tell the maintainer (`TELL_MAINTAINER probe=P5`). Its `verdict` is `PASS` only
+   when the worker outlived the tool call that started it; `longest_completed_hold_seconds` is the tool-call limit.
+
+Tests: `python3 -I -B deploy/vm/test_cps_vm.py --work /abs/NEW_DIR --jobs 4` from a clean clone (see the test file's
+docstring). `--jobs N` runs the scenarios in N parallel processes (each in its own folder) and merges the results.
+Measured 2026-11-09 on a 4-CPU machine (round 4): 1,678 tests, 749 s with `--jobs 4`; the scenario times sum to
+2,768 s, so the serial run (`--jobs 1`) is over the 30-minute limit of spec 11.5: use `--jobs 4` or more.

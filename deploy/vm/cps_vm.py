@@ -21,11 +21,13 @@ Standard library only.
 """
 import argparse
 import datetime
+import errno
 import fcntl
 import gzip
 import hashlib
 import importlib.util
 import io
+import itertools
 import json
 import os
 import re
@@ -65,7 +67,11 @@ CONFIG_KEYS = {'schema': str, 'drive': dict, 'png_part_bytes': int, 'upload_veri
                'selftest_expected_tests': int, 'audit_clock_tolerance_seconds': int, 'listing_page_marker': str,
                'sentinels': dict, 'expected_genesis': (str, type(None)), 'confirm_package_before_start': bool,
                'confirm_ai_before_consume': bool, 'transcript_export': bool, 'max_upload_bytes': int,
-               'max_review_revisions': int, 'clock_wait_max_seconds': int, 'wrap_foreground_seconds': int}
+               'max_review_revisions': int, 'clock_wait_max_seconds': int, 'wrap_foreground_seconds': int,
+               'release_gates': dict}
+# r4 F8: the answers a released kit must carry before any job runs (probe P5 and the transcript question, spec 13)
+GATE_KEYS = ('p5_detached_survival', 'p5_tool_call_seconds', 'transcript_policy', 'transcript_owner_decision')
+GATE_FOREGROUND_MARGIN = 60
 NOTE_MAX = 1 << 20
 CHUNK = 1 << 20
 
@@ -336,6 +342,19 @@ def helper_info():
 
 
 # ------------------------------------------------------------------ output protocol (spec 1.2, 1.3)
+def inbox_has_files(d):
+    d = Path(d)
+    return d.is_dir() and any(p.is_symlink() or not p.is_dir() for p in d.rglob('*'))
+
+
+def make_parent(to):
+    """r3 tests-R3-03: the folder of every printed listing or download target exists before the line is printed."""
+    try:
+        Path(str(to)).parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+
 class Block:
     def __init__(self):
         self.pre, self.result, self.bind, self.uploads, self.fetch, self.state, self.tail = [], {}, None, [], [], None, []
@@ -351,11 +370,13 @@ class Block:
         line = f'SAVE_DRIVE_LISTING folder={folder} to={to}' + (f' name={name}' if name else '')
         if line not in self.fetch:
             self.fetch.append(line)
+        make_parent(to)
 
     def download(self, did, name, to):
         line = f'DOWNLOAD id={did} name={name} -> {to}'
         if line not in self.fetch:
             self.fetch.append(line)
+        make_parent(to)
 
     def next(self, action):
         self.tail.append('NEXT: ' + action)
@@ -583,7 +604,34 @@ def load_config(lay):
         s = c['sentinels'].get(k)
         if not isinstance(s, dict) or set(s) != {'name', 'md5', 'upload_by_dot'} or not RX['sentinel'].match(str(s.get('name'))):
             stop('CONFIG_INVALID', 'sentinels.' + k)
+    g = c['release_gates']
+    secs = g.get('p5_tool_call_seconds')
+    dec = g.get('transcript_owner_decision')
+    if set(g) != set(GATE_KEYS) or g['p5_detached_survival'] not in ('PASS', 'FAIL', 'OPEN') or \
+            g['transcript_policy'] not in ('EXPORT_CONFIRMED', 'OWNER_DECISION', 'OPEN') or \
+            not (secs is None or (isinstance(secs, int) and not isinstance(secs, bool) and secs > 0)) or \
+            not (dec is None or (isinstance(dec, str) and re.fullmatch(r'O\d{2,3}', dec))):
+        stop('CONFIG_INVALID', 'release_gates')
+    if g['p5_detached_survival'] == 'PASS' and (secs is None or c['wrap_foreground_seconds'] + GATE_FOREGROUND_MARGIN > secs):
+        stop('CONFIG_INVALID', 'release_gates: a P5 PASS needs p5_tool_call_seconds at least wrap_foreground_seconds + '
+             f'{GATE_FOREGROUND_MARGIN}')
+    pol = g['transcript_policy']
+    if (pol == 'EXPORT_CONFIRMED' and (c['transcript_export'] is not True or dec is not None)) or \
+            (pol == 'OWNER_DECISION' and dec is None) or (pol == 'OPEN' and dec is not None):
+        stop('CONFIG_INVALID', 'release_gates: EXPORT_CONFIRMED needs transcript_export true and no decision id; '
+             'OWNER_DECISION needs transcript_owner_decision')
     return c
+
+
+def open_gates(cfg):
+    """r4 F8: the release gates that are not answered (spec 13: probe P5 and the transcript question)."""
+    g = cfg['release_gates']
+    out = []
+    if g['p5_detached_survival'] != 'PASS':
+        out.append('P5_' + g['p5_detached_survival'])
+    if g['transcript_policy'] == 'OPEN':
+        out.append('TRANSCRIPT_OPEN')
+    return out
 
 
 # ------------------------------------------------------------------ INDEX.jsonl and SESSION_STATE.json (spec 2.6)
@@ -713,6 +761,26 @@ class HelperLock:
             os.close(self.fd)
             self.fd = None
 
+    def hand_off(self):
+        """r3 failure-R3-03: close this descriptor without unlocking: a child that inherited it keeps the lock."""
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+
+    @classmethod
+    def adopt(cls, lay, fd):
+        """The lock a detached worker inherited; None when the descriptor is not the helper lock or the lock is not ours."""
+        try:
+            st, want = os.fstat(fd), os.stat(lay.outbox / '.lock')
+            if (st.st_dev, st.st_ino) != (want.st_dev, want.st_ino):
+                return None
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)     # our own open file description: succeeds at once
+        except OSError:
+            return None
+        lk = cls(lay)
+        lk.fd = fd
+        return lk
+
     def __exit__(self, *exc):
         self.release()
         return False
@@ -746,8 +814,38 @@ class JobLock:
 
 
 # ------------------------------------------------------------------ trees and archives (spec 3.3-3.6)
-def tree_list(root, unsupported_code='PACKAGE_UNSUPPORTED_ENTRY'):
-    """Sorted [rel, 'dir'|'file', mode, bytes|None, sha256|None] of every entry below root, never following a link."""
+def escaped_rel(rel):
+    """r3 failure-R3-01: an ASCII-safe spelling of a path (non-UTF-8 bytes and backslashes escaped), for records only."""
+    raw = os.fsencode(rel)
+    return raw.decode('utf-8', 'backslashreplace').replace('\\', '\\\\') if b'\\' in raw else raw.decode('utf-8', 'backslashreplace')
+
+
+def unsupported_entry(p, rel, st, why):
+    """[escaped rel, 'unsupported', mode, None, descriptor]: a link, special file, special mode or unsafe name, kept as data."""
+    m = st.st_mode
+    typ = ('symlink' if stat.S_ISLNK(m) else 'dir' if stat.S_ISDIR(m) else 'file' if stat.S_ISREG(m) else 'fifo' if stat.S_ISFIFO(m)
+           else 'socket' if stat.S_ISSOCK(m) else 'char_device' if stat.S_ISCHR(m) else 'block_device' if stat.S_ISBLK(m) else 'other')
+    d = {'type': typ, 'why': why}
+    if typ == 'symlink':
+        try:
+            d['target'] = escaped_rel(os.readlink(p))[:1000]
+        except OSError:
+            d['target'] = None
+    if typ == 'file':
+        d['bytes'] = st.st_size
+        try:
+            d['sha256'] = sha_file(p)
+        except OSError:
+            d['sha256'] = None
+    return [escaped_rel(rel)[:1000], 'unsupported', stat.S_IMODE(m), None, d]
+
+
+def tree_list(root, unsupported_code='PACKAGE_UNSUPPORTED_ENTRY', lenient=False):
+    """Sorted [rel, 'dir'|'file', mode, bytes|None, sha256|None] of every entry below root, never following a link.
+
+    r3 failure-R3-01: with lenient=True an entry the archive format does not keep (a link, device, socket, FIFO, a
+    setuid/setgid/sticky bit, a name with a backslash, NUL or non-UTF-8 bytes, and everything below such a directory)
+    is listed as [escaped rel, 'unsupported', mode, None, descriptor] instead of stopping: it is recorded, never packed."""
     out = []
     root = str(root)
     for dp, dns, fns in os.walk(root, followlinks=False):
@@ -760,20 +858,45 @@ def tree_list(root, unsupported_code='PACKAGE_UNSUPPORTED_ENTRY'):
                 bad = unsafe_name(rel)
             except UnicodeEncodeError:
                 bad = 'utf-8'
+            st = os.lstat(p)
             if bad:
+                if lenient:
+                    out.append(unsupported_entry(p, rel, st, 'name'))
+                    continue
                 stop(unsupported_code, 'a file name the archive format does not keep (backslash, NUL or not UTF-8)',
                      detail={'path': rel.encode('utf-8', 'replace').decode('ascii', 'replace')[:200], 'why': bad})
-            st = os.lstat(p)
             m = stat.S_IMODE(st.st_mode)
             if m & 0o7000:
+                if lenient:
+                    out.append(unsupported_entry(p, rel, st, 'mode'))
+                    if stat.S_ISDIR(st.st_mode) and n in dns:
+                        dns.remove(n)
+                        out += [unsupported_entry(q_, os.path.relpath(q_, root).replace(os.sep, '/'), os.lstat(q_), 'below')
+                                for q_ in walk_all(p)]
+                    continue
                 stop(unsupported_code, 'a setuid, setgid or sticky bit in the job folder', detail={'path': rel[:200]})
             if stat.S_ISDIR(st.st_mode):
                 out.append([rel, 'dir', m, None, None])
             elif stat.S_ISREG(st.st_mode):
                 out.append([rel, 'file', m, st.st_size, sha_file(p)])
+            elif lenient:
+                out.append(unsupported_entry(p, rel, st, 'type'))
             else:
                 stop(unsupported_code, 'a symbolic link, device, socket or FIFO in the folder', detail={'path': rel[:200]})
     return sorted(out, key=lambda e: e[0])
+
+
+def walk_all(p):
+    """Every path below directory p, never following a link."""
+    res = []
+    for dp, dns, fns in os.walk(p, followlinks=False):
+        res += [os.path.join(dp, n) for n in dns + fns]
+    return res
+
+
+def split_unsupported(tree):
+    """(packable entries, unsupported entries) of a lenient tree_list."""
+    return [e for e in tree if e[1] != 'unsupported'], [e for e in tree if e[1] == 'unsupported']
 
 
 def tree_sha(entries):
@@ -807,9 +930,13 @@ def write_tar_stream(fobj, members):
             elif isinstance(src, (bytes, bytearray)):
                 tf.addfile(_tarinfo(name, mode, mtime, size=len(src)), io.BytesIO(src))
             else:
-                size = os.lstat(src).st_size
-                with open(src, 'rb') as f:
-                    tf.addfile(_tarinfo(name, mode, mtime, size=size), f)
+                # r3 failure-R3-05: never follow a link; the size is the opened file's own (a member is never cut short)
+                fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(fd, 'rb') as f:
+                    st = os.fstat(f.fileno())
+                    if not stat.S_ISREG(st.st_mode):
+                        raise OSError(f'not a regular file: {src}')
+                    tf.addfile(_tarinfo(name, mode, mtime, size=st.st_size), f)
 
 
 def unsafe_name(n):
@@ -1020,6 +1147,117 @@ def png_tar_members(job_dir, rels):
         p = Path(job_dir) / rel
         out.append(('job/' + rel, 'file', stat.S_IMODE(os.lstat(p).st_mode), 0, str(p)))
     return out
+
+
+class PartWriter:
+    """r3 failure-R3-06: a file-like sink that cuts a tar stream into part files as it is written (no whole PNG tar on
+    disk) and hashes the whole stream. Parts are written under temporary names; finish() returns [(tmp path, bytes,
+    sha256, md5)] in order and the whole stream's sha256."""
+    def __init__(self, outdir, part_bytes, prefix):
+        self.outdir, self.pb, self.prefix = Path(outdir), part_bytes, prefix
+        self.whole = hashlib.sha256()
+        self.parts, self.cur, self.cur_n = [], None, 0
+
+    def _open(self):
+        p = self.outdir / f'{self.prefix}{len(self.parts) + 1:03d}.tmp'
+        if os.path.lexists(p):
+            os.unlink(p)
+        self.cur = open(p, 'xb')
+        self.cur_path, self.cur_n = p, 0
+        self.cur_sha, self.cur_md5 = hashlib.sha256(), hashlib.md5(usedforsecurity=False)
+
+    def _close(self):
+        if self.cur is not None:
+            self.cur.flush()
+            os.fsync(self.cur.fileno())
+            self.cur.close()
+            self.parts.append((self.cur_path, self.cur_n, self.cur_sha.hexdigest(), self.cur_md5.hexdigest()))
+            self.cur = None
+
+    def write(self, b):
+        b = memoryview(b)
+        self.whole.update(b)
+        while len(b):
+            if self.cur is None:
+                self._open()
+            k = min(len(b), self.pb - self.cur_n)
+            self.cur.write(b[:k])
+            self.cur_sha.update(b[:k])
+            self.cur_md5.update(b[:k])
+            self.cur_n += k
+            b = b[k:]
+            if self.cur_n >= self.pb:
+                self._close()
+        return None
+
+    def flush(self):
+        pass
+
+    def tell(self):
+        return sum(x[1] for x in self.parts) + (self.cur_n if self.cur is not None else 0)
+
+    def finish(self):
+        self._close()
+        return self.parts, self.whole.hexdigest()
+
+    def discard(self):
+        if self.cur is not None:
+            self.cur.close()
+            self.cur = None
+        for p_, *_ in self.parts:
+            if os.path.lexists(p_):
+                os.unlink(p_)
+        if getattr(self, 'cur_path', None) is not None and os.path.lexists(self.cur_path):
+            os.unlink(self.cur_path)
+
+
+def tree_bytes(root):
+    """The bytes of every regular file below root (never following a link)."""
+    n = 0
+    for dp, dns, fns in os.walk(str(root), followlinks=False):
+        for f in fns:
+            try:
+                st = os.lstat(os.path.join(dp, f))
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                n += st.st_size
+    return n
+
+
+SPACE_MARGIN = 64 * 1024 * 1024
+
+
+def disk_full_halt(lay, need=None, what=None):
+    """r3 failure-R3-06: STOP DISK_FULL (case C) naming the free space and the largest files under BASE to free."""
+    free = None
+    try:
+        free = shutil.disk_usage(str(lay.outbox if lay.outbox.exists() else lay.base)).free
+    except OSError:
+        pass
+    big = []
+    for root in (lay.outbox, lay.inbox):
+        if root.is_dir():
+            for f in root.iterdir():
+                try:
+                    if f.is_file() and not f.is_symlink():
+                        big.append((os.lstat(f).st_size, str(f)))
+                except OSError:
+                    continue
+    big.sort(reverse=True)
+    return Halt('STOP', 'DISK_FULL', 'the VM file system is full: nothing was uploaded for this step; hand back case C with the '
+                'RESULT (the owner decides what to free)', detail={'free_bytes': free, 'need_bytes': need, 'step': what,
+                                                                  'largest_files': [p_ for _, p_ in big[:8]]})
+
+
+def require_space(lay, need, what):
+    """r3 failure-R3-06: refuse to start a step that cannot finish on the free space left (STOP DISK_FULL)."""
+    try:
+        free = shutil.disk_usage(str(lay.outbox if lay.outbox.exists() else lay.base)).free
+    except OSError:
+        return
+    if free < need + SPACE_MARGIN:
+        raise disk_full_halt(lay, need, what)
 
 
 # ------------------------------------------------------------------ Drive listings (spec 3.2)
@@ -1788,8 +2026,9 @@ def consuming_line(ctx, jv, role, start):
 
 def gen_record_lines(ctx, plan, jv, attempt):
     D = jv.dir
-    plan.act(f'WRITE_GENERATION_RECORD path={D}/run/GENERATION_RECORD.json example={ctx.lay.repo}/deploy/run/GENERATION_RECORD.example.json')
+    # r3 tests-R3-01: the transcript first, since an `exported` record names the exported file's sha256
     plan.act(f'EXPORT_TRANSCRIPT to={transcript_path(ctx, jv.case, jv.tag, "G", attempt)}')
+    plan.act(f'WRITE_GENERATION_RECORD path={D}/run/GENERATION_RECORD.json example={ctx.lay.repo}/deploy/run/GENERATION_RECORD.example.json')
     plan.run(f'{ctx.V} status')
 
 
@@ -1868,7 +2107,7 @@ def role_plan(ctx, plan, jv, role):
     a = archs[-1]
     meta = a.get('meta') or {}
     out = jv.output_dir(role)
-    cur = tree_sha(tree_list(out)) if out.is_dir() else None
+    cur = tree_sha(tree_list(out, lenient=True)) if out.is_dir() else None
     if cur != a.get('tree_sha256'):
         plan.run(f'{V} ai-archive --job-dir {D} --role {role}')
         return
@@ -2227,6 +2466,12 @@ def plan_status(ctx, ignore_pending=False, in_worker=False, past_fz_pending=Fals
         qual_plan(ctx, plan)
     else:
         everyday_plan(ctx, plan)
+    w = plan.wrap
+    if w and w.get('pending') and run_failed_by_reset(ctx, w['tag'], w['case']):
+        # r3 R3-04: the runner command status would print belongs to a run that failed by divergence before it made its
+        # job folder: wrap refuses it (WRAP_RUN_FAILED_RESET_DIVERGED), so status stops instead of printing a dead end
+        stop('PENDING_JOB_DIVERGED', 'this run failed by reset divergence before its job folder existed; nothing can run or be '
+             'frozen: hand back case C', detail={'tag': w['tag'], 'case_id': w['case'], 'subcommand': w['sub']})
     return plan
 
 
@@ -2261,6 +2506,25 @@ def parse_token(tok):
         return None
     return {'none': False, 'sub': parts[1], 'tag': parts[2], 'case': parts[3], 'step': parts[4], 'result': parts[5],
             'codes8': parts[6], 'xlsx8': parts[7], 'D': parts[8] == 'D', 'fields': parts[1:8]}
+
+
+def frozen_on_drive(ctx, tag, case):
+    """r3 R3-02: the newest live package of that job is its FZ: nothing of that job can be lost."""
+    if not tag or not case:
+        return False
+    pk = newest_package(ctx, tag, case)
+    return bool(pk) and parse_name(pk['name'])['pkind'] == 'FZ'
+
+
+def restored_stage_token(jv, tok, p):
+    """r3 R3-02: tok is the own token of a completed entry of the (restored) record: a stage that is not lost."""
+    for e in jv.completed():
+        if e['stage'] != stage_name(p['sub']):
+            continue
+        for x8 in {saved_xlsx8(jv.dir), '0'}:
+            if token_text(p['sub'], jv.tag, jv.case, e, x8, p['D']) == tok:
+                return True
+    return False
 
 
 def stage_name(sub):
@@ -2338,7 +2602,7 @@ def incident_plan(ctx):
     if s['kind'] in ('archived', 'runner'):
         cls = 'AI_ARCHIVED' if s['kind'] == 'archived' else 'NON_AI_STAGE_LOST'
         role = f' --role {s["role"]}' if s['kind'] == 'archived' else ''
-        plan.act('CHOOSE_SEEN_TOKENS')
+        plan.act(seen_tokens_action(ctx, s))
         plan.block.option('SEEN', f"RUN {V} incident --classification {cls}{jd}{role} --seen '{{SEEN}}'")
         plan.block.option('NOT_SEEN', f'RUN {V} incident --classification {cls}{jd}{role} --not-seen')
         return plan
@@ -2346,12 +2610,30 @@ def incident_plan(ctx):
     return plan
 
 
+def seen_tokens_action(ctx, s):
+    """r3 R3-02: CHOOSE_SEEN_TOKENS names the package the restore placed (since=) and any package of the job the restore
+    found dead (dead=): the Dot gives every BIND= token printed after the since= package's upload, and every token printed
+    by the command that made a dead package (its upload reached Drive damaged, so its stage counts as lost)."""
+    jv = s.get('jv')
+    w = s.get('wrap') or {}
+    tag, case = (jv.tag, jv.case) if jv is not None else (w.get('tag'), w.get('case'))
+    since = newest_package(ctx, tag, case) if tag else None
+    if since is None and tag:
+        since = newest_package(ctx, chain=chain_of(tag))
+    deadp = []
+    for r in (ctx.state or {}).get('rejected_copies') or []:
+        pn = parse_name((r or {}).get('name')) if isinstance(r, dict) else None
+        if pn and pn['kind'] == 'package' and (pn['tag'], pn['case']) == (tag, case) and pn['name'] not in deadp and dead(ctx, pn['name']):
+            deadp.append(pn['name'])
+    return 'CHOOSE_SEEN_TOKENS' + (f' since={since["name"]}' if since else '') + (f' dead={",".join(deadp)}' if deadp else '')
+
+
 def no_conversation_allowed(ctx, jv, role, T):
     """None when AI_NO_CONVERSATION may be recorded for START T (5.11), else the refusal code."""
     if link_of(ctx, T['name']) is not None:
         return 'INCIDENT_LINK_EXISTS'
     out = jv.output_dir(role)
-    if out.is_dir() and any(e[1] == 'file' for e in tree_list(out)):
+    if out.is_dir() and any(e[1] in ('file', 'unsupported') for e in tree_list(out, lenient=True)):
         return 'INCIDENT_OUTPUT_NOT_EMPTY'
     if ai_all(ctx, jv.tag, role, T['attempt'], jv.case):          # T-01: an archive listed intact or damaged
         return 'INCIDENT_ARCHIVE_EXISTS'
@@ -2475,38 +2757,130 @@ def unpack_kit(lay, members, run_in_flight):
     return 'unpacked'
 
 
+KIT_NAME = r'SESSION_KIT_[A-Za-z0-9._-]+\.zip'
+# r4 F1: the parts route (deploy/make_kit.py). FOLDER_MANIFEST.md names the kit the Dot rebuilds in one line outside the
+# table (verify_drive_files.py reads table rows only, so a kit that is not stored in Drive is never reported MISSING):
+#   kit-sha256: SESSION_KIT_<v>.zip <bytes> <sha256>
+# and lists, as table rows, the maintainer's bundle parts and the binaries he copied inside Drive:
+#   cps_runtime/kit/<stem>/<stem>_part<i>of<n>_<A|B>.txt      (text, uploaded by the maintainer, both copies)
+#   cps_runtime/kit/<stem>/bin/<file name>                    (binary members, Drive copies)
+KIT_SHA_LINE = re.compile(r'^kit-sha256:[ \t]+(' + KIT_NAME + r')[ \t]+(\d+)[ \t]+([0-9a-f]{64})[ \t]*$', re.M)
+
+
+def kit_rows(text):
+    """(zip rows, kit-sha256 lines, all table rows) of FOLDER_MANIFEST.md."""
+    rows = [(p, int(n), h) for p, n, h in MANIFEST_ROW.findall(text)]
+    zips = [r for r in rows if re.fullmatch('cps_runtime/' + KIT_NAME, r[0])]
+    lines = [(m.group(1), int(m.group(2)), m.group(3)) for m in KIT_SHA_LINE.finditer(text)]
+    return zips, lines, rows
+
+
+def kit_parts_plan(rows, kname):
+    """r4 F1: the manifest rows of the parts route for kit kname: (parts [(path, i, n, copy)], binaries [path], bin dir)."""
+    stem = kname[:-4]
+    pre = f'cps_runtime/kit/{stem}/'
+    prx = re.compile(re.escape(pre + stem) + r'_part(\d+)of(\d+)_([AB])\.txt')
+    parts, bins = [], []
+    for path, _, _ in rows:
+        m = prx.fullmatch(path)
+        if m:
+            parts.append((path, int(m.group(1)), int(m.group(2)), m.group(3)))
+        elif re.fullmatch(re.escape(pre) + r'bin/[A-Za-z0-9._-]+', path):
+            bins.append(path)
+    ns = {n for _, _, n, _ in parts}
+    if len(ns) != 1 or {(i, c) for _, i, _, c in parts} != {(i, c) for i in range(1, next(iter(ns)) + 1) for c in 'AB'}:
+        stop('KIT_PARTS_NOT_IN_MANIFEST', 'FOLDER_MANIFEST.md must list both copies (A and B) of every bundle part of the kit '
+             'under cps_runtime/kit/<stem>/: tell the maintainer', detail={'kit': kname, 'parts_listed': len(parts)})
+    return sorted(parts, key=lambda x: (x[1], x[3])), sorted(bins), pre + 'bin'
+
+
+def rebuild_kit(lay, inbox, block, kname, size, sha, rows):
+    """r4 F1: the parts route. Every part copy and binary is downloaded by its path (id=CPS_FOLDER_PATH); then
+    deploy/make_kit.py assemble rebuilds the zip and writes it only when its sha256 is the manifest's."""
+    parts, bins, bdir = kit_parts_plan(rows, kname)
+    out = inbox / 'cps' / 'rebuilt' / kname
+    if out.is_file() and os.lstat(out).st_size == size and sha_file(out) == sha:
+        return out
+    missing = [p for p in [x[0] for x in parts] + bins if not (inbox / 'cps' / p).is_file()]
+    for p in missing:
+        block.download('CPS_FOLDER_PATH', p, inbox / 'cps' / p)
+    if missing:
+        (inbox / 'cps' / bdir).mkdir(parents=True, exist_ok=True)     # a kit without binary members has an empty folder
+        block.result = dict(block.result, kit={'name': kname, 'route': 'parts', 'downloads': len(missing)})
+        need(block, 'NEED_KIT_PARTS')
+    (inbox / 'cps' / bdir).mkdir(parents=True, exist_ok=True)
+    if os.path.lexists(out):
+        os.unlink(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    mk = HELPER_REPO / 'deploy' / 'make_kit.py'
+    p = subprocess.run([sys.executable, '-I', '-B', str(mk), 'assemble', str(out), '--binaries', str(inbox / 'cps' / bdir),
+                        '--expect', sha, *[str(inbox / 'cps' / x[0]) for x in parts]], capture_output=True, text=True, timeout=3600)
+    if p.returncode != 0 or not out.is_file() or sha_file(out) != sha or os.lstat(out).st_size != size:
+        failed = [ln.strip()[len('FAILED '):][:160] for ln in (p.stdout + p.stderr).splitlines() if ln.strip().startswith('FAILED')]
+        if os.path.lexists(out):
+            os.unlink(out)
+        stop('KIT_NOT_REBUILT', 'make_kit.py assemble could not rebuild the kit from the parts in FOLDER_MANIFEST.md: tell the '
+             'maintainer (a part damaged in both copies, or a binary that differs)', detail={'kit': kname, 'exit': p.returncode,
+                                                                                            'failed': failed[:10]})
+    return out
+
+
 def session_kit(lay, inbox, block, state):
+    """Spec 2.3, r4 F1. Two routes, chosen by FOLDER_MANIFEST.md:
+      zip route: a table row cps_runtime/SESSION_KIT_<v>.zip (the maintainer placed the zip by a Drive copy); one download,
+                 checked with verify_drive_files.py;
+      parts route: no zip row and one kit-sha256 line; the kit is rebuilt with deploy/make_kit.py assemble from the parts
+                 and binaries the manifest lists (about 2 Drive calls per part plus one per binary after every reset).
+    After a parts rebuild the session uploads the zip to the setup folder once (when no listed copy has its md5) and asks
+    the maintainer to copy it into cps_runtime/ and add its row: later sessions then take the zip route."""
     man = inbox / 'cps' / 'FOLDER_MANIFEST.md'
     if not man.is_file():
         refuse('NEED_FOLDER_MANIFEST', 'download FOLDER_MANIFEST.md to BASE/inbox/cps/FOLDER_MANIFEST.md by hand')
-    rows = [(p, int(n), h) for p, n, h in MANIFEST_ROW.findall(man.read_text(encoding='utf-8', errors='replace'))]
-    kits = [r for r in rows if re.fullmatch(r'cps_runtime/SESSION_KIT_[A-Za-z0-9._-]+\.zip', r[0])]
-    if len(kits) != 1:
-        stop('KIT_NOT_IN_MANIFEST', 'FOLDER_MANIFEST.md must list exactly one cps_runtime/SESSION_KIT_<v>.zip')
-    path, size, sha = kits[0]
-    info = {'name': path.split('/')[-1], 'sha256': sha, 'repaired': False}
-    if (state or {}).get('kit_sha256') == sha and lay.release_path.is_file():
-        return info, 'same'
-    zp = inbox / 'cps' / path
-    if not zp.is_file():
-        block.download('CPS_FOLDER_PATH', path, zp)
-        need(block, 'NEED_KIT')
-    vd = HELPER_REPO / 'deploy' / 'verify_drive_files.py'
-    rep = inbox / 'repaired'
-    p = subprocess.run([sys.executable, '-I', '-B', str(vd), str(man), str(inbox / 'cps'), '--repair-to', str(rep), path],
-                       capture_output=True, text=True, timeout=3600)
-    status = None
-    for ln in p.stdout.splitlines():
-        m = re.match(r'^(ok|MISSING|MISMATCH|REPAIRED|NOT REPAIRED)\s+(\S+)$', ln.strip())
-        if m and m.group(2) == path:
-            status = m.group(1)
-    if status == 'ok':
-        use = zp
-    elif status == 'REPAIRED' and (rep / path).is_file():
-        use = rep / path
-        info['repaired'] = True
+    zips, lines, rows = kit_rows(man.read_text(encoding='utf-8', errors='replace'))
+    if len(zips) > 1 or len(lines) > 1 or (not zips and not lines):
+        stop('KIT_NOT_IN_MANIFEST', 'FOLDER_MANIFEST.md must list exactly one kit: one cps_runtime/SESSION_KIT_<v>.zip row, or one '
+             '"kit-sha256: SESSION_KIT_<v>.zip <bytes> <sha256>" line with its bundle parts: tell the maintainer')
+    if zips and lines and (zips[0][0].split('/')[-1], zips[0][1], zips[0][2]) != lines[0]:
+        stop('KIT_NOT_IN_MANIFEST', 'the kit row and the kit-sha256 line of FOLDER_MANIFEST.md disagree: tell the maintainer')
+    route = 'zip' if zips else 'parts'
+    if zips:
+        path, size, sha = zips[0]
+        kname = path.split('/')[-1]
     else:
-        stop('KIT_NOT_VERIFIED', 'the downloaded kit does not match FOLDER_MANIFEST.md and could not be repaired: tell the maintainer')
+        kname, size, sha = lines[0]
+        path = None
+    info = {'name': kname, 'sha256': sha, 'repaired': False, 'route': route}
+    if (state or {}).get('kit_sha256') == sha and lay.release_path.is_file():
+        info['rebuilt_path'] = (state or {}).get('kit_rebuilt_path')
+        return info, 'same'
+    if route == 'parts':
+        use = rebuild_kit(lay, inbox, block, kname, size, sha, rows)
+        keep = lay.outbox / 'kit' / kname       # kept for the one upload to the setup folder (the inbox is emptied)
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        if not (keep.is_file() and sha_file(keep) == sha):
+            write_atomic(keep, use.read_bytes(), 0o444)
+        info['rebuilt_path'] = str(keep)
+    else:
+        zp = inbox / 'cps' / path
+        if not zp.is_file():
+            block.download('CPS_FOLDER_PATH', path, zp)
+            need(block, 'NEED_KIT')
+        vd = HELPER_REPO / 'deploy' / 'verify_drive_files.py'
+        rep = inbox / 'repaired'
+        p = subprocess.run([sys.executable, '-I', '-B', str(vd), str(man), str(inbox / 'cps'), '--repair-to', str(rep), path],
+                           capture_output=True, text=True, timeout=3600)
+        status = None
+        for ln in p.stdout.splitlines():
+            m = re.match(r'^(ok|MISSING|MISMATCH|REPAIRED|NOT REPAIRED)\s+(\S+)$', ln.strip())
+            if m and m.group(2) == path:
+                status = m.group(1)
+        if status == 'ok':
+            use = zp
+        elif status == 'REPAIRED' and (rep / path).is_file():
+            use = rep / path
+            info['repaired'] = True
+        else:
+            stop('KIT_NOT_VERIFIED', 'the downloaded kit does not match FOLDER_MANIFEST.md and could not be repaired: tell the maintainer')
     members = kit_members(use)
     fl = [d for d in Layout().job_folders()]
     how = unpack_kit(lay, members, bool(fl))
@@ -2516,6 +2890,19 @@ def session_kit(lay, inbox, block, state):
             shutil.copyfile(use, keep)
         info['repaired_path'] = str(keep)
     return info, how
+
+
+def kit_upload_lines(ctx, block, kit, setup_lst):
+    """r4 F1: after a parts rebuild, the zip goes to the setup folder once (no listed copy with its md5 or size), and the
+    maintainer is asked to copy it into cps_runtime/ (a Drive copy keeps the bytes) and to add its manifest row."""
+    p = kit.get('rebuilt_path')
+    if kit.get('route') != 'parts' or not p or not Path(p).is_file():
+        return False
+    m5, size = md5_file(p), os.lstat(p).st_size
+    if any((f['md5'] == m5) if f['md5'] else f['size'] == size for f in setup_lst.by.get(kit['name'], [])):
+        return False
+    block.upload(p, ctx.setup_folder())
+    return True
 
 
 # ------------------------------------------------------------------ session (spec 5.1)
@@ -2609,6 +2996,11 @@ def cmd_session(a):
             raise
         if ctx.rel is None:
             stop('KIT_RELEASE_MISSING', 'the kit holds no RELEASE.json')
+        if ctx.mode in ('qualification', 'everyday') and open_gates(ctx.cfg):
+            # r4 F8: a released kit runs nothing until probe P5 has passed and the transcript question is answered (O50:
+            # if detached processes or conversations cannot use the VM, every job waits)
+            stop('RELEASE_GATE_OPEN', 'the kit\'s release gates are not all answered (probe P5, transcript export): every job '
+                 'waits; tell the maintainer (case C)', detail={'gates': open_gates(ctx.cfg)})
         clean_placed(ctx)
         if kit.get('repaired'):
             block.upload(kit['repaired_path'], reports_folder(ctx))
@@ -2636,13 +3028,20 @@ def session_body(ctx, a, inbox, block, old, kit):
             sn = sess[-1]['name']
             content = (ctx.index.get(sn) or {}).get('content')
             if content is None:
-                p = inbox / sn
-                if not p.is_file():
-                    f = lst.copies(sn)[0]
-                    block.download(f['id'], sn, p)
-                else:
-                    content = read_json_file(p)
-                    notes_dl[sn] = p
+                # r3 failure-R3-04: the note is fetched like a restore download (listing md5/size, the next copy, at most 3
+                # downloads per copy); a note no copy of which validates stops instead of silently skipping the check
+                fp_ = lay.outbox / 'SESSION_NOTE_FETCH.json'
+                fplan = read_json_file(fp_) if fp_.is_file() else None
+                fplan = fplan if isinstance(fplan, dict) and fplan.get('name') == sn else {'name': sn}
+                r = Fetcher(ctx, lst, inbox, block, fplan).get(sn, check_note)
+                write_atomic(fp_, note_bytes(fplan))
+                if r is DEAD:
+                    stop('SESSION_NOTE_DAMAGED', 'every Drive copy of the newest SESSION note fails its check: hand back case C',
+                         detail={'name': sn})
+                if r is not None:
+                    content = read_json_file(r)
+                    notes_dl[sn] = r
+                    fp_.unlink()
             if content is not None:
                 np_ = ((content or {}).get('records_listing') or {}).get('newest_package')
                 if np_ and not lst.has(np_):
@@ -2677,6 +3076,7 @@ def session_body(ctx, a, inbox, block, old, kit):
     # mode (step 5)
     st = {'boot_id': boot, 'session_note': None, 'mode': None, 'fingerprint_sha256': fp_sha, 'fingerprint_pass': pass_name,
           'pending_incident': False, 'restore_recheck': False, 'operator_model': a.operator_model, 'kit_sha256': kit['sha256'],
+          'kit_route': kit.get('route'), 'kit_rebuilt_path': kit.get('rebuilt_path'),
           'listing': {'records': sorted(lst.by) if lst else [], 'setup': sorted(setup_lst.by)}, 'unconfirmed': [],
           'ai_corrupt': [], 'rejected_copies': []}
     restored, pending_uploads, mode = None, [], 'fresh'
@@ -2684,15 +3084,20 @@ def session_body(ctx, a, inbox, block, old, kit):
     evidence = os.path.lexists(lay.ledger_dir) or bool(lay.job_folders())
     # T-09: local state is ours only when this VM's SESSION_STATE or INDEX (other than a STRAY record) knows it
     known = isinstance(old, dict) or any(e.get('kind') != 'stray' for e in ctx.index.files.values())
+    # r3 R3-03: SESSION_STATE of this boot is local state even without a job folder or ledger (an everyday VM between
+    # jobs, or a job-start whose INPUTS upload never happened): never a restore and an incident on a VM that kept its state.
+    # Qualification keeps the restore when Drive holds a GENESIS or package and this VM has no ledger.
+    this_boot = isinstance(old, dict) and old.get('boot_id') == boot and known
+    own_state = this_boot and (ctx.mode != 'qualification' or lst is None or not restore_needed(ctx, lst))
     if (lay.outbox / 'RESTORE_IN_PROGRESS.json').is_file():
         mode = 'restore'
         restored = restore_resume(ctx)
         st['pending_incident'] = True
     elif evidence and not known:
         stray_stop(ctx, block)
-    elif evidence:
+    elif evidence or own_state:
         mode = 'local'
-        if ctx.mode == 'qualification':
+        if ctx.mode == 'qualification' and evidence:
             check_ledger_identity(ctx)
         if lst is not None:
             pending_uploads = local_checks(ctx, lst, setup_lst, block, st)
@@ -2701,11 +3106,10 @@ def session_body(ctx, a, inbox, block, old, kit):
             st['restore_recheck'] = bool(old.get('restore_recheck'))
             st['ai_corrupt'] = old.get('ai_corrupt') or []
             st['rejected_copies'] = old.get('rejected_copies') or []
-            for k in ('recheck_incident', 'restore_session'):
-                if old.get(k) and st['pending_incident']:
-                    st[k] = old[k]
             if old.get('recheck_incident'):
                 st['recheck_incident'] = old['recheck_incident']
+            if old.get('restore_session') and st['pending_incident']:    # r2 N1
+                st['restore_session'] = old['restore_session']
             if old.get('boot_id') != boot:
                 st['pending_incident'], boot_changed = True, True
         else:                                   # T-09: a known INDEX without its SESSION_STATE (a killed session): incident first
@@ -2743,7 +3147,7 @@ def session_body(ctx, a, inbox, block, old, kit):
             'boot_id_source': boot_id_path(), 'overrides': ctx.lay.overrides, 'uid': os.getuid(), 'home': lay.home,
             'base': str(lay.base), 'tools': str(lay.tools), 'vm_sh_sha256': sha_file(vm_sh) if vm_sh.is_file() else None,
             'env_report_sha256': sha_file(env_reports[-1]) if env_reports else None, 'fingerprint_sha256': fp_sha,
-            'fingerprint_pass': pass_name, 'mode': mode, 'kit': {k: kit[k] for k in ('name', 'sha256', 'repaired')},
+            'fingerprint_pass': pass_name, 'mode': mode, 'kit': {k: kit.get(k) for k in ('name', 'sha256', 'repaired', 'route')},
             'release': {'sha256': sha_bytes(ctx.rel_raw), 'release_version': ctx.rel.get('release_version'),
                         'commit': (ctx.rel.get('repository') or {}).get('commit'), 'status': ctx.rel.get('status')},
             'previous_session': prev_sess, 'restored': restored, 'pending_uploads': [str(Path(p).name) for p in pending_uploads],
@@ -2759,6 +3163,7 @@ def session_body(ctx, a, inbox, block, old, kit):
     path = lay.outbox / name
     write_new(path, note_bytes(note))
     folder = rec_folder or ctx.setup_folder()
+    kit_up = kit_upload_lines(ctx, block, kit, setup_lst)       # r4 F1: before the SESSION note (uploaded last)
     for p in pending_uploads:
         e = ctx.index.get(Path(p).name)
         block.upload(p, (e or {}).get('folder') or folder)
@@ -2771,9 +3176,14 @@ def session_body(ctx, a, inbox, block, old, kit):
     inbox.mkdir(parents=True, exist_ok=True)
     plan = plan_status(ctx)
     block.result = {'command': 'session', 'mode': mode, 'release_mode': ctx.mode, 'session_note': name,
-                    'fingerprint8': fp8, 'fingerprint_pass': pass_name, 'restored': restored, 'kit_unpack': None}
+                    'fingerprint8': fp8, 'fingerprint_pass': pass_name, 'restored': restored, 'kit_unpack': None,
+                    'kit': {'name': kit['name'], 'route': kit.get('route'), 'uploaded_to_setup': kit_up}}
     block.state = state_line(ctx)
     block.tail = plan.block.tail
+    if kit_up:                                  # r4 F1: the maintainer copies the rebuilt zip into cps_runtime/ (one action)
+        block.tail = [f'NEXT: TELL_MAINTAINER kit={kit["name"]} sha256={kit["sha256"]} copy_from={ctx.setup_folder()} '
+                      f'copy_to=cps_runtime/'] + [('THEN: ' + t[len('NEXT: '):]) if t.startswith('NEXT: ') else t
+                                                  for t in plan.block.tail]
     block.fetch += plan.block.fetch
     block.code = plan.code
     return block
@@ -2843,6 +3253,8 @@ def local_checks(ctx, lst, setup_lst, block, st):
             pending.append(e['payload'])
             if (e.get('tag'), e.get('case_id')) in cur and e.get('kind') in ('start', 'link', 'ai', 'package'):
                 st['unconfirmed'].append(n)
+            elif e.get('kind') == 'inputs' and not packages(ctx, e.get('tag')):
+                st['unconfirmed'].append(n)         # r3 R3-03: the run's prepare waits for its INPUTS on Drive
     local_pk = [e for e in ix.of('package') if e.get('origin') in ('made', 'restored')]
     chains = {}
     for e in local_pk:
@@ -2999,6 +3411,7 @@ def everyday_unfinished(lst):
 
 DEAD = object()
 REDOWNLOAD_MAX = 3
+SPLIT_COMBINATIONS_MAX = 256
 
 
 class Fetcher:
@@ -3067,37 +3480,83 @@ class Fetcher:
         return None
 
     def get_split(self, name, check):
+        """r3 failure-R3-02: slices are judged one by one. The first copy of every slice is tried first; when the set does
+        not join, every other copy is downloaded and the combinations are tried in createdTime order (at most
+        SPLIT_COMBINATIONS_MAX); only when none joins are the copies rejected. A partial duplicate of one slice therefore
+        never kills an intact set."""
         sl = [p for p in self.lst.names('split') if p['original'] == name]
-        if not sl:
-            return DEAD
-        paths, pending = {}, False
-        for s in sorted(sl, key=lambda p: p['k']):
-            fs = [f for f in self.lst.copies(s['name']) if f['id'] not in self.rejected(s['name'])]
-            if not fs:
-                return DEAD
-            p = self.inbox / s['name']
-            if not p.is_file():
-                self.block.download(fs[0]['id'], s['name'], p)
+        groups = {}
+        for p in sl:
+            groups.setdefault((p['h8'], p['n']), {})[p['k']] = p['name']
+        pending = False
+        for (h, n), byk in sorted(groups.items()):
+            if set(byk) != set(range(1, n + 1)):
+                continue
+            r = self.split_group(name, h, n, byk, check)
+            if r is None:
                 pending = True
-            paths[s['k']] = p
+            elif r is not DEAD:
+                return r
+        return None if pending else DEAD
+
+    def slice_path(self, sname, j, fid):
+        return self.inbox / sname if j == 0 else self.inbox / f'{sname}.copy_{fid}'
+
+    def split_group(self, name, h, n, byk, check):
+        copies = {k: [f for f in self.lst.copies(byk[k]) if f['id'] not in self.rejected(byk[k])] for k in byk}
+        if any(not c for c in copies.values()):
+            return DEAD
+        widen = self.plan.setdefault('split_widened', {}).get(byk[1]) is True
+        want = {k: (copies[k] if widen else copies[k][:1]) for k in copies}
+        pending = False
+        for k, fs in want.items():
+            for j, f in enumerate(copies[k]):
+                if f not in fs:
+                    continue
+                p = self.slice_path(byk[k], j, f['id'])
+                if not p.is_file():
+                    self.block.download(f['id'], byk[k], p)
+                    self.plan['requested'][byk[k]] = f['id']
+                    pending = True
         if pending:
             return None
-        data = join_slices(paths, name)
-        out = self.inbox / name
-        if data is None:
-            bad = False
-            for k, p in paths.items():                  # T-03: a slice whose local bytes differ from its listing is downloaded again
-                f = [g for g in self.lst.copies(p.name) if g['id'] not in self.rejected(p.name)][0]
-                if self.download_at_fault(f, p, md5_file(p)):
-                    self.redownload(f, p.name, p)
+        bad = False
+        for k, fs in want.items():                    # T-03: a slice whose local bytes differ from its listing is fetched again
+            for j, f in enumerate(copies[k]):
+                p = self.slice_path(byk[k], j, f['id'])
+                if f in fs and self.download_at_fault(f, p, md5_file(p)):
+                    n_ = self.plan.setdefault('redownloads', {}).get(f['id'], 0) + 1
+                    self.plan['redownloads'][f['id']] = n_
+                    p.unlink()
+                    if n_ > REDOWNLOAD_MAX:
+                        stop('RESTORE_DOWNLOAD_FAILED', 'the same Drive copy downloaded damaged several times: hand back case C',
+                             detail={'name': byk[k], 'drive_id': f['id']})
+                    self.block.download(f['id'], byk[k], p)
                     bad = True
-            if bad:
-                return None
-            for k, p in paths.items():
-                self.reject(p.name, [g for g in self.lst.copies(p.name) if g['id'] not in self.rejected(p.name)][0]['id'],
-                            'slice set does not join')
-                p.unlink()
-            return self.get_split(name, check)
+        if bad:
+            return None
+        paths = {k: [self.slice_path(byk[k], j, f['id']) for j, f in enumerate(copies[k]) if f in want[k]] for k in want}
+        data, tried = None, 0
+        for combo in itertools.product(*[paths[k] for k in range(1, n + 1)]):
+            tried += 1
+            if tried > SPLIT_COMBINATIONS_MAX:
+                break
+            d = b''.join(Path(x).read_bytes() for x in combo)
+            if h8(sha_bytes(d)) == h:
+                data = d
+                break
+        if data is None:
+            if not widen and any(len(c) > 1 for c in copies.values()):
+                self.plan['split_widened'][byk[1]] = True     # try every copy of every slice before rejecting any
+                return self.split_group(name, h, n, byk, check)
+            for k in copies:
+                for j, f in enumerate(copies[k]):
+                    self.reject(byk[k], f['id'], 'slice set does not join')
+                    q_ = self.slice_path(byk[k], j, f['id'])
+                    if q_.is_file():
+                        q_.unlink()
+            return DEAD
+        out = self.inbox / name
         if not out.exists():
             out.write_bytes(data)
         why = check(out)
@@ -3161,9 +3620,14 @@ def ai_expected_check(a):
     man = a.manifest
     exp = {'output': ('dir', man.get('output_mode', 0o755))}
     for rel, kind, mode, size, sha in man.get('tree') or []:
+        if kind not in ('dir', 'file'):
+            a.bad('ARCHIVE_MANIFEST_MISMATCH', {'why': 'tree entry type'})
         exp['output/' + rel] = ('dir', mode) if kind == 'dir' else ('file', mode, size, sha)
     a.check(exp)
-    if tree_sha(man.get('tree') or []) != man.get('tree_sha256'):
+    uns = man.get('unsupported') or []
+    if not isinstance(uns, list) or any(not isinstance(e, list) or len(e) != 5 or e[1] != 'unsupported' for e in uns):
+        a.bad('ARCHIVE_MANIFEST_MISMATCH', {'why': 'unsupported entries'})
+    if tree_sha(sorted((man.get('tree') or []) + uns, key=lambda e: e[0])) != man.get('tree_sha256'):
         a.bad('ARCHIVE_MANIFEST_MISMATCH', {'why': 'tree_sha256'})
 
 
@@ -3351,6 +3815,9 @@ def restore_package(ctx, lst, inbox, block, plan, F, newest, npath, gen, gen_pat
         bad.append('seq')
     if bad:
         stop('RESTORE_MANIFEST_MISMATCH', 'the package manifest does not name this chain: hand back case C', detail={'fields': bad})
+    if man.get('unsupported'):                      # r3 failure-R3-01: links and special files are evidence, never re-created
+        stop('RESTORE_UNSUPPORTED_ENTRY', 'the package records a link or special file the helper does not re-create: hand back case C',
+             detail={'paths': [e[0] for e in man['unsupported']][:10]})
     # notes ahead: a later START must carry this package's record
     for n, path in notes.items():
         pn = parse_name(n)
@@ -3501,13 +3968,19 @@ def restore_package(ctx, lst, inbox, block, plan, F, newest, npath, gen, gen_pat
                 at = aa.manifest.get('tree') or []
                 aa.close()
                 mine = sorted([[m['path'][len(out_rel) + 1:], m['type'], m['mode'], m.get('bytes'), m.get('sha256')] for m in staged])
-                if mine != sorted(at):
+                if mine == sorted(at):
+                    ai = (ai[0], ai[1], 'already')
+                elif revision_over_refusal(aa.manifest, rec, mine):
+                    ai = (ai[0], ai[1], 'replace')          # r3 R3-01: the package holds the refused revision; place the newest
+                else:
                     stop('RESTORE_AI_CONFLICT', 'the package output folder differs from the archived AI output: hand back case C')
-                ai = (ai[0], ai[1], 'already')
         if ai is not None:
             aa = Archive(ai[1], ('MANIFEST.json', 'output'))
             if aa.manifest.get('job_dir') != man['job_dir']:
                 stop('RESTORE_AI_CONFLICT', 'the AI archive names another job folder')
+            if aa.manifest.get('unsupported') and (len(ai) == 2 or ai[2] == 'replace'):
+                stop('RESTORE_UNSUPPORTED_ENTRY', 'the AI archive records a link or special file the helper does not re-create: '
+                     'hand back case C', detail={'paths': [e[0] for e in aa.manifest['unsupported']][:10]})
             aa.close()
         plan['out_rel'] = out_rel
     # PNG (step 12)
@@ -3524,6 +3997,25 @@ def restore_package(ctx, lst, inbox, block, plan, F, newest, npath, gen, gen_pat
           'rejected_copies': plan.get('rejected_why', []), 'ai_corrupt': plan.get('ai_corrupt_start', []),
           'chosen': (plan.get('chosen') or {}).get(newest['name'])}
     return place_restore(ctx, rp, lst)
+
+
+def revision_over_refusal(am, rec, mine):
+    """r3 R3-01: a reviewer revision archive made after a REVIEW_INCOMPLETE refusal whose CP holds the refused revision.
+
+    True when the archive is a revision (>1), the restored record holds the REFUSED visual-record entry the revision names
+    (same seq, REVIEW_INCOMPLETE, the pinned review_attempt sha256 the revision names), and the package's staged output
+    tree is exactly the previous revision's tree (the one the refusal kept)."""
+    ar, prev = am.get('after_refusal') or {}, am.get('previous_revision') or {}
+    if (am.get('revision') or 1) < 2 or am.get('role') != 'V' or not ar or not prev:
+        return False
+    e = next((s for s in rec.get('stages') or [] if s.get('seq') == ar.get('record_seq')), None)
+    ra = ((e or {}).get('inputs') or {}).get('review_attempt') or {}
+    if not (e and e.get('stage') == 'visual-record' and e.get('result') == 'REFUSED' and 'REVIEW_INCOMPLETE' in (e.get('codes') or [])
+            and ra.get('sha256') and ra.get('sha256') == ar.get('review_attempt_sha256')):
+        return False
+    if any(s.get('seq', 0) > e['seq'] for s in rec.get('stages') or []):
+        return False                                # a later entry: the package is not the refusal's CP
+    return tree_sha(mine) == prev.get('tree_sha256')
 
 
 def write_stray(ctx, paths):
@@ -3742,12 +4234,18 @@ def do_place(ctx, rp):
         os.rename(sd, lay.ledger_dir)
     # 16: job folder
     if man is not None and not rp.get('fz_newest') and not Path(man['job_dir']).exists():
+        require_space(lay, sum(m.get('bytes') or 0 for m in man['members']) +
+                      sum(f.get('bytes') or 0 for f in (man.get('png') or {}).get('files') or []), 'restore')   # r3 failure-R3-06
         stg = Staging(man['job_dir'])
         root_mode = next((m['mode'] for m in man['members'] if m['path'] == 'job'), 0o755)
         stg.begin(root_mode)
+        ai = rp.get('ai')
+        replace_rel = rp['out_rel'] if ai and len(ai) == 3 and ai[2] == 'replace' else None
         for m in man['members']:
             if m['path'] == 'job':
                 continue
+            if replace_rel and m['path'].startswith(replace_rel + '/'):
+                continue                                    # r3 R3-01: the refused revision gives way to the newest one
             if not m['path'].startswith('job/'):          # T-25
                 stop('ARCHIVE_UNSAFE_MEMBER', 'a package member outside job/', detail={'path': m['path'][:200]})
             rel = m['path'][4:]
@@ -3765,8 +4263,7 @@ def do_place(ctx, rp):
                 want = {x['path']: x for x in man['png']['files']}
                 for path, b in png_tar_files(tf, man).items():
                     stg.add_file(path[4:], b, want[path]['mode'])
-        ai = rp.get('ai')
-        if ai and len(ai) == 2:
+        if ai and (len(ai) == 2 or replace_rel):
             aa = Archive(ai[1], ('MANIFEST.json', 'output'))
             out_rel = rp['out_rel'][4:]
             if out_rel not in stg.modes:
@@ -3814,7 +4311,7 @@ def do_place(ctx, rp):
     st['rejected_copies'] = rp.get('rejected_copies') or []
     # r2 R2-05: RESTORE_IN_PROGRESS.json stays until the caller has saved SESSION_STATE (and the SESSION note): a kill in
     # between resumes the (idempotent) placement instead of falling into local mode without them
-    return {'package': rp.get('package'), 'ai_archives_placed': [rp['ai'][0]] if rp.get('ai') and len(rp['ai']) == 2 else [],
+    return {'package': rp.get('package'), 'ai_archives_placed': [rp['ai'][0]] if rp.get('ai') and (len(rp['ai']) == 2 or rp['ai'][2] == 'replace') else [],
             'png': (rp.get('png') or {}).get('source'), 'notes': sorted(rp['notes']), 'rejected_copies': rp.get('rejected_copies') or [],
             'ai_corrupt': rp.get('ai_corrupt') or [], 'fz_newest': bool(rp.get('fz_newest'))}
 
@@ -3903,7 +4400,7 @@ def compute_binding(ctx, jv, sub, pre_newest, completed_entry):
     if not obl:
         return inherited or forced, None
     toks = [parse_token(t) for t in seen_tokens(obl)]
-    real = [t for t in toks if t and not t['none']]
+    real = [t for t in toks if t and not t['none'] and t['sub'] == sub]     # r3 R3-02: only this stage's tokens bind it
     own = None
     if completed_entry is not None:
         own = token_text(sub, jv.tag, jv.case, completed_entry, saved_xlsx8(jv.dir), False)
@@ -3924,9 +4421,12 @@ def compute_binding(ctx, jv, sub, pre_newest, completed_entry):
     return diverged, b
 
 
-def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by='wrap'):
-    """Make the save point of the job's current state when its state key changed; returns info or None (no folder)."""
+def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by='wrap', fp=None):
+    """Make the save point of the job's current state when its state key changed; returns info or None (no folder).
+    r4 F2: fp is (the fingerprint the stage started on, the one it ended on), both freshly computed; the name's fp8 and
+    the manifest's fingerprint_sha256 are the first, fingerprint_after_sha256 the second."""
     lay = ctx.lay
+    fp_used, fp_after = fp if fp else (ctx.state['fingerprint_sha256'], ctx.state['fingerprint_sha256'])
     if not jv.dir.is_dir():
         return None
     jv = JobView(ctx, jv.dir)
@@ -3963,39 +4463,44 @@ def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by
     rels = png_set(jv.dir)
     png = None
     new_parts = []
+    # r3 failure-R3-06: the step needs room for the core archive and the PNG parts (at most the folder's bytes each)
+    require_space(lay, tree_bytes(jv.dir) + 1024 * 1024, 'package')
     if rels:
-        tmp = lay.outbox / f'.tmp_{os.getpid()}_png.tar'
-        if tmp.exists():
-            tmp.unlink()
-        with open(tmp, 'xb') as f:
-            write_tar_stream(f, png_tar_members(jv.dir, rels))
-        set_sha = sha_file(tmp)
+        # r3 failure-R3-06: the PNG tar is streamed straight into its parts (no whole tar beside them)
+        pw = PartWriter(lay.outbox, ctx.cfg['png_part_bytes'], f'.tmp_{os.getpid()}_pngpart_')
+        try:
+            write_tar_stream(pw, png_tar_members(jv.dir, rels))
+            tparts, set_sha = pw.finish()
+        except BaseException:
+            pw.discard()
+            raise
         files = [{'path': 'job/' + r, 'mode': stat.S_IMODE(os.lstat(jv.dir / r).st_mode), 'bytes': os.lstat(jv.dir / r).st_size,
                   'sha256': sha_file(jv.dir / r)} for r in rels]
         earlier = [p for p in packages(ctx, jv.tag, jv.case) if (p.get('meta') or {}).get('png_set_sha256') == set_sha]
         if earlier:
             em = earlier[-1]['meta']
             parts, made_by = em['png_parts'], em.get('png_made_by') if em.get('png_made_by') not in (None, 'self') else earlier[-1]['name']
-            tmp.unlink()
+            pw.discard()
         else:
-            pb = ctx.cfg['png_part_bytes']
-            size = os.lstat(tmp).st_size
-            n = max(1, (size + pb - 1) // pb)
+            n = len(tparts)
             parts = []
-            with open(tmp, 'rb') as f:
-                for k in range(1, n + 1):
-                    data = f.read(pb)
-                    name = f'PNG_{jv.tag}_{h8(set_sha)}_{k:02d}of{n:02d}_{jv.case}.part'
-                    pp = lay.outbox / name
-                    ensure_file(pp, data)
-                    parts.append({'name': name, 'bytes': len(data), 'sha256': sha_bytes(data),
-                                  'md5': hashlib.md5(data, usedforsecurity=False).hexdigest()})
-                    new_parts.append(pp)
-            tmp.unlink()
+            for k, (tp_, nb, psha, pmd5) in enumerate(tparts, 1):
+                name = f'PNG_{jv.tag}_{h8(set_sha)}_{k:02d}of{n:02d}_{jv.case}.part'
+                pp = lay.outbox / name
+                if os.path.lexists(pp) and not (not os.path.islink(pp) and pp.is_file() and os.lstat(pp).st_size == nb and sha_file(pp) == psha):
+                    os.unlink(pp)                   # T-07: a partial or other copy is replaced
+                if os.path.lexists(pp):
+                    os.unlink(tp_)
+                else:
+                    os.rename(tp_, pp)
+                parts.append({'name': name, 'bytes': nb, 'sha256': psha, 'md5': pmd5})
+                new_parts.append(pp)
             made_by = 'self'
         png = {'set_sha256': set_sha, 'files': files, 'parts': parts, 'part_bytes': ctx.cfg['png_part_bytes'], 'made_by_package': made_by}
     skip = set(rels)
-    entries = [e for e in tree_list(jv.dir) if e[0] not in skip]
+    # r3 failure-R3-01: a link or special file left in the job folder is recorded as data (never packed); the runner
+    # records RUN_OUTPUT_SYMLINK_OR_SPECIAL_FILE, and restore refuses to place such a package (RESTORE_UNSUPPORTED_ENTRY)
+    entries, unsup = split_unsupported([e for e in tree_list(jv.dir, lenient=True) if e[0] not in skip])
     root_mode = stat.S_IMODE(os.lstat(jv.dir).st_mode)
     members = [{'path': 'job', 'type': 'dir', 'mode': root_mode}]
     for rel, k, mode, size, sha in entries:
@@ -4007,8 +4512,9 @@ def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by
         frozen = {'frozen_sha256': fsha, 'verify_frozen': (command or {}).get('verify_frozen')}
     ident = sha_bytes(led_raw.split(b'\n', 1)[0] + b'\n') if qual and led_raw else None
     man = {'schema': 'cps.vm-package.v1', 'kind': kind, 'created_utc': utc(), 'helper': helper_info(),
-           'runner_sha256': sha_file(runner_path()), 'boot_id': current_boot_id(), 'fingerprint_sha256': ctx.state['fingerprint_sha256'],
-           'mode': ctx.mode, 'case_id': jv.case, 'reader': jv.reader, 'tag': jv.tag, 'job_dir': str(jv.dir),
+           'runner_sha256': sha_file(runner_path()), 'boot_id': current_boot_id(), 'fingerprint_sha256': fp_used,
+           'fingerprint_after_sha256': fp_after, 'session_fingerprint_sha256': ctx.state['fingerprint_sha256'], 'mode': ctx.mode,
+           'case_id': jv.case, 'reader': jv.reader, 'tag': jv.tag, 'job_dir': str(jv.dir),
            'jobs_root': str(jv.dir.parent), 'run_id': None if qual else jv.tag,
            'ledger': ({'path': str(lay.ledger), 'seq': len(led_entries), 'bytes': len(led_raw), 'sha256': lsha,
                        'identity_line_sha256': ident, 'mode': stat.S_IMODE(os.lstat(lay.ledger).st_mode)} if qual else None),
@@ -4017,7 +4523,7 @@ def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by
                       'marker_present': (jv.dir / CJ.MARKER_NAME).exists()},
            'frozen': frozen, 'command': command if command else None, 'binding': binding, 'reset_diverged': bool(diverged),
            'previous_package': ({'name': prev['name'], 'sha256': prev.get('sha256')} if prev else None),
-           'members': members, 'png': png,
+           'members': members, 'png': png, 'unsupported': unsup,
            'deliverable_xlsx_sha256': ((read_json_file(jv.dir / 'qa' / 'SAVED_QA.json') or {}).get('deliverable_xlsx') or {}).get('sha256')
            if (jv.dir / 'qa' / 'SAVED_QA.json').is_file() else None}
     if command is None:
@@ -4043,7 +4549,7 @@ def build_package(ctx, jv, sub, pre_newest, command, completed_entry, applied_by
         chk.close()
     pkg8 = h8(sha_file(tmp))
     name = package_name(kind, jv.tag, seqkind, seq, h8(lsha) if qual else '00000000', h8(rsha), h8(fsha) if fsha else '00000000',
-                        h8(ctx.state['fingerprint_sha256']), pkg8, jv.case)
+                        h8(fp_used), pkg8, jv.case)
     final = lay.outbox / name
     os.rename(tmp, final)
     folder = ctx.records_folder()
@@ -4110,6 +4616,26 @@ def require_session_ready(ctx, block=None):
         refuse('FINGERPRINT_NOT_PASSED', 'run the self-test on this VM first (RUN $V selftest)')
 
 
+def fingerprint_changed_halt(ctx, now_fp, where, block=None):
+    """r4 F2 (O47): the toolchain fingerprint now differs from the one this session's FINGERPRINT_PASS covers. Every job
+    waits until the new fingerprint has its own self-test: the NEXT line is a new session start (which prints the
+    self-test). Not a handback."""
+    b = block if block is not None else Block()
+    b.next(f'RUN bash {ctx.lay.repo}/deploy/vm/session_start.sh --operator-model {q(ctx.model)}')
+    return Halt('STOP', 'FINGERPRINT_CHANGED', 'the toolchain changed since session start (O47: every job waits for a self-test of '
+                'the new fingerprint): not a handback; do the UPLOAD lines, then run the NEXT line (session start) and follow it',
+                block=b, detail={'where': where, 'session_fp8': h8(ctx.state.get('fingerprint_sha256') or ''), 'now_fp8': h8(now_fp)})
+
+
+def fingerprint_gate(ctx, where):
+    """r4 F2: recompute the fingerprint (about 2-4 s) before a command that starts a stage or a conversation; the value
+    returned is the one the command records."""
+    fp, _ = fingerprint(ctx.lay)
+    if fp != ctx.state.get('fingerprint_sha256'):
+        raise fingerprint_changed_halt(ctx, fp, where)
+    return fp
+
+
 def require_no_incident(ctx):
     if ctx.state.get('pending_incident'):
         b = Block()
@@ -4135,10 +4661,7 @@ def consume_confirms(ctx):
         if not ctx.index.confirmed(name):           # T-06: this narrow listing showed no matching copy
             ctx.index.event('narrow_miss', name)
         p.unlink()
-    try:
-        d.rmdir()
-    except OSError:
-        pass
+    # r3 tests-R3-03: the folder stays (a printed line may still point into it); the start-note inbox check counts files only
 
 
 def confirm_line(ctx, block, name):
@@ -4166,7 +4689,7 @@ def ai_guard(ctx, jv, role):
         refuse('AI_ARCHIVE_MISSING', 'run ai-archive first: the AI output must reach Drive before anything reads it')
     a = archs[-1]
     out = jv.output_dir(role)
-    if not out.is_dir() or tree_sha(tree_list(out)) != a.get('tree_sha256'):
+    if not out.is_dir() or tree_sha(tree_list(out, lenient=True)) != a.get('tree_sha256'):
         refuse('AI_ARCHIVE_STALE', 'the output folder differs from its archive: run status')
     if ctx.cfg['confirm_ai_before_consume'] and not ctx.index.confirmed(a['name']) and a.get('origin') == 'made':
         b = Block()
@@ -4199,11 +4722,12 @@ def wrap_checks(ctx, sub, rargs):
     require_session_ready(ctx)
     require_no_incident(ctx)
     require_recheck(ctx)
-    consume_confirms(ctx)
     o = runner_opts(rargs)
     qual = ctx.mode == 'qualification'
     if ctx.mode == 'setup':
         refuse('WRAP_MODE', 'no released kit')
+    fp_now = fingerprint_gate(ctx, 'wrap ' + sub)   # r4 F2: before anything changes (O47)
+    consume_confirms(ctx)
     if 'release' in o and os.path.abspath(o['release']) != str(lay.release_path):
         refuse('WRAP_PATH_OUTSIDE_LAYOUT', '--release is BASE/runtime/RELEASE.json')
     if 'admission' in o and not under(o['admission'], lay.runtime / 'qualification'):
@@ -4240,6 +4764,8 @@ def wrap_checks(ctx, sub, rargs):
     if sub == 'interrupt' and not qual:
         refuse('WRAP_INTERRUPT_EVERYDAY', 'everyday: freeze, then job-start --restart-of (once)')
     jv = JobView(ctx, target)
+    if sub == 'prepare' and not qual:
+        require_unconfirmed(ctx, jv)                # r3 R3-03: an INPUTS archive a new chat re-offered is confirmed first
     prev = newest_package(ctx, tag, case)
     failed = run_failed_by_reset(ctx, tag, case)
     if sub != 'freeze' and failed:
@@ -4276,8 +4802,8 @@ def wrap_checks(ctx, sub, rargs):
     if sub == 'finish' and not (target / 'run' / 'GENERATION_RECORD.json').is_file():
         b = Block()
         T = newest_start(ctx, tag, 'G', case)
-        b.next(f'WRITE_GENERATION_RECORD path={target}/run/GENERATION_RECORD.json example={lay.repo}/deploy/run/GENERATION_RECORD.example.json')
-        b.then(f'EXPORT_TRANSCRIPT to={transcript_path(ctx, case, tag, "G", (T or {}).get("attempt") or 1)}')
+        b.next(f'EXPORT_TRANSCRIPT to={transcript_path(ctx, case, tag, "G", (T or {}).get("attempt") or 1)}')
+        b.then(f'WRITE_GENERATION_RECORD path={target}/run/GENERATION_RECORD.json example={lay.repo}/deploy/run/GENERATION_RECORD.example.json')
         b.then(f'RUN {ctx.V} status')
         refuse('WRAP_GENERATION_RECORD_MISSING', 'write the generation record first', block=b)
     if sub == 'interrupt':
@@ -4287,11 +4813,25 @@ def wrap_checks(ctx, sub, rargs):
                                    for i in incidents(ctx))
         if not ok:
             refuse('WRAP_INCIDENT_REQUIRED', 'an interrupt needs its AI_NOTHING_WRITTEN incident (with the transcript) first')
+        interrupt_output_check(ctx, jv, role, T)
     placed = []
     if sub == 'prepare' and qual:
         placed = place_frozen(ctx, case)
     return {'sub': sub, 'tag': tag, 'case': case, 'job_dir': str(target), 'pre_newest': pre_newest, 'placed': placed,
-            'pre_len': len(jv.stages()) if jv.rec else 0, 'rargs': rargs}
+            'pre_len': len(jv.stages()) if jv.rec else 0, 'rargs': rargs, 'failed_before': bool(failed), 'fingerprint_sha256': fp_now}
+
+
+def interrupt_output_check(ctx, jv, role, T):
+    """r3 R3-05: an interrupt rests on 'nothing was written'. The role's output folder must still hold no response and
+    no file outside scratch/ (G), and equal the incident's archived tree when an archive was made."""
+    out = jv.output_dir(role)
+    tree = tree_list(out, 'AI_OUTPUT_UNSUPPORTED_ENTRY', lenient=True) if out.is_dir() else []
+    bad = [e[0] for e in tree if e[1] != 'dir' and (e[0] == RESPONSE_FILE[role] or unexpected_entries([e], role))]
+    archs = ai_archives(ctx, jv.tag, role, T['attempt'], jv.case)
+    changed = bool(archs) and archs[-1].get('tree_sha256') != tree_sha(tree)
+    if bad or changed or any(e[1] not in ('dir', 'file') for e in tree):
+        stop('INTERRUPT_OUTPUT_WRITTEN', 'the output folder holds files although the incident says nothing was written: '
+             'do not delete anything; hand back case C', detail={'paths': bad[:10], 'changed_since_archive': changed})
 
 
 def place_frozen(ctx, case):
@@ -4361,10 +4901,13 @@ def spawn(ctx, kind, info, lock):
     d = {'id': wid, 'kind': kind, 'info': info, 'pid': None, 'started_utc': utc(), 'boot_id': current_boot_id(),
          'log': str(lay.outbox / f'{kind}_{wid}.log'), 'out': str(lay.outbox / f'{kind}_{wid}.out'), 'exit': None}
     write_atomic(lay.outbox / 'DETACHED.json', note_bytes(d))
-    lock.release()
+    # r3 failure-R3-03: the worker inherits the held lock (the same open file description), so no waiting helper command
+    # can take the lock between the checks and the work; this process then drops its descriptor without unlocking
     with open(d['log'], 'ab') as log:
-        p = subprocess.Popen([sys.executable, '-I', '-B', str(HELPER_FILE), '_worker', wid], start_new_session=True,
-                             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, close_fds=True, env=os.environ.copy())
+        p = subprocess.Popen([sys.executable, '-I', '-B', str(HELPER_FILE), '_worker', wid, '--lock-fd', str(lock.fd)],
+                             start_new_session=True, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, close_fds=True,
+                             pass_fds=(lock.fd,), env=os.environ.copy())
+    lock.hand_off()
     d['pid'] = p.pid
     cur = read_json_file(lay.outbox / 'DETACHED.json') or {}
     if cur.get('id') == wid and cur.get('out_written') is None:
@@ -4411,14 +4954,18 @@ def wait_block(ctx, seconds):
                 continue
             b = Block()
             b.result = {'command': 'wait', 'detached': d['id'], 'kind': d['kind']}
-            if d['kind'] == 'wrap':
+            hint = 'the detached command ended without its result'
+            if d['kind'] == 'wrap' and Path(d['info']['job_dir']).is_dir():
                 b.next(f'RUN {ctx.V} package --job-dir {d["info"]["job_dir"]}')
-            else:
+            elif d['kind'] == 'wrap':                # r3 failure-R3-03: no job folder (the runner never made it): status
+                b.next(f'RUN {ctx.V} status')
+            else:                                   # r3 tests-R3-05: a new self-test is the next step, not a handback
                 b.next(f'RUN {ctx.V} selftest')
+                hint = 'the self-test worker ended without its result: run the NEXT line (a new self-test, not a retry); no handback'
             with HelperLock(lay, wait=30):
                 if p.is_file():
                     p.unlink()
-            raise Halt('STOP', 'WORKER_DIED', 'the detached command ended without its result', block=b)
+            raise Halt('STOP', 'WORKER_DIED', hint, block=b)
         if time.time() >= deadline:
             b = Block()
             b.result = {'command': 'wait', 'detached': d['id'], 'in_progress': True}
@@ -4463,7 +5010,19 @@ def cmd_worker(a):
         time.sleep(0.1)
     if not isinstance(d, dict) or d.get('id') != a.wid:
         return 2
-    with HelperLock(lay, wait=10):
+    lock = HelperLock.adopt(lay, a.lock_fd) if a.lock_fd is not None else None
+    try:
+        if lock is None:
+            lock = HelperLock(lay, wait=10)
+            lock.__enter__()
+    except Halt as h:                               # r3 failure-R3-03: never die silently on the lock: a REFUSED result
+        b = h.to_block()
+        write_atomic(Path(d['out']), b.text().encode('utf-8'))
+        cur = read_json_file(p) or d
+        cur['exit'] = b.code
+        write_atomic(p, note_bytes(cur))
+        return 0
+    try:
         ctx = Ctx()
         try:
             if d['kind'] == 'wrap':
@@ -4472,11 +5031,17 @@ def cmd_worker(a):
                 b = selftest_work(ctx, d['info'])
         except Halt as h:
             b = h.to_block()
+        except OSError as e:
+            if e.errno != errno.ENOSPC:
+                raise
+            b = disk_full_halt(lay).to_block()      # r3 failure-R3-06
         text = b.text()
         write_atomic(Path(d['out']), text.encode('utf-8'))
         cur = read_json_file(p) or d
         cur['exit'] = b.code
         write_atomic(p, note_bytes(cur))
+    finally:
+        lock.release()
     return 0
 
 
@@ -4511,6 +5076,8 @@ def wrap_work(ctx, info):
     code, lines, last, lj, osha = run_runner(ctx, [sub, *info['rargs']], log)
     if info.get('placed'):
         remove_placed(ctx, info['placed'])
+    fp_before = info.get('fingerprint_sha256') or ctx.state['fingerprint_sha256']
+    fp_after, _ = fingerprint(lay)                  # r4 F2: the toolchain the stage ended on
     b = Block()
     b.pre = ['RUNNER| ' + scrub(ln) for ln in lines]
     verify = None
@@ -4529,12 +5096,14 @@ def wrap_work(ctx, info):
     pk = None
     if jd.is_dir():
         with JobLock(lay, jd):
-            pk = build_package(ctx, jv, sub, info['pre_newest'], command, completed)
+            pk = build_package(ctx, jv, sub, info['pre_newest'], command, completed, fp=(fp_before, fp_after))
     uploads = package_uploads(ctx, pk)
     folder = ctx.records_folder()
     for u in uploads:
         b.upload(u, folder)
     diverged = bool(pk and pk.get('reset_diverged'))
+    bnd = (pk or {}).get('binding') or {}
+    newly_diverged = bool(diverged and bnd.get('compared') and bnd.get('matched') is False and not info.get('failed_before'))
     tok = None
     if completed is not None:
         tok = token_text(sub, info['tag'], info['case'], completed, saved_xlsx8(jd), diverged)
@@ -4549,9 +5118,17 @@ def wrap_work(ctx, info):
     if verify is not None and verify['exit'] != 0:     # the FZ (uploaded above) is the evidence; never evicted (r2 R2-01)
         raise Halt('STOP', 'FROZEN_FOLDER_CHANGED', 'verify-frozen found the frozen folder changed: upload, then hand back case C',
                    block=b)
+    if fp_after != fp_before:                       # r4 F2: the save point is uploaded, then every job waits (O47)
+        b.result['fingerprint_changed_during_stage'] = True
+        raise fingerprint_changed_halt(ctx, fp_after, 'during wrap ' + sub, block=b)
     if pk is not None and pk.get('reset_diverged') and not pk.get('existing') and sub != 'freeze':
         b.next('RUN ' + freeze_line(ctx, D))
         raise Halt('STOP', 'RESET_DIVERGED', 'the re-run differs from what was seen: the run has failed; freeze it', block=b)
+    if pk is not None and not pk.get('existing') and sub == 'freeze' and newly_diverged:
+        # r3 R3-07: a bound freeze that differs from its seen token fails the run like any other stage
+        b.next(f'RUN {V} evict --job-dir {D}' if last == 'NEXT: DONE' else 'RUN ' + freeze_line(ctx, D))
+        raise Halt('STOP', 'RESET_DIVERGED', 'the re-run of freeze differs from what was seen: the run has failed; verify and '
+                   'evict it, then hand back case C', block=b)
     if last.startswith('REFUSED:'):
         rc = last.split(':', 1)[1].strip()
         made_pkg = pk is not None and not pk.get('existing')
@@ -4647,8 +5224,9 @@ def cmd_package(a):
                 verify = {'exit': 0 if vlast == 'NEXT: DONE' else 3, 'result': (vj or {}).get('result'), 'json': vj, 'last_line': vlast}
             prev = newest_package(ctx, jv.tag, jv.case)
             pre = prev['name'] if prev else (newest_package(ctx, chain=chain_of(jv.tag)) or {}).get('name')
+            fp_now, _ = fingerprint(ctx.lay)        # r4 F2: recorded; a change stops every job once the CP is uploaded
             pk = build_package(ctx, jv, sub or 'package', pre, {'runner_subcommand': None, 'reason': 'package', 'verify_frozen': verify}
-                               if verify else None, completed, applied_by='package')
+                               if verify else None, completed, applied_by='package', fp=(ctx.state['fingerprint_sha256'], fp_now))
         for u in package_uploads(ctx, pk):
             b.upload(u, ctx.records_folder())
         tok = token_text(sub, jv.tag, jv.case, completed, saved_xlsx8(jd), bool(pk and pk['reset_diverged'])) if completed else 'none'
@@ -4657,6 +5235,8 @@ def cmd_package(a):
         if verify is not None and verify['exit'] != 0:
             raise Halt('STOP', 'FROZEN_FOLDER_CHANGED', 'verify-frozen found the frozen folder changed: upload, then hand back case C',
                        block=b)
+        if fp_now != ctx.state['fingerprint_sha256']:
+            raise fingerprint_changed_halt(ctx, fp_now, 'package', block=b)
         if (jd / CJ.MARKER_NAME).exists():
             b.next('RUN ' + freeze_line(ctx, jd))
             if ctx.mode == 'everyday':
@@ -4761,7 +5341,7 @@ def cmd_start_note(a):
             confirm_or_upload(ctx, b, pk['name'])
             need(b, 'START_PACKAGE_NOT_CONFIRMED')
         require_unconfirmed(ctx, jv)
-        if lay.inbox.exists() and any(lay.inbox.iterdir()):
+        if inbox_has_files(lay.inbox):             # r3 tests-R3-03: the empty folders printed lines need do not count
             refuse('START_INBOX_PRESENT', 'BASE/inbox must be empty during a conversation')
         others = [d for d in lay.job_folders() if d != jv.dir]
         if others:
@@ -4770,11 +5350,12 @@ def cmd_start_note(a):
         if lay.transcripts.exists() and any(not p.name.startswith(pref) for p in lay.transcripts.iterdir()):
             refuse('START_TRANSCRIPTS_PRESENT', 'BASE/transcripts holds files of another run')
         out = jv.output_dir(role)
-        if out.is_dir() and any(e[1] == 'file' for e in tree_list(out)):
+        if out.is_dir() and any(e[1] in ('file', 'unsupported') for e in tree_list(out, lenient=True)):
             refuse('START_OUTPUT_NOT_EMPTY', 'the output folder is not empty: do not delete anything; run status')
         prompt, pin = prompt_pin(jv, role)
         if not prompt.is_file() or sha_file(prompt) != pin:
             refuse('START_PROMPT_CHANGED', 'the prompt file differs from the record pin: hand back case C')
+        fp_now = fingerprint_gate(ctx, 'start-note ' + role)    # r4 F2 (O47): before the START exists
         att, sup, repl = next_attempt(ctx, jv, role)
         nonce = secrets.token_hex(16)
         now = now_dt()
@@ -4788,7 +5369,7 @@ def cmd_start_note(a):
                 'case_id': jv.case, 'reader': jv.reader, 'tag': jv.tag, 'job_dir': str(jv.dir), 'role': role, 'attempt': att,
                 'nonce': nonce, 'prompt_path': str(prompt), 'prompt_sha256': pin, 'run_path': str(run_path(jv, role)),
                 'output_dir': str(out), 'record_sha256': rsha, 'ledger_seq': led_seq,
-                'fingerprint_sha256': ctx.state['fingerprint_sha256'], 'supersedes': sup, 'replaces': repl, 'incident': inc,
+                'fingerprint_sha256': fp_now, 'supersedes': sup, 'replaces': repl, 'incident': inc,
                 'rules': START_RULES,
                 'package_confirmed': {'name': pk['name'], 'drive_id': pk.get('drive_id'), 'md5': pk.get('md5'), 'listing': 'narrow'},
                 'output_dir_empty': True}
@@ -4852,6 +5433,9 @@ def unexpected_entries(tree, role):
     resp = RESPONSE_FILE[role]
     out = []
     for rel, k, *_ in tree:
+        if k == 'unsupported':                      # r3 failure-R3-01: a link or special file is always unexpected
+            out.append(rel)
+            continue
         if rel == resp:
             continue
         if role == 'G' and (rel == 'scratch' or rel.startswith('scratch/')):
@@ -4873,8 +5457,12 @@ def cmd_ai_archive(a):
         att = T['attempt']
         with JobLock(lay, jv.dir):
             out = jv.output_dir(role)
-            tree = tree_list(out, 'AI_OUTPUT_UNSUPPORTED_ENTRY') if out.is_dir() else []
-            tsha = tree_sha(tree)
+            # r3 failure-R3-01: a link or special file is archived as data (never packed or placed), so the written
+            # output still reaches Drive and the runner records RUN_OUTPUT_SYMLINK_OR_SPECIAL_FILE
+            full = tree_list(out, 'AI_OUTPUT_UNSUPPORTED_ENTRY', lenient=True) if out.is_dir() else []
+            tree, unsup = split_unsupported(full)
+            tsha = tree_sha(full)
+            require_space(lay, sum(e[3] or 0 for e in tree), 'ai-archive')   # r3 failure-R3-06
             archs = ai_archives(ctx, jv.tag, role, att, jv.case)
             if not archs and ai_lost(ctx, jv.tag, role, att, jv.case):
                 b = Block()
@@ -4919,14 +5507,14 @@ def cmd_ai_archive(a):
                 prev = {'name': last['name'], 'tree_sha256': last.get('tree_sha256')}
                 after = {'record_seq': e['seq'], 'code': 'REVIEW_INCOMPLETE', 'review_attempt_sha256': ra.get('sha256')}
             resp = out / RESPONSE_FILE[role]
-            present = os.path.lexists(resp)
+            present = os.path.lexists(resp) and stat.S_ISREG(os.lstat(resp).st_mode)   # a linked response is unsupported
             man = {'schema': 'cps.vm-ai-archive.v1', 'case_id': jv.case, 'reader': jv.reader, 'tag': jv.tag, 'job_dir': str(jv.dir),
                    'role': role, 'attempt': att, 'output_dir': str(out), 'start_note': T['name'], 'tree': tree, 'tree_sha256': tsha,
                    'output_mode': stat.S_IMODE(os.lstat(out).st_mode) if out.is_dir() else 0o755,
                    'response_file': RESPONSE_FILE[role], 'response_present': present,
-                   'response_sha256': sha_file(resp) if present and resp.is_file() else None, 'created_utc': utc(),
+                   'response_sha256': sha_file(resp) if present else None, 'created_utc': utc(), 'unsupported': unsup,
                    'boot_id': current_boot_id(), 'fingerprint_sha256': ctx.state['fingerprint_sha256'], 'revision': rev,
-                   'previous_revision': prev, 'after_refusal': after, 'unexpected': unexpected_entries(tree, role),
+                   'previous_revision': prev, 'after_refusal': after, 'unexpected': unexpected_entries(full, role),
                    'record_seq_at_archive': len(jv.stages())}
             name = f'AI_{jv.tag}_{role}{att}' + (f'r{rev}' if rev > 1 else '') + f'_{h8(tsha)}_{jv.case}.tgz'
             dest = lay.outbox / name
@@ -4943,7 +5531,7 @@ def cmd_ai_archive(a):
                           tree_sha256=tsha, meta=ai_meta(man)):
                 b.upload(u, ctx.records_folder())
             b.result = {'command': 'ai-archive', 'archive': name, 'response_present': present, 'revision': rev,
-                        'unexpected': len(man['unexpected'])}
+                        'unexpected': len(man['unexpected']), 'unsupported': [e[0] for e in unsup][:20]}
             ai_next(ctx, b, jv, role, T, ai_meta(man))
             return b
 
@@ -5056,7 +5644,7 @@ def incident_body(ctx, a):
             refuse('INCIDENT_RESPONSE_PRESENT', 'the response file exists: run ai-archive and go on')
         if arch is None:
             out = jv.output_dir(role)
-            if out.is_dir() and unexpected_entries([e for e in tree_list(out) if e[1] == 'file'], role):
+            if out.is_dir() and unexpected_entries([e for e in tree_list(out, lenient=True) if e[1] in ('file', 'unsupported')], role):
                 refuse('INCIDENT_CLASSIFICATION', 'the output folder holds files: AI_WRITTEN_LOST')
         if not a.conversation or not a.conversation.strip() or a.conversation.strip().startswith('<'):
             refuse('INCIDENT_NEEDS_JOB', '--conversation (the conversation id) is required')
@@ -5076,12 +5664,27 @@ def incident_body(ctx, a):
         refuse('INCIDENT_NEEDS_SEEN', 'give every BIND= token you saw since the last upload (--seen), or --not-seen')
     tag = jv.tag if jv else (pending_job or {}).get('tag')
     case = jv.case if jv else (pending_job or {}).get('case')
-    parsed = []
+    parsed, ignored = [], []
     for t in seen:
         p = parse_token(t)
+        if p is not None and not p['none'] and (p['tag'] != tag or p['case'] != case) and frozen_on_drive(ctx, p['tag'], p['case']):
+            ignored.append(t)                       # r3 R3-02: the token of a job whose FZ is on Drive (printed before that upload)
+            continue
         if p is None or (not p['none'] and (p['tag'] != tag or p['case'] != case)):
             refuse('INCIDENT_SEEN_INVALID', 'copy the BIND= token again exactly')
+        if not p['none'] and sub is not None and p['sub'] != sub:
+            # r3 R3-02: a token of another stage binds nothing here. One of a stage the restored package already holds
+            # (printed just before that package's upload) is harmless: recorded, never compared. Any other is refused.
+            if jv is not None and restored_stage_token(jv, t, p):
+                ignored.append(t)
+                continue
+            refuse('INCIDENT_SEEN_INVALID', f'the token of stage {p["sub"]} is neither of the stage this incident concerns ({sub}) '
+                   'nor of a stage the restored package holds: copy the BIND= tokens again exactly',
+                   detail={'token_subcommand': p['sub'], 'next_subcommand': sub})
         parsed.append(p)
+    seen = [t for t in seen if t not in ignored]
+    if ignored and not seen and not not_seen:
+        not_seen = True                             # only harmless tokens: nothing of the lost stage was seen
     real = [p for p in parsed if not p['none']]
     forces = any(p['D'] for p in real) or len({tuple(p['fields']) for p in real}) > 1
     earlier = []
@@ -5138,7 +5741,8 @@ def incident_body(ctx, a):
             'classification': cls, 'job_dir': str(jv.dir) if jv else None, 'case_id': case, 'tag': tag, 'role': role,
             'attempt': T['attempt'] if T else None, 'start_note': T['name'] if T else None, 'conversation': a.conversation,
             'transcript': tinfo, 'note': a.note, 'after_restore': after, 'pending_job': pending_job, 'seen': seen, 'not_seen': not_seen,
-            'next_subcommand': sub, 'forces_reset_diverged': bool(forces), 'conversation_ended': bool(a.conversation_ended),
+            'seen_ignored': ignored, 'next_subcommand': sub, 'forces_reset_diverged': bool(forces),
+            'conversation_ended': bool(a.conversation_ended),
             'ai_archive': ({'name': arch['name'], 'response_present': (arch.get('meta') or {}).get('response_present'),
                             'unexpected': (arch.get('meta') or {}).get('unexpected')} if arch else
                            ({'name': lost_names[-1], 'rejected': True} if lost_names else None)),
@@ -5165,12 +5769,19 @@ def incident_body(ctx, a):
         b.fetch += plan.block.fetch
     if forces:
         b.tail = []
+        if jv is None:                              # r3 R3-04: a pending (folder-less) prepare or nonattempt has nothing to freeze
+            b.fetch = []
+            if after:
+                b.listing(ctx.records_folder(), lay.inbox / 'DRIVE_LISTING.json')
+                b.next(f'RUN {ctx.V} recheck')
+            raise Halt('STOP', 'PENDING_JOB_DIVERGED', 'the seen tokens disagree about a runner command that left no job folder: '
+                       'the run has failed and nothing can be frozen; hand back case C', block=b)
         if after:
             b.listing(ctx.records_folder(), lay.inbox / 'DRIVE_LISTING.json')
             b.next(f'RUN {ctx.V} recheck')
-            b.then('RUN ' + freeze_line(ctx, jv.dir) if jv else f'RUN {ctx.V} status')
+            b.then('RUN ' + freeze_line(ctx, jv.dir))
         else:
-            b.next('RUN ' + freeze_line(ctx, jv.dir) if jv else f'RUN {ctx.V} status')
+            b.next('RUN ' + freeze_line(ctx, jv.dir))
         raise Halt('STOP', 'RESET_DIVERGED', 'the seen tokens disagree: the run has failed; freeze it', block=b)
     return b
 
@@ -5308,7 +5919,7 @@ def cmd_selftest(a):
             refuse('HELPER_BUSY', 'a detached command is in progress', block=b)
         fp, _ = fingerprint(ctx.lay)
         if fp != ctx.state.get('fingerprint_sha256'):
-            stop('FINGERPRINT_CHANGED', 'the toolchain changed since session start: run session_start.sh again')
+            raise fingerprint_changed_halt(ctx, fp, 'selftest')        # r4 F2: one rule for every FINGERPRINT_CHANGED
         d = ctx.lay.outbox / f'selftest_{utc14()}'
         d.mkdir()
         commit = (subprocess.run(['git', '-C', str(HELPER_REPO), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout or '').strip()
@@ -5351,7 +5962,8 @@ def cmd_fingerprint_pass(a):
             raise Halt('BUSY', 'SELFTEST_STILL_RUNNING', block=b)
         fp, full = fingerprint(lay)
         if fp != run.get('fingerprint_before_sha256') or fp != st.get('fingerprint_sha256'):
-            stop('FINGERPRINT_CHANGED', 'something changed the toolchain during the self-test: hand back case C')
+            # r4 F2/F5: no PASS for a self-test whose toolchain changed under it; a new session start, then a new self-test
+            raise fingerprint_changed_halt(ctx, fp, 'fingerprint-pass')
         d = runs[-1].parent
         res_p = d / 'work' / 'EXPORT_TEST_RESULTS.json'
         res_raw = res_p.read_bytes() if res_p.is_file() else b''
@@ -5572,10 +6184,12 @@ def cmd_evict(a):
                 man = fz_manifest(ctx, fz)
                 if man is not None:
                     with JobLock(lay, jd):
-                        have = {('job/' + e[0], e[1], e[2], e[3], e[4]) for e in tree_list(jd)}
+                        have = {('job/' + e[0], e[1], e[2], e[3], e[4] if e[1] != 'unsupported' else canon(e[4]))
+                                for e in tree_list(jd, lenient=True)}
                         have.add(('job', 'dir', stat.S_IMODE(os.lstat(jd).st_mode), None, None))
                         want = {(m['path'], m['type'], m['mode'], m.get('bytes'), m.get('sha256')) for m in man['members']}
                         want |= {(f['path'], 'file', f['mode'], f['bytes'], f['sha256']) for f in (man.get('png') or {}).get('files') or []}
+                        want |= {('job/' + e[0], e[1], e[2], e[3], canon(e[4])) for e in man.get('unsupported') or []}
                         if have != want:
                             stop('EVICT_FOLDER_CHANGED', 'the frozen folder differs from its FZ: hand back case C')
             elif pend:
@@ -5707,6 +6321,9 @@ def cmd_job_start(a):
         src = Path(str(job.get('source_path', '')))
         if not src.is_file() or src.parent != d:
             refuse('JOB_START_SOURCE_OUTSIDE', 'source_path must be the source file in that folder')
+        for f in ('JOB.json', 'JOB_TITLE.json', src.name):     # r3 failure-R3-05: the files themselves, never links
+            if not stat.S_ISREG(os.lstat(d / f).st_mode):
+                refuse('JOB_START_INPUT_NOT_REGULAR', 'put the file itself into the folder (a copy, not a link)', detail={'file': f})
         if restart_of:                              # T-08: a restart runs on the original run's inputs, byte for byte
             om = inputs_manifest(orig[0]) if orig else None
             if om is None or om.get('case_id') != case or inputs_shas(d, om) != om.get('files') or \
@@ -5731,6 +6348,11 @@ def cmd_job_start(a):
         for n in ('JOB.json', 'JOB_TITLE.json', src.name):
             mm.append(('inputs/' + n, 'file', 0o644, 0, str(d / n)))
         write_tgz(tmp, mm)
+        chk = Archive(tmp, ('MANIFEST.json', 'inputs'))      # r3 failure-R3-05: read back before it is named
+        try:
+            chk.check({'inputs': ('dir', 0o755), **{'inputs/' + n: ('file', 0o644, os.lstat(d / n).st_size, h) for n, h in files.items()}})
+        finally:
+            chk.close()
         name = f'INPUTS_{tag}_{restart_of or "E0"}_{h8(sha_file(tmp))}_{case}.tgz'
         if (lay.outbox / name).exists() or ctx.index.get(name) is not None:
             tmp.unlink()
@@ -5872,6 +6494,11 @@ def ensure_fz_meta(ctx, fz, lst, block):
     return None
 
 
+# r4 F3/F4: the ALL_FROZEN.json v2 flags that make a run a failed run (O44 RESET_DIVERGED, O46 AI_OUTPUT_LOST); the scoring
+# consumer (deploy/vm/apply_frozen_flags.py, a G3 candidate) keys on these lists
+FAILED_RUN_FLAGS = ('RESET_DIVERGED', 'AI_OUTPUT_LOST')
+
+
 def run_flags(ctx, tag, case, meta, lst, led, job_dir):
     fl = []
     incs = [p for p in lst.names('incident') if p['tag'] == tag and p['case'] == case]
@@ -5885,7 +6512,9 @@ def run_flags(ctx, tag, case, meta, lst, led, job_dir):
         fl.append('REVIEWER_REPLACED')
     if any(p['role'] == 'V' and p['attempt'] == 2 and p['cls'] in ('AI_NOTHING_WRITTEN', 'AI_WRITTEN_LOST') for p in incs) or \
             any(p['role'] == 'V' and p['cls'] == 'AI_WRITTEN_LOST' for p in incs):
-        fl.append('REVIEWER_LOST')
+        # r4 F3 (O46, design E4): a reviewer output lost to a reset, or a replacement reviewer that also wrote nothing, is
+        # failed visual QA for this run, never a failed run: the frozen generated output is scored as it is
+        fl.append('VISUAL_QA_FAILED_BY_RESET')
     pe = led.of('prepare', job_dir=job_dir)
     if (pe and pe[0].get('restart_of')) or CJ.in_place_restart_used(led, job_dir):
         fl.append('RESTARTED')
@@ -6010,10 +6639,14 @@ def cmd_final(a):
               'sessions': [{'name': x['name'], 'boot8': x['boot8'], 'fp8': x['fp8'], 'created': lst.copies(x['name'])[0]['created']}
                            for x in lst.names('session')],
               'fingerprint_passes': [],
-              'runs_failed_by_reset': sorted(r['job_dir'] for r in runs if {'RESET_DIVERGED', 'AI_OUTPUT_LOST', 'REVIEWER_LOST'} & set(r['flags'])),
+              'runs_failed_by_reset': sorted(r['job_dir'] for r in runs if set(FAILED_RUN_FLAGS) & set(r['flags'])),
+              'runs_visual_qa_failed_by_reset': sorted(r['job_dir'] for r in runs if 'VISUAL_QA_FAILED_BY_RESET' in r['flags']),
+              'runs_needing_owner': sorted(r['job_dir'] for r in runs if 'FROZEN_UNVERIFIED' in r['flags']),
               'checks': {'one_chain': True, 'no_fork': True, 'genesis_matches': True, 'every_freeze_archived': True, 'jobs_complete': True}}
         sl = ctx.state.get('listing', {}).get('setup') or []
-        af['fingerprint_passes'] = [{'name': n, 'fp8': parse_name(n)['fp8'], 'created': None} for n in sl if (parse_name(n) or {}).get('kind') == 'fpass']
+        # r3 R3-08: each PASS with the setup listing's createdTime (the earliest copy the session listings recorded)
+        af['fingerprint_passes'] = [{'name': n, 'fp8': parse_name(n)['fp8'], 'created': pass_created(ctx, n)}
+                                    for n in sl if (parse_name(n) or {}).get('kind') == 'fpass']
         ap = lay.outbox / 'ALL_FROZEN.json'
         if ap.exists():
             ap.unlink()
@@ -6029,6 +6662,15 @@ def cmd_final(a):
 
 
 # ------------------------------------------------------------------ rebuild-parts (spec 6.7) and standalone restore (5.10)
+def pass_created(ctx, name):
+    """r3 R3-08: the Drive createdTime of a FINGERPRINT_PASS: the earliest listed copy, else the confirmed copy's."""
+    ts = [c.get('drive_created') for c in ctx.index.copies.get(name, {}).values() if c.get('drive_created')]
+    e = ctx.index.get(name) or {}
+    if not ts and e.get('drive_created'):
+        ts = [e['drive_created']]
+    return min(ts) if ts else None
+
+
 def cmd_rebuild_parts(a):
     ctx = Ctx()
     with HelperLock(ctx.lay):
@@ -6223,7 +6865,8 @@ def cmd_assemble(a):
         stg.finish()
         newest_mode = (man.get('ledger') or {}).get('mode', newest_mode)
         ar.close()
-        report['runs'].append({'job_dir': man['job_dir'], 'archive': r['archive']['name'], 'runner_sha256': man.get('runner_sha256')})
+        report['runs'].append({'job_dir': man['job_dir'], 'archive': r['archive']['name'], 'runner_sha256': man.get('runner_sha256'),
+                               'unsupported_not_recreated': [e[0] for e in man.get('unsupported') or []]})    # r3 failure-R3-01
     lp = Path(af['ledger']['path'])
     lp.parent.mkdir(parents=True, exist_ok=True)
     with open(lp, 'xb') as f:
@@ -6359,6 +7002,11 @@ def cmd_audit(a):
                          and c.get('role') == role and c.get('transcript') for _, c in incs)
                 if not ok:
                     A('AUD_INTERRUPT_WITHOUT_INCIDENT', [jd])
+                fi = (s.get('facts') or {}).get('interruption') or {}
+                written = [k for k in (fi.get('output_files') or {}) if role == 'S' or not (k == 'scratch' or k.startswith('scratch/'))]
+                if fi.get('response_file_present') or written:      # r3 R3-05: an interrupt rests on 'nothing was written'
+                    A('AUD_INTERRUPT_OUTPUT_WRITTEN', [jd], {'seq': s.get('seq'), 'response_file_present': bool(fi.get('response_file_present')),
+                                                             'files': written[:10]})
         for role in set(need_roles):
             if not [x for x in st_ if x['role'] == role]:
                 A('AUD_START_MISSING', [jd], {'role': role})
@@ -6427,12 +7075,7 @@ def cmd_audit(a):
     for s in starts_:
         c = notes.get(s['name']) or {}
         lk = links.get(s['name']) or {}
-        t0 = parse_utc(lk.get('started_utc'))
-        if t0 is None and s['role'] == 'G':
-            for jd, (r, rec) in recs.items():
-                if r['tag'] == s['tag'] and r['case_id'] == s['case']:
-                    g = read_json_file(Path(jd) / 'response' / 'GENERATION_RECORD.json') or {}
-                    t0 = parse_utc(g.get('started_utc'))
+        t0 = conversation_start(s, lk, recs, starts_)          # r3 R3-06: every fallback of 5.16
         if t0 is None:
             continue
         sk = skew.get(c.get('boot_id'), 0)
@@ -6496,6 +7139,12 @@ def cmd_audit(a):
             continue
         if (m.get('helper') or {}).get('sha256') != pins.get('deploy/vm/cps_vm.py') or m.get('runner_sha256') != pins.get('deploy/run/cps_job.py'):
             A('AUD_HELPER_NOT_PINNED', [p['name']])
+        # r4 F2 (O47): the name's fp8 is the fingerprint the stage started on; a toolchain change during the stage is evidence
+        if h8(m.get('fingerprint_sha256') or '') != p['fp8']:
+            A('AUD_FINGERPRINT_LABEL', [p['name']])
+        if m.get('fingerprint_after_sha256') not in (None, m.get('fingerprint_sha256')):
+            A('AUD_FINGERPRINT_CHANGED_DURING_STAGE', [p['name']], {'before8': h8(m.get('fingerprint_sha256') or ''),
+                                                                   'after8': h8(m['fingerprint_after_sha256'])})
         bd = m.get('binding') or {}
         if (bd.get('matched') is False or m.get('reset_diverged')) and m.get('job_dir') not in failed_runs:
             A('AUD_BINDING_MISMATCH', [p['name']])
@@ -6534,13 +7183,53 @@ def cmd_audit(a):
                      'owner_platform_created': None})
     rep = Path(a.report) if a.report else d / 'AUDIT_REPORT.json'
     write_atomic(rep, note_bytes({'schema': 'cps.vm-audit-report.v1', 'created_utc': utc(), 'helper': helper_info(), 'anomalies': an,
-                                  'listed': listed, 'runs_failed_by_reset': sorted(failed_runs)}))
+                                  'listed': listed, 'runs_failed_by_reset': sorted(failed_runs),
+                                  'runs_visual_qa_failed_by_reset': sorted(af.get('runs_visual_qa_failed_by_reset') or []),
+                                  'runs_needing_owner': sorted(af.get('runs_needing_owner') or [])}))
     write_atomic(rep.parent / 'O52_COMPARISON.json', note_bytes({'schema': 'cps.vm-o52-comparison.v1', 'rows': rows}))
     b = Block()
     b.result = {'command': 'audit', 'anomalies': len(an), 'codes': sorted({x['code'] for x in an}), 'report': str(rep)}
     b.next('DONE')
     b.code = EXIT_OK if not an else EXIT_STOP
     return b
+
+
+def conversation_start(s, lk, recs, starts_):
+    """r3 R3-06 (5.16 AUD_START_AFTER_CONVERSATION): the conversation start of START s: its LINK's started_utc; else, for
+    the last G attempt, the frozen GENERATION_RECORD's started_utc; else the started_utc of the interrupt entry of that
+    attempt (S/G); else, for the last attempt of the role, the started_utc of the first consuming-stage entry."""
+    t0 = parse_utc(lk.get('started_utc'))
+    if t0 is not None:
+        return t0
+    rec = next((rec for jd, (r, rec) in recs.items() if r['tag'] == s['tag'] and r['case_id'] == s['case']), None)
+    jd = next((jd for jd, (r, rec) in recs.items() if r['tag'] == s['tag'] and r['case_id'] == s['case']), None)
+    if rec is None:
+        return None
+    last_att = max((x['attempt'] for x in starts_ if (x['tag'], x['case'], x['role']) == (s['tag'], s['case'], s['role'])), default=s['attempt'])
+    done = [x for x in rec.get('stages', []) if x.get('completed')]
+    if s['role'] == 'G' and s['attempt'] == last_att:
+        g = read_json_file(Path(jd) / 'response' / 'GENERATION_RECORD.json') or {}
+        t0 = parse_utc(g.get('started_utc'))
+        if t0 is not None:
+            return t0
+    if s['role'] in ('S', 'G'):
+        want = 'SCOPE_READER' if s['role'] == 'S' else 'GENERATE'
+        ints = []
+        for x in done:
+            if x['stage'] == 'interrupt':
+                prev = [y for y in done if y['seq'] < x['seq']]
+                if prev and str(prev[-1].get('next') or '').split(' ')[0] == want:
+                    ints.append(x)
+        if len(ints) >= s['attempt']:
+            t0 = parse_utc((((ints[s['attempt'] - 1].get('facts') or {}).get('interruption')) or {}).get('started_utc'))
+            if t0 is not None:
+                return t0
+    if s['attempt'] == last_att:
+        stage = {'S': 'scope-finish', 'G': 'finish', 'V': 'visual-record'}[s['role']]
+        cons = [x for x in rec.get('stages', []) if x['stage'] == stage]
+        if cons:
+            return parse_utc(cons[0].get('started_utc'))
+    return None
 
 
 def tag_case_of(job_dir):
@@ -6577,6 +7266,154 @@ def pkg_record_seq(d, name):
 
 def ai_manifest(p):
     return pkg_manifest(Path(p).parent, Path(p).name) if Path(p).is_file() else None
+
+
+# ------------------------------------------------------------------ probe P5 (r4 F8): does a detached process survive the tool call?
+PROBE_SCHEMA = 'cps.vm-probe-p5.v1'
+PROBE_HOLDS = (60, 240, 600, 1200)
+
+
+def probe_dir(lay):
+    d = lay.outbox / 'probe_p5'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def probe_worker_alive(st):
+    pid = (st or {}).get('pid')
+    if not pid or st.get('boot_id') != current_boot_id():
+        return False
+    try:
+        cmd = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+    except OSError:
+        return False
+    return b'_probe_worker' in cmd and str(st.get('token')).encode() in cmd
+
+
+def probe_line(args):
+    return f'RUN python3 -I -B {HELPER_FILE} probe-p5 {args}'
+
+
+def cmd_probe_p5(a):
+    """r4 F8: probe P5 (spec 13). No kit, no session and no Drive needed; the report goes to the reports folder.
+      start [--seconds N]   start a detached worker (the same Popen flags as every detached helper command) that writes
+                            one heartbeat a second for N seconds; then END_TOOL_CALL, WAIT and check in a new tool call
+      hold --seconds S      stay in the foreground S seconds (finds the longest tool call the platform allows: a call
+                            that is killed leaves its HOLD file without completed_utc)
+      check [--min-gap G]   at least G seconds (default 60) after start, in a new tool call: did the worker outlive the
+                            tool call that started it? writes PROBE_P5_<boot8>_<utc14>.json and prints its UPLOAD"""
+    lay = Layout()
+    check_layout_basic(lay)
+    d = probe_dir(lay)
+    b = Block()
+    sp = d / 'START.json'
+    st = read_json_file(sp) if sp.is_file() else None
+    if a.action == 'start':
+        if not 5 <= a.seconds <= 7200:
+            refuse('PROBE_USAGE', '--seconds between 5 and 7200')
+        if isinstance(st, dict) and probe_worker_alive(st):
+            refuse('PROBE_RUNNING', 'a probe worker is still running: run probe-p5 check')
+        for f in ('HEARTBEAT.jsonl', 'DONE.json'):
+            if (d / f).exists():
+                (d / f).unlink()
+        token = secrets.token_hex(6)
+        st = {'schema': PROBE_SCHEMA, 'boot_id': current_boot_id(), 'started_utc': utc(), 'seconds': a.seconds, 'token': token,
+              'pid': None, 'foreground_pid': os.getpid()}
+        write_atomic(sp, note_bytes(st))
+        with open(d / 'worker.log', 'ab') as log:
+            pr = subprocess.Popen([sys.executable, '-I', '-B', str(HELPER_FILE), '_probe_worker', str(d), token, str(a.seconds)],
+                                  start_new_session=True, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                  close_fds=True, env=os.environ.copy())
+        st['pid'] = pr.pid
+        write_atomic(sp, note_bytes(st))
+        b.result = {'command': 'probe-p5', 'action': 'start', 'pid': pr.pid, 'seconds': a.seconds}
+        b.next('END_TOOL_CALL')
+        b.then('WAIT until=' + iso(now_dt() + datetime.timedelta(seconds=a.min_gap + 10)))
+        b.then(probe_line(f'check --min-gap {a.min_gap}'))
+        return b
+    if a.action == 'hold':
+        if not 1 <= a.seconds <= 7200:
+            refuse('PROBE_USAGE', '--seconds between 1 and 7200')
+        hp = d / f'HOLD_{a.seconds:05d}_{utc14()}_{secrets.token_hex(2)}.json'
+        h = {'seconds': a.seconds, 'started_utc': utc(), 'completed_utc': None, 'pid': os.getpid()}
+        write_atomic(hp, note_bytes(h))
+        time.sleep(a.seconds)
+        h['completed_utc'] = utc()
+        write_atomic(hp, note_bytes(h))
+        b.result = {'command': 'probe-p5', 'action': 'hold', 'seconds': a.seconds, 'completed': True}
+        nxt = [x for x in PROBE_HOLDS if x > a.seconds]
+        b.next(probe_line(f'hold --seconds {nxt[0]}') if nxt else probe_line('check'))
+        return b
+    # check
+    if not isinstance(st, dict) or st.get('schema') != PROBE_SCHEMA:
+        refuse('PROBE_NOT_STARTED', 'run probe-p5 start first')
+    started = parse_utc(st.get('started_utc'))
+    gap = (now_dt() - started).total_seconds() if started else 0
+    if gap < a.min_gap:
+        b.next('WAIT until=' + iso(started + datetime.timedelta(seconds=a.min_gap + 5)))
+        b.then(probe_line(f'check --min-gap {a.min_gap}'))
+        refuse('PROBE_TOO_EARLY', f'check at least {a.min_gap} s after start, in a new tool call', block=b)
+    beats = []
+    hb = d / 'HEARTBEAT.jsonl'
+    for ln in (hb.read_text(encoding='utf-8', errors='replace').splitlines() if hb.is_file() else []):
+        try:
+            x = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(x, dict) and x.get('token') == st.get('token') and parse_utc(x.get('utc')):
+            beats.append(parse_utc(x['utc']))
+    done = read_json_file(d / 'DONE.json') if (d / 'DONE.json').is_file() else None
+    done = done if isinstance(done, dict) and done.get('token') == st.get('token') else None
+    alive = probe_worker_alive(st)
+    last = max(beats) if beats else None
+    lived = (last - started).total_seconds() if last else 0.0
+    survives = bool((alive or done) and lived >= a.min_gap - 5)
+    holds = []
+    for f in sorted(d.glob('HOLD_*.json')):
+        x = read_json_file(f) or {}
+        su = parse_utc(x.get('started_utc'))
+        killed = x.get('completed_utc') is None and su is not None and (now_dt() - su).total_seconds() > (x.get('seconds') or 0) + 60
+        holds.append({'seconds': x.get('seconds'), 'started_utc': x.get('started_utc'), 'completed_utc': x.get('completed_utc'),
+                      'killed': killed})
+    done_holds = [h['seconds'] for h in holds if h['completed_utc']]
+    killed_holds = [h['seconds'] for h in holds if h['killed']]
+    now = now_dt()
+    rep = {'schema': PROBE_SCHEMA, 'helper': helper_info(), 'boot_id': current_boot_id(), 'created_utc': iso(now),
+           'start': {k: st.get(k) for k in ('started_utc', 'seconds', 'boot_id', 'pid', 'foreground_pid')},
+           'check_gap_seconds': round(gap, 1), 'min_gap_seconds': a.min_gap, 'heartbeats': len(beats),
+           'last_heartbeat_utc': iso(last) if last else None, 'worker_lived_seconds': round(lived, 1), 'worker_alive': alive,
+           'worker_done': done is not None, 'same_boot': st.get('boot_id') == current_boot_id(),
+           'detached_survives_tool_call': survives, 'holds': holds,
+           'longest_completed_hold_seconds': max(done_holds) if done_holds else None,
+           'shortest_killed_hold_seconds': min(killed_holds) if killed_holds else None,
+           'verdict': 'PASS' if survives and a.min_gap >= 60 else ('FAIL' if not survives else 'INCONCLUSIVE_SHORT_GAP')}
+    out = lay.outbox / f'PROBE_P5_{h8(sha_bytes(current_boot_id().encode()))}_{utc14(now)}.json'
+    write_new(out, note_bytes(rep))
+    cfg = None
+    if lay.config_path.is_file():
+        try:
+            cfg = load_config(lay)
+        except Halt:
+            cfg = None
+    b.upload(out, reports_folder(cfg) if cfg else 'CPS/reports')
+    b.result = {'command': 'probe-p5', 'action': 'check', 'verdict': rep['verdict'], 'detached_survives_tool_call': survives,
+                'longest_completed_hold_seconds': rep['longest_completed_hold_seconds'], 'report': out.name}
+    b.next(f'TELL_MAINTAINER probe=P5 report={out.name}')
+    return b
+
+
+def cmd_probe_worker(a):
+    d = Path(a.dir)
+    end = time.time() + a.seconds
+    n = 0
+    with open(d / 'HEARTBEAT.jsonl', 'a', encoding='utf-8') as f:
+        while time.time() < end:
+            n += 1
+            f.write(json.dumps({'utc': utc(), 'n': n, 'token': a.token}) + '\n')
+            f.flush()
+            time.sleep(1)
+    write_atomic(d / 'DONE.json', note_bytes({'token': a.token, 'ended_utc': utc(), 'heartbeats': n}))
+    return 0
 
 
 # ------------------------------------------------------------------ command line
@@ -6655,6 +7492,15 @@ def build_parser():
     p.add_argument('--fz', required=True)
     p = sub.add_parser('_worker')
     p.add_argument('wid')
+    p.add_argument('--lock-fd', type=int, default=None)
+    p = sub.add_parser('probe-p5')
+    p.add_argument('action', choices=['start', 'hold', 'check'])
+    p.add_argument('--seconds', type=int, default=900)
+    p.add_argument('--min-gap', type=int, default=60)
+    p = sub.add_parser('_probe_worker')
+    p.add_argument('dir')
+    p.add_argument('token')
+    p.add_argument('seconds', type=int)
     return ap
 
 
@@ -6662,7 +7508,8 @@ COMMANDS = {'session': cmd_session, 'fingerprint': cmd_fingerprint, 'selftest': 
             'genesis': cmd_genesis, 'wrap': cmd_wrap, 'package': cmd_package, 'start-note': cmd_start_note, 'link-note': cmd_link_note,
             'ai-archive': cmd_ai_archive, 'restore': cmd_restore, 'incident': cmd_incident, 'recheck': cmd_recheck, 'evict': cmd_evict,
             'final': cmd_final, 'assemble': cmd_assemble, 'audit': cmd_audit, 'status': cmd_status, 'wait': cmd_wait,
-            'job-start': cmd_job_start, 'delivery-note': cmd_delivery_note, 'rebuild-parts': cmd_rebuild_parts}
+            'job-start': cmd_job_start, 'delivery-note': cmd_delivery_note, 'rebuild-parts': cmd_rebuild_parts,
+            'probe-p5': cmd_probe_p5}
 
 
 def main(argv=None):
@@ -6673,10 +7520,20 @@ def main(argv=None):
         return EXIT_USAGE if e.code else 0
     if a.cmd == '_worker':
         return cmd_worker(a)
+    if a.cmd == '_probe_worker':
+        return cmd_probe_worker(a)
     try:
         b = COMMANDS[a.cmd](a)
     except Halt as h:
         b = h.to_block()
+    except OSError as e:
+        if e.errno != errno.ENOSPC:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            b = Halt('STOP', 'INTERNAL_ERROR', 'an unexpected helper error: hand back case C with the output',
+                     detail={'error': type(e).__name__}).to_block()
+        else:                                               # r3 failure-R3-06: a full file system is named as such
+            b = disk_full_halt(Layout()).to_block()
     except Exception as e:                                  # noqa: BLE001 - an internal error is a STOP (case C), never a guess
         import traceback
         traceback.print_exc(file=sys.stderr)
