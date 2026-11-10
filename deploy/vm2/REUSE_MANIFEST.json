@@ -1,0 +1,569 @@
+{
+ "modified": [
+  {
+   "name": "check_layout_release",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    525,
+    562
+   ],
+   "v1_segment_sha256": "e65b25b9f32332ad845c433c1f28e2a75cda00273ddd35fa845412610a6733aa"
+  },
+  {
+   "name": "tree_list",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    843,
+    886
+   ],
+   "v1_segment_sha256": "23b44d804efe0ff23642d2b0df3703f6f6e190b81df2fb27bd265f61e46cc056"
+  },
+  {
+   "name": "rebuild_kit",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    2797,
+    2825
+   ],
+   "v1_segment_sha256": "23ea04aab5466fcb4375586043c2b213341bfbf95ec99e8d6f27e3de4aa35d60"
+  },
+  {
+   "name": "session_kit",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    2828,
+    2892
+   ],
+   "v1_segment_sha256": "6144ac3696065b8d72fa6f0b87ad1525a6a9fee016218be4b35e090bb36f4ffe"
+  },
+  {
+   "name": "cleanup_leftovers",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    2956,
+    2975
+   ],
+   "v1_segment_sha256": "a800f44e91a88b357bb5d590c17d747efeb5753053a12e7383b9e6d29f96df58"
+  },
+  {
+   "name": "place_frozen",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    4837,
+    4879
+   ],
+   "v1_segment_sha256": "cd52c082840843c3a873ff9fe8569eb0fc9fa92690eff171e116b1f5a1306b8c"
+  },
+  {
+   "name": "wait_block",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    4930,
+    4975
+   ],
+   "v1_segment_sha256": "dc5f59a7b58635dbc8b980b6757be2da31c6e18aa81caa4e82542fb08a3cae39"
+  },
+  {
+   "name": "cmd_worker",
+   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
+   "v1_lines": [
+    5002,
+    5045
+   ],
+   "v1_segment_sha256": "db59c5f217e27a0e986ea92e1b91af43a065cbafa16a85cffb88af4b27f2c4b5"
+  }
+ ],
+ "reused": [
+  {
+   "kind": "function",
+   "name": "now_dt",
+   "segment_sha256": "1f7cc6f6949f79e811ad269e7c7e6bd1bebd212db1ea2bc21bd58cfaedb78a23",
+   "v1_lines": [
+    171,
+    172
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "iso",
+   "segment_sha256": "d016e32d4c2a76e1391f5cbb074e805ec958400ea3845c23b7edda90075201a2",
+   "v1_lines": [
+    175,
+    176
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "utc",
+   "segment_sha256": "97afadbb2429ffab96d7f71b06b618e4b2deec67b2602c5c472140679214e2da",
+   "v1_lines": [
+    179,
+    180
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "utc14",
+   "segment_sha256": "48baa80bfd770fa91f94456b1b8ab0b38e04879e129e459b95fad8407169f58d",
+   "v1_lines": [
+    183,
+    184
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "parse_utc",
+   "segment_sha256": "f6f18dca1ac99b7cf49311b233f809e89544d76142f9b03efd9844bfe4c98d36",
+   "v1_lines": [
+    187,
+    194
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "sha_bytes",
+   "segment_sha256": "3e699aa4d547eb48e2efb061177916f546d94a7374c828baa296f48639ab7124",
+   "v1_lines": [
+    197,
+    198
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "sha_file",
+   "segment_sha256": "a42563b601126d2c74f272d2f0d9ce4721ff389d58181b96bc21ac6636ec2b23",
+   "v1_lines": [
+    201,
+    206
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "md5_file",
+   "segment_sha256": "89174225391867dfa49a137b1cba50e547e42be3b4c8c7047373eaf25c2894e2",
+   "v1_lines": [
+    209,
+    214
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "h8",
+   "segment_sha256": "2f2a60192818874f9c337a3429e97e1bed2f2568642f47d18173ab63fbf01c16",
+   "v1_lines": [
+    217,
+    218
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "canon",
+   "segment_sha256": "df2675b85c78d0a40b2a053b35bc783b5b41bd469a5791d8e562234876570d38",
+   "v1_lines": [
+    221,
+    222
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "sjson",
+   "segment_sha256": "64e3a806a74d27c25cf71122a20bcaeac0378ca6b7006b99ae2561fdc5a2de54",
+   "v1_lines": [
+    229,
+    241
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "read_json_file",
+   "segment_sha256": "d64b24c5c49b638280814e045e7074aa18f19d72ae9529af063e56d1af082056",
+   "v1_lines": [
+    244,
+    248
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "write_atomic",
+   "segment_sha256": "f5e6a77ea804dda29fc5ecb07bdd93c51e0669ce8caa8cc985a4ffa09e70335d",
+   "v1_lines": [
+    251,
+    261
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "write_new",
+   "segment_sha256": "4e3d56aaaaedf6f8113f27d52c72d54e4fc799f2bc5a5a9074dce826836dfb94",
+   "v1_lines": [
+    264,
+    287
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "make_writable_tree",
+   "segment_sha256": "ce85f7f113ad0f51cc186d16a0c496d96ff24cac5165468fbfdb36c0d22c0c9f",
+   "v1_lines": [
+    300,
+    312
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "remove_tree",
+   "segment_sha256": "43bf3dc7f35e92bf05c00fb18f70cb8386df5394b25b1e2d1c6d3a8e9a30b79c",
+   "v1_lines": [
+    315,
+    322
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "q",
+   "segment_sha256": "fd1c7bca5675fd333375c19cfc23d2b791866f95d001aa23f07157f1d5884438",
+   "v1_lines": [
+    325,
+    326
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "boot_id_path",
+   "segment_sha256": "f54d38df17168792b236112664b71ac3820d3a1946f64fc0ab43e1cf1ad27997",
+   "v1_lines": [
+    329,
+    330
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "current_boot_id",
+   "segment_sha256": "1997b31cc4354c57bda4f7c41bcca3ea5205fc9044d6b7d1d85ee957512c677b",
+   "v1_lines": [
+    333,
+    337
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Layout",
+   "segment_sha256": "43e8d5371f15374ca1e932ffb19ac94c42dd4fa4814bbe6c650f355631d515f1",
+   "v1_lines": [
+    448,
+    500
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "check_layout_basic",
+   "segment_sha256": "57a7e34e79b869a34d8a034e16135d88aaa33ed7f71f15c5b4c0737a1a82abe0",
+   "v1_lines": [
+    503,
+    509
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "HelperLock",
+   "segment_sha256": "26f94da0f858102060ea954f0ba6a12bec0d6567123a119cf084013766db012b",
+   "v1_lines": [
+    736,
+    786
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "JobLock",
+   "segment_sha256": "b84cf733b2a1d64204b1d70380f1afb13ba8f8c97ce9ee6cfb38756d4cf1f9dc",
+   "v1_lines": [
+    789,
+    813
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "_tarinfo",
+   "segment_sha256": "22c7e4e5b44879f9b99bd29be9bbd023cecd865df08773ffcf178c970078464e",
+   "v1_lines": [
+    906,
+    913
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "write_tgz",
+   "segment_sha256": "455ac88f4cf280087aead7dfe23431aa42eb4c0749e92dc3eefe8d46cad08ac5",
+   "v1_lines": [
+    916,
+    922
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "write_tar_stream",
+   "segment_sha256": "b6115f5feee88b243bb148f29a42b02cbdf3fdc15b55d02de5c2be17a2a9ee38",
+   "v1_lines": [
+    925,
+    939
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "unsafe_name",
+   "segment_sha256": "688c45727548e53f1626ec83a9e8386615d095f7ba9131328d50fb98d1cbfe24",
+   "v1_lines": [
+    942,
+    948
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "under_stage",
+   "segment_sha256": "66de53a5121ed509f1b49e106ec210154782f01f18c1fcf2bf7227b46feff4cd",
+   "v1_lines": [
+    954,
+    960
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "png_manifest_problem",
+   "segment_sha256": "c54e7505c37f17a18292d6e46289863944097473d4cc5a702bb18ffe36ecca95",
+   "v1_lines": [
+    966,
+    990
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "pkg_manifest_problem",
+   "segment_sha256": "fa8559396901336f4a6a2f50a6a62e2fa482d99ae1ae71a420d0f1951da8e395",
+   "v1_lines": [
+    993,
+    1001
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "check_pkg_manifest",
+   "segment_sha256": "5134127d98280fdd81f01c4740324d5de5eb9f3dcf059f86e91b1869174fe5c7",
+   "v1_lines": [
+    1004,
+    1007
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Archive",
+   "segment_sha256": "cbc7f5a3391845c3d3b924c6b8a5f8e260477ad2370836246b676b398b5e912c",
+   "v1_lines": [
+    1010,
+    1073
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "zlib_error",
+   "segment_sha256": "25eaa338abe5654c9570cd4bbdcabf07631f38e3d3daae9c9f995bdf6324b95d",
+   "v1_lines": [
+    1076,
+    1078
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Staging",
+   "segment_sha256": "9384485cfab669a78a09f006acc02d1887f9e3ab808ecc20dde001922479d6b5",
+   "v1_lines": [
+    1081,
+    1122
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "png_set",
+   "segment_sha256": "c6be08782ed6da431b42bf67cdabf66bd11be0a4810f6a9edd3188b58beba35a",
+   "v1_lines": [
+    1125,
+    1141
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "png_tar_members",
+   "segment_sha256": "280e957a38c5d7b90f5db4d87015578245ceda42ae8b8c1c7099a3ce421a2dbe",
+   "v1_lines": [
+    1144,
+    1149
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "PartWriter",
+   "segment_sha256": "b91ebb6f1c977d9286465e4204aa63172193bb8003825503c37d67de7f74609c",
+   "v1_lines": [
+    1152,
+    1211
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "tree_bytes",
+   "segment_sha256": "a8856d9827b2478c4531afe50a95b8e85667fc3e77af96326689b5f347109362",
+   "v1_lines": [
+    1214,
+    1225
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "disk_full_halt",
+   "segment_sha256": "01fb6e8ec8b6db903c9e38812828ccf34224f328c53eee5ff0232c2c573d9980",
+   "v1_lines": [
+    1231,
+    1250
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "require_space",
+   "segment_sha256": "3d3aed91b994be4fd64e0f69a0a27a63522bd3e92fa255819f496e735eb21c81",
+   "v1_lines": [
+    1253,
+    1260
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "join_slices",
+   "segment_sha256": "987c55cc611858f8ed9f81026ac14323ab12faaab7a87fb1a155ef02cdf14b6e",
+   "v1_lines": [
+    1482,
+    1493
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "FP",
+   "segment_sha256": "3451c0618e741f3585750d16061b6d8ff374b31d6e2a8c1d13b23082f48d5b74",
+   "v1_lines": [
+    1497,
+    1527
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "first_line",
+   "segment_sha256": "a7f760d619e04b5da073b49e3111c83de941545bc810f2b1639a09623026e13d",
+   "v1_lines": [
+    1530,
+    1536
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "fingerprint",
+   "segment_sha256": "c54c8db792d155e69cd2247f4fa8a1d02fc3d0a6ea0d32b0be5861dd2c9f1869",
+   "v1_lines": [
+    1539,
+    1634
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "kit_members",
+   "segment_sha256": "9ff313e98b99f1dbb83752a33832c8e1c33f8be12ff07cc108caa6faa1f5cfca",
+   "v1_lines": [
+    2688,
+    2725
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "unpack_kit",
+   "segment_sha256": "0c0a6dc606d5c37845f6c7577513808603262ae576a844dc05d98830ba5c2142",
+   "v1_lines": [
+    2728,
+    2757
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "validate_pass",
+   "segment_sha256": "e781dcd471da24684aba01895c23bc03115f812178b5f608db44d39c3f54eb73",
+   "v1_lines": [
+    2936,
+    2947
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "check_ledger_identity",
+   "segment_sha256": "bf7ae532cd3dbf901ae7ae68340dd2480ee44ba6aa1fb3a346e43c0bb297959b",
+   "v1_lines": [
+    3214,
+    3224
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "clock_check",
+   "segment_sha256": "bc22ebedd33dc59fc8decab73b251a1c998b29d86473079147a48ae268586743",
+   "v1_lines": [
+    3317,
+    3329
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "spawn",
+   "segment_sha256": "9c39e37ba70f1e26bf5bbacba57429d0a39bb427811a311b854e23ed068c1915",
+   "v1_lines": [
+    4898,
+    4916
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "worker_alive",
+   "segment_sha256": "6c4e99ef47f3c866e861bb50a51dffcda39408b2c92f61649574b550cdea4704",
+   "v1_lines": [
+    4919,
+    4927
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "run_runner",
+   "segment_sha256": "16f358358df3531b3a87b43400152247a841f3daebd2822760262e43094e8f8f",
+   "v1_lines": [
+    5048,
+    5061
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "scrub",
+   "segment_sha256": "39658ee629497ad5fa306f7da09d48bb9e1d352e5bc53cc39d30a100eb7fc34e",
+   "v1_lines": [
+    5064,
+    5069
+   ]
+  },
+  {
+   "kind": "function",
+   "name": "selftest_work",
+   "segment_sha256": "b717e6176752d35b667d287729958e4593e065952c573e599ec90dd6be466465",
+   "v1_lines": [
+    5934,
+    5948
+   ]
+  }
+ ],
+ "schema": "cps.vm2-reuse-manifest.v1",
+ "source": "deploy/vm/cps_vm.py",
+ "source_commit": "95df27099c275ba1a8442df5087cb87b97434dae",
+ "source_sha256": "7524987159f579d426eb99a22983a414bbcfa9c5ba99ea655611b7d77d43e14a",
+ "target": "deploy/vm2/cpsvm2/vio/v1reuse.py"
+}
