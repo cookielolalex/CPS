@@ -1,4 +1,4 @@
-# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O53; 2026-11-06, extended 2026-11-09)
+# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O61; 2026-11-06, extended 2026-11-09 and 2026-11-10)
 
 This page says how CPS is deployed and who owns what. The operating documents themselves are in the private Drive folder "CPS" (in "Dots Folder"). They are not published here because the interview material holds company data.
 
@@ -80,3 +80,16 @@ The Dot's VM keeps nothing across a reset; only Google Drive persists.
 - Qualification stays blocked until the helpers G1 are built, reviewed and admitted, the probes P1–P4 pass, and a reset drill passes.
 - **O53:** the maintainer may edit the Dot's folder. Instructions reach the Dot as `CPS/maintainer_messages/Mnnn_*.md` when the owner says "mail", and the Dot replies in `reports/Mnnn_*/REPLY.md`.
 - Every file the Dot downloads from the CPS folder is first checked with `deploy/verify_drive_files.py` against `FOLDER_MANIFEST.md`, because the maintainer's uploads can carry base64 slips.
+- The "mail" route did not work: no Dot document mentioned the mailbox. Since 2026-11-09 the owner pastes each maintainer message to the Dot; a record copy stays in `CPS/maintainer_messages/`, and replies still go to `reports/Mnnn_*/`.
+
+## VM helper v2 rules (O54–O61, 2026-11-10)
+
+Admission review 1 rejected helper v1 (`deploy/vm/ADMISSION_VM_HELPER_V1.json`). On 2026-11-10 the owner approved Q1–Q8 of [VM_HELPER_V2_DESIGN.md](VM_HELPER_V2_DESIGN.md) section H as recommended, recorded as O54–O61:
+- **O54:** no result is shown before it is saved and confirmed on Drive; a saved result binds any re-run; an unsaved one was never shown, so its step re-runs unbound and logged (how O44 is met).
+- **O55:** without transcript export, the Dot's own reading that an interrupted conversation wrote nothing may allow the one restart, flagged for the owner to check that conversation before scoring; a write found fails that reader's case.
+- **O56:** every interrupted conversation's transcript is kept on Drive, including ones whose output was lost.
+- **O57:** a reset during a visual reviewer's completion of an unfinished review fails visual QA for that run, with no replacement reviewer.
+- **O58:** a fresh START is allowed once per attempt, only if no conversation was opened and the Dot's conversation list shows none; the gap is listed on the O52 sheet.
+- **O59:** the maintainer may clear a helper halt with a settings-only kit naming exactly that halt; no code, rule or scoring change.
+- **O60:** everyday jobs resume from the last saved step without limit; "prepared again once" (O49) counts only starting over from the inputs.
+- **O61:** a visual reviewer may be asked to complete an unfinished review at most twice; a third time fails visual QA.

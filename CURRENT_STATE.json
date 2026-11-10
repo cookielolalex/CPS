@@ -485,5 +485,16 @@
  },
  "owner_decisions_2026_11_09_source": "owner approved OD-1..OD-10 of docs/handoff/RESET_PROOF_DESIGN_DRAFT.md as recommended ('Approval all', 2026-11-09); O53 from the owner's message of the same day",
  "owner_fact_2026_11_09_drive_space": "about 2 TB free in the owner's Google Drive (owner's message, 2026-11-09); qualification evidence needs about 11.5 GB (RESET_PROOF_DESIGN_DRAFT.md section H), so total space does not limit O48. Per-file size limits and transfer speed are still measured by probe P2",
- "vm_helper_g1_2026_11_09": "candidate cps-vm-helper.v1 at 95df270 (deploy/vm/*, make_kit.py, apply_frozen_flags.py): NOT ADMITTED by independent admission review 1 (1 critical, 15 major confirmed; record deploy/vm/ADMISSION_VM_HELPER_V1.json). Runner v4 stays the admitted runner. Next: a simplified v2 (one save-point primitive, one open-conversation rule, one failure-flag function, fail-closed restore, narrow name-prefix listings) with regression tests for every blocking item, then a new admission review; probes P1-P3 and P5 pending on the Dot"
+ "vm_helper_g1_2026_11_09": "candidate cps-vm-helper.v1 at 95df270 (deploy/vm/*, make_kit.py, apply_frozen_flags.py): NOT ADMITTED by independent admission review 1 (1 critical, 15 major confirmed; record deploy/vm/ADMISSION_VM_HELPER_V1.json). Runner v4 stays the admitted runner. Next: a simplified v2 (one save-point primitive, one open-conversation rule, one failure-flag function, fail-closed restore, narrow name-prefix listings) with regression tests for every blocking item, then a new admission review; probes P1-P3 and P5 pending on the Dot",
+ "owner_decisions_2026_11_10": {
+  "O54": "Q1 (O44): the helper never prints a result before its journal entry is md5-confirmed on Drive; a committed result binds any re-run mechanically; an uncommitted result was never shown, so its stage re-runs unbound and logged. This satisfies 'a result already seen binds'",
+  "O55": "Q2: without transcript export, the Dot's attested reading that an interrupted conversation wrote nothing may allow the one rule-3 restart, flagged OWNER_CHECK; the owner checks that conversation before scoring, and a write found fails that reader's case",
+  "O56": "Q3 (F7): every resolved interrupted conversation's transcript, written-and-lost included, is committed in the RESTORE entry as failure evidence",
+  "O57": "Q4: a REVIEW_INCOMPLETE continuation interrupted by a reset fails visual QA (VISUAL_QA_FAILED_BY_RESET), with no replacement reviewer",
+  "O58": "Q5 (O45): a superseding START is allowed once per attempt, only from a never-opened START, only when the Dot's conversation list shows no such conversation, and it is listed with its time window on the O52 sheet",
+  "O59": "Q6 (O53): the maintainer may clear a helper HALT with a config-only kit naming the series, seq and code; no code, rule or evaluator change",
+  "O60": "Q7 (O49): everyday jobs resume from the last committed entry without limit; 'prepared again once' applies only to re-preparing from the inputs",
+  "O61": "Q8: at most 2 REVIEW_INCOMPLETE continuations per reviewer; a third refusal freezes as REVIEW_INCOMPLETE_LIMIT and fails visual QA"
+ },
+ "owner_decisions_2026_11_10_source": "owner approved Q1-Q8 of docs/handoff/VM_HELPER_V2_DESIGN.md section H as recommended ('Approval', 2026-11-10)"
 }

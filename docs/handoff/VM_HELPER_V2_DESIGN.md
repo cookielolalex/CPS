@@ -1,4 +1,4 @@
-<!-- Status: DESIGN, not built, not admitted. Produced 2026-11-09 by an independent design panel (three designs, two adversarial judges, one synthesis) after admission review 1 rejected cps-vm-helper.v1 (deploy/vm/ADMISSION_VM_HELPER_V1.json). Owner decisions Q1-Q8 in section H are pending; probe answers (P1-P3, P5, and the section F questions) are pending. -->
+<!-- Status: DESIGN, not built, not admitted. Produced 2026-11-09 by an independent design panel (three designs, two adversarial judges, one synthesis) after admission review 1 rejected cps-vm-helper.v1 (deploy/vm/ADMISSION_VM_HELPER_V1.json). Owner decisions Q1-Q8 in section H were approved as recommended on 2026-11-10 (O54-O61); probe answers (P1-P3, P5, and the section F questions) are pending. -->
 
 CPS VM-RESET HELPER v2 (cps-vm-helper.v2): RECOMMENDED DESIGN
 Base: Design 3, with grafts from Design 2 (close-before-place, three verbs, transition-table oracle, import lint, reset enumeration) and Design 1 (--at, md5s never printed, one md5 per name, REUSE_MANIFEST, authenticated absence check). Runner v4 (7505e98a), evaluator v4 (fc723405) and aggregator v2 (e5aa4fc7) are unchanged.
