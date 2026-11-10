@@ -93,17 +93,17 @@ def scenarios():
           (('AI', 2), 'runner_after', 'verify-frozen', 'FP2_visual_verify'),
           (('AI', 2), 'snapshot', 'visual-record', 'FP3_visual'),
           (('FROZEN', 3), 'runner_after', 'prepare', 'FP2_prepare_B')]
-    for tgt, where, sub, tag in fp:
-        add('D_%s' % tag, 'D', tgt, 'e', seam=(where, sub, 'reset'))
+    for tgt, where, sub, tag in fp:                    # armed at the target commit's first SAVE block: the stage that
+        add('D_%s' % tag, 'D', tgt, 'a', seam=(where, sub, 'reset'))   # follows that commit is the one interrupted
     add('D_FP_place_ledger', 'D', ('AI', 1), 'e', seam=('place_ledger', None, 'reset_after_reset'))
     add('D_FP_place_job', 'D', ('AI', 1), 'e', seam=('place_job', None, 'reset_after_reset'))
-    add('D_kill_finish_same_boot', 'D', ('AI', 1), 'e', seam=('runner_after', 'finish', 'kill'),
+    add('D_kill_finish_same_boot', 'D', ('AI', 1), 'a', seam=('runner_after', 'finish', 'kill'),
         stop='FOREGROUND_DIED')
-    add('D_kill_prepare_same_boot', 'D', ('FROZEN', 2), 'e', seam=('runner_before', 'prepare', 'kill'),
+    add('D_kill_prepare_same_boot', 'D', ('FROZEN', 2), 'a', seam=('runner_before', 'prepare', 'kill'),
         stop='FOREGROUND_DIED')
     for tgt, where, sub, tag in (fp[3], fp[7], fp[11]):
         add('E_%s' % tag, 'E', {('FROZEN', 2): ('INPUTS', 1), ('AI', 1): ('AI', 1), ('AI', 2): ('AI', 2)}[tgt],
-            'e', seam=(where, sub, 'reset'))
+            'a', seam=(where, sub, 'reset'))
     # the Dot's answers at the open-role points: G never opened (STAGE1 e), G opened and wrote (AI1 a), V opened and
     # wrote (AI2 a); transcript export is `no` (O55), so NOTHING_WRITTEN is always not_available here
     for tgt, pt, tag in ((('STAGE', 1), 'e', 'G0'), (('AI', 1), 'a', 'G'), (('AI', 2), 'a', 'V')):
@@ -143,11 +143,15 @@ def scenarios():
         add('DRI_%s%d_%s' % (k[0], k[1], pt), 'DRI', k, pt)
     add('Q_ans_S_nw_not_available', 'Q', ('STAGE', 3), 'e', answer='nw_not_available')
     add('Q_ans_G_after_scope_nw', 'Q', ('STAGE', 4), 'e', answer='nw_not_available')
-    add('Q_FP2_scope_finish', 'Q', ('AI', 3), 'e', seam=('runner_after', 'scope-finish', 'reset'))
+    add('Q_FP2_scope_finish', 'Q', ('AI', 3), 'a', seam=('runner_after', 'scope-finish', 'reset'))
     for c in ('D', 'DV', 'DL', 'DRI', 'Q', 'E'):
         add('%s_baseline' % c, c, None, None)
     for fn in ('test_helper_busy_second_command_refused', 'test_selftest_died_retried_once_then_stops'):
         add(fn, 'X', None, None, special=fn)
+    import test_codes
+    import test_v1_regressions                     # the v1 regressions that need the real runner (§14.4)
+    for x in test_v1_regressions.WORLD + test_codes.WORLD:
+        out.append(dict(x))
     return out
 
 
@@ -202,11 +206,18 @@ class Runner:
                     done.add(s['name'])
                     results.append(self.fork(w, s, snap, lines))
                 w.restore(snap)
-                w.dot.hook = hook
+                w.dot.hook = hook2
             return base_hook(dot, lines)
         t0 = time.time()
+        early = all(s.get('target') is not None for s in scs)
+
+        def hook2(dot, lines):
+            r = hook(dot, lines)
+            if early and len(done) == len(todo):         # every fork is done and no scenario needs the baseline's end
+                return 'stop'
+            return r
         try:
-            w.dot.hook = hook
+            w.dot.hook = hook2
             code, lines = w.start()
             code, lines = w.dot.run(code, lines)
             for s in scs:
@@ -275,6 +286,7 @@ class Runner:
         t0 = time.time()
         try:
             w.restore(snap)
+            w.seams.hits = []
             dot = w.dot
             dot.hook = self.stop_hook(w)
             if s.get('answer'):
@@ -306,6 +318,29 @@ class Runner:
                 return dot.reset(notes=s.get('notes', 'hint'))
             w.seams.arm(where, 1, F.Kill if how == 'kill' else F.Reset, sub)
             return 0, lines
+        if vis == 'gen_record':                        # the generation record exists before the G consumer runs
+            R = w.state()['runs'][w.state()['current']]
+            p = Path(R['job_dir']) / 'run' / 'GENERATION_RECORD.json'
+            p.write_bytes(b'{"invented": "a record that must not exist yet"}\n')
+            return 0, lines
+        if vis == 'head_state_sha':                    # the head on Drive is a valid archive whose state sha is wrong
+            hn = w.cache()['head']['name']
+            for c in d.folders[folder][hn]:
+                raw = restate(d.blobs[c['id']])
+                d.blobs[c['id']] = raw
+                c.update(size=len(raw), md5=F.md5(raw), sha256=F.sha(raw))
+            return dot.reset(notes=s.get('notes', 'hint'))
+        if vis in ('change_prompt', 'change_output'):  # a file the next stage reads changes (no reset)
+            R = w.state()['runs'][w.state()['current']]
+            lt = [x for x in R['roles']['G1']['starts'] if x['superseded_by'] is None][-1]
+            p = Path(lt['prompt']) if vis == 'change_prompt' else Path(lt['output']) / 'response.json'
+            os.chmod(p, 0o644)
+            with open(p, 'ab') as fh:
+                fh.write(b'\n')
+            return 0, lines
+        if vis == 'drop_restore':                      # every upload of the RESTORE entry is lost
+            d.drop[F.N.entry_name(w.series, w.cache()['head']['seq'] + 1)] = {1, 2, 3}
+            return dot.reset(notes=s.get('notes', 'hint'))
         if vis in ('lag1', 'lag2'):
             for n in names:
                 d.lag[n] = 1 if vis == 'lag1' else 2
@@ -333,9 +368,9 @@ class Runner:
         if pt in ('b', 'd'):
             for t in ups:
                 d.upload(t[1], t[3], t[5])
-            if vis == 'lose_part':
+            if vis in ('lose_part', 'lose_allfz'):
                 for n in names:
-                    if '_PNG' in n:
+                    if ('_PNG' if vis == 'lose_part' else '_ALLFZ') in n:
                         d.remove(folder, n)
                         break
         if vis in ('head_lag1', 'head_dup', 'foreign_next', 'foreign_prev', 'ghost'):
@@ -363,11 +398,14 @@ class Runner:
         res = {'name': s['name'], 'ok': True, 'seconds': None, 'blocks': len(w.dot.blocks),
                'last': lines[-1][:120] if lines else None}
         try:
+            if s.get('seam'):
+                assert w.seams.hits, 'the armed seam %s never fired: the scenario tested nothing' % (s['seam'],)
             want_stop = s.get('stop')
             if want_stop:
                 assert lines and lines[-1].startswith('DO: STOP %s ' % want_stop), \
                     'O7: expected STOP %s, got %s' % (want_stop, lines[-1:] or lines)
                 self.no_progress_after_stop(w, lines)
+                self.extra(w, s)
                 if s.get('seam') and s['seam'][2] == 'kill':
                     assert w.jobs_tree() == w.dot.killed_tree, 'X.7.2: the dead stage\'s job folder was touched'
                 if s.get('vis') == 'refuse3':
@@ -375,10 +413,12 @@ class Runner:
             elif w.series[0] == 'E':
                 assert lines and 'state=IDLE' in lines[0], 'everyday did not return to IDLE: %s' % lines[-1:]
                 self.common_checks(w, s)
+                self.extra(w, s)
                 self.everyday_checks(w, s)
             else:
                 assert lines and lines[-1] == 'DO: STOP FINAL HANDBACK B', 'not FINAL: %s' % lines[-1:]
                 self.common_checks(w, s)
+                self.extra(w, s)
                 self.final_checks(w, s)
         except AssertionError as e:
             res['ok'], res['error'] = False, str(e)[:800]
@@ -389,6 +429,11 @@ class Runner:
         res['uploads_max'] = w.drive.max_upload
         res['refused_stops'] = len(w.dot.stops_a)
         return res
+
+    def extra(self, w, s):
+        """The scenario's own oracle (a v1 regression of test_v1_regressions.WORLD), before BASE is wiped."""
+        if s.get('extra'):
+            getattr(__import__(s.get('module', 'test_v1_regressions')), s['extra'])(w, s)
 
     def common_checks(self, w, s):
         """§X.6.4/§X.9: every `after=T` is a START's VM-clock utc minus the gate tolerance (fail-closed); §X.5.6: a
@@ -459,9 +504,11 @@ class Runner:
         root = self.work / ('x_' + s['name'][-20:])
         w = None
         try:
-            w = self.F.World(root, series='E1', cases=(), plant_pass=s['special'] != 'test_selftest_died_retried_once_'
-                                                                                     'then_stops')
-            getattr(self, s['special'])(w)
+            w = self.F.World(root, series='E1', cases=(), plant_pass=not s.get('no_pass') and s['special'] != (
+                'test_selftest_died_retried_once_then_stops'))
+            fn = getattr(self, s['special'], None) or getattr(__import__(s.get('module', 'test_v1_regressions')),
+                                                              s['special'])
+            fn(w)
             return {'name': s['name'], 'ok': True, 'seconds': round(time.time() - t0, 1)}
         except Exception as e:                                     # noqa: BLE001 - recorded
             return {'name': s['name'], 'ok': False, 'error': '%s: %s' % (type(e).__name__, str(e)[:600]),
@@ -521,6 +568,24 @@ class Runner:
         assert len(runs) == 2 and all(b['lines'][0].startswith('CPSV-RUNNING kind=selftest ') for b in runs), runs
         assert list((w.base / 'outbox/v2').glob('dead_*.json')), 'the first dead self-test record is kept'
         self.no_progress_after_stop(w, lines)
+
+
+def restate(raw):
+    """An entry archive with the same members whose MANIFEST.json claims another state_sha256."""
+    import io
+    import tarfile
+    out = io.BytesIO()
+    with tarfile.open(fileobj=io.BytesIO(raw), mode='r:gz') as src, \
+            tarfile.open(fileobj=out, mode='w:gz', format=tarfile.PAX_FORMAT) as dst:
+        for ti in src.getmembers():
+            data = src.extractfile(ti).read() if ti.isfile() else None
+            if ti.name == 'MANIFEST.json':
+                m = json.loads(data)
+                m['state_sha256'] = '0' * 64
+                data = (json.dumps(m, sort_keys=True, ensure_ascii=True, indent=1) + '\n').encode()
+                ti.size = len(data)
+            dst.addfile(ti, io.BytesIO(data) if data is not None else None)
+    return out.getvalue()
 
 
 def trail(w):
@@ -590,8 +655,13 @@ def check_answers_reflected(w, s, oc, st):
 def _group_worker(args):
     cfg, names, work = args
     sys.path.insert(0, HERE)
+    import seen
+    seen.install()
     scs = [s for s in scenarios() if s['name'] in names]
-    return Runner(cfg, Path(work) / ('g_%s_%d' % (cfg, os.getpid()))).run_group(scs)
+    try:
+        return Runner(cfg, Path(work) / ('g_%s_%d' % (cfg, os.getpid()))).run_group(scs)
+    finally:
+        seen.dump()
 
 
 def plan_groups(only, jobs):

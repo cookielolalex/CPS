@@ -69,8 +69,10 @@ def raised_codes():
 
 
 def t_l1_codes_registered_and_tested():
-    """L1: every code raised in the source is in the CODES registry (the union of §13); every registry code is named
-    in some test (asserted by name)."""
+    """L1: every code raised in the source is in the CODES registry (the union of §13 and the delta §X.13); every
+    registry code is asserted by name in some test file; and, in a full run (run_tests.py without --only, this suite
+    last), every registry code was raised or printed at least once while the other suites ran (tests/seen.py records
+    them in every process)."""
     rc = raised_codes()
     bad = sorted(c for c in rc if not N.is_code(c))
     assert not bad, 'L1: codes raised but not in §13: %s' % bad
@@ -83,6 +85,18 @@ def t_l1_codes_registered_and_tested():
     REPORT['codes_registry'] = len(N.CODES)
     REPORT['codes_not_named_in_any_test'] = untested
     assert not untested, 'L1: registry codes no test names: %s' % untested
+    if os.environ.get('CPSVM2_SEEN_FULL') != '1':
+        REPORT['codes_runtime'] = 'not checked (a partial run)'
+        return
+    import seen
+    got = seen.collect(os.environ['CPSVM2_SEEN_DIR']) | seen.CODES
+    REPORT['codes_seen_at_runtime'] = len(got & N.CODES)
+    REPORT['codes_seen_not_registered'] = sorted(c for c in got if not N.is_code(c))
+    never = sorted(N.CODES - got)
+    REPORT['codes_never_raised'] = never
+    assert not never, 'L1: registry codes no test raised: %s' % never
+    assert not REPORT['codes_seen_not_registered'], 'L1: unregistered codes printed: %s' % REPORT[
+        'codes_seen_not_registered']
 
 
 def t_l2_import_rule_and_core_without_io():
@@ -141,6 +155,7 @@ def t_l4_core_line_coverage():
     """L4: core/ line coverage from the core tests (stdlib sys.monitoring, PEP 669). Every executable line of core/ is run."""
     import test_core_table
     import test_core_props
+    import test_core_more
     files = {os.path.realpath(p) for p in sources('cpsvm2/core')}
     hits = set()
     mon = sys.monitoring
@@ -154,8 +169,11 @@ def t_l4_core_line_coverage():
     mon.register_callback(tid, mon.events.LINE, on_line)
     mon.set_events(tid, mon.events.LINE)
     try:
+        for p in sorted(files):                    # module-level lines ran at import, before monitoring: run them again
+            exec_module_body(p)
         test_core_table.run()
         test_core_props.run(1, 300)
+        test_core_more.run()
     finally:
         mon.set_events(tid, 0)
         mon.register_callback(tid, mon.events.LINE, None)
@@ -173,6 +191,16 @@ def t_l4_core_line_coverage():
     REPORT['core_coverage'] = {'lines': total, 'missed': n, 'percent': round(100.0 * (total - n) / total, 2),
                                'missed_lines': missing}
     assert not missing, 'L4: core lines not run by the core tests: %s' % json.dumps(missing)[:600]
+
+
+def exec_module_body(p):
+    """Execute a core module's top level once more, in a throwaway module of the same package (its module-level
+    statements are covered by import; the monitor starts after the import)."""
+    import types
+    name = 'cpsvm2.core._cov_' + os.path.basename(p)[:-3]
+    mod = types.ModuleType(name)
+    mod.__package__, mod.__file__ = 'cpsvm2.core', p
+    exec(compile(open(p, encoding='utf-8').read(), p, 'exec'), mod.__dict__)
 
 
 def executable_lines(p):

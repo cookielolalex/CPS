@@ -60,6 +60,40 @@ an upload (an approval review or any refusal message, not a timeout or an error)
 from Drive at exactly the path given; never copy a local file there instead. Never edit, rename or delete a file on
 Drive.
 
+### 2.1 Two lines that are not blocks
+
+- `CPSV-RUNNING kind=... since=... max=...` is printed first by a `go` that runs a stage (or by `session_start.sh`
+  before the setup). It names no result. Keep polling the same command session until the process exits; the block
+  follows it.
+- A helper command that finds another one still running prints exactly three lines and exits 4, changing nothing:
+  `CPSV-BUSY kind=... since=...`, `REFUSED HELPER_BUSY`, `DO: POLL`. Do what POLL says (section 3). Never start a
+  second helper command while one runs.
+
+### 2.2 Qualification and drill (series Q1, D1)
+
+1. The maintainer gives you the commit and the kit (the `--hint 000000 --kit` value of the first session). Run the
+   bootstrap of section 1, then `go`.
+2. Follow every block. The helper runs the jobs in the order of the kit's job list: for each case reader A, then
+   reader B, each through prepare, the generator conversation (and the scope reader for a large workbook), finish,
+   the visual reviewer, freeze. A case without its source is frozen as a nonattempt without any conversation.
+3. Every stage runs in the foreground of one `go` (up to 1,200 s; the finish stage takes minutes). Poll until it
+   exits. Then the helper saves the result on Drive through its SAVE blocks (UPLOAD, FIND, `found`, DOWNLOAD,
+   `go`); nothing that depends on a result is shown before it is saved.
+4. When the owner must be told something (a stopped run, a finished series), the block is `NOTIFY_OWNER`.
+5. `STOP FINAL HANDBACK B` ends the series: tell the owner that qualification generation is complete.
+
+### 2.3 Everyday jobs (series E1)
+
+1. With no job running the block is `STOP IDLE` or the idle question `case=CASE_ID`. When a user asks for a job,
+   put the user's three files (`JOB.json`, `JOB_TITLE.json` and the source workbook it names) in
+   `/home/agent/cps/everyday_inputs/` under a folder named by the case id, then answer with that case id.
+2. Follow the blocks through prepare, the generator, finish and the visual reviewer, exactly as in qualification.
+3. Delivery: `DELIVER ... to=copy` (make the personal copy and its log, answer the two paths), then
+   `DELIVER ... to=user` (send it, answer `sent=yes`). After a reset during a delivery you are asked whether the copy
+   reached the user (`arrived=`); ask the user, never send a second copy on your own.
+4. A failed job is never retried on your own: the block asks you to tell the user (`asked=yes`); a new job starts only
+   at the user's request.
+
 ## 3. The actions (the `DO:` line)
 
 | action | you do | then |
@@ -84,6 +118,29 @@ Drive.
 | `STOP <CODE> HANDBACK C` | stop; upload nothing more; tell the owner the code and your last `CPSV` line | nothing |
 | `STOP <CODE> HANDBACK B` | stop; tell the owner that qualification generation is complete | nothing |
 | `STOP IDLE` | stop | nothing |
+
+Handback letters: **A** the owner must approve something in the platform, then you run `go` and the series goes on;
+**B** the series is complete; **C** stop and wait for the maintainer (nothing more is uploaded). `STOP IDLE` and
+`STOP ... HANDBACK A` are the only stops after which you run the helper again without new instructions.
+
+### 3.1 When the platform refuses an upload
+
+The platform's automatic approval review sometimes refuses an upload, and a timed-out upload may still appear later.
+
+1. Do every UPLOAD line once. Whatever an upload returned (success, timeout, error or refusal), do every FIND line of
+   the block and report what the search shows.
+2. Only for an upload the platform **refused**, add `--refused` after its `--name N` in `found`. Never use
+   `--refused` for a timeout or an error, and never for a file the block did not ask you to upload (that is refused
+   with `FOUND_SYNTAX`).
+3. If the refused file is not found, the helper prints `DO: STOP UPLOAD_REFUSED HANDBACK A`. Tell the owner the code,
+   the file name and your last `CPSV` line, and ask the owner to approve the upload in the platform. Do not upload it
+   again yourself. When the owner says it is approved (or to continue), run `go`.
+4. The next block FINDs the file first, never uploads at once (the approved upload may have landed). The helper
+   uploads one file at most three times; after the third, it stops with `UPLOAD_FAILED HANDBACK C`.
+5. A copy that appears late is a second copy with the same bytes; the helper checks it (it may ask you to DOWNLOAD
+   it) and nothing else changes.
+6. A DOWNLOAD the platform refuses: ask the owner to approve it, then download again and run `go`. Running `go`
+   without the file gives `REFUSED DOWNLOAD_MISSING` and the same block again.
 
 ## 4. What you are asked, and where
 

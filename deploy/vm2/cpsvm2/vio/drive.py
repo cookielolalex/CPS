@@ -98,8 +98,22 @@ def check_grammar(lines):
         k = order.get(ln.split(' ', 1)[0])
         if k is None or k < last or (k == 3) != (i == len(body) - 1):
             return 'order'
+        if k < 3 and not _line_form(ln):
+            return 'form'
         last = k
     return None if body and body[-1].startswith('DO: ') else 'do'
+
+
+def _line_form(ln):
+    """§6.1 (delta §X.6.1) line forms: UPLOAD <path> TO <folder> AS <name>, FIND <folder> NAME <name>, LIST <folder>
+    NEWEST <k>, DOWNLOAD <folder> ID <id> TO <path>; the prefix forms are deleted."""
+    try:
+        t = shlex.split(ln)
+    except ValueError:
+        return False
+    want = {'UPLOAD': (6, {2: 'TO', 4: 'AS'}), 'FIND': (4, {2: 'NAME'}), 'LIST': (4, {2: 'NEWEST'}),
+            'DOWNLOAD': (6, {2: 'ID', 4: 'TO'})}[t[0]]
+    return len(t) == want[0] and all(t[j] == v for j, v in want[1].items()) and (t[0] != 'LIST' or t[3].isdigit())
 
 
 # ---------------------------------------------------------------- argument parsing (§6.2, §6.3)

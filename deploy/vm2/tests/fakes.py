@@ -53,6 +53,7 @@ from cpsvm2 import cli                                                      # no
 from cpsvm2.core import fold as F                                           # noqa: E402
 from cpsvm2.core import names as N                                          # noqa: E402
 from cpsvm2.vio import drive, host, v1reuse                                 # noqa: E402
+import seen                                                                 # noqa: E402
 
 _spec = importlib.util.spec_from_file_location('tcj_for_vm2', str(REPO / 'deploy/run/test_cps_job.py'))
 TCJ = importlib.util.module_from_spec(_spec)
@@ -306,7 +307,7 @@ class Seams:
 
 # ================================================================ FakeDot
 DOT_FIELDS = ('blocks', 'notes', 'policy', 'conv_n', 'convs', 'opened', 'current', 'events', 'o2', 'refused', 'live',
-              'answered', 'running', 'stops_a', 'attests_after', 'killed_tree', 'downloads')
+              'answered', 'running', 'stops_a', 'attests_after', 'killed_tree', 'downloads', 'reset_calls')
 
 
 class FakeDot:
@@ -327,6 +328,7 @@ class FakeDot:
         self.o2, self.refused, self.live, self.answered = set(), [], {}, []
         self.running, self.stops_a, self.attests_after, self.killed_tree = [], [], [], None
         self.downloads = []                     # (boot, drive id, path) of every DOWNLOAD line done
+        self.reset_calls = []                   # len(FakeDrive.calls) at each reset (the restore's call budget)
 
     # ---- one helper command, run to completion (P5: the Dot polls the same session until the process exits)
     def cmd(self, *argv):
@@ -644,6 +646,7 @@ class FakeDot:
         """Everything but Drive is lost. notes: 'hint' (the last CPSV and CPSV-REPO lines survive), 'commit' (only
         the CPSV-REPO line), 'none' (step 0 of the README)."""
         w = self.w
+        self.reset_calls.append(len(w.drive.calls))
         w.kill_boot()
         force_rmtree(w.base)
         w.new_boot()
@@ -677,6 +680,7 @@ class FakeDot:
         p = subprocess.run(['bash', '-c', '\n'.join(script)], capture_output=True, text=True, env=w.env(),
                            timeout=600)
         lines = [ln for ln in p.stdout.splitlines() if ln]
+        seen.scan(lines)
         self.boot_err = p.stderr
         self.blocks.append({'argv': ['session_start'], 'code': p.returncode, 'lines': lines, 'boot': w.boot})
         for ln in lines:
