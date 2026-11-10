@@ -24,7 +24,7 @@ FROZEN_FLAGS = ('AI_OUTPUT_LOST', 'VISUAL_QA_FAILED_BY_RESET', 'RESTART_EXHAUSTE
                 'RESET_DIVERGED')
 START_ACTIONS = {'SUPERSEDE': 'NO_CONVERSATION', 'EVERYDAY_RETRY': 'EVERYDAY_RETRY', 'REPLACE': 'REPLACEMENT'}
 CONFIG_MEMBER = 'VM_HELPER_CONFIG.json'
-CHANGEABLE_KEYS = frozenset({'clear', 'wrap_foreground_seconds', 'clock_wait_max_seconds', 'png_part_bytes',
+CHANGEABLE_KEYS = frozenset({'clear', 'clock_wait_max_seconds', 'png_part_bytes',
                              'max_entry_bytes', 'max_transcript_bytes', 'max_ai_output_bytes', 'doc_samples'})
 
 

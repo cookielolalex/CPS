@@ -55,7 +55,8 @@ def kit_zip(release, config, extra=b't1'):
 def config(series, **kw):
     c = {'schema': 'cps.vm2-config.v1', 'series': series, 'accepted_helper_tree_sha256': [CW.TREE],
          'accepts_release_sha256': [], 'selftest_expected_tests': 1, 'clock_wait_max_seconds': 60,
-         'wrap_foreground_seconds': 60, 'png_part_bytes': 1000000, 'max_entry_bytes': 1000000,
+         'foreground_hold_seconds': 1200, 'stage_max_seconds': {}, 'max_upload_bytes': 50000000,
+         'png_part_bytes': 1000000, 'max_entry_bytes': 1000000,
          'max_transcript_bytes': 1000, 'max_ai_output_bytes': 1000, 'conversation_re': 'conv-[A-Z0-9]+',
          'transcript_ext': 'json', 'drive_id_re': '[A-Za-z0-9_-]{20,80}', 'gates': CW.GATES, 'clear': None,
          'doc_samples': []}
@@ -497,7 +498,7 @@ def kit_change_series(j, lie=False):
     j.play('GENESIS', *FULL)
     rel2 = b'{"release": "invented-2"}\n'
     c1 = config(j.series)
-    c2 = config(j.series, accepts_release_sha256=[sha(rel2)], wrap_foreground_seconds=90)
+    c2 = config(j.series, accepts_release_sha256=[sha(rel2)], clock_wait_max_seconds=90)
     k2 = j.add_kit(rel2, c2, extra=b't2')
     kz = {r['name']: os.path.join(j.root, 'setup', r['id'], r['name']) for r in j.srows}
     m1 = AU.kit_info(kz['SESSION_KIT_%s.zip' % j.kit[:12]])['members']
@@ -511,7 +512,7 @@ def kit_change_series(j, lie=False):
     elif lie:        # the body claims a config-only change; the zips differ in tables/t.json and RELEASE.json
         kc['to_members'] = [[p, dict(m2)['VM_HELPER_CONFIG.json'] if p == 'VM_HELPER_CONFIG.json' else h]
                             for p, h in m1]
-        kc['config_only'], kc['config_keys_changed'], rel = True, ['wrap_foreground_seconds'], sha(j.release)
+        kc['config_only'], kc['config_keys_changed'], rel = True, ['clock_wait_max_seconds'], sha(j.release)
     j.w.reset()
     j.w.kit = k2
     e = j.w.entry('RESTORE', CW.restore_body(j.w, kit_change=kc, kit_sha256=k2), kit=k2, release=rel)

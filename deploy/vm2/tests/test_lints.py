@@ -40,7 +40,7 @@ def raised_codes():
     commit_halt (a Halt of kind NEED is an internal request for a download, §13.4, and is not a code), a
     {'verdict': 'stop', 'code': X} result, and session_start.sh's `stop X`."""
     out = {}
-    files = list(sources()) + [os.path.join(VM2, 'vm2.py'), os.path.join(VM2, 'probe_p5.py')]
+    files = list(sources()) + [os.path.join(VM2, 'vm2.py')]      # probe_p5.py's codes are not helper codes (§X.13)
     for p in files:
         tree = ast.parse(open(p, encoding='utf-8').read())
         for node in ast.walk(tree):
@@ -253,7 +253,8 @@ def t_l9_print_rules():
     """L9: printed values round-trip through shlex and are ASCII; a value that would not is INTERNAL_PRINT."""
     from cpsvm2.vio import drive
     from cpsvm2.vio.v1compat import Halt
-    for bad in ('/a b', '/aé', '', '/a\nb'):
+    assert shlex_ok(drive.q('Dots Folder/CPS_JOB_RECORDS')), 'a folder name with a space is printed quoted (§6.1)'
+    for bad in ('/aé', '', '/a\nb'):
         try:
             drive.q(bad)
             raise AssertionError('L9: printed %r' % bad)
@@ -275,6 +276,35 @@ def t_l9_print_rules():
         assert 'case id' in str(e)
 
 
+def shlex_ok(printed):
+    import shlex
+    return len(shlex.split(printed)) == 1
+
+
+def t_l11_no_detached_process():
+    """L11 (§X.14, P5 FAIL): no detached or background process anywhere in the helper. AST scan of deploy/vm2/**/*.py
+    except probe_p5.py and tests/: no subprocess.Popen, os.fork, os.setsid, os.spawn*, os.daemon, start_new_session,
+    preexec_fn, multiprocessing or threading; session_start.sh has no setsid, nohup, disown or line ending in a bare &."""
+    files = list(sources()) + [os.path.join(VM2, 'vm2.py')]
+    for p in files:
+        tree = ast.parse(open(p, encoding='utf-8').read())
+        rel = os.path.relpath(p, VM2)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                mods = [a.name for a in node.names] + ([node.module] if isinstance(node, ast.ImportFrom) and
+                                                       node.module else [])
+                assert not any(m.split('.')[0] in ('multiprocessing', 'threading') for m in mods), 'L11: %s' % rel
+            if isinstance(node, ast.Attribute):
+                assert not (node.attr == 'Popen' or node.attr in ('fork', 'setsid', 'daemon')
+                            or node.attr.startswith('spawn')), 'L11: %s uses %s' % (rel, node.attr)
+            if isinstance(node, ast.keyword):
+                assert node.arg not in ('start_new_session', 'preexec_fn'), 'L11: %s passes %s' % (rel, node.arg)
+    for ln in open(os.path.join(VM2, 'session_start.sh')).read().splitlines():
+        code = ln.split('#', 1)[0].rstrip()
+        assert not re.search(r'\b(setsid|nohup|disown)\b', code), 'L11: session_start.sh: %s' % ln
+        assert not (code.endswith('&') and not code.endswith('&&')), 'L11: a background job: %s' % ln
+
+
 def t_l10_unused_reused():
     """L10: reused segments without a caller in v2 (reported, not failing)."""
     import cpsvm2.vio.v1reuse as R
@@ -290,7 +320,8 @@ def t_l10_unused_reused():
 
 TESTS = [t_l1_codes_registered_and_tested, t_l2_import_rule_and_core_without_io, t_l2_only_cli_and_worker_import_both,
          t_l3_reuse_manifest, t_l4_core_line_coverage, t_l5_grammar_rejects, t_l6_readme_examples_refused,
-         t_l7_no_or_in_exit_code_assertions, t_l8_pinned_shas, t_l9_print_rules, t_l10_unused_reused]
+         t_l7_no_or_in_exit_code_assertions, t_l8_pinned_shas, t_l9_print_rules, t_l10_unused_reused,
+         t_l11_no_detached_process]
 
 
 def run(only=None, work=None):

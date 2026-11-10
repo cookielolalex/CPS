@@ -1,6 +1,7 @@
 """The single test entry point (§14): python3 -I -B deploy/vm2/tests/run_tests.py --work /abs/NEW_DIR [--jobs 4]
-[--only NAMES]. This first version runs the core tests (§14.1); the integrator adds the other suites. Writes
-<work>/TEST_RESULTS.json (cps.vm2-tests.v1). Exit 0 all passed, 1 a failure, 2 usage or preflight."""
+[--only SUITES]. Runs the core tests (§14.1), the reuse check, the vio and maintainer tests, the probe tests, the
+lints and the reset enumeration with the real runner v4 (§14.3). Writes <work>/TEST_RESULTS.json (cps.vm2-tests.v1).
+Exit 0 all passed, 1 a failure, 2 usage or preflight (less than 1.5 GiB free: the reset worlds need room)."""
 import argparse
 import hashlib
 import json
@@ -13,8 +14,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 VM2 = os.path.dirname(HERE)
 RUNNER = os.path.join(os.path.dirname(VM2), 'run', 'cps_job.py')
-MIN_FREE = 1 << 30
-SUITES = ('test_core_table', 'test_core_props')
+MIN_FREE = 3 << 29
+SUITES = ('test_core_table', 'test_core_props', 'test_reuse', 'test_vio', 'test_maint', 'test_probe_p5', 'test_lints',
+          'test_resets')
 
 
 def tree_sha():
@@ -50,7 +52,16 @@ def main(argv):
             continue
         t = time.time()
         mod = __import__(name)
-        r = mod.run(a.jobs) if name == 'test_core_props' else mod.run()
+        wd = os.path.join(a.work, name)
+        os.makedirs(wd, exist_ok=True)
+        if name == 'test_core_props':
+            r = mod.run(a.jobs)
+        elif name in ('test_core_table', 'test_reuse'):
+            r = mod.run()
+        elif name == 'test_resets':
+            r = mod.run(None, wd, a.jobs)
+        else:
+            r = mod.run(None, wd)
         r['seconds'] = round(time.time() - t, 1)
         results.append(r)
     runner_sha = None
@@ -60,11 +71,11 @@ def main(argv):
     doc = {'schema': 'cps.vm2-tests.v1', 'tests': sum(r['tests'] for r in results),
            'passed': sum(r['passed'] for r in results),
            'failed': [{'suite': r['name'], 'tests': r['failed'], 'detail': r['detail']} for r in results if r['failed']],
-           'suites': [{k: r[k] for k in ('name', 'tests', 'passed', 'seconds', 'counts')} for r in results],
+           'suites': [{k: r.get(k) for k in ('name', 'tests', 'passed', 'seconds', 'counts')} for r in results],
            'seconds': round(time.time() - t0, 1), 'free_bytes_at_start': free, 'helper_tree_sha256': tree_sha(),
            'runner_sha256': runner_sha}
     with open(os.path.join(a.work, 'TEST_RESULTS.json'), 'w') as f:
-        json.dump(doc, f, indent=1, sort_keys=True)
+        json.dump(doc, f, indent=1, sort_keys=True, default=str)
     print(json.dumps({k: doc[k] for k in ('tests', 'passed', 'seconds')}))
     for x in doc['failed']:
         print('FAILED', x['suite'], x['tests'])

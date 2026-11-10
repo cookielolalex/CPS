@@ -31,6 +31,12 @@ from cpsvm2.vio.v1reuse import Archive, Layout                              # no
 
 WORK = None
 BOOT = '0f0e0d0c-0b0a-4908-8706-050403020100'
+GATES = {'p1_vm_files': 'PASS', 'p1_transcript_export': 'yes', 'p1_conversation_list': 'yes',
+         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_md5_visible': 'yes', 'p2_newest_first': 'no',
+         'p2_lag_seconds': 20, 'p2_max_upload_bytes': 50000000, 'p2_tgz_kept': 'PASS',
+         'p2_failed_upload_can_appear': 'yes', 'p3_identity_stable': 'yes', 'p3_clock_tolerance_seconds': 300,
+         'p5_foreground_hold_seconds': 1200, 'p5_setup_seconds': 130}
+STAGE_MAX = {k: 600 for k in N.STAGE_KEYS}
 PRINTED = []                       # every block printed by the cli in this suite (grammar lint at the end)
 
 
@@ -58,7 +64,8 @@ def expect_halt(code, fn, *a, **k):
 
 # ================================================================ FakeDrive and FakeDot
 class FakeDrive:
-    """Folders of name -> [copies {id, bytes, md5}]; exact-name and prefix FIND, download by id; no listing."""
+    """Folders of name -> [copies {id, bytes, md5}]; exact-name FIND (the only search, §X.5), download by id; no
+    listing."""
     def __init__(self):
         self.files, self.n, self.drop, self.calls = {}, 0, set(), 0
 
@@ -81,10 +88,6 @@ class FakeDrive:
     def find(self, folder, name):
         self.calls += 1
         return list(self.files.get(folder, {}).get(name, []))
-
-    def find_prefix(self, folder, prefix):
-        self.calls += 1
-        return {n: c for n, c in self.files.get(folder, {}).items() if n.startswith(prefix)}
 
     def download(self, did):
         self.calls += 1
@@ -109,27 +112,24 @@ def at_of(lines):
 
 def dot_do(drv, lines, hidden=False, skip_upload=False):
     """Carry out a SAVE block on the FakeDrive and return the found arguments (None when it is not an ATTEST found)."""
-    folder_of, prefixes = {}, []
+    folder_of = {}
     for ln in lines[1:]:
         t = shlex.split(ln)
         if t[0] == 'UPLOAD' and not skip_upload:
             drv.upload(t[1], t[3], t[5])
-        elif t[0] == 'FIND' and t[2] == 'NAME':
+        elif t[0] == 'FIND':
+            assert t[2] == 'NAME', 'only exact-name FIND exists (X.5)'
             folder_of[t[3]] = t[1]
-        elif t[0] == 'FIND' and t[2] == 'PREFIX':
-            prefixes.append((t[1], t[3]))
         elif t[0] == 'DOWNLOAD':
             Path(t[5]).parent.mkdir(parents=True, exist_ok=True)
             Path(t[5]).write_bytes(drv.download(t[3]))
     do = lines[-1]
     if ' found --at ' not in do:
         return None
+    hidden = hidden or '(--file ID:SIZE' in do                  # the block names the form (§X.6.2)
     names = [w for i, w in enumerate(shlex.split(do)) if i and shlex.split(do)[i - 1] == '--name']
     args = ['--at', at_of(lines)]
     found = {}
-    for f, p in prefixes:
-        for n, cs in drv.find_prefix(f, p).items():
-            found[n] = cs
     for n in names:
         if n in folder_of:
             found[n] = drv.find(folder_of[n], n)
@@ -154,7 +154,7 @@ class SPEnv:
         self.v2.mkdir(parents=True, exist_ok=True)
         (root / 'base/inbox').mkdir(parents=True, exist_ok=True)
         self.gates = dict(CW.GATES, **(gates or {}))
-        self.cfg = {'png_part_bytes': part_bytes, 'max_entry_bytes': max_entry}
+        self.cfg = {'png_part_bytes': part_bytes, 'max_entry_bytes': max_entry, 'max_upload_bytes': N.UPLOAD_CAP_BYTES}
         self.series_folder = N.series_folder(series)
         self.series = series
 
@@ -223,13 +223,9 @@ def drive_pending(env, drv, pend, hidden=False, max_rounds=40):
             drv.upload(p, f, n)
         got = {}
         for f, how, v in finds:
-            if how == 'NAME':
-                cs = drv.find(f, v)
-                got[v] = ['%s:%d' % (c['id'], len(c['bytes'])) if hidden else '%s:%s:%d' % (
-                    c['id'], c['md5'], len(c['bytes'])) for c in cs] or None
-            else:
-                for n, cs in drv.find_prefix(f, v).items():
-                    got[n] = ['%s:%s:%d' % (c['id'], c['md5'], len(c['bytes'])) for c in cs] or None
+            cs = drv.find(f, v)
+            got[v] = ['%s:%d' % (c['id'], len(c['bytes'])) if hidden else '%s:%s:%d' % (
+                c['id'], c['md5'], len(c['bytes'])) for c in cs] or None
         for n in names:
             got.setdefault(n, None)
         r = savepoint.on_found(env, pend, got, lambda v: None)
@@ -365,18 +361,47 @@ def t_commit_md5_hidden_download_back():
     assert pend2['entry']['copies'] == [[cs[0]['id'], pend['entry']['md5'], len(good)]], 'local md5 recorded'
 
 
-def t_commit_prefix_variant_foreign_name_forks():
-    root = tmpdir('prefix')
-    env, drv = SPEnv(root, gates={'p2_prefix_search': 'yes'}), FakeDrive()
+def t_commit_refused_upload_find_before_reupload():
+    """§X.5.6: --refused with --none stops with UPLOAD_REFUSED HANDBACK A (PENDING written); the next block FINDs and
+    never UPLOADs; two absences then re-upload; a third refused upload's two absences are UPLOAD_FAILED; --refused
+    with copies only counts. setup files over max_upload_bytes are UPLOAD_TOO_LARGE before printing (§X.3)."""
+    root = tmpdir('refused')
+    env, drv = SPEnv(root), FakeDrive()
     pend, entry, _, _ = write_png_commit(env, make_job(root, pngs=0))
-    ups, finds, dls, do, names = savepoint.block(env, pend)
-    assert finds == ((env.series_folder, 'PREFIX', 'CPSJ_Q1_000001'),)
-    for p, f, n in ups:
-        drv.upload(p, f, n)
-    drv.put(env.series_folder, 'CPSJ_Q1_000001_PNG07.part', b'foreign')
-    got = {n: ['%s:%s:%d' % (c['id'], c['md5'], len(c['bytes'])) for c in cs]
-           for n, cs in drv.find_prefix(env.series_folder, 'CPSJ_Q1_000001').items()}
-    assert savepoint.on_found(env, pend, got, lambda v: None) == ('stop', 'FORK')
+    n = entry['name']
+    for k in range(1, 4):
+        ups, finds, dls, do, names = savepoint.block(env, pend)
+        assert [u[2] for u in ups] == [n] and do[1]['uploaded'] == [n], (k, ups)
+        r = savepoint.on_found(env, pend, {n: None}, lambda v: None, {n})
+        assert r == ('handback', 'UPLOAD_REFUSED') and pend['tries'][n]['refused'] == k
+        ups, finds, dls, do, names = savepoint.block(env, pend)
+        assert not ups and finds == ((env.series_folder, 'NAME', n),), 'FIND first after a refusal'
+        r = savepoint.on_found(env, pend, {n: None}, lambda v: None)
+        assert r == ('ok', None) and savepoint.block(env, pend)[3][0] == 'WAIT'
+        ups, finds, dls, do, names = savepoint.block(env, pend)
+        assert not ups
+        r = savepoint.on_found(env, pend, {n: None}, lambda v: None)
+        if k < 3:
+            assert r == ('ok', None) and pend['tries'][n]['need'] == 'upload'
+    assert r == ('stop', 'UPLOAD_FAILED') and pend['tries'][n]['uploads'] == 3
+    root2 = tmpdir('refused2')
+    env2, drv2 = SPEnv(root2), FakeDrive()
+    pend2, e2, _, _ = write_png_commit(env2, make_job(root2, pngs=0))
+    ups, finds, dls, do, names = savepoint.block(env2, pend2)
+    for p_, f, n_ in ups:
+        drv2.upload(p_, f, n_)
+    cs = drv2.find(env2.series_folder, e2['name'])
+    got = {e2['name']: ['%s:%s:%d' % (c['id'], c['md5'], len(c['bytes'])) for c in cs]}
+    assert savepoint.on_found(env2, pend2, got, lambda v: None, {e2['name']}) == ('ok', None)
+    assert pend2['entry']['copies'] and pend2['tries'][e2['name']]['refused'] == 1
+    big = root2 / 'big.json'
+    big.write_bytes(b'x' * 2000)
+    env2.cfg = dict(env2.cfg, max_upload_bytes=1000)
+    lp = savepoint.setup_loop([(big, 'CPS/setup', 'big.json')])
+    expect_halt('UPLOAD_TOO_LARGE', savepoint.setup_block, env2, lp)
+    at, items = drive.parse_found(['--at', 'A', '--name', 'N', '--refused', '--none'])
+    assert drive.check_found(items, ['N'], False, ['N'])[0] is None
+    assert drive.check_found(items, ['N'], False, [])[0] == 'FOUND_SYNTAX', '--refused only on an uploaded name'
 
 
 def t_commit_rebase_absence_third_check():
@@ -692,9 +717,56 @@ def t_found_argument_rules():
     at, items = drive.parse_found(['--at', 'A', '--name', 'N', '--none'])
     assert drive.check_found(items, ['N', 'M'], False)[0] == 'FOUND_NAMES_INCOMPLETE'
     at, items = drive.parse_found(['--at', 'A', '--file', 'n:i:m:1'])
-    assert drive.check_found(items, [], True) == (None, {None: ['n:i:m:1']})
+    assert drive.check_found(items, [], True) == (None, {None: ['n:i:m:1']}, set())
     assert drive.parse_copy('i:m:1', False) == ('i', 'm', '1') and drive.parse_copy('i:1', False) is None
     assert drive.parse_copy('i:1', True) == ('i', '1') and drive.parse_copy('n:i:m:1', False, True)
+
+
+def t_config_upload_and_stage_budget_invalid():
+    """§X.2: stage_max_seconds has exactly the STAGE_KEYS with int values >= 1; max_upload_bytes <= UPLOAD_CAP_BYTES;
+    png_part_bytes and max_entry_bytes <= max_upload_bytes; max_ai_output + max_transcript + 1e6 <= max_entry; the
+    deleted keys are refused (exact key set)."""
+    rel = {'status': 'RELEASED_FOR_USE'}
+    base = {'schema': 'cps.vm2-config.v1', 'series': 'E1', 'accepted_helper_tree_sha256': ['a' * 64],
+            'accepts_release_sha256': [], 'selftest_expected_tests': 1, 'clock_wait_max_seconds': 60,
+            'foreground_hold_seconds': 1200, 'stage_max_seconds': dict(STAGE_MAX), 'max_upload_bytes': 50000000,
+            'png_part_bytes': 1000000, 'max_entry_bytes': 50000000, 'max_transcript_bytes': 20000000,
+            'max_ai_output_bytes': 20000000, 'conversation_re': r'conv-[0-9a-f]{8}', 'transcript_ext': 'json',
+            'drive_id_re': r'[A-Za-z0-9_-]{20,80}', 'gates': dict(GATES), 'clear': None, 'doc_samples': []}
+
+    def load(**over):
+        c = dict(base, **over)
+        for k in [k for k, v in over.items() if v is None and k not in ('clear',)]:
+            c.pop(k)
+        return host.load_config(json.dumps(c).encode(), rel, N.check_config_patterns, N.UPLOAD_CAP_BYTES,
+                                N.STAGE_KEYS)
+    assert load()['max_upload_bytes'] == 50000000
+    sm_missing = {k: v for k, v in STAGE_MAX.items() if k != 'finish'}
+    for over in ({'stage_max_seconds': sm_missing}, {'stage_max_seconds': dict(STAGE_MAX, deliver=5)},
+                 {'stage_max_seconds': dict(STAGE_MAX, finish=0)}, {'stage_max_seconds': dict(STAGE_MAX, finish=True)},
+                 {'max_upload_bytes': N.UPLOAD_CAP_BYTES + 1, 'max_entry_bytes': 50000000},
+                 {'png_part_bytes': 60000000}, {'max_entry_bytes': 60000000},
+                 {'max_ai_output_bytes': 30000000}, {'wrap_foreground_seconds': 240}, {'foreground_hold_seconds': None},
+                 {'gates': dict(GATES, p5_detached='PASS')}, {'gates': dict(GATES, p2_prefix_search='no')},
+                 {'gates': {k: v for k, v in GATES.items() if k != 'p3_clock_tolerance_seconds'}}):
+        expect_halt('CONFIG_INVALID', load, **over)
+
+
+def t_gate1_foreground_hold_gate():
+    """§X.12.1 release gates: foreground_hold_seconds <= p5_foreground_hold_seconds; p5_setup_seconds + 60 and every
+    stage budget + 60 within the hold; max_upload_bytes <= min(cap, p2_max_upload_bytes); parts and entries within
+    max_upload_bytes; an OPEN or null gate is open."""
+    cfg = {'gates': dict(GATES), 'foreground_hold_seconds': 1200, 'stage_max_seconds': dict(STAGE_MAX),
+           'max_upload_bytes': 50000000, 'png_part_bytes': 1000000, 'max_entry_bytes': 50000000}
+    gp = lambda c: host.gates_problem(c, 'qualification', N.UPLOAD_CAP_BYTES)          # noqa: E731
+    assert gp(cfg) is None and host.gates_problem(cfg, 'setup', N.UPLOAD_CAP_BYTES) is None
+    assert 'p5_foreground_hold_seconds' in gp(dict(cfg, gates=dict(GATES, p5_foreground_hold_seconds=600)))
+    assert gp(dict(cfg, gates=dict(GATES, p5_foreground_hold_seconds=None))) == ['p5_foreground_hold_seconds']
+    assert gp(dict(cfg, stage_max_seconds=dict(STAGE_MAX, finish=1150))) == ['stage_max_seconds.finish']
+    assert gp(dict(cfg, gates=dict(GATES, p5_setup_seconds=1150))) == ['p5_setup_seconds']
+    assert gp(dict(cfg, gates=dict(GATES, p2_max_upload_bytes=40000000))) == ['p2_max_upload_bytes']
+    assert gp(dict(cfg, gates=dict(GATES, p3_clock_tolerance_seconds='OPEN'))) == ['p3_clock_tolerance_seconds']
+    assert gp(dict(cfg, gates=dict(GATES, p2_tgz_kept='OPEN'))) == ['p2_tgz_kept']
 
 
 # ================================================================ the cli on an everyday series (in-process)
@@ -711,12 +783,13 @@ class World:
         for d in ('runtime', 'outbox/v2', 'everyday_inputs', 'attest', 'inbox'):
             (b / d).mkdir(parents=True, exist_ok=True)
         os.symlink(cli.Path(cli.host.HELPER_REPO), b / 'repo')
-        self.gates = dict(CW.GATES, **(gates or {}))
+        self.gates = dict(GATES, **(gates or {}))
         rel = json.dumps({'status': 'RELEASED_FOR_USE', 'invented': True}).encode()
         cfg = {'schema': 'cps.vm2-config.v1', 'series': 'E1', 'accepted_helper_tree_sha256': [host.helper_tree_sha256()],
                'accepts_release_sha256': [], 'selftest_expected_tests': 1, 'clock_wait_max_seconds': 60,
-               'wrap_foreground_seconds': 240, 'png_part_bytes': 1000000, 'max_entry_bytes': 100000000,
-               'max_transcript_bytes': 50000000, 'max_ai_output_bytes': 100000000,
+               'foreground_hold_seconds': 1200, 'stage_max_seconds': dict(STAGE_MAX), 'max_upload_bytes': 50000000,
+               'png_part_bytes': 1000000, 'max_entry_bytes': 50000000,
+               'max_transcript_bytes': 20000000, 'max_ai_output_bytes': 20000000,
                'conversation_re': r'conv-[0-9a-f]{8}', 'transcript_ext': 'json', 'drive_id_re': r'[A-Za-z0-9_-]{20,80}',
                'gates': self.gates, 'clear': None, 'doc_samples': ['conv-EXAMPLE', 'case-example']}
         (self.lay.runtime / 'RELEASE.json').write_bytes(rel)
@@ -765,7 +838,7 @@ class World:
 
     def cmd(self, *argv):
         out = io.StringIO()
-        with contextlib.redirect_stdout(out), patched(cli, 'start_worker', self._spawn):
+        with contextlib.redirect_stdout(out), patched(cli, 'run_stage', self._spawn):
             code = cli.main(list(argv))
         text = out.getvalue()
         lines = [ln for ln in text.splitlines() if ln]
@@ -774,6 +847,8 @@ class World:
         return code, lines
 
     def _spawn(self, env, kind, info):
+        """The foreground stage replaced (§X.7.2: only `go` reaches it)."""
+        assert env.command == 'go', 'X.5: %s started a stage' % env.command
         self.started.append((kind, info))
         raise cli.Out(0)
 
@@ -828,7 +903,9 @@ def t_cli_inputs_commit_found_and_next_stage():
     assert pend['tries']['CPSJ_E1_000002.tgz']['uploads'] == 1
     args = dot_do(w.drive, s)
     code, out = w.cmd('found', *args)
-    assert code == 0 and w.started and w.started[0][1]['first'] == 'prepare', (out, w.started)
+    assert code == 0 and not w.started and 'state=WORK' in out[0] and out[-1].startswith('DO: RUN '), out
+    code, out2 = w.cmd('go')
+    assert code == 0 and w.started and w.started[0][1]['first'] == 'prepare', (out2, w.started)
     st = json.loads((w.lay.base / 'outbox/v2/STATE.json').read_text())
     assert st['head']['seq'] == 2 and not (w.lay.base / 'outbox/v2/PENDING.json').exists()
     assert (w.lay.inbox / 'journal/CPSJ_E1_000002.tgz').is_file(), 'the confirmed entry is kept for this boot'
@@ -947,6 +1024,8 @@ def t_cli_generator_open_export_ask_ai_commit():
     code, s_ = ans()
     assert code == 0 and 'state=SAVE' in s_[0], s_
     code, out = w.cmd('found', *dot_do(w.drive, s_))
+    assert not w.started and 'state=WORK' in out[0], 'X.5: found never starts the stage'
+    code, out = w.cmd('go')
     assert w.started and w.started[-1][1]['first'] == 'finish' and w.started[-1][1]['info']['consume'] == 'G1'
     st = json.loads((w.lay.base / 'outbox/v2/STATE.json').read_text())
     g1 = st['state']['runs'][run]['roles']['G1']
@@ -965,6 +1044,30 @@ class Clock:
     def __call__(self):
         import time
         return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.t))
+
+
+def t_cli_setup_failed_log_uploaded_then_stop():
+    """§X.6.6: session_start.sh ran the setup in the foreground and wrote the failed marker for this boot and commit:
+    `go` uploads the setup log to CPS/reports through the setup-file loop, then STOP SETUP_FAILED (local sticky).
+    Neither marker: STOP SETUP_FAILED at once (`go` never waits for setup)."""
+    for failed in (True, False):
+        w = World()
+        b = w.lay.base
+        for f in ('outbox/v2/STATE.json', 'outbox/v2/RESTORE_WORK.json'):
+            os.unlink(b / f)
+        (w.lay.tools / 'var').mkdir(parents=True, exist_ok=True)
+        if failed:
+            (w.lay.tools / 'var/cps_vm2_setup_failed').write_text('%s %s\n' % (BOOT, host.repo_commit(w.lay)))
+            (b / 'outbox/setup_20261110T000000Z.log').write_text('invented setup log: check_env all_met false\n')
+        code, a = w.cmd('go')
+        if failed:
+            assert code == 0 and a[1].startswith('UPLOAD ') and ' TO CPS/reports AS setup_20261110T000000Z.log' in a[1]
+            assert '[--refused]' in a[-1], a[-1]
+            code, a = w.cmd('found', *dot_do(w.drive, a))
+            assert w.drive.find('CPS/reports', 'setup_20261110T000000Z.log')
+        assert code == 3 and a[-1] == 'DO: STOP SETUP_FAILED HANDBACK C', (code, a)
+        code, again = w.cmd('go')
+        assert code == 3 and again[-1] == a[-1], 'the STOP is local sticky'
 
 
 def t_cli_session_fresh_everyday_genesis():
@@ -987,8 +1090,9 @@ def t_cli_session_fresh_everyday_genesis():
     cfg = json.loads(json.dumps({'schema': 'cps.vm2-config.v1', 'series': 'E1',
                                  'accepted_helper_tree_sha256': [host.helper_tree_sha256()], 'accepts_release_sha256': [],
                                  'selftest_expected_tests': 7, 'clock_wait_max_seconds': 60,
-                                 'wrap_foreground_seconds': 240, 'png_part_bytes': 1000000, 'max_entry_bytes': 10 ** 8,
-                                 'max_transcript_bytes': 5 * 10 ** 7, 'max_ai_output_bytes': 10 ** 8,
+                                 'foreground_hold_seconds': 1200, 'stage_max_seconds': dict(STAGE_MAX),
+                                 'max_upload_bytes': 50000000, 'png_part_bytes': 1000000, 'max_entry_bytes': 50000000,
+                                 'max_transcript_bytes': 2 * 10 ** 7, 'max_ai_output_bytes': 2 * 10 ** 7,
                                  'conversation_re': r'conv-[0-9a-f]{8}', 'transcript_ext': 'json',
                                  'drive_id_re': r'[A-Za-z0-9_-]{20,80}', 'gates': w.gates, 'clear': None,
                                  'doc_samples': []}))
@@ -1090,12 +1194,13 @@ def t_printed_blocks_grammar_and_paths():
 
 TESTS = [t_commit_entry_then_parts, t_commit_duplicates_same_md5_kept, t_commit_fork_foreign_md5,
          t_commit_bounded_reupload, t_commit_late_appearing_copy_is_harmless, t_commit_md5_hidden_download_back,
-         t_commit_prefix_variant_foreign_name_forks, t_commit_rebase_absence_third_check,
+         t_commit_refused_upload_find_before_reupload, t_commit_rebase_absence_third_check,
          t_commit_refuses_second_and_limits, t_commit_illegal_transition_leaves_nothing,
          t_durable_write_ok_and_short_write, t_durable_zero_write_is_eio, t_durable_enospc_and_fsync_eio,
          t_durable_doc_self_hash, t_commit_enospc_at_every_write, t_walk_strict_unsupported_entries,
          t_snapshot_place_roundtrip_and_evict, t_evict_frozen_folder, t_evict_changed_file_and_unplace,
          t_runner_parse, t_runner_argv_refuses_unsafe_values, t_grammar_and_quoting, t_found_argument_rules,
+         t_config_upload_and_stage_budget_invalid, t_gate1_foreground_hold_gate, t_cli_setup_failed_log_uploaded_then_stop,
          t_cli_idle_reprint_and_refusals, t_cli_inputs_commit_found_and_next_stage, t_cli_fork_is_sticky,
          t_cli_upload_failed_after_three_tries, t_cli_enospc_halts_before_printing, t_cli_md5_hidden_download_back,
          t_cli_session_fresh_everyday_genesis, t_cli_generator_open_export_ask_ai_commit,

@@ -1,7 +1,7 @@
 """outcomes(state) (§9.1-9.3) and final_dispositions(outcomes, verdicts) (§9.5). Pure: they read only their
 arguments. No other code derives a disposition (F4, F5)."""
 from .fold import chain, latest
-from .names import cjson, sha
+from .names import cjson, sha, utc_minus
 
 ALLOWED = {'OWNER_CHECK': ('NOTHING_WRITTEN_CONFIRMED', 'WRITE_FOUND'),
            'SUPERSEDED_WINDOW': ('NO_CONVERSATION_IN_WINDOW', 'CONVERSATION_FOUND'), 'O52_SHEET': ('SHEET_CHECKED',)}
@@ -73,6 +73,7 @@ def outcomes(state):
     any fold state gives a result (an everyday state has no pairs)."""
     jobs = sorted(state['genesis']['jobs'] or [], key=lambda j: j[1])
     pairs, sheet, items, reruns, rebases = [], [], [], [], []
+    tol = (state['genesis'].get('gates') or {}).get('p3_clock_tolerance_seconds') or 0     # §X.9 rule 5
     for job in jobs:
         for rd in ('A', 'B'):
             ch = chain(state, job[0], rd)
@@ -92,7 +93,8 @@ def outcomes(state):
                      'diverged': x['diverged']} for x in R['rebases']]
         for ro, st in _starts(R):
             nxt = [s2 for s2 in (ro['starts'] if ro else []) if s2['start_no'] == st['superseded_by']]
-            window = [st['utc'], nxt[0]['utc'] if nxt else None] if st['superseded_by'] is not None else None
+            window = [utc_minus(st['utc'], tol), utc_minus(nxt[0]['utc'], -tol) if nxt else None] \
+                if st['superseded_by'] is not None else None
             sheet.append({'run': k, 'case': R['case'], 'reader': R['reader'], 'role': st['role'],
                           'attempt': st['attempt'], 'start_no': st['start_no'], 'reason': st['reason'],
                           'start_utc': st['utc'], 'boot_id': st['boot_id'],
@@ -117,7 +119,8 @@ def outcomes(state):
               'owner_checks': sum(1 for i in items if i['kind'] == 'OWNER_CHECK'),
               'reruns': len(reruns), 'rebases': len(rebases)}
     return {'series': state['series'], 'seq': state['seq'], 'pairs': pairs, 'o52_sheet': sheet,
-            'owner_items': items, 'reruns': reruns, 'rebases': rebases, 'counts': counts}
+            'clock_tolerance_seconds': tol, 'owner_items': items, 'reruns': reruns, 'rebases': rebases,
+            'counts': counts}
 
 
 def final_dispositions(outs, checks):

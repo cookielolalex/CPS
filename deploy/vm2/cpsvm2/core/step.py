@@ -6,8 +6,8 @@ Conventions shared by the builders of cli.py, worker.py and vio/:
   AWAIT_CONVERSATION, CONTINUE_CONVERSATION, END_CONVERSATION, EXPORT_TRANSCRIPT, WAIT, STOP; args is a dict of the
   action's key=value arguments in print order. Two more ACTIONs name an ATTEST line the glue renders with `--at`:
   ATTEST_FOUND {'names': [...]} (or {'list': True} for a LIST answer), and the Ask step (ATTEST ... answer). `--at` is never in a Step: vio computes it (names.at_string).
-  uploads: ((abs_path, folder, name), ...); finds: ((folder, 'NAME'|'PREFIX', value), ...);
-  lists: ((folder, prefix, newest_k), ...); downloads: ((folder, drive_id, abs_path), ...).
+  uploads: ((abs_path, folder, name), ...); finds: ((folder, 'NAME', value), ...);
+  lists: ((folder, newest_k), ...) (LIST <folder> NEWEST <k>); downloads: ((folder, drive_id, abs_path), ...).
   mark: a §2.3 mark key that vio writes durably into STATE.marks BEFORE printing the block, or None.
 - Ask.keys is {key: PATTERN} (§6.3/§6.5, insertion order = print order); Ask.context is a dict naming what the answer
   is for: context['action'] in OPERATOR, OPENED, AI, IDLE, NOTIFY_OWNER, ASK_USER, DELIVER_COPY, DELIVER_USER,

@@ -1,4 +1,4 @@
-"""The 54 reused segments of deploy/vm/cps_vm.py at 95df270 (spec §1.4), byte-identical, in v1 order.
+"""The 52 reused segments of deploy/vm/cps_vm.py at 95df270 (spec §1.4), byte-identical, in v1 order.
 Generated from the v1 file; tests/test_reuse.py checks every segment hash against REUSE_MANIFEST.json. Do not edit:
 a changed function belongs in v1mod.py (§1.6)."""
 import datetime
@@ -938,38 +938,6 @@ def clock_check(ctx, floor, block, model, code='CLOCK_BEHIND'):
         block.then(f'RUN bash {ctx.lay.repo}/deploy/vm/session_start.sh --operator-model {q(model)}')
         raise Halt('NEED', 'CLOCK_WAIT', block=block)
     stop(code, 'this VM clock is behind the records: hand back case C')
-
-
-def spawn(ctx, kind, info, lock):
-    lay = ctx.lay
-    wid = utc14() + '_' + secrets.token_hex(4)
-    d = {'id': wid, 'kind': kind, 'info': info, 'pid': None, 'started_utc': utc(), 'boot_id': current_boot_id(),
-         'log': str(lay.outbox / f'{kind}_{wid}.log'), 'out': str(lay.outbox / f'{kind}_{wid}.out'), 'exit': None}
-    write_atomic(lay.outbox / 'DETACHED.json', note_bytes(d))
-    # r3 failure-R3-03: the worker inherits the held lock (the same open file description), so no waiting helper command
-    # can take the lock between the checks and the work; this process then drops its descriptor without unlocking
-    with open(d['log'], 'ab') as log:
-        p = subprocess.Popen([sys.executable, '-I', '-B', str(HELPER_FILE), '_worker', wid, '--lock-fd', str(lock.fd)],
-                             start_new_session=True, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, close_fds=True,
-                             pass_fds=(lock.fd,), env=os.environ.copy())
-    lock.hand_off()
-    d['pid'] = p.pid
-    cur = read_json_file(lay.outbox / 'DETACHED.json') or {}
-    if cur.get('id') == wid and cur.get('out_written') is None:
-        cur['pid'] = p.pid
-        write_atomic(lay.outbox / 'DETACHED.json', note_bytes(cur))
-    return wait_block(ctx, ctx.cfg['wrap_foreground_seconds'] if ctx.cfg else 240)
-
-
-def worker_alive(d):
-    pid = d.get('pid')
-    if not pid or d.get('boot_id') != current_boot_id():
-        return False
-    try:
-        cmd = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
-    except OSError:
-        return False
-    return b'_worker' in cmd and d['id'].encode() in cmd
 
 
 def run_runner(ctx, argv, log):

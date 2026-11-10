@@ -1,12 +1,15 @@
 """go / found / answer (spec §6), the glue that imports core/ and vio/. It carries out the Steps that core returns
 (session_next §8, next_action §7.1) and decides nothing about the journal itself: every transition is the fold's.
 
-Command prologue (§2.5, §6.7): layout check, HelperLock, cleanup, sticky HALT, detached worker, cache validation. Then
-the loop: a pending commit first (§5), the session machine until RESTORE_WORK.phase is DONE (§8), then next_action.
+Command prologue (§2.5, §X.6.7): layout check, HelperLock (busy: the CPSV-BUSY block, exit 4), cache validation, the
+FOREGROUND check (a dead stage of this boot), cleanup, sticky HALT. Then the loop: a pending commit first (§5), the
+session machine until RESTORE_WORK.phase is DONE (§8), then next_action. Only `go` runs a stage, in the foreground of
+this process, holding the lock for the whole stage (§X.7.2); `found` and `answer` print `DO: RUN ... go` instead.
 Exit codes: 0 follow the block, 3 the block ends in DO: STOP, 4 refused (state unchanged), 2 usage.
 
 Sections: environment and cache; printing; entry drafts and commits; pending commit; prologue; found; answer; the
-loop; session glue (§8 I/O phases); answers (§6.5); plan commits (CLEAR, FINAL); workers."""
+loop; session glue (§8 I/O phases); answers (§6.5); plan commits (CLEAR, FINAL); foreground stages."""
+import errno
 import os
 import re
 import secrets
@@ -22,14 +25,17 @@ from .core import session as S
 from .core.step import Ask, Commit, Halt as HaltStep, Place, PrintBlock, Reupload, RunChain, Stop
 from .vio import durable, drive, host, place, runner, savepoint
 from .vio.v1compat import Block, Halt
-from .vio.v1mod import check_layout_release, cleanup_leftovers, session_kit, wait_block
+from .vio.v1mod import check_layout_release, cleanup_leftovers, session_kit
 from .vio.v1reuse import (HelperLock, Layout, check_layout_basic, clock_check, current_boot_id, fingerprint,
-                          kit_members, md5_file, now_dt, parse_utc, remove_tree, sha_bytes, sha_file, sjson, spawn,
+                          kit_members, md5_file, now_dt, parse_utc, remove_tree, sha_bytes, sha_file, sjson,
                           unpack_kit, validate_pass)
 
 WORK_SCHEMA, BLOCK_SCHEMA, HALT_SCHEMA = 'cps.vm2-restore-work.v1', 'cps.vm2-block.v1', 'cps.vm2-halt.v1'
+FG_SCHEMA = 'cps.vm2-foreground.v1'
 NOT_STICKY = ('FINAL', 'RELEASE_GATE_OPEN')
-SETUP_DONE = 'var/cps_vm2_setup_ok'
+SETUP_DONE, SETUP_FAILED = 'var/cps_vm2_setup_ok', 'var/cps_vm2_setup_failed'
+DEFAULT_GATES = {'p2_md5_visible': 'no'}        # before a kit config is read: this platform's md5-hidden mode (§X.5.5)
+BARE_HDR = 'CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup state='
 
 
 class Out(Exception):
@@ -45,7 +51,7 @@ class Env:
         self.lay, self.lock, self.p = lay, lock, host.Paths(lay)
         self.v2, self.journal, self.boot = self.p.v2, self.p.journal, current_boot_id()
         self.cfg = self.release = self.rel_raw = self.series = None
-        self.mode = 'setup'
+        self.mode, self.command = 'setup', 'go'
         self.cache = self.pending = self.block = self.work = None
         cp = lay.config_path
         if cp.is_file():
@@ -58,7 +64,7 @@ class Env:
             self.release = sjson(rel_raw)
         except (ValueError, UnicodeDecodeError):
             raise Halt('STOP', 'CONFIG_INVALID', 'RELEASE.json')
-        self.cfg = host.load_config(cfg_raw, self.release, N.check_config_patterns)
+        self.cfg = host.load_config(cfg_raw, self.release, N.check_config_patterns, N.UPLOAD_CAP_BYTES, N.STAGE_KEYS)
         self.series = self.cfg['series']
         self.mode = N.mode_of(self.series) if self.release.get('status') in (
             'RELEASED_FOR_QUALIFICATION', 'RELEASED_FOR_USE') else 'setup'
@@ -68,7 +74,12 @@ class Env:
 
     @property
     def gates(self):
-        return (self.cfg or {}).get('gates') or {}
+        return (self.cfg or {}).get('gates') or DEFAULT_GATES
+
+    @property
+    def upload_cfg(self):
+        """The config the setup-file loop reads; before a kit is read, the cap alone (§X.3)."""
+        return self.cfg or {'max_upload_bytes': N.UPLOAD_CAP_BYTES}
 
     @property
     def series_folder(self):
@@ -82,8 +93,15 @@ class Env:
         return ((self.cache or {}).get('head') or {}).get('seq') or 0
 
     def ctx2(self):
-        return host.Ctx2(self.lay, self.cfg or {'wrap_foreground_seconds': 240, 'clock_wait_max_seconds': 300,
-                                               'selftest_expected_tests': 0})
+        return host.Ctx2(self.lay, self.cfg or {'clock_wait_max_seconds': 300, 'selftest_expected_tests': 0})
+
+    def known_ids(self, name):
+        """Rule V's id shortcut (§X.5.5 step 5): the Drive ids already recorded for `name` (state.files, the head)."""
+        c = self.cache or {}
+        ids = {x[0] for x in ((self.state or {}).get('files') or {}).get(name) or []}
+        if (c.get('head') or {}).get('name') == name:
+            ids.add(c['head']['id'])
+        return ids
 
     def idcfg(self, case=''):
         c = self.cfg or {}
@@ -282,8 +300,8 @@ def pending_step(env):
         return
     env.pending = durable.write_doc(env.p.pending, env.pending)
     ups, finds, dls, do, names = b
-    exp = {'command': 'found', 'names': names, 'kind': 'pending'} if do[0] == 'ATTEST_FOUND' else {
-        'command': 'go', 'kind': 'pending'}
+    exp = {'command': 'found', 'names': names, 'kind': 'pending', 'uploaded': do[1]['uploaded']} \
+        if do[0] == 'ATTEST_FOUND' else {'command': 'go', 'kind': 'pending'}
     emit(env, 'SAVE', PrintBlock('SAVE', uploads=ups, finds=finds, downloads=dls, do=do), exp)
 
 
@@ -292,7 +310,9 @@ def finish_commit(env):
     env.cache = savepoint.finish(env, env.cache, pend)
     env.pending = None
     if env.work is not None and env.work.get('committed') is None and env.work.get('phase') != 'DONE':
-        env.work['committed'] = {'seq': pend['seq'], 'md5': pend['entry']['md5'], 'utc': env.now()}
+        e = pend['entry']
+        env.work['committed'] = {'seq': pend['seq'], 'md5': e['md5'], 'utc': env.now(), 'sha256': e['sha256'],
+                                 'bytes': e['bytes'], 'ids': [c[0] for c in e['copies']]}
         save_work(env)
     run_post(env)
 
@@ -326,48 +346,58 @@ def run_post(env):
 
 # ================================================================ prologue and dispatch (§6.7)
 def main(argv):
-    if not argv or argv[0] not in ('go', 'found', 'answer', '_worker'):
+    if not argv or argv[0] not in ('go', 'found', 'answer'):
         print('usage: vm2.py go | found --at A ... | answer --at A k=v ...')
         return 2
-    if argv[0] == '_worker':
-        from . import worker
-        return worker.main(argv[1:])
     lay = Layout()
     try:
         check_layout_basic(lay)
         host.layout_paths_ok(lay)
     except Halt as h:
-        print('CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup state=STOP\n'
-              'DO: STOP %s HANDBACK C' % h.code)
+        print(BARE_HDR + 'STOP\nDO: STOP %s HANDBACK C' % h.code)
         return 3
     try:
         lock = HelperLock(lay, wait=10)
         lock.__enter__()
     except Halt:
-        print('CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup state=WORK\nDO: WAIT seconds=30')
-        return 0
+        return busy(lay)
     try:
         return run_command(lay, lock, argv)
     finally:
         lock.release()
 
 
+def busy(lay):
+    """§X.6.2: another helper command holds the lock (a foreground stage, normally). FOREGROUND.json is read without
+    the lock (unreadable or absent: none); nothing changes; exit 4."""
+    kind = since = 'none'
+    try:
+        d = sjson((lay.base / 'outbox/v2/FOREGROUND.json').read_bytes())
+        if isinstance(d, dict) and d.get('kind') in ('selftest', 'place', 'chain') and N.fm(N.UTC_S,
+                                                                                         d.get('started_utc')):
+            kind, since = d['kind'], d['started_utc']
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
+    print('CPSV-BUSY kind=%s since=%s\nREFUSED HELPER_BUSY\nDO: POLL' % (kind, since), flush=True)
+    return 4
+
+
 def run_command(lay, lock, argv):
     try:
         env = Env(lay, lock)
     except Halt as h:                                   # an invalid kit config (CONFIG_INVALID): nothing else runs
-        print('CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup state=STOP\n'
-              'DO: STOP %s HANDBACK C' % h.code)
+        print(BARE_HDR + 'STOP\nDO: STOP %s HANDBACK C' % h.code)
         return 3
+    env.command = argv[0]
     try:
-        cleanup_leftovers(lay)
         load_cache(env)
+        foreground_check(env)
+        cleanup_leftovers(lay)
         w = env.work
         if w and w.get('phase') != 'DONE' and 'CONFIG' in w['done']:
             m = kit_members(w['kit']['path'])               # the kit being taken in, before it is installed
             env.adopt(m['VM_HELPER_CONFIG.json'], m['RELEASE.json'])
         sticky_halt(env)
-        absorb_worker(env)
         if argv[0] == 'go':
             if len(argv) > 1:
                 bare((env.block or {}).get('lines') or ['usage: vm2.py go'], 2)
@@ -404,8 +434,7 @@ def safe_stop(env, code):
     except Out as o:
         return o.code
     except (Halt, durable.DurableError, OSError):
-        print('CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup state=STOP\n'
-              'DO: STOP %s HANDBACK C' % code)
+        print(BARE_HDR + 'STOP\nDO: STOP %s HANDBACK C' % code)
         return 3
 
 
@@ -419,39 +448,26 @@ def sticky_halt(env):
     emit(env, 'STOP', PrintBlock('STOP', do=('STOP', {'code': code, 'handback': 'C'})), {'command': 'none'})
 
 
-def absorb_worker(env):
-    """§7.2 step 4: running -> WAIT; died -> STOP WORKER_DIED (a self-test is retried once per boot); done ->
-    absorbed (pending: commit step 5 follows; halt: a local sticky STOP)."""
-    dp = env.lay.outbox / 'DETACHED.json'
-    if not dp.is_file():
+def foreground_check(env):
+    """§X.7.2 step 4: a FOREGROUND.json found under the lock means its writer died. Another boot's (or an unreadable
+    one) is an invalid cache file, moved aside like the cache (§2.5). This boot's: a self-test at attempt 1 is moved to
+    dead_<utc14>.json and runs again at attempt 2; anything else is a local sticky STOP FOREGROUND_DIED (SELFTEST_DIED
+    for a self-test at attempt 2). The job folder is left untouched for the maintainer."""
+    fg, why = durable.read_doc(env.p.foreground, FG_SCHEMA, sjson)
+    if fg is None and why is None:
         return
-    d = sjson(dp.read_bytes())
-    st, res = wait_block(env.ctx2(), 0)
-    if st == 'running':
-        wait_out(env, 30)
-    os.unlink(dp)
-    load_cache(env)
-    if st == 'died':
-        if d.get('kind') == 'selftest' and env.work is not None and not env.work.get('selftest_died'):
-            env.work['selftest_died'], env.work['selftest_dir'] = True, None
-            save_work(env)
-            return
-        raise Halt('STOP', 'SELFTEST_WORKER_DIED' if d.get('kind') == 'selftest' else 'WORKER_DIED', 'died')
-    if d.get('out') and os.path.isfile(d['out']):
-        os.unlink(d['out'])
-    if res.get('status') == 'halt':
-        raise Halt('STOP', res['code'], 'the worker stopped')
-    if d.get('kind') == 'place' and env.work is not None:
-        env.work['placed'], env.work['placed_list'] = True, res.get('placed') or []
-        if res.get('files_found') is not None:
-            env.work['resolve'] = dict(env.work['resolve'], placed=True, files_found=res['files_found'])
+    if fg is None or fg.get('boot_id') != env.boot:
+        dest = env.v2 / ('invalid_' + host.utc14(env.now()))
+        dest.mkdir(parents=True, exist_ok=True)
+        os.replace(env.p.foreground, dest / 'FOREGROUND.json')
+        return
+    if fg['kind'] == 'selftest' and fg.get('attempt') == 1 and env.work is not None:
+        os.replace(env.p.foreground, env.v2 / ('dead_%s.json' % host.utc14(env.now())))
+        durable.fsync_dir(env.v2)
+        env.work['selftest_died'], env.work['selftest_dir'] = True, None
         save_work(env)
-    if d.get('kind') == 'selftest' and env.work is not None:
-        env.work['selftest_dir'] = d['info']['dir']
-        save_work(env)
-    if res.get('status') == 'fingerprint' and env.cache is not None:
-        env.cache['pass'], env.cache['fingerprint_sha256'] = None, res['fingerprint']
-        save_cache(env)
+        return
+    stop_block(env, 'SELFTEST_DIED' if fg['kind'] == 'selftest' else 'FOREGROUND_DIED')
 
 
 def go_checks(env):
@@ -474,9 +490,11 @@ def go_checks(env):
         if r == 'stop':
             raise Halt('STOP', code, 'a copy differs')
         env.pending = durable.write_doc(env.p.pending, env.pending)
-    lp = (env.work or {}).get('setup_loop')
+    lp = (env.work or {}).get(b['expect'].get('loop') or 'setup_loop')
     if lp and lp.get('verify'):
         r, code = savepoint.setup_verify(env, lp)
+        if r == 'refused':
+            refuse(env, code)
         if r == 'stop':
             raise Halt('STOP', code, 'a copy differs')
         save_work(env)
@@ -494,10 +512,10 @@ def do_found(env, args):
     ex = b['expect']
     if ex.get('command') != 'found':
         refuse(env, 'COMMAND_NOT_EXPECTED')
-    for name, files, _ in items:
+    for name, files, _, _ in items:
         if any(N.forbidden(v) for v in ([name] if name is not None else []) + files):
             refuse(env, 'VALUE_FORBIDDEN')
-    code, got = drive.check_found(items, ex.get('names') or [], bool(ex.get('list')))
+    code, got, refused = drive.check_found(items, ex.get('names') or [], bool(ex.get('list')), ex.get('uploaded') or ())
     if code:
         refuse(env, code)
 
@@ -506,9 +524,9 @@ def do_found(env, args):
     kind, hidden = ex.get('kind'), env.gates.get('p2_md5_visible') == 'no'
     if kind in ('pending', 'setup'):
         if kind == 'pending':
-            r, c = savepoint.on_found(env, env.pending, got, chk)
+            r, c = savepoint.on_found(env, env.pending, got, chk, refused, env.known_ids)
         else:
-            r, c = savepoint.setup_found(env, env.work['setup_loop'], got, chk)
+            r, c = savepoint.setup_found(env, env.work[ex.get('loop') or 'setup_loop'], got, chk, refused)
         if r == 'refused':
             refuse(env, c)
         if r == 'stop':
@@ -517,6 +535,9 @@ def do_found(env, args):
             env.pending = durable.write_doc(env.p.pending, env.pending)
         else:
             save_work(env)
+        if r == 'handback':          # §X.5.6 step 4: not sticky, not in HALT.json; the next `go` FINDs first
+            emit(env, env.block['state_code'], PrintBlock('STOP', do=('STOP', {'code': c, 'handback': 'A'})),
+                 {'command': 'go', 'kind': kind})
         return
     if ex.get('list'):
         rows = []
@@ -525,6 +546,8 @@ def do_found(env, args):
             if c is None:
                 refuse(env, 'FOUND_SYNTAX')
             if chk(c[1]) or not N.fm(N.PATTERNS['SIZE'], c[-1]):
+                refuse(env, 'VALUE_PATTERN')
+            if not hidden and not N.fm(N.PATTERNS['MD5'], c[2]):
                 refuse(env, 'VALUE_PATTERN')
             rows.append([c[0], c[1], None if hidden else c[2], int(c[-1])])
         env.work['listing'] = rows
@@ -545,8 +568,10 @@ def do_found(env, args):
         if kind == 'fetch':
             env.work['fetched'][name] = cps
         else:
-            env.work['lookups'].append({'name': name, 'result': 'present' if cps else 'absent', 'copies': cps,
-                                        'utc': now})
+            lk = {'name': name, 'result': 'present' if cps else 'absent', 'copies': cps, 'utc': now}
+            if env.work.get('committed'):
+                lk['post'] = True               # a step-6 re-check FIND (§8.4): never a head-search observation
+            env.work['lookups'].append(lk)
     save_work(env)
 
 
@@ -593,7 +618,7 @@ def advance(env):
 
 
 def gates_check(env):
-    if host.gates_problem(env.cfg, env.mode):
+    if host.gates_problem(env.cfg, env.mode, N.UPLOAD_CAP_BYTES):
         stop_block(env, 'RELEASE_GATE_OPEN')
     if env.state is not None and env.cfg['gates'] != env.state['genesis']['gates']:
         raise Halt('STOP', 'GATES_CHANGED', 'the kit gates differ from the genesis gates')
@@ -627,7 +652,7 @@ def carry(env, st):
             return commit_halt(env, st.code)
         stop_block(env, st.code)
     if isinstance(st, RunChain):
-        start_worker(env, 'chain', {'run': st.run, 'first': st.first, 'info': st.info})
+        return start_chain(env, {'run': st.run, 'first': st.first, 'info': st.info})
     if isinstance(st, Commit):
         return plan_commit(env, st)
     raise Halt('STOP', 'UNCLASSIFIED', 'a step the plan does not return')
@@ -673,9 +698,10 @@ def session_step(env):
         save_work(env)
         return
     if isinstance(st, PrintBlock):
-        if st.downloads and phase == 'HEAD' and not w.get('head'):
-            if all(os.path.isfile(x[2]) for x in st.downloads):
-                return verify_head(env, st.downloads[0][2])
+        if st.downloads and all(os.path.isfile(x[2]) for x in st.downloads):
+            if phase == 'HEAD' and not w.get('head'):
+                return verify_head(env, st.downloads)
+            return record_downloads(env, st.downloads)
         if st.do[0] == 'END_CONVERSATION':
             w['resolve'] = dict(w['resolve'], end=True)
             save_work(env)
@@ -696,19 +722,61 @@ def ph_layout(env):
     done(env, 'LAYOUT')
 
 
+def record_downloads(env, downloads):
+    """Rule V (§X.5.5, §X.8.4): hash every copy the session asked to download; the session compares. A head-part copy
+    1 in inbox/journal/ is kept as inbox/journal/<name> for placement (no second download); the others are deleted."""
+    w = env.work
+    ver = dict(w.get('verified') or {})
+    for _, did, path in downloads:
+        ver[did] = [sha_file(path), os.lstat(path).st_size]
+        jr = os.path.dirname(path) == str(env.lay.inbox / 'journal')
+        if jr and path.endswith('.1') and not os.path.lexists(path[:-2]):
+            os.replace(path, path[:-2])
+        else:
+            os.unlink(path)
+    w['verified'] = ver
+    save_work(env)
+
+
+def marker(path):
+    try:
+        return Path(path).read_text().split()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def ph_setup(env):
-    """§6.6 step 4: the detached setup finished for this boot and commit."""
-    mk = env.lay.tools / SETUP_DONE
-    commit_ = host.repo_commit(env.lay)
-    if mk.is_file() and mk.read_text().split() == [env.boot, commit_ or '']:
+    """§X.6.6: session_start.sh ran the setup in the foreground. The ok marker for this boot and commit: continue; the
+    failed marker: the setup log goes to CPS/reports through the setup-file loop, then STOP SETUP_FAILED; neither:
+    STOP SETUP_FAILED (not done: the Dot re-runs a killed session_start.sh, so `go` never waits for setup)."""
+    want = [env.boot, host.repo_commit(env.lay) or '']
+    if marker(env.lay.tools / SETUP_DONE) == want:
         return done(env, 'SETUP')
-    sj = env.p.setup
-    d = sjson(sj.read_bytes()) if sj.is_file() else {}
-    pid = d.get('pid')
-    if d.get('boot_id') == env.boot and pid and os.path.exists('/proc/%d' % int(pid)) and \
-            not (env.lay.tools / 'var/cps_vm2_setup_failed').exists():
-        wait_out(env, 60, 'SETUP')
+    logs = sorted(env.lay.outbox.glob('setup_*.log'))
+    if marker(env.lay.tools / SETUP_FAILED) == want and logs and os.lstat(logs[-1]).st_size > 0:
+        if upload_files(env, 'report_loop', [(logs[-1], N.FOLDERS['reports'], logs[-1].name)], 'SETUP'):
+            stop_block(env, 'SETUP_FAILED')
     stop_block(env, 'SETUP_FAILED')
+
+
+def upload_files(env, key, files, state_code):
+    """The setup-file loop (§5 steps 5-7 without a chain, §X.5.6) for report files kept in RESTORE_WORK[key]: prints
+    the next block, or returns True once every file is confirmed."""
+    w = env.work
+    if w.get(key) is None:
+        for p, _, _ in files:
+            if os.lstat(p).st_size > env.upload_cfg['max_upload_bytes']:
+                raise Halt('STOP', 'UPLOAD_TOO_LARGE', 'a report file over max_upload_bytes')
+        w[key] = savepoint.setup_loop(files)
+        save_work(env)
+    b = savepoint.setup_block(env, w[key])
+    if b is None:
+        return True
+    save_work(env)
+    ups, finds, dls, do, names = b
+    emit(env, state_code, PrintBlock(state_code, ups, finds, (), dls, do),
+         {'command': 'found', 'names': names, 'kind': 'setup', 'loop': key, 'uploaded': do[1]['uploaded']}
+         if do[0] == 'ATTEST_FOUND' else {'command': 'go', 'kind': 'setup', 'loop': key})
 
 
 def fetch(env, folder, name, local, code_missing='KIT_NOT_VERIFIED'):
@@ -722,8 +790,8 @@ def fetch(env, folder, name, local, code_missing='KIT_NOT_VERIFIED'):
             {'command': 'found', 'names': [name], 'kind': 'fetch'})
     if not cps:
         return None
-    if len({c[1] for c in cps}) > 1:
-        raise Halt('STOP', 'FORK', 'two md5 for one setup file')
+    if len({(c[1], c[2]) for c in cps}) > 1:                 # §X.8.2: one size (and md5, when visible)
+        raise Halt('STOP', 'FORK', 'two copies of one setup file differ')
     Path(local).parent.mkdir(parents=True, exist_ok=True)
     emit(env, 'KIT', PrintBlock('KIT', downloads=((folder, cps[0][0], str(local)),)), {'command': 'go', 'kind': 'fetch'})
 
@@ -769,7 +837,7 @@ def kit_bytes(env):
 def ph_config(env):
     m = kit_bytes(env)
     env.adopt(m['VM_HELPER_CONFIG.json'], m['RELEASE.json'])
-    if host.gates_problem(env.cfg, env.mode):
+    if host.gates_problem(env.cfg, env.mode, N.UPLOAD_CAP_BYTES):
         stop_block(env, 'RELEASE_GATE_OPEN')
     check_layout_release(env.lay, env.release, host.helper_tree_sha256(), host.repo_commit(env.lay))
     done(env, 'CONFIG')
@@ -785,8 +853,9 @@ def ph_pass(env):
 
 
 def pass_phase(env, fp):
-    """§8.3: FIND the PASS of this fingerprint; a copy with the known md5 is accepted without download, else each copy
-    is downloaded and validated; none: the self-test runs and its PASS is uploaded through the setup-file loop."""
+    """§8.3, §X.8.3: FIND the PASS of this fingerprint; a copy with the known md5 (md5 visible only) is accepted without
+    download, else every copy is downloaded and validated; none valid: the self-test runs and its PASS is uploaded
+    through the setup-file loop."""
     w, setup = env.work, N.FOLDERS['setup']
     name = 'FINGERPRINT_PASS_%s.json' % fp
     passes = ((w.get('head') or {}).get('entry') or {}).get('state', {}).get('passes') or (env.state or {}).get(
@@ -796,15 +865,16 @@ def pass_phase(env, fp):
             fetch(env, setup, name, env.lay.inbox / 'pass' / name)
         cps = w['fetched'][name] or []
         known = passes.get(fp)
-        hit = [c for c in cps if known and c[1] == known['md5']]
+        hit = [c for c in cps if known and c[1] is not None and c[1] == known['md5']]
         if hit:
             return accept_pass(env, {'name': name, 'md5': hit[0][1], 'size': hit[0][2]})
-        for k, c in enumerate(cps, 1):
-            lp = env.lay.inbox / 'pass' / ('%s.%d' % (name, k))
-            if not lp.is_file():
-                lp.parent.mkdir(parents=True, exist_ok=True)
-                emit(env, 'KIT', PrintBlock('KIT', downloads=((setup, c[0], str(lp)),)), {'command': 'go'})
-            if validate_pass(env.ctx2(), lp.read_bytes(), fp):
+        lps = [env.lay.inbox / 'pass' / ('%s.%d' % (name, k)) for k in range(1, len(cps) + 1)]
+        dl = tuple((setup, c[0], str(lp)) for c, lp in zip(cps, lps) if not lp.is_file())
+        if dl:
+            lps[0].parent.mkdir(parents=True, exist_ok=True)
+            emit(env, 'KIT', PrintBlock('KIT', downloads=dl), {'command': 'go'})
+        for c, lp in zip(cps, lps):
+            if os.lstat(lp).st_size == c[2] and validate_pass(env.ctx2(), lp.read_bytes(), fp):
                 return accept_pass(env, {'name': name, 'md5': md5_file(lp), 'size': os.lstat(lp).st_size})
         return start_selftest(env, fp)
     if w.get('setup_loop') is None:
@@ -817,8 +887,8 @@ def pass_phase(env, fp):
     save_work(env)
     ups, finds, dls, do, names = b
     emit(env, 'SELFTEST', PrintBlock('SELFTEST', ups, finds, (), dls, do),
-         {'command': 'found', 'names': names, 'kind': 'setup'} if do[0] == 'ATTEST_FOUND' else {'command': 'go',
-                                                                                              'kind': 'setup'})
+         {'command': 'found', 'names': names, 'kind': 'setup', 'uploaded': do[1]['uploaded']}
+         if do[0] == 'ATTEST_FOUND' else {'command': 'go', 'kind': 'setup'})
 
 
 def accept_pass(env, ps):
@@ -832,12 +902,15 @@ def accept_pass(env, ps):
 
 
 def start_selftest(env, fp):
+    """§8.3: the self-test as a foreground stage (attempt 2 after a dead attempt 1 of this boot, §X.7.2 step 4)."""
+    if env.command != 'go':
+        run_go(env)
     d = env.lay.outbox / ('selftest_' + host.utc14(env.now()))
     d.mkdir(parents=True, exist_ok=True)
     durable.write_plain(d / 'RUN.json', {'fingerprint_before_sha256': fp, 'commit': host.repo_commit(env.lay),
                                          'started_utc': env.now(), 'work_dir': str(d / 'work'), 'exit': None,
                                          'ended_utc': None, 'pid': None})
-    start_worker(env, 'selftest', {'dir': str(d)})
+    run_stage(env, 'selftest', {'dir': str(d), 'attempt': 2 if env.work.get('selftest_died') else 1})
 
 
 def finish_selftest(env, fp):
@@ -887,11 +960,25 @@ IO_PHASES = {'LAYOUT': ph_layout, 'SETUP': ph_setup, 'KIT': ph_kit, 'CONFIG': ph
              'FINGERPRINT': ph_fingerprint, 'PASS': ph_pass, 'CLOCK': ph_clock, 'KIT_ACCEPT': ph_kit_accept}
 
 
-def verify_head(env, path):
-    """§8.4 step 3: the downloaded head: Archive and check, validate_entry, state sha, helper tree, runner pin,
-    release acceptance; any failure is the specific code (C1, a local sticky STOP)."""
+def verify_head(env, downloads):
+    """§8.4 step 3 (§X.8.4): every copy of N was downloaded to inbox/journal/<name>.<k>; all must be byte-identical
+    and of the size the FIND reported (else FORK); copy 1 is the head, kept as inbox/journal/<name>. Then Archive and
+    check, validate_entry, state sha, helper tree, runner pin, release acceptance; any failure is the specific code
+    (C1, a local sticky STOP)."""
     w = env.work
     cfg = {'series': env.series, 'accepted_helper_tree_sha256': env.cfg['accepted_helper_tree_sha256']}
+    paths = [x[2] for x in downloads]
+    sizes = {c[0]: c[2] for lk in w['lookups'] for c in lk['copies']}
+    shas = {sha_file(p_) for p_ in paths}
+    if len(shas) > 1 or any(os.lstat(p_).st_size != sizes.get(x[1]) for x, p_ in zip(downloads, paths)):
+        w['head_error'] = 'FORK'
+        save_work(env)
+        return
+    path = paths[0][:-2]
+    os.replace(paths[0], path)
+    for p_ in paths[1:]:
+        os.unlink(p_)
+    code = None
     try:
         man = savepoint.read_entry(path)
     except Halt:
@@ -1059,7 +1146,9 @@ def start_place(env, plan):
     if env.cache is None or env.cache.get('head') is None:
         build_state(env)
     ensure_local(env, sorted(set(names)), 'PLACE')
-    start_worker(env, 'place', dict(plan, files=None, series=ser, inbox=str(env.lay.inbox / 'journal')))
+    if env.command != 'go':
+        run_go(env)
+    run_stage(env, 'place', dict(plan, files=None, series=ser, inbox=str(env.lay.inbox / 'journal')))
 
 
 def ensure_local(env, names, code):
@@ -1102,8 +1191,8 @@ def reupload(env, st):
     save_work(env)
     ups, finds, dls, do, names = b
     emit(env, 'RESTORE', PrintBlock('RESTORE', ups, finds, (), dls, do),
-         {'command': 'found', 'names': names, 'kind': 'setup'} if do[0] == 'ATTEST_FOUND' else {'command': 'go',
-                                                                                              'kind': 'setup'})
+         {'command': 'found', 'names': names, 'kind': 'setup', 'uploaded': do[1]['uploaded']}
+         if do[0] == 'ATTEST_FOUND' else {'command': 'go', 'kind': 'setup'})
 
 
 # ================================================================ asks and answers (§6.5)
@@ -1126,8 +1215,8 @@ def ask(env, st):
         set_mark(env, ctx['mark'])
     ctx.pop('then', None)
     emit(env, ctx.get('state_code', 'ATTEST'), PrintBlock(ctx.get('state_code', 'ATTEST'), do=(
-        'ATTEST_ANSWER', {'keys': st.keys, 'prefix': prefix})), {'command': 'answer', 'keys': st.keys,
-                                                                 'context': ctx})
+        'ATTEST_ANSWER', {'keys': st.keys, 'prefix': prefix, 'after': ctx.get('after')})),
+        {'command': 'answer', 'keys': st.keys, 'context': ctx})
 
 
 def ensure_text(env, path, seq, member):
@@ -1190,8 +1279,8 @@ def apply_answer(env, ctx, got):
                post=[['DROP_ATTEST', [ctx['file']]]])
     elif a == 'DELIVER_COPY':
         return delivery_commit(env, ctx, got)
-    elif a in ('DELIVER_USER', 'DELIVER_SENT'):
-        start_worker(env, 'chain', {'run': ctx['run'], 'first': 'freeze', 'info': {'delivery_sent': True}})
+    elif a in ('DELIVER_USER', 'DELIVER_SENT'):       # §X.5 step 8: the freeze chain runs in the next `go`
+        set_mark(env, P.sent_mark(ctx['run'], ctx['prepared_seq'], env.state['runs'][ctx['run']]['delivery']))
     return None
 
 
@@ -1350,7 +1439,7 @@ def final_commit(env):
                                                      {'kind': 'ALLFZ', 'data': ab, 'folder': env.series_folder}])
 
 
-# ================================================================ workers (§7.2)
+# ================================================================ foreground stages (§X.7.2)
 def needed_entries(env, kind, info):
     """Journal entries a chain worker reads that are not local: an earlier run's FROZEN entry for §7.7 placement, the
     AI entry of a G consumer (attested values, transcript)."""
@@ -1369,26 +1458,61 @@ def needed_entries(env, kind, info):
     return names
 
 
-def start_worker(env, kind, info):
-    """§7.2: a detached worker inherits the helper lock; `go` waits up to wrap_foreground_seconds, then prints WAIT.
-    A finished worker's result is absorbed by running the command loop again under a new lock."""
-    ensure_local(env, needed_entries(env, kind, info), 'WORK')
-    if kind == 'chain' and info['first'] == 'prepare' and (info.get('info') or {}).get('inputs_seq'):
+def run_go(env):
+    """§X.5 step 8: `found` and `answer` never start a stage; they print the WORK block that hands it to `go`."""
+    emit(env, 'WORK', PrintBlock('WORK', do=('RUN', {})), {'command': 'go', 'kind': 'plan'})
+
+
+def start_chain(env, info):
+    """§7.1 RunChain: the local journal files the chain reads, the INPUTS re-check, then the foreground stage."""
+    ensure_local(env, needed_entries(env, 'chain', info), 'WORK')
+    if info['first'] == 'prepare' and (info.get('info') or {}).get('inputs_seq'):
         R = env.state['runs'][info['run']]
         got = inputs_of(env, R['case'])
         if got is None or N.sha(N.cjson(got)) != R['inputs']['sha256']:
             refuse(env, 'INPUTS_CHANGED')
-    lines = render(env, 'WORK', PrintBlock('WORK', do=('WAIT', {'seconds': 30})), {'command': 'go'})
-    st, _ = spawn(env.ctx2(), kind, info, env.lock)
-    if st == 'running':
-        print('\n'.join(lines), flush=True)
-        raise Out(0)
-    lock = HelperLock(env.lay, wait=30)
-    lock.__enter__()
+    if env.command != 'go':
+        run_go(env)
+    run_stage(env, 'chain', info)
+
+
+def run_stage(env, kind, info):
+    """§X.7.2 steps 2-3: FOREGROUND.json (durably), the RUNNING line (flushed at once), the body in this process
+    under the helper lock, then FOREGROUND.json unlinked and outbox/v2 fsynced on return of any status (never in a
+    `finally`: a stage that dies leaves it for step 4), then the result absorbed. The caller's loop prints the block."""
+    from . import worker
+    first = info.get('first') if kind == 'chain' else None
+    mx = env.cfg['stage_max_seconds'][first or kind]
+    since = env.now()
+    durable.write_doc(env.p.foreground, {'schema': FG_SCHEMA, 'kind': kind, 'run': info.get('run'), 'first': first,
+                                         'attempt': info.get('attempt', 1), 'boot_id': env.boot, 'pid': os.getpid(),
+                                         'started_utc': since, 'max_seconds': mx})
+    print('CPSV-RUNNING kind=%s since=%s max=%d' % (kind, since, mx), flush=True)
     try:
-        raise Out(run_command(env.lay, lock, ['go']))
-    finally:
-        lock.release()
+        res = worker.dispatch(kind, info, env)
+    except Halt as h:
+        res = {'status': 'halt', 'code': h.code}
+    except durable.DurableError as e:
+        res = {'status': 'halt', 'code': e.code}
+    except OSError as e:
+        res = {'status': 'halt', 'code': 'DISK_FULL' if e.errno in (errno.ENOSPC, errno.EDQUOT) else 'WRITE_FAILED'}
+    durable.remove(env.p.foreground)
+    absorb(env, kind, info, res)
 
 
-
+def absorb(env, kind, info, res):
+    """§7.2 step 4 in memory: halt is a STOP (or a committed HALT, run_command); pending continues with the SAVE block
+    (env.pending is set); place and selftest record their result in RESTORE_WORK; fingerprint resets the PASS."""
+    if res.get('status') == 'halt':
+        raise Halt('STOP', res['code'], 'the stage stopped')
+    if kind == 'place' and env.work is not None:
+        env.work['placed'], env.work['placed_list'] = True, res.get('placed') or []
+        if res.get('files_found') is not None:
+            env.work['resolve'] = dict(env.work['resolve'], placed=True, files_found=res['files_found'])
+        save_work(env)
+    if kind == 'selftest' and env.work is not None:
+        env.work['selftest_dir'] = info['dir']
+        save_work(env)
+    if res.get('status') == 'fingerprint' and env.cache is not None:
+        env.cache['pass'], env.cache['fingerprint_sha256'] = None, res['fingerprint']
+        save_cache(env)

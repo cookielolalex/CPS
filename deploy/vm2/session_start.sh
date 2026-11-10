@@ -1,7 +1,7 @@
 #!/bin/bash
 # cps-vm-helper.v2 bootstrap after a reset or in a new operator chat (spec section 6.6).
 # Usage: bash ~/cps/repo/deploy/vm2/session_start.sh --commit <40 hex> [--hint <seq6> --kit <hex12>]
-# Every failure prints a full block (no set -e). The setup runs detached, never in the foreground (SAFE-07).
+# Every failure prints a full block (no set -e). The setup runs in the foreground (delta X.6.6: no detached process).
 umask 022
 HDR='CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup'
 stop() { echo "$HDR state=STOP"; echo "DO: STOP $1 HANDBACK C"; exit 3; }
@@ -38,23 +38,6 @@ ST=$(git -C "$BASE/repo" status --porcelain --untracked-files=no 2>/dev/null) ||
 mkdir -p "$BASE"/runtime "$BASE"/jobs "$BASE"/qual "$BASE"/transcripts "$BASE"/everyday_inputs "$BASE"/inbox \
   "$BASE"/outbox/v2 "$BASE"/outbox/journal "$BASE"/attest "$BASE"/deliver "$TOOLS"/var || stop SESSION_LAYOUT
 
-# 4. setup once per boot and commit, detached; the detached job writes the marker (or the failure marker)
-BOOT=$(cat "${CPS_VM_BOOT_ID_PATH:-/proc/sys/kernel/random/boot_id}") || stop SESSION_LAYOUT
-UTC=$(date -u +%Y%m%dT%H%M%SZ)
-OK="$TOOLS/var/cps_vm2_setup_ok"
-if [ "$(cat "$OK" 2>/dev/null)" != "$BOOT $COMMIT" ] && [ ! -f "$BASE/outbox/SETUP.json.$BOOT" ]; then
-  rm -f "$TOOLS/var/cps_vm2_setup_failed"
-  LOG="$BASE/outbox/setup_$UTC.log"
-  setsid nohup bash -c 'if CPS_WITH_LIBREOFFICE=host bash "$1/deploy/setup_vm_user.sh" && . "$2/env.sh" &&
-      python3 "$1/deploy/check_env.py" --out "$3" | grep -q "\"all_met\": true"; then
-      echo "$4 $5" > "$2/var/cps_vm2_setup_ok"; else echo "$4 $5" > "$2/var/cps_vm2_setup_failed"; fi' \
-    _ "$REPO" "$TOOLS" "$BASE/outbox/ENV_REPORT_$UTC.json" "$BOOT" "$COMMIT" > "$LOG" 2>&1 < /dev/null &
-  PID=$!
-  printf '{"boot_id": "%s", "log": "%s", "pid": %d, "started_utc": "%s"}\n' "$BOOT" "$LOG" "$PID" "$UTC" \
-    > "$BASE/outbox/.SETUP.json.tmp" && mv "$BASE/outbox/.SETUP.json.tmp" "$BASE/outbox/SETUP.json" || stop SESSION_LAYOUT
-  : > "$BASE/outbox/SETUP.json.$BOOT"
-fi
-
 # 5. the launcher (atomically, 0755) and the hint
 printf '#!/bin/bash\n[ -f %q ] && . %q\nexec python3 -I -B %q "$@"\n' "$TOOLS/env.sh" "$TOOLS/env.sh" \
   "$BASE/repo/deploy/vm2/vm2.py" > "$BASE/.vm.sh.tmp" && chmod 0755 "$BASE/.vm.sh.tmp" &&
@@ -62,6 +45,24 @@ printf '#!/bin/bash\n[ -f %q ] && . %q\nexec python3 -I -B %q "$@"\n' "$TOOLS/en
 if [ -n "$HINT" ]; then
   printf '{"kit": "%s", "seq": %d}\n' "$KIT" "$((10#$HINT))" > "$BASE/outbox/v2/.HINT.json.tmp" &&
     mv "$BASE/outbox/v2/.HINT.json.tmp" "$BASE/outbox/v2/HINT.json" || stop SESSION_LAYOUT
+fi
+
+# 4. setup once per boot and commit, in the foreground (SAFE-07 with the probe results: setup takes about 130 s, well
+#    inside the polled foreground hold); the marker records the outcome for `go`
+BOOT=$(cat "${CPS_VM_BOOT_ID_PATH:-/proc/sys/kernel/random/boot_id}") || stop SESSION_LAYOUT
+OK="$TOOLS/var/cps_vm2_setup_ok"
+if [ "$(cat "$OK" 2>/dev/null)" != "$BOOT $COMMIT" ]; then
+  rm -f "$TOOLS/var/cps_vm2_setup_failed"
+  UTC=$(date -u +%Y%m%dT%H%M%SZ)
+  echo "CPSV-RUNNING kind=setup since=$(date -u +%Y-%m-%dT%H:%M:%SZ) max=600"
+  LOG="$BASE/outbox/setup_$UTC.log"
+  if ( CPS_WITH_LIBREOFFICE=host bash "$REPO/deploy/setup_vm_user.sh" && . "$TOOLS/env.sh" &&
+       python3 "$REPO/deploy/check_env.py" --out "$BASE/outbox/ENV_REPORT_$UTC.json" | grep -q '"all_met": true'
+     ) > "$LOG" 2>&1 < /dev/null; then
+    echo "$BOOT $COMMIT" > "$TOOLS/var/cps_vm2_setup_ok" || stop SESSION_LAYOUT
+  else
+    echo "$BOOT $COMMIT" > "$TOOLS/var/cps_vm2_setup_failed" || stop SESSION_LAYOUT
+  fi
 fi
 
 # 6. the checked-out commit is the one named

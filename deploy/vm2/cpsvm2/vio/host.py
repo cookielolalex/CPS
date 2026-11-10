@@ -13,17 +13,18 @@ from .v1reuse import current_boot_id, sha_bytes, sha_file, sjson
 
 CONFIG_SCHEMA = 'cps.vm2-config.v1'
 CONFIG_KEYS = {'schema': str, 'series': str, 'accepted_helper_tree_sha256': list, 'accepts_release_sha256': list,
-               'selftest_expected_tests': int, 'clock_wait_max_seconds': int, 'wrap_foreground_seconds': int,
-               'png_part_bytes': int, 'max_entry_bytes': int, 'max_transcript_bytes': int, 'max_ai_output_bytes': int,
-               'conversation_re': str, 'transcript_ext': str, 'drive_id_re': str, 'gates': dict,
-               'clear': (dict, type(None)), 'doc_samples': list}
+               'selftest_expected_tests': int, 'clock_wait_max_seconds': int, 'foreground_hold_seconds': int,
+               'stage_max_seconds': dict, 'max_upload_bytes': int, 'png_part_bytes': int, 'max_entry_bytes': int,
+               'max_transcript_bytes': int, 'max_ai_output_bytes': int, 'conversation_re': str, 'transcript_ext': str,
+               'drive_id_re': str, 'gates': dict, 'clear': (dict, type(None)), 'doc_samples': list}
 GATE_VALUES = {'p1_vm_files': ('PASS', 'FAIL', 'OPEN'), 'p1_transcript_export': ('yes', 'no', 'OPEN'),
                'p1_conversation_list': ('yes', 'no', 'OPEN'), 'p1_end_after_reset': ('yes', 'no', 'OPEN'),
                'p2_exact_search': ('PASS', 'FAIL', 'OPEN'), 'p2_md5_visible': ('yes', 'no', 'OPEN'),
-               'p2_prefix_search': ('yes', 'no', 'OPEN'), 'p2_newest_first': ('yes', 'no', 'OPEN'),
-               'p2_lag_seconds': int, 'p2_max_upload_bytes': int, 'p2_tgz_kept': ('PASS', 'FAIL', 'OPEN'),
-               'p2_failed_upload_can_appear': ('yes', 'no', 'OPEN'), 'p3_identity_stable': ('yes', 'no', 'OPEN'),
-               'p5_detached': ('PASS', 'FAIL', 'OPEN'), 'p5_tool_call_seconds': int, 'p5_setup_seconds': int}
+               'p2_newest_first': ('yes', 'no', 'OPEN'), 'p2_lag_seconds': int, 'p2_max_upload_bytes': int,
+               'p2_tgz_kept': ('PASS', 'FAIL', 'OPEN'), 'p2_failed_upload_can_appear': ('yes', 'no', 'OPEN'),
+               'p3_identity_stable': ('yes', 'no', 'OPEN'), 'p3_clock_tolerance_seconds': int,
+               'p5_foreground_hold_seconds': int, 'p5_setup_seconds': int}
+PLATFORM_UPLOAD_LIMIT = 104857600
 
 
 def now():
@@ -46,7 +47,7 @@ class Paths:
             b / 'deliver'
         self.state, self.pending, self.block, self.halt, self.work = (self.v2 / n for n in (
             'STATE.json', 'PENDING.json', 'BLOCK.json', 'HALT.json', 'RESTORE_WORK.json'))
-        self.hint, self.setup = self.v2 / 'HINT.json', lay.outbox / 'SETUP.json'
+        self.hint, self.foreground = self.v2 / 'HINT.json', self.v2 / 'FOREGROUND.json'
         self.deliveries = Path(lay.home or '/nonexistent') / 'cps-deliveries'
 
 
@@ -83,9 +84,10 @@ def repo_commit(lay):
     return s if p.returncode == 0 and re.fullmatch(r'[0-9a-f]{40}', s) else None
 
 
-def load_config(raw, release, check_patterns):
-    """§2.2 exact keys and types, gate value sets (§12.1), mode/status agreement and the release series pin (INT-09).
-    check_patterns(conversation_re, doc_samples) -> None | 'CONFIG_INVALID' (core.names). Returns the config dict."""
+def load_config(raw, release, check_patterns, cap, stage_keys):
+    """§2.2 exact keys and types, gate value sets (§12.1), mode/status agreement and the release series pin (INT-09),
+    and the delta's size and stage-budget rules (§X.2). check_patterns(conversation_re, doc_samples) -> None |
+    'CONFIG_INVALID'; cap and stage_keys are core.names UPLOAD_CAP_BYTES and STAGE_KEYS. Returns the config dict."""
     try:
         c = sjson(raw)
     except (ValueError, UnicodeDecodeError):
@@ -121,24 +123,38 @@ def load_config(raw, release, check_patterns):
             stop('CONFIG_INVALID', 'regex')
     if check_patterns(c['conversation_re'], c['doc_samples']):
         stop('CONFIG_INVALID', 'conversation_re')
-    if not 1000000 <= c['png_part_bytes'] or c['clear'] is not None and set(c['clear']) != {'series', 'seq', 'code'}:
+    if c['clear'] is not None and set(c['clear']) != {'series', 'seq', 'code'}:
         stop('CONFIG_INVALID', 'values')
+    sm = c['stage_max_seconds']
+    if set(sm) != set(stage_keys) or any(not isinstance(v, int) or isinstance(v, bool) or v < 1 for v in sm.values()):
+        stop('CONFIG_INVALID', 'stage_max_seconds')
+    if not 1 <= c['max_upload_bytes'] <= cap or not 1000000 <= c['png_part_bytes'] <= c['max_upload_bytes'] \
+            or c['max_entry_bytes'] > c['max_upload_bytes'] or c['foreground_hold_seconds'] < 1 \
+            or c['max_ai_output_bytes'] + c['max_transcript_bytes'] + 1000000 > c['max_entry_bytes']:
+        stop('CONFIG_INVALID', 'sizes')
     return c
 
 
-def gates_problem(cfg, mode):
-    """§12.1 release gates, on every command: None or the names of the open gates."""
+def gates_problem(cfg, mode, cap):
+    """§12.1 release gates as the delta restates them (§X.12.1), on every command: None or the sorted names of the open
+    gates and failed budget keys."""
     if mode == 'setup':
         return None
     g, bad = cfg['gates'], []
     bad += [k for k, v in g.items() if v in ('OPEN', None)]
-    bad += [k for k, want in (('p1_vm_files', 'PASS'), ('p2_exact_search', 'PASS'), ('p2_tgz_kept', 'PASS'),
-                              ('p5_detached', 'PASS')) if g.get(k) != want]
-    t, mx = g.get('p5_tool_call_seconds') or 0, g.get('p2_max_upload_bytes') or 0
-    if cfg['wrap_foreground_seconds'] + 60 > t:
-        bad.append('wrap_foreground_seconds')
-    if cfg['png_part_bytes'] > mx or cfg['max_entry_bytes'] > mx:
+    bad += [k for k, want in (('p1_vm_files', 'PASS'), ('p2_exact_search', 'PASS'), ('p2_tgz_kept', 'PASS'))
+            if g.get(k) != want]
+    hold, fh = g.get('p5_foreground_hold_seconds') or 0, cfg['foreground_hold_seconds']
+    if fh > hold:
+        bad.append('p5_foreground_hold_seconds')
+    if (g.get('p5_setup_seconds') or 0) + 60 > fh:
+        bad.append('p5_setup_seconds')
+    bad += ['stage_max_seconds.' + k for k, v in sorted(cfg['stage_max_seconds'].items()) if v + 60 > fh]
+    mx = min(cap, g.get('p2_max_upload_bytes') or 0, PLATFORM_UPLOAD_LIMIT)
+    if cfg['max_upload_bytes'] > mx:
         bad.append('p2_max_upload_bytes')
+    if cfg['png_part_bytes'] > cfg['max_upload_bytes'] or cfg['max_entry_bytes'] > cfg['max_upload_bytes']:
+        bad.append('max_upload_bytes')
     return sorted(set(bad)) or None
 
 
@@ -178,7 +194,7 @@ def selftest_ok(cfg, run, s, node_sha):
 
 def halt_code(h):
     """§13.4: map a reused Halt to ('wait', seconds) | ('stop', code)."""
-    if h.kind == 'REFUSED' and h.code in ('HELPER_BUSY', 'JOB_BUSY'):
+    if h.kind == 'REFUSED' and h.code == 'JOB_BUSY':
         return 'wait', 30
     if h.kind == 'NEED' and h.code == 'CLOCK_WAIT':
         return 'wait', None

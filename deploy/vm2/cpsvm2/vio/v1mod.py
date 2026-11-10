@@ -1,19 +1,16 @@
-"""The 8 modified v1 functions (spec §1.6), each reviewed as a diff against its v1 segment (REUSE_MANIFEST.json
+"""The 6 modified v1 functions (spec §1.6), each reviewed as a diff against its v1 segment (REUSE_MANIFEST.json
 `modified` names the v1 lines and segment hash). The FOLDER_MANIFEST row helpers below them (MANIFEST_ROW, KIT_NAME,
 KIT_SHA_LINE, kit_rows, kit_parts_plan) are copied unchanged from v1 (lines 2679, 2760-2795) because the modified
 session_kit and rebuild_kit read them; they are not in §1.4's reuse list."""
-import errno
 import os
 import re
 import stat
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from .v1compat import HELPER_REPO, Halt, need, stop, under
-from .v1reuse import (HelperLock, current_boot_id, kit_members, parse_utc, now_dt, read_json_file, remove_tree,
-                      sha_file, sjson, unsafe_name, worker_alive)
+from .v1reuse import current_boot_id, kit_members, remove_tree, sha_file, sjson, unsafe_name
 
 
 def tree_list(root):
@@ -109,15 +106,9 @@ def check_layout_release(lay, rel, helper_tree_sha256, commit):
 
 
 def cleanup_leftovers(lay):
-    """T-23 (v2): leftovers of a killed earlier helper, removed under the helper lock and only when no detached worker
-    of this boot is alive: staging folders, temporary files of durable writes, and inbox downloads of an earlier boot.
-    Never a job folder."""
-    dp = lay.outbox / 'DETACHED.json'
-    d = read_json_file(dp) if dp.is_file() else None
-    if isinstance(d, dict) and worker_alive(d):
-        return
-    if isinstance(d, dict) and d.get('boot_id') != current_boot_id():
-        dp.unlink()
+    """T-23 (v2, foreground delta §X.1): leftovers of a killed earlier helper, removed under the helper lock after the
+    FOREGROUND check (no stage of this boot can be running: only `go` runs one, holding the lock): staging folders,
+    temporary files of durable writes, and inbox downloads of an earlier boot. Never a job folder."""
     globs = [lay.base.glob('.cps_vm_stage_*'), lay.outbox.glob('.tmp_*'), (lay.outbox / 'journal').glob('.tmp_*'),
              (lay.outbox / 'v2').glob('.tmp_*')]
     for root in (lay.qual, lay.jobs):
@@ -171,83 +162,6 @@ def place_frozen(lay, job_dir, frozen_bytes, frozen_sha256):
     os.chmod(jd, 0o755)
     write_new(jd / 'FROZEN.json', frozen_bytes, 0o444)
     return str(jd)
-
-
-def wait_block(ctx, seconds):
-    """§7.2 (v2): ('done', result dict), ('running', None) or ('died', None). No plan call, no printing; the caller
-    absorbs the result under the helper lock."""
-    p = ctx.lay.outbox / 'DETACHED.json'
-    deadline = time.time() + seconds
-    while True:
-        d = read_json_file(p) if p.is_file() else None
-        if not isinstance(d, dict):
-            return 'died', None
-        out = Path(d['out'])
-        if out.is_file() and d.get('exit') is not None:
-            res = read_json_file(out)
-            return ('done', res) if isinstance(res, dict) else ('died', None)
-        young = d.get('pid') is None and time.time() - (parse_utc(d['started_utc']) or now_dt()).timestamp() < 30
-        if not worker_alive(d) and not young:
-            time.sleep(0.5)
-            d2 = read_json_file(p) or {}
-            if Path(d['out']).is_file() and d2.get('exit') is not None:
-                continue
-            return 'died', None
-        if time.time() >= deadline:
-            return 'running', None
-        time.sleep(0.5)
-
-
-def cmd_worker(wid, lock_fd, dispatch, write_doc):
-    """§7.2 (v2): the detached worker's entry. dispatch(kind, info, lay) -> result dict ({'status': 'pending' |
-    'halt' | 'done', 'code', 'detail'}); the result is written durably (write_doc) to spawn's `out` path, then
-    DETACHED.json gets `exit`. Never prints."""
-    from .v1reuse import Layout
-    lay = Layout()
-    p = lay.outbox / 'DETACHED.json'
-    d = None
-    for _ in range(100):
-        d = read_json_file(p)
-        if isinstance(d, dict) and d.get('id') == wid:
-            break
-        time.sleep(0.1)
-    if not isinstance(d, dict) or d.get('id') != wid or d.get('kind') not in ('chain', 'selftest', 'place'):
-        return 2
-    lock = HelperLock.adopt(lay, lock_fd) if lock_fd is not None else None
-    try:
-        if lock is None:
-            lock = HelperLock(lay, wait=10)
-            lock.__enter__()
-    except Halt as h:
-        _finish(p, d, {'status': 'halt', 'code': h.code, 'detail': {}}, 4, write_doc)
-        return 0
-    try:
-        try:
-            res = dispatch(d['kind'], d['info'], lay)
-        except Halt as h:
-            res = {'status': 'halt', 'code': h.code, 'detail': _small(h.detail)}
-        except OSError as e:
-            res = {'status': 'halt', 'code': 'DISK_FULL' if e.errno in (errno.ENOSPC, errno.EDQUOT) else 'WRITE_FAILED',
-                   'detail': {'errno': e.errno}}
-        _finish(p, d, res, 0, write_doc)
-    finally:
-        lock.release()
-    return 0
-
-
-def _small(x):
-    """A bounded detail: codes and counts only (ints, bools, short ASCII strings)."""
-    if not isinstance(x, dict):
-        return {}
-    return {str(k)[:40]: v if isinstance(v, (int, bool)) or v is None else str(v)[:80]
-            for k, v in list(x.items())[:10] if isinstance(v, (int, bool, str)) or v is None}
-
-
-def _finish(p, d, res, code, write_doc):
-    write_doc(Path(d['out']), res)
-    cur = read_json_file(p) or d
-    cur['exit'] = code
-    write_doc(p, cur)
 
 
 # ---------------------------------------------------------------- kit intake (§8.2): FOLDER_MANIFEST route

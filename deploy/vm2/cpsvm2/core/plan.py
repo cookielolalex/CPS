@@ -150,6 +150,8 @@ def next_action(view):
             key = 'DELIVER_USER:%s:%d:%d' % (cur, d['prepared_seq'], d.get('ack_seq') or 0)
             ctx = {'state_code': 'DELIVER', 'run': cur, 'prepared_seq': d['prepared_seq'],
                    'then': ('freeze', {'delivery_sent': True})}
+            if sent_mark(cur, d['prepared_seq'], d) in marks:                                # §X.5 step 8
+                return RunChain(cur, 'freeze', {'delivery_sent': True})
             if key not in marks:
                 return Ask({'sent': 'YES'}, dict(ctx, action='DELIVER_USER', mark=key))
             return Ask({'sent': 'YES'}, dict(ctx, action='DELIVER_SENT'))
@@ -158,6 +160,12 @@ def next_action(view):
     if cur is None:
         return Ask({'case': 'CASE_ID'}, {'action': 'IDLE', 'state_code': 'IDLE'})               # row 22
     return Stop('UNCLASSIFIED', 'C')                                                            # row 23
+
+
+def sent_mark(run, prepared_seq, delivery):
+    """The mark `answer sent=yes` writes (§X.5 step 8: an answer never runs a stage; the next `go` runs the freeze
+    chain of row 17). Keyed like the DELIVER_USER mark: one per permission."""
+    return 'DELIVER_SENT:%s:%d:%d' % (run, prepared_seq, (delivery or {}).get('ack_seq') or 0)
 
 
 def _notify(s, base):

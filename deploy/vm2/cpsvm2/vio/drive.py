@@ -38,8 +38,8 @@ def body_lines(block, vm):
     out = ['UPLOAD %s TO %s AS %s' % (q(p), q(f), word(n)) for p, f, n in block.uploads]
     for f, how, v in block.finds:
         out.append('FIND %s %s %s' % (q(f), how, word(v)))
-    for f, prefix, k in block.lists:
-        out.append('LIST %s PREFIX %s NEWEST %d' % (q(f), word(prefix), int(k)))
+    for f, k in block.lists:
+        out.append('LIST %s NEWEST %d' % (q(f), int(k)))
     for f, did, p in block.downloads:
         out.append('DOWNLOAD %s ID %s TO %s' % (q(f), word(did), q(p)))
     out.append('DO: ' + do_text(block.do, vm))
@@ -62,17 +62,23 @@ def do_text(do, vm):
         pre = ''
         if args.get('prefix'):
             pre = args['prefix'][0] + ''.join(' %s=%s' % (k, word(v)) for k, v in args['prefix'][1].items()) + ' '
-        return pre + 'ATTEST bash %s answer --at %s %s' % (q(vm), AT_MARK, ' '.join(
+        if args.get('after'):
+            pre += 'ATTEST after=%s bash %s answer --at %s ' % (word(args['after']), q(vm), AT_MARK)
+        else:
+            pre += 'ATTEST bash %s answer --at %s ' % (q(vm), AT_MARK)
+        return pre + '%s' % (' '.join(
             '%s=%s' % (k, p) for k, p in args['keys'].items()))
     return act + ''.join(' %s=%s' % (k, word(v)) for k, v in args.items())
 
 
 def found_attest(vm, args):
-    if args.get('list'):
-        return 'ATTEST bash %s found --at %s (--file NAME:ID:MD5:SIZE ... | --none)' % (q(vm), AT_MARK)
     trip = 'ID:SIZE' if args.get('md5_hidden') else 'ID:MD5:SIZE'
+    if args.get('list'):
+        return 'ATTEST bash %s found --at %s (--file NAME:%s ... | --none)' % (q(vm), AT_MARK, trip)
+    up = set(args.get('uploaded') or ())
     return 'ATTEST bash %s found --at %s %s' % (q(vm), AT_MARK, ' '.join(
-        '--name %s (--file %s ... | --none)' % (word(n), trip) for n in args['names']))
+        '--name %s%s (--file %s ... | --none)' % (word(n), ' [--refused]' if n in up else '', trip)
+        for n in args['names']))
 
 
 def check_grammar(lines):
@@ -102,8 +108,8 @@ class Usage(Exception):
 
 
 def parse_found(argv):
-    """`found --at A (--name N (--file F ... | --none))+` or, for a LIST answer, `found --at A (--file F ... |
-    --none)`. Returns (at, [(name or None, [F] or None)]); a malformed F is checked later (parse_copy)."""
+    """`found --at A (--name N [--refused] (--file F ... | --none))+` or, for a LIST answer, `found --at A (--file F
+    ... | --none)`. Returns (at, [[name or None, [F], none, refused]]); a malformed F is checked later (parse_copy)."""
     if len(argv) < 3 or argv[0] != '--at':
         raise Usage('found --at')
     at, rest, out, cur = argv[1], argv[2:], [], None
@@ -111,13 +117,19 @@ def parse_found(argv):
     while i < len(rest):
         a = rest[i]
         if a == '--name' and i + 1 < len(rest):
-            cur = [rest[i + 1], [], False]
+            cur = [rest[i + 1], [], False, False]
             out.append(cur)
             i += 2
             continue
+        if a == '--refused':
+            if cur is None or cur[0] is None or cur[3] or cur[1] or cur[2]:
+                raise Usage(a)
+            cur[3] = True
+            i += 1
+            continue
         if a in ('--file', '--none'):
             if cur is None:
-                cur = [None, [], False]
+                cur = [None, [], False, False]
                 out.append(cur)
             if a == '--file':
                 if i + 1 >= len(rest):
@@ -132,20 +144,23 @@ def parse_found(argv):
     return at, out
 
 
-def check_found(items, names_expected, list_mode):
-    """REFUSED codes of the found syntax rules: (code or None, {name: [F] or None})."""
-    got = {}
-    for name, files, none in items:
-        if (name is None) != list_mode or name in got:
-            return 'FOUND_SYNTAX', None
+def check_found(items, names_expected, list_mode, uploaded=()):
+    """REFUSED codes of the found syntax rules: (code or None, {name: [F] or None}, {names attested --refused}).
+    `--refused` is allowed only on a name the block uploaded (§X.5.6 step 2)."""
+    got, refused = {}, set()
+    for name, files, none, ref in items:
+        if (name is None) != list_mode or name in got or (ref and name not in uploaded):
+            return 'FOUND_SYNTAX', None, None
+        if ref:
+            refused.add(name)
         if files and none:
-            return 'FOUND_FILE_AND_NONE', None
+            return 'FOUND_FILE_AND_NONE', None, None
         if not files and not none:
-            return 'FOUND_SYNTAX', None
+            return 'FOUND_SYNTAX', None, None
         got[name] = None if none else files
     if not list_mode and not set(names_expected) <= set(got):
-        return 'FOUND_NAMES_INCOMPLETE', None
-    return None, got
+        return 'FOUND_NAMES_INCOMPLETE', None, None
+    return None, got, refused
 
 
 def parse_copy(f, md5_hidden, with_name=False):

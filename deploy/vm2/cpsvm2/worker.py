@@ -1,6 +1,7 @@
-"""The detached worker (spec §7.2, §7.3, §7.5, §7.7, §8.5.1). It runs the runner chain, the snapshot and the entry
-build up to PENDING (commit steps 1-4), the self-test, and placement; it prints nothing. Its result goes durably to
-the `out` path spawn recorded: {'status': 'pending' | 'halt' | 'done' | 'fingerprint', 'code', 'detail'}."""
+"""The foreground stage body (spec §7.3, §7.5, §7.7, §8.5.1; delta §X.7.2), called in-process by cli.run_stage while
+`go` holds the helper lock. It runs the runner chain, the snapshot and the entry build up to PENDING (commit steps
+1-4), the self-test, and placement; it prints nothing. Its result is returned in memory: {'status': 'pending' |
+'done' | 'fingerprint', ...}; a Halt or OSError propagates to cli.run_stage, which makes it a 'halt' result."""
 import os
 import time
 from pathlib import Path
@@ -12,24 +13,15 @@ from .core import plan as P
 from .core import session as S
 from .vio import durable, host, place, runner, savepoint
 from .vio.v1compat import Halt
-from .vio.v1mod import cmd_worker, place_frozen
+from .vio.v1mod import place_frozen
 from .vio.v1reuse import (JobLock, fingerprint, read_json_file, require_space, selftest_work, sha_file, tree_bytes,
                           write_new)
 
-PROBE_TRIES, PROBE_SECONDS = 60, 60
 OUTPUT = {'S': 'scope/reader/output', 'V': 'qa/visual_review'}
 
 
-def main(argv):
-    """vm2.py _worker <wid> --lock-fd N."""
-    if len(argv) != 3 or argv[1] != '--lock-fd':
-        return 2
-    return cmd_worker(argv[0], int(argv[2]), dispatch, durable.write_plain)
-
-
-def dispatch(kind, info, lay):
-    env = cli.Env(lay, None)
-    cli.load_cache(env)
+def dispatch(kind, info, env):
+    """The stage of `kind` ('selftest', 'place', 'chain') with the command's own Env (cache loaded, lock held)."""
     if kind == 'selftest':
         selftest_work(env.ctx2(), info)
         return {'status': 'done'}
@@ -43,16 +35,17 @@ def sleep(seconds):
 
 
 def probe_lock(env, job_dir):
-    """§7.2 step 3: acquire and release JobLock at once, up to 60 tries 60 s apart (a killed runner's tool may hold
-    it, R6); then JOB_BUSY_TOO_LONG."""
-    for i in range(PROBE_TRIES):
+    """§X.7.2: acquire and release JobLock at once, up to JOB_BUSY_TRIES tries JOB_BUSY_GAP_SECONDS apart (only a
+    process of this boot that outlived a dead stage can hold it, R6); then JOB_BUSY_TOO_LONG."""
+    for i in range(N.JOB_BUSY_TRIES):
         try:
             with JobLock(env.lay, job_dir):
                 return
         except Halt as h:
             if h.code != 'JOB_BUSY':
                 raise
-        sleep(PROBE_SECONDS)
+        if i + 1 < N.JOB_BUSY_TRIES:
+            sleep(N.JOB_BUSY_GAP_SECONDS)
     raise Halt('STOP', 'JOB_BUSY_TOO_LONG', 'the job folder stayed locked')
 
 
@@ -215,8 +208,7 @@ class Chain:
         r = self.prologue()
         if r:
             return r
-        d = read_json_file(self.lay.outbox / 'DETACHED.json') or {}
-        self.log = d.get('log') or str(self.lay.outbox / ('chain_%s.log' % N.run8(self.run_key)))   # spawn's log
+        self.log = str(self.lay.outbox / ('chain_%s.log' % host.utc14(host.now())))       # never printed (§X.2)
         R, mode = self.R, self.env.mode
         bind = (R or {}).get('rebase_bind')
         cn = {'n': 0, 'freeze_retries': 0, 'v_review_incomplete': P.v_review_incomplete(R) if R else 0,
@@ -240,9 +232,9 @@ class Chain:
             if out['action'] == 'retry':
                 cn['n'] -= 1
                 busy += 1
-                if busy >= PROBE_TRIES:
+                if busy >= N.JOB_BUSY_TRIES:
                     raise Halt('STOP', 'JOB_BUSY_TOO_LONG', 'JOB_BUSY')
-                sleep(PROBE_SECONDS)
+                sleep(N.JOB_BUSY_GAP_SECONDS)
                 continue
             self.commands.append(cmd)
             self.parsed.append(res)

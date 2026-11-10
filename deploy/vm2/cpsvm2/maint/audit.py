@@ -40,17 +40,20 @@ def read_bytes(p):
 
 
 def load_listing(path):
-    """[{'id', 'name', 'md5', 'size', 'created'}] from a Drive listing file; raises ValueError when malformed."""
+    """[{'id', 'name', 'md5', 'size', 'created'}] from a Drive listing file; raises ValueError when malformed. A
+    listing without md5Checksum (md5 hidden, §X.10) gives md5 None: the md5 of the downloaded bytes is used instead
+    (download()), so copies are grouped by content and checked by size and the sha256 of the full download."""
     d = sjson(read_bytes(path))
     out = []
     for r in d['files'] if isinstance(d, dict) else d:
         size, ct = r['size'], r['createdTime']
         size = int(size) if isinstance(size, str) and size.isdigit() else size
-        if not (fm(r'[A-Za-z0-9_-]{1,200}', r['id']) and isinstance(r['name'], str) and fm(r'[0-9a-f]{32}', r['md5Checksum'])
+        m5 = r.get('md5Checksum')
+        if not (fm(r'[A-Za-z0-9_-]{1,200}', r['id']) and isinstance(r['name'], str)
+                and (m5 is None or fm(r'[0-9a-f]{32}', m5))
                 and isinstance(size, int) and isinstance(ct, str) and utc_epoch(ct[:19] + 'Z') is not None):
             raise ValueError('listing row')
-        out.append({'id': r['id'], 'name': r['name'], 'md5': r['md5Checksum'], 'size': size,
-                    'created': utc_epoch(ct[:19] + 'Z')})
+        out.append({'id': r['id'], 'name': r['name'], 'md5': m5, 'size': size, 'created': utc_epoch(ct[:19] + 'Z')})
     return out
 
 
@@ -67,6 +70,8 @@ def download(ddir, r):
             h.update(b)
             m.update(b)
             n += len(b)
+    if r['md5'] is None and n == r['size']:
+        r['md5'] = m.hexdigest()                    # md5 hidden: the downloaded bytes' md5 (§X.10)
     return h.hexdigest() if n == r['size'] and m.hexdigest() == r['md5'] else None
 
 
@@ -381,6 +386,9 @@ def main(argv):
         return 2
     try:
         rows, srows = load_listing(a.listing), load_listing(a.setup_listing)
+        for r in srows:
+            if r['md5'] is None:
+                download(a.setup_dir, r)
     except (OSError, ValueError, KeyError, TypeError, UnicodeDecodeError):
         print('REFUSED VALUE_PATTERN listing')
         return 2

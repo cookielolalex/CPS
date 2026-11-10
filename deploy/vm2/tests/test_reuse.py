@@ -112,8 +112,8 @@ def t6_manifest_shape():
     assert man['schema'] == 'cps.vm2-reuse-manifest.v1' and man['source_commit'] == \
         '95df27099c275ba1a8442df5087cb87b97434dae'
     assert man['source_sha256'] == '7524987159f579d426eb99a22983a414bbcfa9c5ba99ea655611b7d77d43e14a'
-    assert sum(r['v1_lines'][1] - r['v1_lines'][0] + 1 for r in man['reused']) == 880
-    assert sum(r['v1_lines'][1] - r['v1_lines'][0] + 1 for r in man['modified']) == 329
+    assert sum(r['v1_lines'][1] - r['v1_lines'][0] + 1 for r in man['reused']) == 852
+    assert sum(r['v1_lines'][1] - r['v1_lines'][0] + 1 for r in man['modified']) == 239
 
 
 def t7_unused_reused_report():

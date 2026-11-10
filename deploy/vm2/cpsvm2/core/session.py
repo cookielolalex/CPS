@@ -14,10 +14,16 @@ RESTORE_WORK keys read here (the glue records each observation before calling ag
   the glue (§8.4 step 3)}, head_error None|code, identity {'home', 'uid'}, kit {'sha256', 'members', 'config',
   'release_sha256'}, head_kit None|{'sha256', 'members', 'config'}, list_shows_none None|bool (C5),
   resolve {'end': bool, 'placed': bool, 'files_found': bool|None, 'export': bool, 'answers': dict|None},
-  placed bool, reuploaded bool, committed None|{'seq', 'md5', 'utc'} (the RESTORE commit, for RECHECK).
-Blocks that END or EXPORT set work['resolve']['end'|'export'] before printing (the RESTORE_WORK analogue of a mark)."""
+  placed bool, reuploaded bool, committed None|{'seq', 'md5', 'utc', 'sha256', 'bytes', 'ids'} (the RESTORE commit,
+  for RECHECK), verified {drive id: [sha256, size]} (downloads the glue hashed: rule V, §X.5.5).
+Blocks that END or EXPORT set work['resolve']['end'|'export'] before printing (the RESTORE_WORK analogue of a mark).
+
+Delta (probe results): a copy found by name is ours by rule V (§X.5.5 step 5): its size is the expected size and its
+id is recorded or its downloaded bytes have the expected sha256; with md5 hidden every lookup copy is [id, None, size].
+A newest-first listing gives a head hint only (§X.8.4); the step-6 re-check runs unless a Dot hint found the head.
+Restore questions about the conversation list carry after=T, T = START utc - p3_clock_tolerance_seconds (§X.9)."""
 from . import fold as F
-from .names import FOLDERS, cjson, entry_name, series_folder, sha, utc_epoch
+from .names import ENTRY, FOLDERS, LIST_NEWEST_K, cjson, entry_name, fm, series_folder, sha, utc_epoch, utc_minus
 from .plan import pending_chain
 from .step import Ask, Commit, Halt, Place, PrintBlock, Reupload, Stop
 
@@ -45,10 +51,10 @@ def _facts(lookups, names):
 
 def _status(f, name, twice, w, now):
     """'P' or 'A' for one name, or raise _Out with the lookup/wait needed (§8.4: a second absence counts only w apart;
-    a copy at any observation is present; two md5s is FORK)."""
+    a copy at any observation is present; two sizes (or, md5 visible, two md5s) is FORK)."""
     x = f.get(name)
     if x and x['present']:
-        if len({c[1] for lk in x['present'] for c in lk['copies']}) > 1:
+        if len({(c[1], c[2]) for lk in x['present'] for c in lk['copies']}) > 1:
             raise _Out({'verdict': 'stop', 'code': 'FORK'})
         return 'P'
     ab = sorted(utc_epoch(lk['utc']) for lk in (x['absent'] if x else []))
@@ -62,15 +68,12 @@ def _status(f, name, twice, w, now):
 
 
 def head_search(series, hint, lookups, gates, now, listing=None):
-    """§8.4 steps 1-2 as a pure function of the observations so far. Returns {'need': 'find', 'name'} |
+    """§8.4 steps 1-2 (§X.8.4) as a pure function of the observations so far. Returns {'need': 'find', 'name'} |
     {'need': 'wait', 'seconds'} | {'need': 'list'} | {'verdict': 'head', 'seq', 'copies', 'via': 'hint'|'list'|'gallop'}
-    | {'verdict': 'fresh'} | {'verdict': 'stop', 'code': FORK|HINT_AHEAD|HEAD_UNSTABLE}."""
+    | {'verdict': 'fresh'} | {'verdict': 'stop', 'code': FORK|HINT_AHEAD|HEAD_UNSTABLE}. A listing row is a hint only:
+    presence and absence come only from exact-name FINDs."""
     w, t = F.w_abs(gates), utc_epoch(now)
-    lk = list(lookups)
-    for row in listing or []:
-        lk.append({'name': row[0], 'result': 'present', 'copies': [row[1:4]], 'utc': now})
-    names = {x['name'] for x in lk}
-    f = _facts(lk, names)
+    f = _facts(lookups, {x['name'] for x in lookups})
     flips = sum(1 for x in f.values() if any(r == 'absent' for _, r in sorted(x['seq'])[:1])
                 and any(r == 'present' for _, r in x['seq']))
     if flips > MAX_FLIPS:
@@ -78,21 +81,20 @@ def head_search(series, hint, lookups, gates, now, listing=None):
     nm = lambda k: entry_name(series, k)                                            # noqa: E731
     st = lambda k, tw: 'A' if k > 999999 else _status(f, nm(k), tw, w, t)           # noqa: E731
     try:
-        if gates.get('p2_newest_first') == 'yes':
-            via = 'list'
-            if listing is None:
-                return {'need': 'list'}
-            seqs = [int(r[0][-10:-4]) for r in listing if r[0].startswith('CPSJ_%s_' % series)
-                    and r[0] == nm(int(r[0][-10:-4]))]
-            lo = max(seqs) if seqs else (None if st(1, True) == 'A' else 1)
-        elif hint:
+        lo, via = None, 'gallop'
+        if hint:
             via = 'hint'
             if st(hint, True) == 'A':
                 return {'verdict': 'stop', 'code': 'HINT_AHEAD'}
             lo = hint
-        else:
-            via = 'gallop'
-            lo = None if st(1, True) == 'A' else 1
+        elif gates.get('p2_newest_first') == 'yes':
+            if listing is None:
+                return {'need': 'list'}
+            seqs = [int(r[0][-10:-4]) for r in listing if fm(ENTRY, r[0]) and r[0] == nm(int(r[0][-10:-4]))]
+            if seqs and st(max(seqs), True) == 'P':
+                lo, via = max(seqs), 'list'
+        if lo is None and st(1, True) == 'P':
+            lo = 1
         if lo is None:
             return {'verdict': 'fresh'}
         for _ in range(MAX_FLIPS + 1):
@@ -110,6 +112,49 @@ def head_search(series, hint, lookups, gates, now, listing=None):
         return {'verdict': 'stop', 'code': 'HEAD_UNSTABLE'}
     except _Out as o:
         return o.r
+
+
+def pre_commit(w, gates):
+    """The lookups of the head search: those made before the RESTORE commit. The step-6 re-check's own FINDs (flagged
+    `post` by the glue, or made w_abs after the commit) see the RESTORE at N+1 and must not move the head."""
+    c = w.get('committed')
+    if not c:
+        return w['lookups']
+    t = utc_epoch(c['utc']) + F.w_abs(gates)
+    return [x for x in w['lookups'] if not x.get('post') and utc_epoch(x['utc']) < t]
+
+
+def present_copies(lookups, name):
+    """Every copy of `name` any FIND returned, by id (the first report of an id wins)."""
+    out = {}
+    for lk in lookups:
+        if lk['name'] == name:
+            for c in lk['copies']:
+                out.setdefault(c[0], c)
+    return [out[k] for k in sorted(out)]
+
+
+def rule_v(copies, size, sha256, known_ids, verified, md5=None):
+    """§X.5.5 step 5 for the copies of one name: ('ok', None) | ('download', [copies to download]) | ('bad', why)
+    with why 'size', 'md5' or 'sha'. A copy attested with an md5 (md5 visible, r2) is ours iff that md5 is `md5`."""
+    if any(int(c[2]) != size for c in copies):
+        return 'bad', 'size'
+    if any(c[1] is not None and c[1] != md5 for c in copies):
+        return 'bad', 'md5'
+    known_ids = set(known_ids) | {c[0] for c in copies if c[1] is not None}
+    need = [c for c in copies if c[0] not in known_ids and c[0] not in verified]
+    if need:
+        return 'download', need
+    if any(verified[c[0]][0] != sha256 for c in copies if c[0] not in known_ids):
+        return 'bad', 'sha'
+    return 'ok', None
+
+
+def _dl_block(name, need, all_copies, folder, base, sub):
+    """DOWNLOAD lines for the copies `need` of `name` to BASE/inbox/<sub>/<name>.<k> (k: the copy's position)."""
+    k = {c[0]: i for i, c in enumerate(all_copies, 1)}
+    return PrintBlock('HEAD', downloads=tuple((folder, c[0], '%s/inbox/%s/%s.%d' % (base, sub, name, k[c[0]]))
+                                              for c in need), do=('RUN', {}))
 
 
 def absent_twice(names, lookups, w, now):
@@ -291,7 +336,7 @@ def session_next(view):
     for ph in ('KIT', 'CONFIG', 'FINGERPRINT'):
         if ph not in done:
             return ph, None
-    hs = head_search(series, (w.get('hint') or {}).get('seq'), w['lookups'], g, now, w.get('listing'))
+    hs = head_search(series, (w.get('hint') or {}).get('seq'), pre_commit(w, g), g, now, w.get('listing'))
     if 'need' in hs:
         return 'HEAD', _search_step(hs, series, sf)
     if hs['verdict'] == 'stop':
@@ -301,29 +346,45 @@ def session_next(view):
     N = hs['seq']
     if w.get('head_error'):
         return 'HEAD', Stop(w['head_error'], 'C')                                   # C1
-    if not w.get('head'):
-        cp = hs['copies'][0]
-        return 'HEAD', PrintBlock('HEAD', downloads=((sf, cp[0], '%s/inbox/journal/%s' % (view['base'], entry_name(
-            series, N))),), do=('RUN', {}))
+    if not w.get('head'):                                                           # step 3: every copy
+        return 'HEAD', _dl_block(entry_name(series, N), hs['copies'], hs['copies'], sf, view['base'], 'journal')
     head = w['head']['entry']
     st = head['state']
-    if N > 1:                                                                       # step 4: link
-        f = _facts(w['lookups'], {entry_name(series, N - 1)})
-        prev = f.get(entry_name(series, N - 1))
-        if not prev:
-            return 'HEAD', _find_block([entry_name(series, N - 1)], folder)
-        want = {c['md5'] for c in head['confirms'][0]['copies']}
-        if not prev['present'] or any(c[1] not in want for lk in prev['present'] for c in lk['copies']):
+    ver = w.get('verified') or {}
+    if N > 1:                                                                       # step 4: link (rule V)
+        pn = entry_name(series, N - 1)
+        f = _facts(w['lookups'], {pn})
+        if not f.get(pn):
+            return 'HEAD', _find_block([pn], folder)
+        if not f[pn]['present']:
             return 'HEAD', Stop('LINK_MISMATCH', 'C')
-    pf = {p['name']: p['folder'] for p in head['parts']}
+        cf = head['confirms'][0]['copies']
+        sizes = {c['size'] for c in cf}
+        cps = present_copies(w['lookups'], pn)
+        md5s = {c['md5'] for c in cf}
+        r, x = rule_v(cps, sizes.pop() if len(sizes) == 1 else -1, head['prev_sha256'], {c['id'] for c in cf}, ver,
+                      md5s.pop() if len(md5s) == 1 else None)
+        if r == 'download':
+            return 'HEAD', _dl_block(pn, x, cps, sf, view['base'], 'verify')
+        if r == 'bad':
+            return 'HEAD', Stop('LINK_MISMATCH', 'C')
+    pf = {p['name']: p for p in head['parts']}
     at = absent_twice(list(pf), w['lookups'], F.w_abs(g), now)                      # step 5: head parts
     if at[0] == 'find':
-        return 'HEAD', PrintBlock('HEAD', finds=tuple((pf[n], 'NAME', n) for n in at[1]),
+        return 'HEAD', PrintBlock('HEAD', finds=tuple((pf[n]['folder'], 'NAME', n) for n in at[1]),
                                   do=('ATTEST_FOUND', {'names': at[1]}))
     if at[0] == 'wait':
         return 'HEAD', PrintBlock('HEAD', do=('WAIT', {'seconds': at[1]}))
     if 'fork' in at[1].values():
         return 'HEAD', Stop('FORK', 'C')
+    for n in sorted(n for n, v in at[1].items() if v == 'present'):
+        cps = present_copies(w['lookups'], n)
+        known = {c[0] for c in (st.get('files') or {}).get(n) or []}
+        r, x = rule_v(cps, pf[n]['bytes'], pf[n]['sha256'], known, ver, pf[n]['md5'])
+        if r == 'download':
+            return 'HEAD', _dl_block(n, x, cps, pf[n]['folder'], view['base'], 'journal')
+        if r == 'bad':
+            return 'HEAD', Stop('FORK', 'C')
     missing = sorted(n for n, v in at[1].items() if v == 'missing')
     ident = w.get('identity') or {}
     if (ident.get('home'), ident.get('uid')) != (head['home'], head['uid']) and F.run_in_flight(st):
@@ -345,7 +406,7 @@ def session_next(view):
 
 def _search_step(hs, series, sf):
     if hs['need'] == 'list':
-        return PrintBlock('HEAD', lists=((sf, 'CPSJ_%s_' % series, 5),), do=('ATTEST_FOUND', {'list': True}))
+        return PrintBlock('HEAD', lists=((sf, LIST_NEWEST_K),), do=('ATTEST_FOUND', {'list': True}))
     if hs['need'] == 'wait':
         return PrintBlock('HEAD', do=('WAIT', {'seconds': hs['seconds']}))
     return PrintBlock('HEAD', finds=((sf, 'NAME', hs['name']),), do=('ATTEST_FOUND', {'names': [hs['name']]}))
@@ -373,6 +434,7 @@ def _fresh(w, g, series, now, done):
 def _after_classify(view, w, head, st, missing, kc, hs):
     g, base, N = view['gates'], view['base'], head['seq']
     row, d = classify(head, st, missing, view.get('clear'), kc is None or kc['config_only'], g)
+    tol = g.get('p3_clock_tolerance_seconds') or 0
     if 'stop' in d:
         return 'CLASSIFY', Stop(d['stop'], 'C')
     if row in ('C3', 'C4') and d['reupload'] and not w.get('reuploaded'):
@@ -382,13 +444,14 @@ def _after_classify(view, w, head, st, missing, kc, hs):
     if row == 'C4':
         row, d = _classify_rest(st)
     draft = {'prev_boot_id': st['boots'][-1][0] if st['boots'] else None, 'operator': w['operator'],
-             'head': {'seq': N, 'md5': hs['copies'][0][1], 'copies': hs['copies']}, 'lookups': w['lookups'],
+             'head': {'seq': N, 'md5': w['head'].get('md5') or hs['copies'][0][1], 'copies': hs['copies']},
+             'lookups': w['lookups'],
              'kit_sha256': w['kit']['sha256'], 'kit_change': kc, 'resolutions': [], 'start': None, 'rebase': None,
              'rerun_expected': None, 'reprepare': None, 'abandon': None, 'delivery_question': None}
     if row == 'C5':
         if 'ask_list' in d and w.get('list_shows_none') is None:
             return 'CLASSIFY', Ask({'list_shows_none': 'YESNO'}, {'action': 'LIST_SHOWS_NONE', 'state_code': 'RESTORE',
-                                                                  'after': d['ask_list']})
+                                                                  'after': utc_minus(d['ask_list'], tol)})
         if 'ask_list' in d and w['list_shows_none'] is False:
             return 'CLASSIFY', Stop('REBASE_CONFLICT', 'C')
         absn = absent_twice(missing, w['lookups'], F.w_abs(g), view['now'])[2]
@@ -432,10 +495,11 @@ def _resolve(view, w, st, run, rkey, draft, hs):
     R = st['runs'][run]
     ro = R['roles'][rkey]
     lt = F.latest(ro)
+    after = utc_minus(lt['utc'], g.get('p3_clock_tolerance_seconds') or 0)          # T (§X.6.4, §X.9)
     conv = ro['opened']['conversation'] if ro['opened'] else (
         ro['archives'][0]['conversation'] if ro['status'] == 'CONTINUED' else None)
     if g.get('p1_end_after_reset') == 'yes' and not rs.get('end'):
-        args = {'role': ro['role'], 'after': lt['utc']}
+        args = {'role': ro['role'], 'after': after}
         if conv:
             args['conversation'] = conv
         return 'RESOLVE_END', PrintBlock('RESTORE', do=('END_CONVERSATION', args))
@@ -447,11 +511,14 @@ def _resolve(view, w, st, run, rkey, draft, hs):
         args = {'role': ro['role'], 'to': to}
         if conv:
             args['conversation'] = conv
-        args['after'] = lt['utc']
+        args['after'] = after
         return 'RESOLVE_EXPORT', PrintBlock('RESTORE', do=('EXPORT_TRANSCRIPT', args))
     if rs.get('answers') is None:
-        return 'RESOLVE_ATTEST', Ask(restore_keys(st, run, rkey, rs.get('files_found'), conv is not None),
-                                     {'action': 'RESTORE_ROLE', 'state_code': 'RESTORE', 'run': run, 'role': rkey})
+        keys = restore_keys(st, run, rkey, rs.get('files_found'), conv is not None)
+        ctx = {'action': 'RESTORE_ROLE', 'state_code': 'RESTORE', 'run': run, 'role': rkey}
+        if 'list_shows_none' in keys or 'conversation' in keys:
+            ctx['after'] = after
+        return 'RESOLVE_ATTEST', Ask(keys, ctx)
     item, start = build_item(st, run, rkey, rs['answers'], rs.get('files_found'))
     draft['resolutions'], draft['start'] = [item], start
     return _commit(w, st, draft, hs, view)
@@ -468,7 +535,7 @@ def _commit(w, st, draft, hs, view):
     utc/boot_id (the entry's)."""
     if not w.get('committed'):
         return 'COMMIT', Commit({'kind': 'RESTORE', 'body': draft})
-    if not (F.is_q(st) and hs['via'] == 'gallop'):
+    if not (F.is_q(st) and hs['via'] != 'hint'):
         return 'DONE', None
     c, N, series = w['committed'], hs['seq'], view['series']
     elapsed = utc_epoch(view['now']) - utc_epoch(c['utc'])
@@ -481,9 +548,13 @@ def _commit(w, st, draft, hs, view):
     need = [n for n in names if n not in f]
     if need:
         return 'RECHECK', _find_block(need, lambda n: series_folder(series))
-    own = f[names[0]]['present']
-    if not own or any(cp[1] != c['md5'] for lk in own for cp in lk['copies']) \
-            or any(f[n]['present'] for n in names[1:]):
+    if not f[names[0]]['present'] or any(f[n]['present'] for n in names[1:]):
+        return 'RECHECK', Stop('FORK', 'C')
+    cps = present_copies(later, names[0])
+    r, x = rule_v(cps, c['bytes'], c['sha256'], set(c['ids']), w.get('verified') or {}, c['md5'])
+    if r == 'download':
+        return 'RECHECK', _dl_block(names[0], x, cps, series_folder(series), view['base'], 'verify')
+    if r == 'bad':
         return 'RECHECK', Stop('FORK', 'C')
     return 'DONE', None
 

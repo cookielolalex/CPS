@@ -47,6 +47,14 @@ KEY_NAMES = frozenset({'operator_model', 'platform', 'ended', 'conversation', 's
                        'list_shows_none', 'notified', 'case', 'copy', 'log', 'sent', 'arrived', 'asked'})
 FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents')
 
+# Delta (probe results): the platform's upload cap with a margin, the head-hint listing size, the JobLock retry
+# bound inside a foreground stage, and the exact stage_max_seconds keys (§X.2, §X.3, §X.7.2, §X.8.4).
+UPLOAD_CAP_BYTES = 94_371_840
+LIST_NEWEST_K = 10
+JOB_BUSY_TRIES, JOB_BUSY_GAP_SECONDS = 5, 30
+STAGE_KEYS = ('selftest', 'place', 'prepare', 'nonattempt', 'scope-finish', 'finish', 'visual-record', 'interrupt',
+              'freeze')
+
 REVIEW_CONTINUABLE = frozenset({'REVIEW_INCOMPLETE', 'REVIEW_NOT_FRESH_CONTEXT', 'REVIEWER_CONVERSATION_ID_REQUIRED'})
 
 # §13: every REFUSED, STOP and HALT code the helper may raise (lint L1). STOP HALTED_<code> is HALTED_ + a member.
@@ -57,14 +65,15 @@ COPY_INVALID HELPER_BUSY JOB_BUSY'''.split())
 CODES_STOP = frozenset('''FORK UPLOAD_FAILED HINT_AHEAD HEAD_UNSTABLE HEAD_CORRUPT SCHEMA_INVALID STATE_SHA_MISMATCH
 CHAIN_INVALID LINK_MISMATCH HELPER_UNKNOWN RELEASE_NOT_ACCEPTED DISK_FULL WRITE_FAILED WRITE_READBACK_MISMATCH
 ENTRY_TOO_LARGE PART_TOO_LARGE INTERNAL_EMPTY_OUTPUT INTERNAL_PENDING_EXISTS INTERNAL_ILLEGAL_TRANSITION INTERNAL_PRINT
-INTERNAL_CHAIN_TOO_LONG WORKER_DIED SELFTEST_WORKER_DIED PLACE_TARGET_NOT_EMPTY PLACE_SHA_MISMATCH KIT_NOT_VERIFIED
+INTERNAL_CHAIN_TOO_LONG FOREGROUND_DIED SELFTEST_DIED PLACE_TARGET_NOT_EMPTY PLACE_SHA_MISMATCH KIT_NOT_VERIFIED
 KIT_SUMS_MISMATCH KIT_NOT_IN_MANIFEST KIT_PARTS_NOT_IN_MANIFEST KIT_NOT_REBUILT ARCHIVE_UNSAFE_MEMBER ARCHIVE_UNREADABLE
 ARCHIVE_MANIFEST_MISMATCH ARCHIVE_MEMBER_SHA_MISMATCH KIT_CHANGE_WITH_RUN_IN_FLIGHT CONFIG_INVALID RELEASE_GATE_OPEN
 LAYOUT_HOME LAYOUT_BASE LAYOUT_HELPER_NOT_IN_BASE_REPO LAYOUT_PATH LAYOUT_RELEASE_MISMATCH LAYOUT_HELPER_NOT_PINNED
 LAYOUT_RUNNER_NOT_PINNED LEDGER_MISSING LEDGER_NO_IDENTITY CLOCK_BEHIND HOME_CHANGED SELFTEST_FAILED SETUP_FAILED
 SESSION_LAYOUT SESSION_GIT_ERROR SESSION_REPO_DIRTY JOB_BUSY_TOO_LONG QUALIFICATION_DIVERGED_RESTART_CONFLICT
 REBASE_PART_APPEARED REBASE_LIMIT REBASE_CONFLICT CONFIG_CHANGE_NOT_ALLOWED GATES_CHANGED QUALIFICATION_SERIES_EXISTS
-SESSION_COMMIT_MISMATCH SESSION_NO_COMMIT INTERNAL_STEP_OVERFLOW FINAL UNCLASSIFIED'''.split())
+SESSION_COMMIT_MISMATCH SESSION_NO_COMMIT INTERNAL_STEP_OVERFLOW UPLOAD_REFUSED UPLOAD_TOO_LARGE FINAL
+UNCLASSIFIED'''.split())
 CODES_HALT = frozenset('''RUNNER_REFUSED RUNNER_OUTPUT_UNPARSEABLE UNCLASSIFIED AI_OUTPUT_CHANGED WALK_UNSUPPORTED_ENTRY
 EVICT_MISMATCH EVICT_FAILED POST_ACTION_FAILED FROZEN_FOLDER_CHANGED FREEZE_INCOMPLETE PNG_MANIFEST_UNSAFE PROMPT_CHANGED
 GENERATION_RECORD_EXISTS AI_OUTPUT_TOO_LARGE PLACED_FROZEN_CHANGED'''.split())
@@ -95,6 +104,22 @@ def sha(b):
 def run8(run_key):
     """§0: first 8 hex of sha256(run_key) — names a run's helper files without its case id."""
     return sha(run_key.encode('ascii'))[:8]
+
+
+def utc_minus(s, seconds):
+    """The UTC_S time `seconds` before UTC_S s (the fail-closed clock tolerance of §X.9: T = utc - tolerance)."""
+    t = utc_epoch(s) - int(seconds or 0)
+    y, rem = 1970, t
+    while True:
+        n = 366 * 86400 if calendar.isleap(y) else 365 * 86400
+        if rem < n:
+            break
+        rem, y = rem - n, y + 1
+    mo = 1
+    while rem >= calendar.monthrange(y, mo)[1] * 86400:
+        rem, mo = rem - calendar.monthrange(y, mo)[1] * 86400, mo + 1
+    d, rem = divmod(rem, 86400)
+    return '%04d-%02d-%02dT%02d:%02d:%02dZ' % (y, mo, d + 1, rem // 3600, rem % 3600 // 60, rem % 60)
 
 
 def mode_of(series):

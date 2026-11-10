@@ -53,24 +53,6 @@
     4879
    ],
    "v1_segment_sha256": "cd52c082840843c3a873ff9fe8569eb0fc9fa92690eff171e116b1f5a1306b8c"
-  },
-  {
-   "name": "wait_block",
-   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
-   "v1_lines": [
-    4930,
-    4975
-   ],
-   "v1_segment_sha256": "dc5f59a7b58635dbc8b980b6757be2da31c6e18aa81caa4e82542fb08a3cae39"
-  },
-  {
-   "name": "cmd_worker",
-   "target": "deploy/vm2/cpsvm2/vio/v1mod.py",
-   "v1_lines": [
-    5002,
-    5045
-   ],
-   "v1_segment_sha256": "db59c5f217e27a0e986ea92e1b91af43a065cbafa16a85cffb88af4b27f2c4b5"
   }
  ],
  "reused": [
@@ -513,24 +495,6 @@
    "v1_lines": [
     3317,
     3329
-   ]
-  },
-  {
-   "kind": "function",
-   "name": "spawn",
-   "segment_sha256": "9c39e37ba70f1e26bf5bbacba57429d0a39bb427811a311b854e23ed068c1915",
-   "v1_lines": [
-    4898,
-    4916
-   ]
-  },
-  {
-   "kind": "function",
-   "name": "worker_alive",
-   "segment_sha256": "6c4e99ef47f3c866e861bb50a51dffcda39408b2c92f61649574b550cdea4704",
-   "v1_lines": [
-    4919,
-    4927
    ]
   },
   {

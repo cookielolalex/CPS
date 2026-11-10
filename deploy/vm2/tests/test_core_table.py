@@ -1021,12 +1021,14 @@ def run_session(cw, wk, answers=None, files_found=False, limit=300):
             for f in st.finds:
                 x = names.get(f[2])
                 md5 = None if x is None else CW.md5ish('e%d' % x['seq']) if 'parts' in x else x['md5']
-                cp = [] if x is None or f[2] in wk.get('_deleted', ()) else [['ID%020d' % len(wk['lookups']), md5, 100]]
+                size = None if x is None else 1000 if 'parts' in x else x['bytes']      # the sizes confirms record
+                cp = [] if x is None or f[2] in wk.get('_deleted', ()) else [['ID%020d' % len(wk['lookups']), md5,
+                                                                              size]]
                 wk['lookups'].append({'name': f[2], 'result': 'present' if cp else 'absent', 'copies': cp,
                                       'utc': CW.utc(t)})
             t += 5
-        elif isinstance(st, PrintBlock) and st.downloads:
-            he = names[st.downloads[0][2].rsplit('/', 1)[1]]
+        elif isinstance(st, PrintBlock) and st.downloads:              # copy 1 of the head (§X.8.4 step 3)
+            he = names[st.downloads[0][2].rsplit('/', 1)[1].rsplit('.', 1)[0]]
             assert he is cw.entries[-1]
             wk['head'] = {'entry': dict(he, state=cw.state, state_sha256=EN.state_sha256(cw.state))}
         elif isinstance(st, PrintBlock) and st.do[0] in ('END_CONVERSATION', 'EXPORT_TRANSCRIPT'):
@@ -1090,7 +1092,8 @@ def test_session_restore_open_role_draft_folds():
         assert st.entry['body']['resolutions'][0]['action'] == act
         rows = complete_restore(cw, st)
         assert rows[0] == 'T42', rows
-        wk['committed'] = {'seq': cw.state['seq'], 'md5': 'x', 'utc': CW.utc(cw.t)}
+        wk['committed'] = {'seq': cw.state['seq'], 'md5': 'x', 'utc': CW.utc(cw.t), 'bytes': 1000, 'sha256': 'x' * 64,
+                           'ids': []}
         assert run_session(cw, wk, ans)[0] == 'DONE'
 
 
@@ -1104,7 +1107,8 @@ def test_session_rebase_and_recheck_fork():
     ph, st, wk = run_session(cw, wk)
     assert ph == 'COMMIT' and st.entry['body']['rebase']['missing_parts'] == wk['_deleted']
     assert complete_restore(cw, st) == ['T42', 'T49']
-    wk['committed'] = {'seq': cw.state['seq'], 'md5': 'not-ours', 'utc': CW.utc(cw.t)}
+    wk['committed'] = {'seq': cw.state['seq'], 'md5': 'not-ours', 'utc': CW.utc(cw.t), 'bytes': 1000,
+                       'sha256': 'x' * 64, 'ids': []}
     ph, st, wk = run_session(cw, wk)                   # found by gallop in Q: the re-check runs; N+1's md5 differs
     assert (ph, st) == ('RECHECK', Stop('FORK', 'C')), (ph, st)
 
@@ -1362,6 +1366,26 @@ def test_outcomes_total_over_generated_states():
             assert len(o['pairs']) == 2 * len(w.state['genesis']['jobs'] or [])
             assert sum(1 for i in o['owner_items'] if i['kind'] == 'O52_SHEET') == 1
     assert n > 1000
+
+
+@test
+def test_o52_sheet_windows_widened():
+    """§X.9 rule 5 (SD-33): a superseded START's O52 window is [START1 utc - tol, START2 utc + tol], tol the genesis
+    gate p3_clock_tolerance_seconds, recorded in the outcomes; without the gate the window is exact."""
+    for tol in (300, None):
+        w = q_world(**({'p3_clock_tolerance_seconds': tol} if tol else {}))
+        drive(w, 'PREPARE_GENERATE')
+        a = {'ended': True, 'files_found': False, 'transcript': 'not_available', 'outcome': 'NO_CONVERSATION',
+             'list_shows_none': True}
+        w.commit(CW._restore(w, resolve=CW.open_role(w.state), ans=a))
+        o = O.outcomes(w.state)
+        row = [r for r in o['o52_sheet'] if r['superseded_by'] is not None][0]
+        nxt = [r for r in o['o52_sheet'] if r['start_no'] == row['superseded_by']][0]
+        t = tol or 0
+        assert row['window'] == [N.utc_minus(row['start_utc'], t), N.utc_minus(nxt['start_utc'], -t)], row
+        assert o['clock_tolerance_seconds'] == t
+        it = [i for i in o['owner_items'] if i['kind'] == 'SUPERSEDED_WINDOW'][0]
+        assert it['window'] == row['window']
 
 
 @test

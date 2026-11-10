@@ -1,25 +1,33 @@
-"""The world harness (spec §14.2): FakeDrive, FakeDot and the World builder. Invented data only.
+"""The world harness (spec §14.2 with the probe-results delta §X.14): FakeDrive, FakeDot, the reset seams and the World
+builder. Invented data only.
 
-FakeDrive: folders of name -> [copies {id, md5, size, created}], add-only. The helper side has exact-name FIND,
-prefix FIND and newest-first LIST (the last two only when the world's gates say yes) and download by id; there is no
-full listing (OP-06). Knobs per name: lag (a copy stays invisible for n FINDs), drop (the k-th upload never lands),
-late (a dropped upload appears after n FINDs), dup (every upload lands twice), foreign copies, removal of a file
-(a lost part). The oracle and the audit read `table()` directly.
+FakeDrive: folders of name -> [copies {id, md5, size, sha256, created}], add-only (nothing is ever edited or deleted by
+the Dot). The helper side has only exact-name FIND (every copy), a newest-first LIST of one folder limited to k (by
+creation order, only when the world's gates say yes) and download by id; there is no full listing (OP-06) and, with
+`hide_md5` (the default, as P2/M004 found), no md5 in any result. Knobs per name: lag (a copy stays invisible for n
+FINDs), drop (the k-th upload never lands), late (a dropped or timed-out upload appears after n FINDs), timeout (the
+k-th upload reports a timeout), refuse (the k-th upload is refused by the platform's approval review and lands after
+approve(), or never), dup (every upload lands twice), foreign copies (plant), and a lost part (remove, the test's
+side). The oracle and the audit read `table()` directly.
 
-FakeDot: runs cli.main in-process, checks every block against the §6.1 grammar (F6, L5) and the printing rules (L9),
-executes each block literally (UPLOAD, FIND, LIST, DOWNLOAD on FakeDrive; one DO action), plays the AI roles with the
-runner's invented stand-ins (S: scope reader response, G: the package's invented example response, V: a complete PASS
-review, an incomplete one or a FAIL), answers with a scenario policy, and keeps its notes (the last CPSV line, the
-CPSV-REPO line). reset() kills every process of the boot, deletes BASE (BASE/repo included) and the tools marker,
-gives a new boot id, and runs the README bootstrap lines (§6.1) with the clone line replaced by a symbolic link to the
-checkout under test (the in-process cli requires realpath(BASE/repo) == the helper's repository).
+FakeDot: runs cli.main in-process, one command at a time to completion (the poll model of P5: a foreground command
+keeps running until it exits, and the Dot starts no other helper command meanwhile). It splits the optional
+`CPSV-RUNNING` line from the block, checks every block against the §6.1 grammar (F6, L5) and the printing rules (L9),
+executes each block literally (UPLOAD, FIND, LIST, DOWNLOAD on FakeDrive; one DO action), reports `--refused` for an
+upload the platform refused, plays the AI roles with the runner's invented stand-ins, answers like the operator (VM
+clock times, conversation list read against `after=`), and keeps its notes (the last CPSV line, the CPSV-REPO line).
+A reset (FakeDot.reset) deletes BASE (BASE/repo included) and the tools marker, gives a new boot id, and runs the
+README bootstrap lines (§6.1) with the clone line replaced by a symbolic link to the checkout under test.
+
+Reset seams (§X.14): stages run in-process in `go`, so a reset inside a stage is injected by wrappers around
+vio.runner.run_runner, the placement steps, the snapshot, the PNG part writer and vio.durable.write that raise
+`Reset` (a BaseException) at the chosen call; FakeDot catches it and resets. `Kill` is the same without a reset (a
+process killed in the same boot: FOREGROUND_DIED). The shipped code has no switch.
 
 World: HOME, BASE, TOOLS under one folder; a kit built from an invented release, admission, JOBS.json, jobs and
-config; the real runner v4 (no memoization). The clock is real time everywhere (the cli, the worker, the runner and
-the Dot share it: the runner checks the attested generator times against its own clock, R21, so a clock running ahead
-in the cli alone would make it refuse). To keep WAIT blocks short, the absence interval w_abs (core.fold.w_abs, §8.4)
-is patched in-process to W_ABS_TEST seconds; the commit WAIT (§5.1, a count of FINDs, not a time) is slept for at
-most W_ABS_TEST seconds by the Dot."""
+config; the real runner v4 (no memoization). The clock is real time everywhere (the runner checks the attested
+generator times against its own clock, R21). To keep WAIT blocks short, the absence interval w_abs (core.fold.w_abs)
+is patched in-process to W_ABS_TEST seconds and every WAIT is slept for at most W_ABS_TEST seconds by the Dot."""
 import contextlib
 import copy
 import hashlib
@@ -30,7 +38,6 @@ import math
 import os
 import shlex
 import shutil
-import signal
 import stat
 import subprocess
 import sys
@@ -51,11 +58,13 @@ _spec = importlib.util.spec_from_file_location('tcj_for_vm2', str(REPO / 'deploy
 TCJ = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(TCJ)
 
-GATES = {'p1_vm_files': 'PASS', 'p1_transcript_export': 'yes', 'p1_conversation_list': 'yes',
-         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_md5_visible': 'yes', 'p2_prefix_search': 'no',
-         'p2_newest_first': 'no', 'p2_lag_seconds': 20, 'p2_max_upload_bytes': 300000000, 'p2_tgz_kept': 'PASS',
-         'p2_failed_upload_can_appear': 'no', 'p3_identity_stable': 'yes', 'p5_detached': 'PASS',
-         'p5_tool_call_seconds': 3600, 'p5_setup_seconds': 300}
+GATES = {'p1_vm_files': 'PASS', 'p1_transcript_export': 'no', 'p1_conversation_list': 'yes',
+         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_md5_visible': 'no', 'p2_newest_first': 'yes',
+         'p2_lag_seconds': 0, 'p2_max_upload_bytes': 50000000, 'p2_tgz_kept': 'PASS',
+         'p2_failed_upload_can_appear': 'yes', 'p3_identity_stable': 'yes', 'p3_clock_tolerance_seconds': 300,
+         'p5_foreground_hold_seconds': 1200, 'p5_setup_seconds': 130}
+STAGE_MAX = {'selftest': 1100, 'place': 300, 'prepare': 600, 'nonattempt': 300, 'scope-finish': 600, 'finish': 900,
+             'visual-record': 600, 'interrupt': 600, 'freeze': 600}
 NODE = '/opt/node22/bin/node'
 NODE_SHA = '2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff'
 NODE_PATH = os.environ.get('NODE_PATH') or '/usr/local/lib/node_modules_global'
@@ -108,9 +117,11 @@ def real_utc():
 class FakeDrive:
     def __init__(self, gates):
         self.gates = gates
+        self.hide_md5 = gates.get('p2_md5_visible') != 'yes'
         self.folders, self.blobs, self.n, self.calls = {}, {}, 0, []
-        self.uploads = {}
+        self.uploads, self.max_upload = {}, 0
         self.drop, self.lag, self.late, self.dup = {}, {}, {}, set()
+        self.timeout, self.refuse, self.refused_pending, self.ghosts = {}, {}, [], []
 
     def _put(self, folder, name, data, hidden=0):
         self.n += 1
@@ -120,19 +131,44 @@ class FakeDrive:
         self.folders.setdefault(folder, {}).setdefault(name, []).append(c)
         return c
 
+    def _out(self, c):
+        """What the Dot's tool shows of a copy: id, size, creation (and md5 only when visible)."""
+        r = {'id': c['id'], 'size': c['size'], 'created': c['created']}
+        if not self.hide_md5:
+            r['md5'] = c['md5']
+        return r
+
     # ---- the Dot's side
     def upload(self, path, folder, name):
+        """Returns 'ok', 'timeout' or 'refused' (what the Dot's tool reports)."""
         self.calls.append(('UPLOAD', folder, name))
         k = self.uploads[name] = self.uploads.get(name, 0) + 1
         data = Path(path).read_bytes()
         assert data, 'Drive rejects an empty file'
+        assert len(data) <= 104857600, 'the platform refuses an upload over 100 MiB (P2)'
+        self.max_upload = max(self.max_upload, len(data))
+        if k in self.refuse.get(name, ()):
+            self.refused_pending.append((folder, name, data))
+            return 'refused'
         if k in self.drop.get(name, ()):
             if name in self.late:
                 self._put(folder, name, data, hidden=self.late[name])
-            return
+            return 'ok'
+        if k in self.timeout.get(name, ()):
+            if name in self.late:
+                self._put(folder, name, data, hidden=self.late[name])
+            return 'timeout'
         self._put(folder, name, data, hidden=self.lag.get(name, 0))
         if name in self.dup:
             self._put(folder, name, data)
+        return 'ok'
+
+    def approve(self, land=True):
+        """The owner approves the refused uploads in the platform; they land (or, land=False, never do)."""
+        for folder, name, data in self.refused_pending:
+            if land:
+                self._put(folder, name, data)
+        self.refused_pending = []
 
     def _visible(self, cs):
         out = []
@@ -145,20 +181,15 @@ class FakeDrive:
 
     def find(self, folder, name):
         self.calls.append(('FIND', folder, name))
-        return self._visible(self.folders.get(folder, {}).get(name, []))
+        return [self._out(c) for c in self._visible(self.folders.get(folder, {}).get(name, []))]
 
-    def find_prefix(self, folder, prefix):
-        assert self.gates['p2_prefix_search'] == 'yes', 'a prefix FIND without the gate'
-        self.calls.append(('FINDP', folder, prefix))
-        return {n: v for n, cs in sorted(self.folders.get(folder, {}).items()) if n.startswith(prefix)
-                for v in [self._visible(cs)] if v}
-
-    def list_newest(self, folder, prefix, k):
+    def list_newest(self, folder, k):
         assert self.gates['p2_newest_first'] == 'yes', 'a LIST without the gate'
-        self.calls.append(('LIST', folder, prefix))
-        rows = [(c['created'], n, c) for n, cs in self.folders.get(folder, {}).items() if n.startswith(prefix)
-                for c in self._visible(cs)]
-        return [(n, c) for _, n, c in sorted(rows, key=lambda r: -r[0])[:k]]
+        self.calls.append(('LIST', folder, k))
+        rows = [(c['created'], n, c) for n, cs in self.folders.get(folder, {}).items()
+                for c in cs if c['hidden'] <= 0]
+        got = [(n, self._out(c)) for _, n, c in sorted(rows, key=lambda r: -r[0])[:k]]
+        return [(f_, c) for fo, f_, c in self.ghosts if fo == folder] + got          # listed, never found
 
     def download(self, did):
         self.calls.append(('DOWNLOAD', None, did))
@@ -182,55 +213,173 @@ class FakeDrive:
         self.folders.get(folder, {}).pop(name, None)
 
     def listing(self, folder):
-        """The maintainer tool's full listing (audit input; never offered to the helper)."""
+        """The maintainer tool's full listing (audit input; never offered to the helper). With md5 hidden it has no
+        md5Checksum either (§X.10)."""
         out = []
         for n, cs in sorted(self.folders.get(folder, {}).items()):
             for c in cs:
-                out.append({'id': c['id'], 'name': n, 'md5Checksum': c['md5'], 'size': str(c['size']),
-                            'createdTime': c['ctime']})
+                r = {'id': c['id'], 'name': n, 'size': str(c['size']), 'createdTime': c['ctime']}
+                if not self.hide_md5:
+                    r['md5Checksum'] = c['md5']
+                out.append(r)
         return out
+
+
+class Reset(BaseException):
+    """A VM reset injected at a seam inside a foreground stage (§X.14)."""
+
+
+class Kill(BaseException):
+    """The helper process killed in the same boot (the platform ended the foreground command)."""
+
+
+class Seams:
+    """Wrappers around the in-process stage steps; `arm(where, n, exc, sub)` raises exc at the n-th call of `where`
+    (counted from arming) whose sub-command is `sub` (a runner call's own sub-command; for the other seams the first
+    runner sub-command of the current helper command), or any when sub is None. where: 'runner_before',
+    'runner_after', 'snapshot', 'png_parts', 'place_job', 'place_ledger', 'write' (vio.durable.write), 'selftest'."""
+    def __init__(self):
+        from cpsvm2 import worker
+        from cpsvm2.vio import durable, place, runner, savepoint
+        self.mods = {'runner': runner, 'place': place, 'savepoint': savepoint, 'durable': durable, 'worker': worker}
+        self.orig = {'run_runner': runner.run_runner, 'snapshot': place.snapshot, 'png_parts': savepoint._png_parts,
+                     'place_job': place.place_job, 'place_ledger': place.place_ledger, 'write': durable.write,
+                     'selftest_work': worker.selftest_work}
+        self.armed, self.count, self.hits, self.times = None, 0, [], 0
+        self.stage_calls, self.subs, self.cmd_subs = {}, [], []
+        runner.run_runner = self._runner
+        place.snapshot = self._wrap('snapshot', self.orig['snapshot'])
+        savepoint._png_parts = self._wrap('png_parts', self.orig['png_parts'], after=False)
+        place.place_job = self._wrap('place_job', self.orig['place_job'])
+        place.place_ledger = self._wrap('place_ledger', self.orig['place_ledger'])
+        durable.write = self._wrap('write', self.orig['write'], after=False)
+        worker.selftest_work = self._wrap('selftest', self.orig['selftest_work'], after=False)
+
+    def close(self):
+        m = self.mods
+        m['runner'].run_runner = self.orig['run_runner']
+        m['place'].snapshot, m['place'].place_job = self.orig['snapshot'], self.orig['place_job']
+        m['place'].place_ledger = self.orig['place_ledger']
+        m['savepoint']._png_parts, m['durable'].write = self.orig['png_parts'], self.orig['write']
+        m['worker'].selftest_work = self.orig['selftest_work']
+
+    def arm(self, where, n=1, exc=Reset, sub=None, times=1):
+        self.armed, self.count, self.times = (where, n, exc, sub), 0, times
+
+    def disarm(self):
+        self.armed = None
+
+    def _hit(self, where, sub=None):
+        if sub is None:
+            sub = self.cmd_subs[0] if self.cmd_subs else None
+        if self.armed and self.armed[0] == where and self.armed[3] in (None, sub):
+            self.count += 1
+            if self.count == self.armed[1]:
+                exc = self.armed[2]
+                self.times -= 1
+                if self.times <= 0:
+                    self.armed = None
+                self.count = 0
+                self.hits.append(where)
+                raise exc(where)
+
+    def _wrap(self, where, fn, after=True):
+        def w(*a, **k):
+            self.stage_calls[where] = self.stage_calls.get(where, 0) + 1
+            if not after:
+                self._hit(where)
+            r = fn(*a, **k)
+            if after:
+                self._hit(where)
+            return r
+        return w
+
+    def _runner(self, ctx, argv, log):
+        self._hit('runner_before', argv[0])
+        self.subs.append(argv[0])
+        self.cmd_subs.append(argv[0])
+        r = self.orig['run_runner'](ctx, argv, log)
+        self.stage_calls[argv[0]] = self.stage_calls.get(argv[0], 0) + 1
+        self._hit('runner_after', argv[0])
+        return r
 
 
 # ================================================================ FakeDot
 DOT_FIELDS = ('blocks', 'notes', 'policy', 'conv_n', 'convs', 'opened', 'current', 'events', 'o2', 'refused', 'live',
-              'answered')
+              'answered', 'running', 'stops_a', 'attests_after', 'killed_tree', 'downloads')
 
 
 class FakeDot:
     """Executes blocks literally. policy keys (scenario answers):
        'v': 'pass' | 'fail' | 'incomplete' (first review) ; 'v_cont': 'pass' | 'incomplete' (after CONTINUE)
        'export': True/False (EXPORT_TRANSCRIPT done) ; 'restore': {...restore answers...} ; 'arrived': 'yes'|'no'
-       'list_shows_none': 'yes'|'no' (C5 rebase question)."""
+       'list_shows_none': 'yes'|'no' (C5 rebase question) ; 'approve': True/False (the owner approves a refused
+       upload, HANDBACK A, and it lands)."""
     def __init__(self, world):
         self.w = world
         self.blocks, self.notes = [], {'cpsv': None, 'repo': None}
-        self.policy = {'v': 'pass', 'v_cont': 'pass', 'export': True, 'restore': {}, 'arrived': 'yes',
-                       'list_shows_none': 'yes', 'role_writes': True}
+        self.policy = {'v': 'pass', 'v_cont': 'pass', 'export': False, 'restore': {}, 'arrived': 'yes',
+                       'list_shows_none': 'yes', 'role_writes': True, 'approve': True}
         self.conv_n, self.convs, self.opened = 0, {}, {}
         self.current = None
         self.hook = None                        # hook(dot, lines) -> None | 'reset' | 'stop' before a block is done
         self.events = []                        # ('OPEN', role, prompt, boot) ... in order
         self.o2, self.refused, self.live, self.answered = set(), [], {}, []
+        self.running, self.stops_a, self.attests_after, self.killed_tree = [], [], [], None
+        self.downloads = []                     # (boot, drive id, path) of every DOWNLOAD line done
 
-    # ---- one helper command
+    # ---- one helper command, run to completion (P5: the Dot polls the same session until the process exits)
     def cmd(self, *argv):
         v2 = self.w.base / 'outbox/v2'
-        before = cache_files(v2) if argv[0] in ('found', 'answer') else None
+        before = cache_files(v2) if argv[0] in ('found', 'answer', 'go') else None
         out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = cli.main(list(argv))
+        t0, n0 = time.time(), len(self.w.seams.subs)
+        self.w.seams.cmd_subs = []
+        try:
+            with contextlib.redirect_stdout(out):
+                code = cli.main(list(argv))
+        except Reset:
+            self.blocks.append({'argv': list(argv), 'code': None, 'lines': out.getvalue().splitlines(),
+                                'boot': self.w.boot, 'reset': True})
+            return self.reset()
+        except Kill:
+            lines = [ln for ln in out.getvalue().splitlines() if ln]
+            self.blocks.append({'argv': list(argv), 'code': None, 'lines': lines, 'boot': self.w.boot, 'kill': True})
+            self.killed_tree = self.w.jobs_tree()
+            return None, lines
         lines = [ln for ln in out.getvalue().splitlines() if ln]
-        if lines and lines[0].startswith('CPSV ') and code != 2:
+        if lines and lines[0].startswith('CPSV-RUNNING '):
+            assert argv[0] == 'go', 'X.5: %s started a stage' % argv[0]
+            r = dict(x.split('=', 1) for x in lines[0].split()[1:])
+            assert set(r) == {'kind', 'since', 'max'} and r['kind'] in ('selftest', 'place', 'chain'), lines[0]
+            subs = self.w.seams.subs[n0:]
+            self.running.append({'kind': r['kind'], 'max': int(r['max']), 'seconds': round(time.time() - t0, 1),
+                                 'first': subs[0] if subs else None, 'subs': subs})
+            lines = lines[1:]
+        assert not any(ln.startswith('CPSV-RUNNING') for ln in lines), 'a RUNNING line inside a block'
+        if lines and lines[0].startswith('CPSV-BUSY '):
+            assert code == 4 and lines[1:] == ['REFUSED HELPER_BUSY', 'DO: POLL'], lines
+            assert before is None or cache_files(v2) == before, 'O7: a busy refusal changed a cache file'
+        elif lines and lines[0].startswith('CPSV ') and code != 2:
             why = drive.check_grammar(lines)
             assert why is None, 'F6/L5 block grammar (%s): %s' % (why, lines)
             check_printed(lines, self.w.case_ids())
             self.notes['cpsv'] = lines[0]
             self.oracles(lines)
-        if code == 4 and before is not None:
+            self.check_uploads(lines)
+        if code == 4 and before is not None and argv[0] in ('found', 'answer'):
             assert cache_files(v2) == before, 'O7: a refusal changed a cache file'
             self.refused.append(lines[1] if len(lines) > 1 else '')
         self.blocks.append({'argv': list(argv), 'code': code, 'lines': lines, 'boot': self.w.boot})
         return code, lines
+
+    def check_uploads(self, lines):
+        """L12: every UPLOAD line names a file of at most max_upload_bytes."""
+        mx = self.w.config_doc()['max_upload_bytes']
+        for ln in lines:
+            if ln.startswith('UPLOAD '):
+                p = shlex.split(ln)[1]
+                assert os.path.getsize(p) <= mx, 'L12: an UPLOAD over max_upload_bytes'
 
     def oracles(self, lines):
         """O1 (no reveal before the commit it depends on is on Drive with every part) and O2 (one OPEN per START,
@@ -245,9 +394,13 @@ class FakeDot:
             return
         assert not (self.w.base / 'outbox/v2/PENDING.json').is_file(), 'O1: revealed while a commit is pending'
         for cf in (st or {}).get('confirms') or []:
-            want = {c['md5'] for c in cf['copies']}
-            have = {c['md5'] for fo in self.w.drive.folders.values() for c in fo.get(cf['name'], [])}
+            want = {c['id'] for c in cf['copies']}
+            have = {c['id'] for fo in self.w.drive.folders.values() for c in fo.get(cf['name'], [])}
             assert want and want <= have, 'O1: %s revealed before %s is on Drive' % (do[:40], cf['name'])
+            for fo in self.w.drive.folders.values():
+                for c in fo.get(cf['name'], []):
+                    if c['id'] in want:
+                        assert c['md5'] == cf['copies'][0]['md5'], 'O1: a confirmed copy has other bytes'
         s = (st or {}).get('state') or {}
         R = (s.get('runs') or {}).get(s.get('current')) if s.get('current') else None
         key = None
@@ -268,7 +421,7 @@ class FakeDot:
             self.o2.add(key)
 
     # ---- the loop
-    def run(self, code, lines, max_steps=600):
+    def run(self, code, lines, max_steps=900):
         """Follow blocks until a STOP, a refusal the scenario did not expect, or max_steps. Returns (code, lines)."""
         for _ in range(max_steps):
             if self.hook is not None:
@@ -278,6 +431,14 @@ class FakeDot:
                 if h == 'reset':
                     code, lines = self.reset()
                     continue
+            if code is None:                    # killed in the same boot: the Dot runs go once (§X.6.1)
+                code, lines = self.cmd('go')
+                continue
+            if code == 3 and lines and lines[-1].endswith(' HANDBACK A'):
+                self.stops_a.append(lines[-1])
+                self.w.drive.approve(self.policy['approve'])
+                code, lines = self.cmd('go')
+                continue
             if code not in (0,):
                 return code, lines
             nxt = self.execute(lines)
@@ -288,41 +449,45 @@ class FakeDot:
 
     def execute(self, lines):
         d = self.w.drive
-        hidden = self.w.gates['p2_md5_visible'] == 'no'
-        finds, plist = [], []
+        finds, plist, status = [], None, {}
         for ln in lines[1:-1]:
             t = shlex.split(ln)
             if t[0] == 'REFUSED':
                 continue
-            if t[0] == 'UPLOAD':
-                d.upload(t[1], t[3], t[5])
-            elif t[0] == 'FIND' and t[2] == 'NAME':
+            if t[0] == 'UPLOAD':                          # once each, never retried by the Dot (§X.5.6 step 1)
+                status[t[5]] = d.upload(t[1], t[3], t[5])
+            elif t[0] == 'FIND':
+                assert t[2] == 'NAME' and len(t) == 4, 'X.5: only exact-name FIND exists: %s' % ln
                 finds.append((t[3], d.find(t[1], t[3])))
-            elif t[0] == 'FIND' and t[2] == 'PREFIX':
-                finds += sorted(d.find_prefix(t[1], t[3]).items())
             elif t[0] == 'LIST':
-                plist = d.list_newest(t[1], t[3], int(t[5]))
+                assert t[2] == 'NEWEST' and len(t) == 4, ln
+                plist = d.list_newest(t[1], int(t[3]))
             elif t[0] == 'DOWNLOAD':
                 Path(t[5]).parent.mkdir(parents=True, exist_ok=True)
                 Path(t[5]).write_bytes(d.download(t[3]))
+                self.downloads.append((self.w.boot, t[3], t[5]))
         do = lines[-1][len('DO: '):]
         t = shlex.split(do)
         act = t[0]
+        hidden = 'ID:SIZE ...' in do                    # the block names the form the helper expects (§X.6.2)
+        fmt = (lambda c: '%s:%d' % (c['id'], c['size'])) if hidden else (
+            lambda c: '%s:%s:%d' % (c['id'], c['md5'], c['size']))
         if act == 'STOP':
             return None
         if act == 'RUN':
             return self.cmd('go')
+        if act == 'POLL':
+            return self.cmd('go')
         if act == 'WAIT':
             self.w.clock.advance(int(t[1].split('=')[1]))      # (a real wait, shortened: see W_ABS_TEST)
-            self.w.settle_worker()
             return self.cmd('go')
         kv = {x.split('=', 1)[0]: x.split('=', 1)[1] for x in t[1:] if '=' in x and not x.startswith('--')}
-        if act == 'ATTEST' and t[3] == 'found':
-            at = t[5]
+        if act == 'ATTEST' and 'found' in t:
+            at = t[t.index('--at') + 1]
             args = ['--at', at]
-            if '(--file' in do and '--name' not in do:          # a LIST answer
-                for n, c in plist:
-                    args += ['--file', '%s:%s:%s:%d' % (n, c['id'], c['md5'], c['size'])]
+            if '--name' not in t:                                # a LIST answer
+                for n, c in plist or []:
+                    args += ['--file', '%s:%s' % (n, fmt(c))]
                 if not plist:
                     args.append('--none')
                 return self.cmd('found', *args)
@@ -330,23 +495,24 @@ class FakeDot:
             got = dict(finds)
             for n in names:
                 args += ['--name', n]
+                if status.get(n) == 'refused':
+                    args.append('--refused')
                 cs = got.get(n, [])
                 if not cs:
                     args.append('--none')
                 for c in cs:
-                    args += ['--file', ('%s:%d' % (c['id'], c['size'])) if hidden else
-                             '%s:%s:%d' % (c['id'], c['md5'], c['size'])]
-            for n, cs in finds:                                   # prefix results not asked by name: report them
-                if n not in names:
-                    args += ['--name', n] + sum((['--file', '%s:%s:%d' % (c['id'], c['md5'], c['size'])]
-                                                 for c in cs), [])
+                    args += ['--file', fmt(c)]
             return self.cmd('found', *args)
         if 'ATTEST' in t:
             i = t.index('ATTEST')
-            at = t[i + 5]
-            keys = [tuple(x.split('=', 1)) for x in t[i + 6:]]
+            after = t[i + 1].split('=', 1)[1] if t[i + 1].startswith('after=') else None
+            j = t.index('--at')
+            at = t[j + 1]
+            keys = [tuple(x.split('=', 1)) for x in t[j + 2:]]
             pre = (act, kv) if act != 'ATTEST' else None
-            vals = self.answer(keys, pre, lines)
+            if after:
+                self.attests_after.append((after, [k for k, _ in keys]))
+            vals = self.answer(keys, pre, lines, after)
             return self.cmd('answer', '--at', at, *['%s=%s' % (k, vals[k]) for k, _ in keys])
         if act == 'OPEN_CONVERSATION':
             self.events.append(('OPEN', kv['role'], kv['prompt'], self.w.boot))
@@ -402,14 +568,10 @@ class FakeDot:
         write_review(jd, conv, self.policy['v_cont'])
 
     # ---- answers
-    def answer(self, keys, pre, lines):
+    def answer(self, keys, pre, lines, after=None):
         w, pol = self.w, self.policy
         out = {}
         kd = dict(keys)
-        role = None
-        for r in ('G', 'S', 'V'):
-            if r in self.opened:
-                role = r
         if pre and pre[0] == 'DELIVER' and pre[1].get('to') == 'copy':
             return self.w.make_copy(pre[1]['file'])
         rs = pol['restore']
@@ -423,8 +585,9 @@ class FakeDot:
                     else 'yes'
             elif k == 'conversation':
                 out[k] = rs.get('conversation') or self.convs.get(self.cur_role(lines), 'conv-0fffffff')
-            elif k in ('started_utc', 'ended_utc', 'opened_utc'):
-                out[k] = self.opened.get(self.cur_role(lines), {}).get('utc') or real_utc()
+            elif k in ('started_utc', 'ended_utc', 'opened_utc'):    # VM clock readings (§X.6.1)
+                out[k] = self.opened.get(self.cur_role(lines), {}).get('utc') if k != 'ended_utc' else real_utc()
+                out[k] = out[k] or real_utc()
             elif k == 'model':
                 out[k] = 'stand-in-model'
             elif k == 'effort':
@@ -455,7 +618,7 @@ class FakeDot:
             else:
                 raise AssertionError('unknown key %s' % k)
         if 'outcome' in kd or ('transcript' in kd and 'model' not in kd):
-            self.answered.append(dict(out, role=self.current))
+            self.answered.append(dict(out, role=self.current, after=after))
             self.live = {}
         elif 'ended' in kd:
             self.live[self.current] = False
@@ -470,10 +633,6 @@ class FakeDot:
         for r in ('G', 'S', 'V'):
             if ('role=%s ' % r) in hdr:
                 return r
-        return self.last_role
-
-    @property
-    def last_role(self):
         return self.current
 
     # ---- a VM reset
@@ -519,7 +678,7 @@ class FakeDot:
         for ln in lines:
             if ln.startswith('CPSV-REPO commit='):
                 self.notes['repo'] = ln.split('=', 1)[1]
-        blk = [ln for ln in lines if not ln.startswith('CPSV-REPO')]
+        blk = [ln for ln in lines if not ln.startswith(('CPSV-REPO', 'CPSV-RUNNING'))]
         if blk and blk[0].startswith('CPSV '):
             assert drive.check_grammar(blk) is None, blk
         return p.returncode, blk
@@ -574,7 +733,7 @@ class World:
     """One invented VM world. series 'D1' (drill: qualification rules), 'Q1' or 'E1'. cases: list of
     (case_id, kind) with kind 'small', 'large' (scope stage) or 'nonattempt'."""
     def __init__(self, root, series='D1', gates=None, cases=(('9990101', 'small'), ('9990102', 'nonattempt')),
-                 cfg=None):
+                 cfg=None, plant_pass=True):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.series, self.gates = series, dict(GATES, **(gates or {}))
@@ -590,6 +749,7 @@ class World:
         self.saved = {}
         os.environ.update(self.env())
         self.clock_patch()
+        self.seams = Seams()
         self.commit = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], capture_output=True,
                                      text=True).stdout.strip()
         self.fixed.mkdir(parents=True, exist_ok=True)
@@ -598,10 +758,16 @@ class World:
         self.kit = self.build_kit()
         self.drive.plant(N.FOLDERS['setup'], 'SESSION_KIT_%s.zip' % sha(self.kit)[:12], self.kit)
         self.drive.plant(N.FOLDERS['static'], 'VM2_RELEASE.md', ('commit: %s\n' % self.commit).encode())
+        kn = 'SESSION_KIT_%s.zip' % sha(self.kit)[:12]            # §8.2 the FOLDER_MANIFEST route (zip row)
+        self.drive.plant('CPS/cps_runtime', kn, self.kit)
+        self.drive.plant(N.FOLDERS['static'], 'FOLDER_MANIFEST.md', (
+            '# FOLDER_MANIFEST (invented test kit)\n\n| path | bytes | sha256 |\n|---|---|---|\n'
+            '| `cps_runtime/%s` | %d | `%s` |\n' % (kn, len(self.kit), sha(self.kit))).encode())
         self.fp = v1reuse.fingerprint(v1reuse.Layout())[0]
         pdoc = {'schema': 'cps.vm-fingerprint-pass.v1', 'fingerprint_sha256': self.fp,
                 'selftest': {'failed_count': 0, 'tests': 1, 'passed_count': 1}, 'invented': True}
-        self.drive.plant(N.FOLDERS['setup'], 'FINGERPRINT_PASS_%s.json' % self.fp, json.dumps(pdoc).encode())
+        if plant_pass:
+            self.drive.plant(N.FOLDERS['setup'], 'FINGERPRINT_PASS_%s.json' % self.fp, json.dumps(pdoc).encode())
         self.dot = FakeDot(self)
         self.everyday, self.kinds = [], {}
 
@@ -613,12 +779,17 @@ class World:
         return e
 
     def clock_patch(self):
-        self.saved = {'w_abs': F.w_abs}
+        from cpsvm2 import worker
+        self.saved = {'w_abs': F.w_abs, 'sleep': worker.sleep}
         F.w_abs = lambda gates: W_ABS_TEST
+        worker.sleep = lambda s: time.sleep(min(s, 0.2))
 
     def close(self):
         self.kill_boot()
+        self.seams.close()
         F.w_abs = self.saved['w_abs']
+        from cpsvm2 import worker
+        worker.sleep = self.saved['sleep']
         os.environ.clear()
         os.environ.update(self.env0)
 
@@ -649,26 +820,20 @@ class World:
             os.symlink(NODE, t / 'nodelink/node')
 
     def kill_boot(self):
-        """A reset kills every process of the boot: the detached worker's session (and its runner)."""
-        dp = self.base / 'outbox/DETACHED.json'
-        try:
-            d = json.loads(dp.read_text())
-            pid = d.get('pid')
-            if pid:
-                try:
-                    os.killpg(pid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
-        except (OSError, ValueError):
-            pass
+        """A reset ends every process of the boot. Stages run in-process and runner commands in the foreground, so
+        nothing of this boot outlives the command that the seam interrupted; only zombies are reaped."""
         reap()
 
-    def settle_worker(self):
-        """A WAIT while a worker runs: the worker runs in real time, so the Dot waits a moment for real."""
-        dp = self.base / 'outbox/DETACHED.json'
-        if dp.is_file():
-            time.sleep(0.5)
-        reap()
+    def jobs_tree(self):
+        """(path, size, sha256) of every file under BASE/qual and BASE/jobs (the job folders a dead stage leaves)."""
+        out = []
+        for root in (self.base / 'qual', self.base / 'jobs'):
+            for dp, dns, fns in os.walk(root):
+                for n in fns:
+                    p = os.path.join(dp, n)
+                    if not os.path.islink(p):
+                        out.append((p, os.path.getsize(p), sha(Path(p).read_bytes())))
+        return sorted(out)
 
     def drive_snapshot(self):
         return {(f, n): [c['md5'] for c in cs] for f, fo in self.drive.folders.items() for n, cs in fo.items()}
@@ -705,9 +870,10 @@ class World:
     def config_doc(self, **over):
         c = {'schema': 'cps.vm2-config.v1', 'series': self.series,
              'accepted_helper_tree_sha256': [host.helper_tree_sha256()], 'accepts_release_sha256': [],
-             'selftest_expected_tests': 1, 'clock_wait_max_seconds': 300, 'wrap_foreground_seconds': 1800,
-             'png_part_bytes': 1000000, 'max_entry_bytes': 100000000, 'max_transcript_bytes': 50000000,
-             'max_ai_output_bytes': 100000000, 'conversation_re': CONV_RE, 'transcript_ext': 'json',
+             'selftest_expected_tests': 1, 'clock_wait_max_seconds': 300, 'foreground_hold_seconds': 1200,
+             'stage_max_seconds': dict(STAGE_MAX), 'max_upload_bytes': 50000000,
+             'png_part_bytes': 1000000, 'max_entry_bytes': 50000000, 'max_transcript_bytes': 20000000,
+             'max_ai_output_bytes': 20000000, 'conversation_re': CONV_RE, 'transcript_ext': 'json',
              'drive_id_re': r'[A-Za-z0-9_-]{20,80}', 'gates': self.gates, 'clear': None,
              'doc_samples': readme_samples() + ['conv-EXAMPLE']}
         c.update(self.cfg_over)
@@ -881,12 +1047,14 @@ class World:
         rep = json.loads((d / 'AUDIT.json').read_text()) if (d / 'AUDIT.json').is_file() else None
         return code, rep, out.getvalue()
 
-    def assemble(self, d, verify=True):
+    def assemble(self, d, verify=True, root='/'):
+        """O5: assemble at the original absolute paths (root '/', after BASE is wiped): the runner keys its ledger by
+        the job folder path (R25), so verify-frozen holds only there."""
         from cpsvm2.maint import assemble as AS
         d = Path(d)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = AS.main(['--series', self.series, '--dir', str(d / 'dl'), '--root', str(d / 'root'),
+            code = AS.main(['--series', self.series, '--dir', str(d / 'dl'), '--root', root,
                             '--out', str(d / 'ASSEMBLE.json')] + (['--verify-frozen'] if verify else []))
         rep = json.loads((d / 'ASSEMBLE.json').read_text()) if (d / 'ASSEMBLE.json').is_file() else None
         return code, rep, out.getvalue()

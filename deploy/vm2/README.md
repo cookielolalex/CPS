@@ -35,25 +35,39 @@ Run `bash /home/agent/cps/vm.sh go`, then do the block it prints, exactly. Every
 ```
 CPSV series=<S> head=<seq6> kit=<hex12|none> at=<at> mode=<mode> state=<STATE>
 UPLOAD <abs> TO <folder> AS <name>        (0..n, in order)
-FIND <folder> NAME <name>                 (0..n)  or  FIND <folder> PREFIX <prefix>  or  LIST <folder> PREFIX <prefix> NEWEST <k>
+FIND <folder> NAME <name>                 (0..n)  or  LIST <folder> NEWEST <k>
 DOWNLOAD <folder> ID <id> TO <abs>        (0..n)
 DO: <exactly one action>
 ```
+
+**Run every helper command in the foreground.** If the command tool gives you back a session before the command has
+exited, poll that same session until the process exits, and start no other helper command meanwhile. A command may
+run up to 1,200 s (a `go` that runs a stage first prints one line `CPSV-RUNNING kind=<kind> since=<UTC> max=<s>`).
+The result of a command is its last block: from the last line that starts with `CPSV ` through the `DO:` line, which
+is always the last line. If the process exited and no `DO:` line follows the last `CPSV ` line, run `go` once; if
+that happens again, stop and tell the owner `NO_BLOCK` (case C).
 
 A refusal adds one line `REFUSED <CODE>` right after the header; the rest of the block is the block you had before.
 Keep the last `CPSV` line in your notes. Exit codes: 0 follow the block, 3 the block ends in `DO: STOP`, 4 refused
 (nothing changed; correct the answer), 2 usage.
 
-Do the UPLOAD lines first, in order, then every FIND, then every DOWNLOAD. A FIND by NAME is an exact-name search in
-that folder. Report every copy it returns, or `--none` when it returns nothing. Never edit, rename or delete a file
-on Drive.
+Do the UPLOAD lines first, in order, each **once** (never retry an upload yourself), then every FIND, whatever the
+upload returned, then every DOWNLOAD. A FIND by NAME is an exact-name search in that folder: report every copy over
+every result page, with its id and its size in bytes exactly as the search shows it, or `--none` when it returns
+nothing. Save the raw search result to a file first and copy the ids from that file. When the platform **refused**
+an upload (an approval review or any refusal message, not a timeout or an error), add `--refused` right after that
+`--name N`. A LIST answer names every file the listing returned as `--file NAME:ID:SIZE`. A DOWNLOAD saves the file
+from Drive at exactly the path given; never copy a local file there instead. Never edit, rename or delete a file on
+Drive.
 
 ## 3. The actions (the `DO:` line)
 
 | action | you do | then |
 |---|---|---|
 | `RUN bash /home/agent/cps/vm.sh go` | run it | follow the new block |
-| `ATTEST ... found --at A --name N (--file ID:MD5:SIZE ... \| --none) ...` | do the block's UPLOAD/FIND lines, then run `found` with one `--file` per copy each FIND returned, or `--none` | follow the output |
+| `ATTEST ... found --at A --name N [--refused] (--file ID:SIZE ... \| --none) ...` | do the block's UPLOAD/FIND lines, then run `found` with one `--file` per copy each FIND returned, or `--none` | follow the output |
+| `ATTEST after=T bash ... answer ...` | as below; `list_shows_none=yes` means your conversation list shows **no** conversation with `attachedAt` at or after T, and `conversation=` is the id of the conversation of that role with `attachedAt` at or after T | follow the output |
+| `POLL` | another helper command still runs: go back to its session and poll it until it exits, then follow its block. If you no longer have that session, `WAIT seconds=60`, then run `go` | follow that block |
 | `ATTEST ... answer --at A k1=PATTERN1 ...` | run `answer` with a real value for each key, matching the pattern named | follow the output |
 | `OPEN_CONVERSATION role=R prompt=P folder=F then=when_ended` | open a new conversation and give it the full text of file P as its only message. Roles S and G may use only folder F. Role V may open only the PNG files the prompt lists (under F) and may write only `F/visual_review/VISUAL_REVIEW.json` | when it has ended: run `go` |
 | `OPEN_CONVERSATION ... then=now` | the same | as soon as the prompt is sent: run `go` (it asks for the conversation and the time you opened it) |
@@ -66,6 +80,7 @@ on Drive.
 | `DELIVER file=P to=copy ATTEST ... copy=COPYPATH log=COPYPATH` | everyday: make the user's personal copy of P with that user's preferences, as `PERSONAL_COPY.xlsx` with its `PERSONALIZATION_LOG.json` in `~/cps-deliveries/<case>/<user>/<utc14>/` | run the answer with the two paths |
 | `DELIVER file=P to=user ATTEST ... sent=YES` | everyday: send P to the requesting user, under the standard file name from the `JOB_TITLE.json` you wrote | run the answer |
 | `WAIT seconds=N` | wait N seconds | run `go` |
+| `STOP UPLOAD_REFUSED HANDBACK A` | tell the owner the code, the file name and your last `CPSV` line, and ask the owner to approve the refused upload in the platform | when the owner says it is approved (or to continue): run `go` |
 | `STOP <CODE> HANDBACK C` | stop; upload nothing more; tell the owner the code and your last `CPSV` line | nothing |
 | `STOP <CODE> HANDBACK B` | stop; tell the owner that qualification generation is complete | nothing |
 | `STOP IDLE` | stop | nothing |
@@ -73,6 +88,9 @@ on Drive.
 ## 4. What you are asked, and where
 
 - **First `go` of a session:** `operator_model=MODEL platform=PLATFORM` (your own model id and platform).
+- **Times you attest** (`started_utc`, `ended_utc`, `opened_utc`) are VM clock readings: run
+  `date -u +%Y-%m-%dT%H:%M:%SZ` on the VM just before you send the prompt, and again right after you see the
+  conversation end. Never copy a time from the conversation list or from Drive.
 - **A generator (G) conversation ended:** whether it ended, its conversation id, its start and end times (seconds,
   UTC; the start rounded up, the end rounded down), the generator's platform, model and effort, whether you sent a
   single message, the six features (memory, custom instructions, web, connectors, file uploads, other agents: `yes` or
@@ -111,14 +129,22 @@ helper refuses each of them as an answer.
 
 <!-- doc_samples:begin -->
 ```
+<40 hex>
+<S>
+<at>
+<exactly one action>
+<hex12|none>
 <the 40-hex commit of your last CPSV-REPO line>
 <seq6>
 <hex12>
 <abs>
 <folder>
 <name>
-<prefix>
 <id>
+<k>
+<UTC>
+<kind>
+<s>
 <mode>
 <STATE>
 <case>

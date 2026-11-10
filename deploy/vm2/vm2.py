@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cps-vm-helper.v2 entry point (spec §1.3): python3 -I -B deploy/vm2/vm2.py <go|found|answer|_worker|audit|assemble|
+"""cps-vm-helper.v2 entry point (spec §1.3): python3 -I -B deploy/vm2/vm2.py <go|found|answer|audit|assemble|
 score_check> [args]. The Dot runs it through BASE/vm.sh; audit, assemble and score_check run on the maintainer's machine."""
 import os
 import sys

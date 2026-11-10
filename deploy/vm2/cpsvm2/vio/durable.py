@@ -105,7 +105,7 @@ def write_doc(path, doc, mode=0o644):
 
 
 def write_plain(path, doc, mode=0o644):
-    """A plain JSON document (no self hash): worker results, DETACHED.json."""
+    """A plain JSON document (no self hash): the self-test RUN.json."""
     return write(path, doc_bytes(doc), mode)
 
 

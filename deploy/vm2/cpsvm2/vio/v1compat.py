@@ -9,7 +9,6 @@ CHUNK = 1 << 20
 BOOT_ID_DEFAULT = '/proc/sys/kernel/random/boot_id'
 _VIO = Path(os.path.realpath(os.path.dirname(os.path.abspath(__file__))))      # deploy/vm2/cpsvm2/vio
 HELPER_REPO = _VIO.parents[3]                                                   # the repository root
-HELPER_FILE = Path(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'vm2.py')))
 EXIT_OK, EXIT_USAGE, EXIT_STOP, EXIT_REFUSED, EXIT_NEED, EXIT_BUSY = 0, 2, 3, 4, 10, 11
 ARCHIVE_EXACT = {'MANIFEST.json': ('MANIFEST.json',), 'ledger': ('ledger', 'ledger/LEDGER.jsonl')}
 PNG_SUBS = ('job/qa/visual_deliverable/', 'job/qa/visual_internal/')
@@ -43,12 +42,6 @@ def parse_name(name):
 
 def runner_path():
     return HELPER_REPO / 'deploy/run/cps_job.py'
-
-
-def wait_block(ctx, seconds):
-    """The modified wait_block of v1mod.py (§1.6), imported late (v1mod imports v1reuse, which imports this module)."""
-    from .v1mod import wait_block as w
-    return w(ctx, seconds)
 
 
 class Halt(Exception):

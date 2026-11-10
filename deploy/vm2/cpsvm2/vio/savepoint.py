@@ -1,9 +1,11 @@
 """commit(): the save-point mechanics (spec §5). The glue (cli.py, worker.py) gives a draft, the archive members, the
 part sources and a `complete` function that folds the draft (core.fold, §5.1 step 2); this module writes the parts,
 the entry and PENDING durably (steps 3-4), prints nothing itself, and runs the upload-FIND-attest loop (steps 5-7,
-§5.2, §5.5) on PENDING. Every PENDING change is written durably before the caller prints the block it implies.
+§X.5.5 md5 hidden, §X.5.6 refused uploads) on PENDING. Every PENDING change is written durably before the caller
+prints the block it implies. FIND is always by exact name (the prefix variant is deleted, §X.5).
 
-PENDING.tries[name] = {'uploads', 'finds_since_upload', 'need'} where need is upload | find | wait | verify | done.
+PENDING.tries[name] = {'uploads', 'finds_since_upload', 'refused', 'need'} where need is upload | find | wait | verify
+| done.
 The entry is confirmed first; parts only after (their number reveals the outcome). PENDING.absent lists names that must
 be absent at the entry's FIND (a rebase RESTORE's missing parts, §5.1 step 5)."""
 import os
@@ -112,7 +114,7 @@ def write_commit(env, draft, members, part_sources, post, complete):
                 k = 1 + sum(1 for p in parts if p['kind'] == src['kind'])
                 ext = {'DELIV': 'xlsx', 'DLOG': 'json', 'LEDGER': 'jsonl', 'ALLFZ': 'json'}[src['kind']]
                 name = 'CPSJ_%s_%06d_%s%02d.%s' % (series, seq, src['kind'], k, ext)
-                if len(src['data']) > env.cfg['png_part_bytes']:
+                if len(src['data']) > min(env.cfg['png_part_bytes'], env.cfg['max_upload_bytes']):
                     raise Halt('STOP', 'PART_TOO_LARGE', 'a part over the part limit')
                 durable.write(env.journal / name, src['data'])
                 ps = [{'name': name, 'kind': src['kind'], 'k': k, 'folder': src['folder'], 'sha256': None,
@@ -139,7 +141,9 @@ def write_commit(env, draft, members, part_sources, post, complete):
         except OSError as e:
             raise durable.DurableError(e.errno)
         n, sh, m5 = durable.seal(path, lambda p_: read_entry(p_))
-        if n > env.cfg['max_entry_bytes']:
+        if any(p['bytes'] > env.cfg['max_upload_bytes'] for p in parts):
+            raise Halt('STOP', 'PART_TOO_LARGE', 'a part over max_upload_bytes')
+        if n > min(env.cfg['max_entry_bytes'], env.cfg['max_upload_bytes']):
             raise Halt('STOP', 'ENTRY_TOO_LARGE', 'the entry is over max_entry_bytes')
         return durable.write_doc(env.v2 / 'PENDING.json', _pending(env, draft, entry, path, parts, n, sh, m5,
                                                                    post)), entry, whole
@@ -160,7 +164,7 @@ def _pending(env, draft, entry, path, parts, n, sh, m5, post):
                       'bytes': n, 'copies': None},
             'parts': [{'name': p['name'], 'path': str(env.journal / p['name']), 'folder': p['folder'],
                        'sha256': p['sha256'], 'md5': p['md5'], 'bytes': p['bytes'], 'copies': None} for p in parts],
-            'tries': {nm: {'uploads': 0, 'finds_since_upload': 0, 'need': 'upload'} for nm in names},
+            'tries': {nm: {'uploads': 0, 'finds_since_upload': 0, 'refused': 0, 'need': 'upload'} for nm in names},
             'verify': [], 'absent': list(((draft.get('body') or {}).get('rebase') or {}).get('missing_parts') or [])
             if draft['kind'] == 'RESTORE' else [],
             'state_after_sha256': entry['state_sha256'], 'post': post, 'created_utc': env.now()}
@@ -177,10 +181,11 @@ def _group(pend):
     return [p for p in pend['parts'] if p['copies'] is None]
 
 
-def block(env, pend):
+def block(env, pend, kind='journal'):
     """§5.1 steps 5-7: the next SAVE block for PENDING, as (uploads, finds, downloads, do, expect_names), after
     updating PENDING's tries in place (the caller writes PENDING durably before printing). None when every file is
-    confirmed (step 8)."""
+    confirmed (step 8). Every file named in an UPLOAD line is at most max_upload_bytes (§X.3; kind 'setup' gives
+    UPLOAD_TOO_LARGE, a journal file ENTRY_TOO_LARGE or PART_TOO_LARGE)."""
     if pend['verify']:
         pend['phase'] = 'VERIFY'
         dl = tuple((v['folder'], v['id'], v['path']) for v in pend['verify'])
@@ -195,32 +200,31 @@ def block(env, pend):
             if tr[f['name']]['need'] == 'wait':
                 tr[f['name']]['need'] = 'find'
         return (), (), (), ('WAIT', {'seconds': max(30, 2 * (env.gates.get('p2_lag_seconds') or 0))}), None
-    ups, finds, names = [], [], []
+    ups, names = [], []
     for f in grp:
         t = tr[f['name']]
         if t['need'] == 'upload':
+            if os.lstat(f['path']).st_size > env.cfg['max_upload_bytes']:
+                code = 'UPLOAD_TOO_LARGE' if kind == 'setup' else (
+                    'ENTRY_TOO_LARGE' if f['name'].endswith('.tgz') else 'PART_TOO_LARGE')
+                raise Halt('STOP', code, 'a file over max_upload_bytes')
             ups.append((f['path'], f['folder'], f['name']))
             t['uploads'] += 1
             t['finds_since_upload'] = 0
             t['need'] = 'find'
         names.append(f['name'])
     absent = pend['absent'] if pend['phase'] == 'ENTRY' else []
-    prefix = 'CPSJ_%s_%06d' % (pend['series'], pend['seq'])
-    if env.gates.get('p2_prefix_search') == 'yes':
-        if any(f['folder'] == env.series_folder for f in grp) or absent:
-            finds.append((env.series_folder, 'PREFIX', prefix))
-        finds += [(f['folder'], 'NAME', f['name']) for f in grp if f['folder'] != env.series_folder]
-    else:
-        finds += [(f['folder'], 'NAME', f['name']) for f in grp] + [(env.series_folder, 'NAME', n) for n in absent]
-    return tuple(ups), tuple(finds), (), ('ATTEST_FOUND', {'names': names + list(absent),
-                                                            'md5_hidden': env.gates.get('p2_md5_visible') == 'no'}), \
-        names + list(absent)
+    finds = [(f['folder'], 'NAME', f['name']) for f in grp] + [(env.series_folder, 'NAME', n) for n in absent]
+    return tuple(ups), tuple(finds), (), ('ATTEST_FOUND', {
+        'names': names + list(absent), 'md5_hidden': env.gates.get('p2_md5_visible') == 'no',
+        'uploaded': [u[2] for u in ups]}), names + list(absent)
 
 
-def on_found(env, pend, got, check_id):
-    """§5.1 step 6 for every name of the current block. got: {name: [copy strings] | None}. check_id(value) -> None or
-    a REFUSED code for an ID value. Returns ('refused', code) with PENDING unchanged, ('stop', code), or ('ok', None)
-    with PENDING updated in place."""
+def on_found(env, pend, got, check_id, refused=(), known=None):
+    """§5.1 step 6, §X.5.5 and §X.5.6 for every name of the current block. got: {name: [copy strings] | None};
+    refused: the names attested `--refused`; known(name) -> the Drive ids already recorded for that name (rule V's id
+    shortcut). check_id(value) -> None or a REFUSED code for an ID value. Returns ('refused', code) with PENDING
+    unchanged, ('stop', code), ('handback', 'UPLOAD_REFUSED') or ('ok', None) with PENDING updated in place."""
     from .drive import parse_copy
     hidden = env.gates.get('p2_md5_visible') == 'no'
     grp = {f['name']: f for f in _group(pend)}
@@ -243,31 +247,42 @@ def on_found(env, pend, got, check_id):
     for name, cps in parsed.items():
         if name in absent and cps:
             return 'stop', 'REBASE_PART_APPEARED'
-        if name not in grp and name not in absent and cps and env.gates.get('p2_prefix_search') == 'yes':
-            return 'stop', 'FORK'
     for name, f in grp.items():
         cps = parsed.get(name) or []
         if any(int(c[-1]) != f['bytes'] or (not hidden and c[1] != f['md5']) for c in cps):
             return 'stop', 'FORK'
-    vf = []
+    vf, handback = [], False
     for name, f in grp.items():
         cps, t = parsed.get(name) or [], pend['tries'][name]
-        if cps and hidden:
+        t.setdefault('refused', 0)
+        if name in refused:
+            t['refused'] += 1
+        ids = set(known(name)) if known else set()
+        unknown = [c for c in cps if c[0] not in ids]
+        if cps and hidden and unknown:
             vf += [{'name': name, 'id': c[0], 'folder': f['folder'],
-                    'path': str(env.lay.inbox / 'verify' / ('%s.%d' % (name, k)))} for k, c in enumerate(cps, 1)]
+                    'path': str(env.lay.inbox / 'verify' / ('%s.%d' % (name, k)))} for k, c in enumerate(cps, 1)
+                   if c[0] not in ids]
+            f['copies'] = [[c[0], f['md5'], int(c[-1])] for c in cps if c[0] in ids] or None
             t['need'] = 'verify'
         elif cps:
-            f['copies'] = [[c[0], c[1], int(c[2])] for c in cps]
+            f['copies'] = [[c[0], f['md5'] if hidden else c[1], int(c[-1])] for c in cps]
             t['need'] = 'done'
+        elif name in refused:
+            t['need'], t['finds_since_upload'] = 'find', 0
+            handback = True
         elif t['finds_since_upload'] == 0:
             t['finds_since_upload'], t['need'] = 1, 'wait'
         elif t['uploads'] < 3:
             t['need'] = 'upload'
         else:
             return 'stop', 'UPLOAD_FAILED'
+    if vf:
+        need = int(sum(int(c[-1]) for n, cps in parsed.items() for c in cps if n in grp) * 1.1) + 1
+        require_space(env.lay, need, 'verify')
     pend['verify'] = vf
     pend['absent'] = [] if absent else pend['absent']
-    return 'ok', None
+    return ('handback', 'UPLOAD_REFUSED') if handback else ('ok', None)
 
 
 def on_verify(env, pend):
@@ -321,19 +336,18 @@ def setup_block(env, loop):
     Same return shape as block()."""
     pend = {'entry': {'copies': True}, 'parts': loop['files'], 'tries': loop['tries'], 'verify': loop['verify'],
             'absent': [], 'series': None, 'seq': 0}
-    env2 = _Env1(env)
-    return block(env2, pend)
+    return block(_Env1(env), pend, 'setup')
 
 
 class _Env1:
     def __init__(self, env):
-        self.gates, self.lay, self.series_folder = dict(env.gates, p2_prefix_search='no'), env.lay, None
+        self.gates, self.lay, self.series_folder, self.cfg = env.gates, env.lay, None, env.cfg
 
 
-def setup_found(env, loop, got, check_id):
+def setup_found(env, loop, got, check_id, refused=()):
     pend = {'entry': {'copies': True}, 'parts': loop['files'], 'tries': loop['tries'], 'verify': loop['verify'],
             'absent': [], 'series': None, 'seq': 0}
-    r = on_found(_Env1(env), pend, got, check_id)
+    r = on_found(_Env1(env), pend, got, check_id, refused)
     loop['verify'] = pend['verify']
     return r
 
@@ -349,8 +363,8 @@ def setup_loop(files):
     """A new setup-file loop for local files [(path, folder, name)]."""
     fs = [{'name': n, 'path': str(p), 'folder': f, 'md5': md5_file(p), 'bytes': os.lstat(p).st_size,
            'sha256': sha_file(p), 'copies': None} for p, f, n in files]
-    return {'files': fs, 'tries': {f['name']: {'uploads': 0, 'finds_since_upload': 0, 'need': 'upload'} for f in fs},
-            'verify': []}
+    return {'files': fs, 'tries': {f['name']: {'uploads': 0, 'finds_since_upload': 0, 'refused': 0, 'need': 'upload'}
+                                   for f in fs}, 'verify': []}
 
 
 def drop_local(paths):
