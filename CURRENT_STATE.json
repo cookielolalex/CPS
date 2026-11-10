@@ -496,5 +496,7 @@
   "O60": "Q7 (O49): everyday jobs resume from the last committed entry without limit; 'prepared again once' applies only to re-preparing from the inputs",
   "O61": "Q8: at most 2 REVIEW_INCOMPLETE continuations per reviewer; a third refusal freezes as REVIEW_INCOMPLETE_LIMIT and fails visual QA"
  },
- "owner_decisions_2026_11_10_source": "owner approved Q1-Q8 of docs/handoff/VM_HELPER_V2_DESIGN.md section H as recommended ('Approval', 2026-11-10)"
+ "owner_decisions_2026_11_10_source": "owner approved Q1-Q8 of docs/handoff/VM_HELPER_V2_DESIGN.md section H as recommended ('Approval', 2026-11-10)",
+ "phase1_2026_11_10": "Phase 1 setup complete: all 45 FOLDER_MANIFEST.md files in Drive with their released bytes (6 repaired by verify_drive_files.py in M001, 2 re-sent with deploy/textcarry.py in M005); light setup on the Dot VM passes check_env; setup evidence setup/eafe9b2/",
+ "probes_2026_11_10": "docs/handoff/PROBE_RESULTS_20261110.md: P1 file access PASS but new conversations have the same app tools (Drive, GitHub, web, messages) - isolation is instruction-only, asked in M006; transcript export partial (O55 applies); P2 Drive tool upload limit 100 MiB per file, no md5 visible (confirm by download-back), exact-name search returns every copy immediately; P3 /home/agent uid 1000, 9 CPUs, 4.9 GB tmpfs; P5 detached processes FAIL, foreground processes persist across tool calls via resumable sessions (1,200 s held)"
 }
