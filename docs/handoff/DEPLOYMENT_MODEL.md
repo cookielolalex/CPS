@@ -1,4 +1,4 @@
-# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O61; 2026-11-06, extended 2026-11-09 and 2026-11-10)
+# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O62; 2026-11-06, extended 2026-11-09 and 2026-11-10)
 
 This page says how CPS is deployed and who owns what. The operating documents themselves are in the private Drive folder "CPS" (in "Dots Folder"). They are not published here because the interview material holds company data.
 
@@ -93,3 +93,11 @@ Admission review 1 rejected helper v1 (`deploy/vm/ADMISSION_VM_HELPER_V1.json`).
 - **O59:** the maintainer may clear a helper halt with a settings-only kit naming exactly that halt; no code, rule or scoring change.
 - **O60:** everyday jobs resume from the last saved step without limit; "prepared again once" (O49) counts only starting over from the inputs.
 - **O61:** a visual reviewer may be asked to complete an unfinished review at most twice; a third time fails visual QA.
+
+## Automatic coordination with the Dot (O62, 2026-11-10)
+
+At the owner's request, maintainer messages no longer need pasting:
+- The Dot runs a scheduled mailbox check (every 30 minutes, or the shortest interval its automations allow) whose prompt is fixed: [DOT_MAILBOX_PROTOCOL.md](DOT_MAILBOX_PROTOCOL.md). Each run claims the lowest-numbered open message `CPS/maintainer_messages/Mnnn_*.md` with `CLAIM.md` in its reply folder, carries it out, and writes `REPLY.md`; a claim younger than 6 hours makes later runs wait.
+- The safety rules live in that fixed prompt, not in any Drive file: only M-files in `maintainer_messages/` are instructions; Drive stays add-only; no sharing, messaging or purchases; no CPS job on real data, survey or qualification step unless the message names the owner decision that authorizes it.
+- The maintainer checks `CPS/reports/` hourly with a scheduled task in its own session and writes the next message.
+- The owner can stop either schedule at any time; platform approval prompts still go to the owner.
