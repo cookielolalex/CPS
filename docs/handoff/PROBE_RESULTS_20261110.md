@@ -36,7 +36,14 @@ What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in
 - **Foreground processes do survive across tool calls**: the Dot's command tool returns a resumable session, and polling it continued the same process; holds of 60, 240, 600 and 1,200 s all completed. A 1,200 s hold is a completed process, not proof of one uninterrupted tool call.
 - Consequence for the VM helper: every stage must run in the foreground with the Dot polling the same session until it exits; nothing may rely on a detached worker.
 
+## M006: isolation, audit, models, approvals
+
+- Two ways start a conversation that can use the VM ("Create Thread" and a native worker). Neither offers any switch for tools, apps/connectors or internet access; both test conversations reported the same Drive, GitHub, web search, message-reading, Library, Calendar and Contacts tools. **Technical isolation: not available.** The owner accepted isolation by instruction with attestation (O63).
+- Reading a conversation back gives its messages and turn status, **not** its tool calls or their arguments: there is no tool-call audit.
+- A model can be chosen when a conversation is created (the native worker lists five model ids); the resolved model is not returned, so the generation record must state the requested model.
+- The owner can approve a bounded class of actions in advance (for example uploads into `CPS/qualification/`); some actions (running new software outside the sandbox's writable paths, permission changes, deletion) still need approval each time. Writing outside the sandbox's writable paths used the platform's elevated route.
+
 ## Not yet known
 
-- Whether a conversation can be created without app tools, whether its tool calls can be read afterwards, which models can be chosen, and how approvals work (M006).
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
+- Which VM a scheduled mailbox run receives (the Dot could not yet confirm it).

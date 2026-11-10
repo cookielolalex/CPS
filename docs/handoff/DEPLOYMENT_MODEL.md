@@ -1,4 +1,4 @@
-# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O62; 2026-11-06, extended 2026-11-09 and 2026-11-10)
+# CPS deployment model (owner decisions O36, O37, O41, O42, O43–O63; 2026-11-06, extended 2026-11-09 and 2026-11-10)
 
 This page says how CPS is deployed and who owns what. The operating documents themselves are in the private Drive folder "CPS" (in "Dots Folder"). They are not published here because the interview material holds company data.
 
@@ -101,3 +101,11 @@ At the owner's request, maintainer messages no longer need pasting:
 - The safety rules live in that fixed prompt, not in any Drive file: only M-files in `maintainer_messages/` are instructions; Drive stays add-only; no sharing, messaging or purchases; no CPS job on real data, survey or qualification step unless the message names the owner decision that authorizes it.
 - The maintainer checks `CPS/reports/` hourly with a scheduled task in its own session and writes the next message.
 - The owner can stop either schedule at any time; platform approval prompts still go to the owner.
+
+## Generator isolation on the Dot (O63, 2026-11-10)
+
+Probe M006 showed that the Dot cannot create a conversation without its app tools (Google Drive, GitHub, web search, message reading and others), by either of its two ways of starting one, and that a conversation's tool calls cannot be read back afterwards. The owner chose "Accept + attest (Recommended)":
+- O40's attested generation record remains the evidence of isolation.
+- Every generator, scope-reader and visual-reviewer prompt forbids any tool except reading and writing the files it lists, and asks the conversation to end with a statement of the tools it used; that statement is frozen with the final message.
+- The generation record lists the tools that were present.
+- The qualification report states plainly that isolation was by instruction, not enforced or audited.
