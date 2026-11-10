@@ -1026,6 +1026,8 @@ def run_session(cw, wk, answers=None, files_found=False, limit=300):
                                                                               size]]
                 wk['lookups'].append({'name': f[2], 'result': 'present' if cp else 'absent', 'copies': cp,
                                       'utc': CW.utc(t)})
+                if wk.get('committed'):                    # as the glue flags a step-6 re-check FIND
+                    wk['lookups'][-1]['post'] = True
             t += 5
         elif isinstance(st, PrintBlock) and st.downloads:              # copy 1 of the head (§X.8.4 step 3)
             he = names[st.downloads[0][2].rsplit('/', 1)[1].rsplit('.', 1)[0]]

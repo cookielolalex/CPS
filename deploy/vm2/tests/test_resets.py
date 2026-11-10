@@ -170,11 +170,15 @@ class Runner:
         return w
 
     def stop_hook(self, w):
-        """Everyday: stop at IDLE once the configured number of jobs is done."""
+        """Everyday: stop at IDLE once a job is frozen (a request lost to a reset before its INPUTS commit is asked
+        again: the user asks once more), or after a second request."""
         n = self.cfg.get('jobs')
 
         def h(dot, lines):
-            if n is not None and lines and 'state=IDLE' in lines[0] and len(w.everyday) >= n:
+            if n is None or not lines or 'state=IDLE' not in lines[0]:
+                return None
+            runs = (w.state() or {}).get('runs') or {}
+            if any(R['status'] == 'FROZEN' for R in runs.values()) or len(w.everyday) > n:
                 return 'stop'
             return None
         return h
@@ -191,9 +195,6 @@ class Runner:
         todo = [s for s in scs if s.get('target') is not None]
 
         def hook(dot, lines):
-            r = base_hook(dot, lines)
-            if r:
-                return r
             hit = [s for s in todo if s['name'] not in done and self.matches(w, s, lines, counts)]
             if hit:
                 snap = w.snapshot(snaps)
@@ -202,7 +203,7 @@ class Runner:
                     results.append(self.fork(w, s, snap, lines))
                 w.restore(snap)
                 w.dot.hook = hook
-            return None
+            return base_hook(dot, lines)
         t0 = time.time()
         try:
             w.dot.hook = hook
@@ -373,11 +374,12 @@ class Runner:
                     assert len(w.dot.stops_a) == 3, 'X.5.6: three UPLOAD_REFUSED stops, got %d' % len(w.dot.stops_a)
             elif w.series[0] == 'E':
                 assert lines and 'state=IDLE' in lines[0], 'everyday did not return to IDLE: %s' % lines[-1:]
+                self.common_checks(w, s)
                 self.everyday_checks(w, s)
             else:
                 assert lines and lines[-1] == 'DO: STOP FINAL HANDBACK B', 'not FINAL: %s' % lines[-1:]
+                self.common_checks(w, s)
                 self.final_checks(w, s)
-            self.common_checks(w, s)
         except AssertionError as e:
             res['ok'], res['error'] = False, str(e)[:800]
             res['trail'] = trail(w)
@@ -392,14 +394,16 @@ class Runner:
         """§X.6.4/§X.9: every `after=T` is a START's VM-clock utc minus the gate tolerance (fail-closed); §X.5.6: a
         refused upload is FOUND before any re-upload (one UPLOAD_REFUSED stop per refusal that never landed)."""
         tol = w.gates['p3_clock_tolerance_seconds']
-        st = w.state() or {}
+        st = w.state() or w.drive_state() or {}
         starts = {x['utc'] for R in (st.get('runs') or {}).values() for ro in R['roles'].values() for x in ro['starts']}
         starts |= {rb['start']['utc'] for R in (st.get('runs') or {}).values() for rb in R['rebases']
                    if rb.get('start')}
         for t, keys in w.dot.attests_after:
             assert self.F.N.utc_minus(t, -tol) in starts, 'X.9: after=%s is not a START utc - %d' % (t, tol)
         seen = {}
-        for boot, did, path in w.dot.downloads:   # X.8.4 step 5: a head part's download is reused by placement
+        for boot, did, path, sess in w.dot.downloads:  # X.8.4 step 5: a head part's download is reused by placement
+            if not sess:                               # (after the RESTORE, DROP_DOWNLOADS empties the inbox, §5.4)
+                continue
             assert (boot, did) not in seen or seen[(boot, did)] == path, \
                 'X.8.4: %s downloaded twice in one boot (%s, %s)' % (did, seen.get((boot, did)), path)
             seen[(boot, did)] = path
@@ -421,7 +425,7 @@ class Runner:
         af = w.all_frozen()
         assert af is not None, 'no ALL_FROZEN part on Drive'
         oc = af['outcomes']
-        st = w.state()
+        st = w.state() or w.drive_state()       # a restore that ends in STOP FINAL B builds no local STATE
         check_dispositions(oc, st)
         check_answers_reflected(w, s, oc, st)
         d = self.work / ('aud_' + self.cfg_name)
@@ -442,7 +446,7 @@ class Runner:
         for R in frozen:
             if 'AI_OUTPUT_LOST' in R['flags'] or 'RESTART_EXHAUSTED_BY_RESET' in R['flags'] \
                     or 'VISUAL_QA_FAILED_BY_RESET' in R['flags']:
-                assert R['frozen'] is not None and not R['frozen']['delivery_sent']
+                assert R['frozen'] is not None and not R['frozen'].get('delivery_sent')
         code, rep, out = w.audit(self.work / ('aud_' + self.cfg_name))
         anomalies = [a for a in (rep or {}).get('anomalies', []) if a.get('code') != 'AUD_NO_FINAL']
         assert rep is not None and not anomalies, 'O4: everyday audit: %s' % json.dumps(anomalies)[:500]
@@ -565,6 +569,9 @@ def check_answers_reflected(w, s, oc, st):
                                                                       and a.get('list_shows_none') == 'no'):
             want = 'VISUAL_QA_FAILED_BY_RESET' if role == 'V' else 'AI_OUTPUT_LOST'
             assert want in flags, 'O3: answer %s for %s needs flag %s (flags %s)' % (o, role, want, sorted(flags))
+        elif o == 'NO_CONVERSATION' and a.get('list_shows_none') is None:      # no list (or not asked): forced
+            want = 'VISUAL_QA_FAILED_BY_RESET' if role == 'V' else 'AI_OUTPUT_LOST'
+            assert want in flags, 'O3: NO_CONVERSATION without the list needs flag %s' % want
         elif o == 'NO_CONVERSATION':
             assert 'START_SUPERSEDED' in flags, 'O3: NO_CONVERSATION with the list showing none supersedes the START'
         elif o == 'NOTHING_WRITTEN':

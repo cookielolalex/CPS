@@ -461,7 +461,7 @@ def do_place(env, info):
     if info.get('job_dir'):
         png = info.get('png')
         parts = [jr / n for n in (png or {}).get('parts') or []]
-        ai = [(jr / N.entry_name(ser, a['seq']), a['output']) for a in info.get('ai') or []]
+        ai = [(jr / N.entry_name(ser, a['seq']), a['output'], (a.get('revision') or 1) > 1) for a in info.get('ai') or []]
         t = place.place_job(lay, info['job_dir'], jr / N.entry_name(ser, info['snapshot_seq']), png, parts, ai)
         placed.append({'what': 'job', 'path': info['job_dir'], 'tree_sha256': t})
         for tr in info.get('transcripts') or []:

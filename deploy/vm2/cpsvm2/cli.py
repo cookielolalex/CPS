@@ -394,7 +394,7 @@ def run_command(lay, lock, argv):
         foreground_check(env)
         cleanup_leftovers(lay)
         w = env.work
-        if w and w.get('phase') != 'DONE' and 'CONFIG' in w['done']:
+        if w and w.get('phase') != 'DONE' and 'CONFIG' in w['done'] and w.get('installed') != w['kit']['sha256']:
             m = kit_members(w['kit']['path'])               # the kit being taken in, before it is installed
             env.adopt(m['VM_HELPER_CONFIG.json'], m['RELEASE.json'])
         sticky_halt(env)
@@ -1184,8 +1184,13 @@ def reupload(env, st):
         w['setup_loop'] = savepoint.setup_loop(files)
         save_work(env)
     b = savepoint.setup_block(env, w['setup_loop'])
-    if b is None:
-        w['setup_loop'], w['reuploaded'] = None, True
+    if b is None:                       # the confirmed copies are this session's observations of those parts
+        now, ver = env.now(), dict(w.get('verified') or {})
+        for f in w['setup_loop']['files']:
+            w['lookups'].append({'name': f['name'], 'result': 'present', 'copies': f['copies'], 'utc': now})
+            for c in f['copies']:
+                ver[c[0]] = [f['sha256'], f['bytes']]
+        w['setup_loop'], w['reuploaded'], w['verified'] = None, True, ver
         save_work(env)
         return
     save_work(env)
@@ -1470,7 +1475,10 @@ def start_chain(env, info):
         R = env.state['runs'][info['run']]
         got = inputs_of(env, R['case'])
         if got is None or N.sha(N.cjson(got)) != R['inputs']['sha256']:
-            refuse(env, 'INPUTS_CHANGED')
+            # nothing runs; the refusal is a fresh block of this head: this `go` may have finished a commit, so the
+            # last block (BLOCK.json) can belong to the previous head and must not be reprinted (§2.5)
+            lines = render(env, 'WORK', PrintBlock('WORK', do=('RUN', {})), {'command': 'go', 'kind': 'plan'})
+            bare(lines[:1] + ['REFUSED INPUTS_CHANGED'] + lines[1:], 4)
     if env.command != 'go':
         run_go(env)
     run_stage(env, 'chain', info)

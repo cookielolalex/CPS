@@ -439,6 +439,9 @@ class FakeDot:
                 self.w.drive.approve(self.policy['approve'])
                 code, lines = self.cmd('go')
                 continue
+            if code == 4 and len(lines) > 1 and lines[1] == 'REFUSED INPUTS_CHANGED' and self.w.restore_inputs():
+                code, lines = self.cmd('go')            # the Dot puts the user's files back after a reset (§11.4)
+                continue
             if code not in (0,):
                 return code, lines
             nxt = self.execute(lines)
@@ -465,7 +468,7 @@ class FakeDot:
             elif t[0] == 'DOWNLOAD':
                 Path(t[5]).parent.mkdir(parents=True, exist_ok=True)
                 Path(t[5]).write_bytes(d.download(t[3]))
-                self.downloads.append((self.w.boot, t[3], t[5]))
+                self.downloads.append((self.w.boot, t[3], t[5], self.w.in_session()))
         do = lines[-1][len('DO: '):]
         t = shlex.split(do)
         act = t[0]
@@ -564,7 +567,8 @@ class FakeDot:
     def continue_v(self, conv):
         self.live['V'] = True
         time.sleep(1.05)
-        jd = Path(self.opened['V']['folder']).parent
+        s = self.w.state()                      # after a reset the Dot finds the folder from the job it runs
+        jd = Path(self.opened['V']['folder']).parent if 'V' in self.opened else Path(s['runs'][s['current']]['job_dir'])
         write_review(jd, conv, self.policy['v_cont'])
 
     # ---- answers
@@ -769,7 +773,7 @@ class World:
         if plant_pass:
             self.drive.plant(N.FOLDERS['setup'], 'FINGERPRINT_PASS_%s.json' % self.fp, json.dumps(pdoc).encode())
         self.dot = FakeDot(self)
-        self.everyday, self.kinds = [], {}
+        self.everyday, self.kinds, self.inputs_saved = [], {}, {}
 
     # ---- environment
     def env(self):
@@ -823,6 +827,13 @@ class World:
         """A reset ends every process of the boot. Stages run in-process and runner commands in the foreground, so
         nothing of this boot outlives the command that the seam interrupted; only zombies are reaped."""
         reap()
+
+    def in_session(self):
+        """True while the session machine (§8) of this boot has not committed its RESTORE or GENESIS."""
+        try:
+            return json.loads((self.base / 'outbox/v2/RESTORE_WORK.json').read_text()).get('committed') is None
+        except (OSError, ValueError):
+            return True
 
     def jobs_tree(self):
         """(path, size, sha256) of every file under BASE/qual and BASE/jobs (the job folders a dead stage leaves)."""
@@ -958,9 +969,36 @@ class World:
         self.everyday.append(case)
         d = self.base / 'everyday_inputs' / case
         d.mkdir(parents=True, exist_ok=True)
-        for k, v in self.job_members(case, 'small', d).items():
+        self.inputs_saved[case] = self.job_members(case, 'small', d)
+        for k, v in self.inputs_saved[case].items():
             (d / k).write_bytes(v)
         return case
+
+    def restore_inputs(self):
+        """The Dot still has the user's three files (in its chat) and puts them back into everyday_inputs/<case>/
+        after a reset; False when there is nothing to put back or they are already there."""
+        put = False
+        for case, mem in self.inputs_saved.items():
+            d = self.base / 'everyday_inputs' / case
+            for k, v in mem.items():
+                if not (d / k).is_file():
+                    d.mkdir(parents=True, exist_ok=True)
+                    (d / k).write_bytes(v)
+                    put = True
+        return put
+
+    def drive_state(self):
+        """The fold state of the newest entry on FakeDrive (the test's side), or None."""
+        from cpsvm2.vio import savepoint
+        names = self.head_entries()
+        if not names:
+            return None
+        p = self.fixed / ('.state_' + names[-1])
+        p.write_bytes(self.drive.bytes_of(N.series_folder(self.series), names[-1]))
+        try:
+            return savepoint.read_entry(p)['state']
+        finally:
+            os.unlink(p)
 
     def make_copy(self, standard):
         """The Dot's personal copy (DEPLOYMENT_MODEL layout) and its log."""
@@ -1005,6 +1043,7 @@ class World:
         d = self.dot
         return {'dir': dest, 'drive': copy.deepcopy(self.drive), 'offset': self.clock.offset, 'nboot': self.nboot,
                 'boot': self.boot, 'everyday': list(self.everyday), 'kinds': dict(self.kinds),
+                'inputs_saved': dict(self.inputs_saved),
                 'dot': copy.deepcopy({k: getattr(d, k) for k in DOT_FIELDS})}
 
     def restore(self, snap):
@@ -1014,6 +1053,7 @@ class World:
         self.drive = copy.deepcopy(snap['drive'])
         self.nboot, self.boot, self.everyday = snap['nboot'], snap['boot'], list(snap['everyday'])
         self.kinds = dict(snap['kinds'])
+        self.inputs_saved = dict(snap['inputs_saved'])
         self.boot_path.write_text(self.boot + '\n')
         for k, v in copy.deepcopy(snap['dot']).items():
             setattr(self.dot, k, v)

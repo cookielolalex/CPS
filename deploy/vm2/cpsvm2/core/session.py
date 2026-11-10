@@ -116,12 +116,8 @@ def head_search(series, hint, lookups, gates, now, listing=None):
 
 def pre_commit(w, gates):
     """The lookups of the head search: those made before the RESTORE commit. The step-6 re-check's own FINDs (flagged
-    `post` by the glue, or made w_abs after the commit) see the RESTORE at N+1 and must not move the head."""
-    c = w.get('committed')
-    if not c:
-        return w['lookups']
-    t = utc_epoch(c['utc']) + F.w_abs(gates)
-    return [x for x in w['lookups'] if not x.get('post') and utc_epoch(x['utc']) < t]
+    `post` by the glue) see the RESTORE at N+1 and must not move the head."""
+    return [x for x in w['lookups'] if not x.get('post')]
 
 
 def present_copies(lookups, name):
@@ -260,7 +256,8 @@ def place_plan(state, run, rebase=False):
     plan = {'ledger': led, 'run': run, 'files': state['files']}
     if R is not None:
         plan.update(job_dir=R['job_dir'], snapshot_seq=R['snapshot']['seq'] if R['snapshot'] else None, png=R['png'])
-        plan['ai'] = [{'role': k, 'seq': r['archives'][-1]['seq'], 'output': F.latest(r)['output']}
+        plan['ai'] = [{'role': k, 'seq': r['archives'][-1]['seq'], 'output': F.latest(r)['output'],
+                       'revision': r['archives'][-1]['revision']}
                       for k, r in sorted(R['roles'].items()) if r['status'] == 'ARCHIVED' and not r['consumed']]
         plan['transcripts'] = [{'role': k, 'seq': r['archives'][-1]['seq']} for k, r in sorted(R['roles'].items())
                                if r['role'] == 'G' and r['status'] == 'ARCHIVED' and not r['consumed']]

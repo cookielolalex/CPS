@@ -96,8 +96,11 @@ def place_ledger(lay, entry_path, want_sha256):
 
 def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
     """Steps 2-5: the job snapshot of `snap_entry` (a local tgz path), the PNG stream from its parts (concatenated in
-    order; sha256 == png['whole_sha256']), and the ai/ members of AI entries [(entry path, output dir)] into their
-    output folders. A strict walk afterwards must equal snapshot + PNGs + AI outputs exactly. Returns the tree sha."""
+    order; sha256 == png['whole_sha256']), and the ai/ members of AI entries [(entry path, output dir, replace)] into
+    their output folders. The folder must be empty in the snapshot, except for a V revision >= 2 (replace): the
+    REVIEW_INCOMPLETE snapshot holds revision 1 there, and the AI entry's tree is the whole folder after the
+    continuation, so it takes the folder's place (§7.8, §8.5.1 step 4). A strict walk afterwards must equal snapshot +
+    PNGs + AI outputs exactly. Returns the tree sha."""
     jd = Path(job_dir)
     if os.path.lexists(jd):
         stop('PLACE_TARGET_NOT_EMPTY', 'the job folder exists')
@@ -105,6 +108,8 @@ def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
     rows = [m for m in man['payload']['members'] if m[0] == 'job' or m[0].startswith('job/')]
     if not rows or rows[0][0] != 'job':
         stop('PLACE_SHA_MISMATCH', 'the entry holds no job snapshot')
+    drop = tuple(os.path.relpath(x[1], jd).replace(os.sep, '/') + '/' for x in ai if x[2])
+    rows = [r for r in rows if not r[0][4:].startswith(drop)] if drop else rows
     expect = {r[0][4:]: [r[1], r[2], r[3], r[4]] for r in rows[1:]}
     stg = Staging(jd).begin(rows[0][2])
     a = Archive(snap_entry, ('MANIFEST.json', 'job', 'ledger', 'ai', 'transcript', 'attest', 'delivery', 'final'))
@@ -145,7 +150,7 @@ def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
                 pa.close()
         finally:
             os.unlink(stream)
-    for ent, out_dir in ai:
+    for ent, out_dir, _ in ai:
         rel0 = os.path.relpath(out_dir, jd).replace(os.sep, '/')
         if any(k.startswith(rel0 + '/') for k in expect):
             stop('PLACE_TARGET_NOT_EMPTY', 'the output folder is not empty in the snapshot')

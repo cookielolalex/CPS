@@ -288,7 +288,7 @@ def on_found(env, pend, got, check_id, refused=(), known=None):
 def on_verify(env, pend):
     """§5.5: compare every downloaded copy with the local file. ('refused', DOWNLOAD_MISSING) | ('stop', FORK) |
     ('ok', None); downloads are deleted after the comparison."""
-    by = {f['name']: f for f in _files(pend)}
+    by = {f['name']: f for f in _files(pend) if 'name' in f}         # a setup-file loop has no entry
     for v in pend['verify']:
         if not os.path.isfile(v['path']):
             return 'refused', 'DOWNLOAD_MISSING'
