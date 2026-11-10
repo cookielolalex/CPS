@@ -1,0 +1,733 @@
+{
+ "schema": "cps.vm-helper-admission.v1",
+ "reviewed_utc": "2026-11-10",
+ "status": "NOT_ADMITTED",
+ "subject": "CPS VM-reset helper candidate cps-vm-helper.v2 (deploy/vm2/*, 47 files) at commit 1d318019485367448e19165b7be25c956f87792e",
+ "decision": "DO_NOT_ADMIT",
+ "scopes": "Decision for cps-vm-helper.v2 at 1d318019485367448e19165b7be25c956f87792e. It covers all three scopes the candidate serves: qualification (Q series, including the reserved-case runs), drill (D series, which is a precondition for qualification), and everyday (E series, DELIVER). Not admitted for any of them. Everyday cannot be admitted separately: it has its own confirmed majors (OPX-06, S-01, the missing local clear) and shares the session and commit machinery with the other scopes. Runner v4 (deploy/run/cps_job.py, sha256 7505e98a...) was confirmed unchanged by the integrity and maint reviewers. Nothing in this decision changes it or its admission. The v1 rejection (deploy/vm/ADMISSION_VM_HELPER_V1.json) stays in force. No helper is admitted for operator use.",
+ "owner_decisions": [
+  "O43-O52 (reset-proof design)",
+  "O53 (maintainer Drive access)",
+  "O54-O61 (helper v2 rules)",
+  "O62 (mailbox)",
+  "O63 (generator isolation by instruction, attested)"
+ ],
+ "reviews": [
+  "independent admission review 2: five lenses (integrity, safety, operator executability, tests with fresh mutants, maintainer tools/kit/O63), one adversarial verifier per lens, then an admission decision; reviewers did not build the code and worked in fresh clones on invented data only"
+ ],
+ "build_history": "design (3 designs, 2 judges, synthesis; owner Q1-Q8 = O54-O61) -> spec r2 (46 runner claims) -> build -> probe delta (M001-M006) -> integration: 412/412 tests, 60/60 builder mutants, lints clean",
+ "tests": {
+  "review_full_suite_at_1d31801": "412/412 passed from a fresh clone, --jobs 3, 2961.7 s (resets 197 in 2830.8 s)",
+  "reviewer_mutants": "51+ fresh mutants (N01-N52); 11 survive the whole suite (N04, N05, N06, N07, N18, N37, N40, N42, N44, N50, N52): 196/196 non-reset tests and 197/197 reset scenarios pass with all 11 applied",
+  "builder_mutant_claim": "60/60 claimed; not reproducible at HEAD (mutants.py copytree without dirs_exist_ok; reset scenarios would kill for SESSION_REPO_DIRTY)"
+ },
+ "verdict_counts": {
+  "CONFIRMED:major": 15,
+  "CONFIRMED:minor": 29,
+  "PLAUSIBLE:minor": 2,
+  "CONFIRMED:critical": 1
+ },
+ "blocking": [
+  {
+   "id": "MAINT-1",
+   "severity": "critical",
+   "title": "assemble places runs at unvalidated absolute job_dir paths (default --root /); neither the fold nor the audit ties job_dir to the genesis layout",
+   "why_blocking": "A confirmed critical (unsafe extraction). It was reproduced: job_dir '/root/.config/git' gives a clean audit and a clean assemble, and the files are written there. In assemble.py, target() (lines 81-88 at HEAD) checks only that the path is absolute, normalized and in the allowed character set. The --root default is '/' (line 219). fold.py:415/434 copies job_dir unchecked. Downloaded journal content can write onto the maintainer's machine after the mandatory pre-gate audit reports clean."
+  },
+  {
+   "id": "INT-R2-01",
+   "severity": "major",
+   "title": "An upload refused for approval, then a VM reset, then a late approval leaves two different copies of one seq. The audit is unclean and score_check refuses with no override",
+   "why_blocking": "A confirmed major on the integrity rules (evidence and scoring). The only record of the pending approval (PENDING.json) is on the tmpfs. The RESTORE reuses the seq. The hint path skips RECHECK (session.py, `hs['via'] != 'hint'`). FakeDrive.approve is never exercised by any test. The result is fail-closed, but a whole Q1 series, reserved outputs included, cannot be scored, and no defined recovery exists. Delta X.5.6.6's premise is false. Whether the platform completes an approved upload after the VM is gone has not been measured."
+  },
+  {
+   "id": "LOCAL-CLEAR (INT-R2-02 = S-02 = OPX-03)",
+   "severity": "major",
+   "title": "The spec §13.5 same-boot clear of a local sticky HALT is not built, and a same-boot cache invalidation always ends in PLACE_TARGET_NOT_EMPTY",
+   "why_blocking": "Confirmed by three reviewers independently. sticky_halt (cli.py:441-448) runs before every dispatch, and its own docstring says the clear 'is not built'. Nothing writes cleared_<utc14> or sets cleared_local. session_start.sh does not handle HALT.json. Every local sticky code then strands the series until a VM reset at an unknown time or an out-of-procedure rm. Those codes include FORK from a one-digit size slip, SETUP_FAILED, FOREGROUND_DIED, UPLOAD_FAILED and DISK_FULL. The required O59 recovery path is missing, and the gap is not disclosed."
+  },
+  {
+   "id": "MAINT-3",
+   "severity": "major",
+   "title": "The audit does not verify O59 CLEAR authorization",
+   "why_blocking": "A confirmed major on O59. A CLEAR whose kit 'clear' names another halt, is null, or whose kit is unchanged (from == to) gives 'audit clean True' (probes p_clear and p_clear2). Audit.kit_change (audit.py:203-223) never compares the to-config's clear with {series, halt seq, code}. Only the Dot side checks it, so the mandatory pre-gate audit cannot detect an unauthorized resume past a HALT."
+  },
+  {
+   "id": "T1",
+   "severity": "major",
+   "title": "The fold guard that refuses NOTHING_WRITTEN/REPLACE for a CONTINUED visual reviewer has no test, and the test named for it (test_f1) has a loop that cannot fail",
+   "why_blocking": "A confirmed major on the no-hidden-retry rule and O61. Mutant N06 survives all 196 non-reset tests and all 197 reset scenarios, and folds a second visual-review conversation as T45 REPLACE. On a regression, or under audit, the fold is the only guard."
+  },
+  {
+   "id": "T2",
+   "severity": "major",
+   "title": "The fold rule that reader B waits while A still owes its rule-3 restart is untested",
+   "why_blocking": "A confirmed major on A-before-B. Mutant N07 survives the whole suite and folds B as T10 while A is FROZEN and restart-eligible (HEAD gives T14). The fold is also the audit verifier."
+  },
+  {
+   "id": "T3",
+   "severity": "major",
+   "title": "The step-6 RECHECK detection of a second writer at N+2/N+3 is untested",
+   "why_blocking": "A confirmed major on journal integrity and O54. Mutant N18 survives the whole suite and returns DONE on a forked journal where HEAD stops FORK. The existing RECHECK FORK test likely FORKs through stale absent-N+1 lookups rather than through the md5 check it means to test."
+  },
+  {
+   "id": "T4",
+   "severity": "major",
+   "title": "The boot binding of AI rows is partly untested: g38 continued_boot, and the START-boot half of g37",
+   "why_blocking": "A confirmed major on O46. Mutant N05 archives a CONTINUED V output from a later boot as valid (T38), where O46 requires it to be resolved as lost (HEAD gives T39). Mutant N04 matters for audited chains. Both survive the whole suite."
+  },
+  {
+   "id": "TST-MUT (verified at decision time)",
+   "severity": "major",
+   "title": "The mutation harness fails at HEAD, so the builders' mutant results cannot be reproduced",
+   "why_blocking": "I confirmed this by reading the code: deploy/vm2/tests/mutants.py:276 calls shutil.copytree(VM2, dest/deploy/vm2) without dirs_exist_ok. deploy/vm2 is tracked at HEAD, so `--mutants` raises FileExistsError (verify_tests reproduced it with G29). Fixing that alone is not enough: a mutated, uncommitted tree makes every reset scenario stop SESSION_REPO_DIRTY, so mutants killed only by reset scenarios (G29, G30, G31, and partly G1 and G16) would be 'killed' for the wrong reason. The claimed 60/60 mutant kill rate, one basis of the test claims on the critical paths, is therefore unverified."
+  },
+  {
+   "id": "OPX-04",
+   "severity": "major",
+   "title": "The README gives no rule for choosing NOTHING_WRITTEN / WRITTEN / UNSURE / NO_CONVERSATION and does not say that transcript is always not_available",
+   "why_blocking": "A confirmed major on the no-hidden-retry and rule-3 path. Delta §X.9 requires the text, and it is missing. NOTHING_WRITTEN with not_available gives INTERRUPT, which is a second generation (T44). An optimistic LLM attestation with no documented basis or fail-closed default turns a lost output into a restart. The later OWNER_CHECK is the only backstop."
+  },
+  {
+   "id": "MAINT-2",
+   "severity": "major",
+   "title": "O63 is not implemented, and the candidate neither records nor handles the gap",
+   "why_blocking": "Confirmed. O63 (owner decision of 2026-11-10, recorded before the candidate in d00a309) is not addressed anywhere in deploy/vm2, the spec or the delta. The README allows tools=none, which M006 shows is false. S and V attest no tools. generation_record never writes `notes`. The qualification report has no isolation statement. Qualification under this candidate would run in breach of a binding owner decision."
+  },
+  {
+   "id": "S-01",
+   "severity": "major",
+   "title": "The SETUP_FAILED path crashes with a TypeError on a fresh VM with no kit config: the setup log is never uploaded and no block is printed",
+   "why_blocking": "Confirmed (savepoint.py:207 through _Env1 using env.cfg = None). Failure evidence is not uploaded on the normal post-reset path. The unit test passes only because its fixture installs a runtime config."
+  },
+  {
+   "id": "OPX-02",
+   "severity": "major",
+   "title": "A mistyped, pattern-valid Drive id in `found` gives an endless DOWNLOAD_MISSING loop with no exit",
+   "why_blocking": "Confirmed. `found` becomes COMMAND_NOT_EXPECTED, and the README's advice cannot help. This is a realistic slip over about 1,000 id transcriptions in a qualification, and it strands the series until a reset."
+  },
+  {
+   "id": "OPX-05",
+   "severity": "major",
+   "title": "final_message must be verbatim, yet any {...} or <...> span, matched across newlines, or more than 8 KB is refused, with no escape and no README text",
+   "why_blocking": "Confirmed. The generator template asks for policy_checks and checker status, so braces and angle brackets are natural there. The Dot must either falsify a 'verbatim' attestation or loop. Any O63 tools-used line would face the same rejection."
+  },
+  {
+   "id": "OPX-06",
+   "severity": "major",
+   "title": "The everyday INPUTS_CHANGED refusal after a reset loops on `RUN go` forever, and the README gives no action",
+   "why_blocking": "Confirmed (cli.py:1474-1481). The §13.1 action ('restore the inputs or tell the owner') is missing from the README, and the refusal has no bound. This blocks the everyday scope."
+  }
+ ],
+ "conditions_before_release": [
+  "A new candidate (v2.1 or similar) is built that fixes every blocking item. It then gets a fresh independent admission review at its own commit, covering at least core/ in full, the fixed paths and the new tests. This decision admits nothing conditionally.",
+  "MAINT-1: job_dir is checked against genesis.layout in the fold (new-run guard) and in the audit, and assemble refuses any path outside the layout. --root becomes required, must be an empty dedicated directory, and no longer defaults to '/'. A test plants a hostile job_dir and expects a refusal from the fold, the audit and assemble.",
+  "LOCAL-CLEAR: the §13.5 local clear is built and tested in the same boot for SETUP_FAILED, FOREGROUND_DIED and FORK: a config-only kit with clear={series,seq,code} moves HALT.json to outbox/v2/cleared_<utc14>/, and the next commit records cleared_local. A same-boot restore accepts existing targets whose strict walk equals the placement plan, or moves them aside, instead of PLACE_TARGET_NOT_EMPTY. HALT.json records the real head (OPX-07).",
+  "MAINT-3 and MAINT-4: Audit.kit_change re-derives the O59 CLEAR authorization (from != to, and the to-config clear equals the halt) and the gates and series rules. Tests use real kit zips.",
+  "INT-R2-01: a pending upload approval survives a reset: the Dot records it in its notes, the restore asks for it as an attested answer, and the seq stays reserved until the owner confirms the approval was denied or completed. Alternatively, a defined audit and score_check treatment is specified and approved. The fix includes a test_resets scenario that calls FakeDrive.approve after a reset. The platform's actual late-landing behaviour is measured on invented data on the operator VM.",
+  "Tests T1-T4 are written as direct fold and session tests, and the vacuous test_f1 loop is replaced. The mutation harness is fixed: copytree with dirs_exist_ok into a clean committed tree, each mutant committed before the reset scenarios run. --only with an unknown name exits 2 (T11). The delta's real-subprocess SIGKILL test (test_foreground_died_same_boot_stops) is added (S-12). The full suite and the full mutant run are then reproduced by an independent reviewer at the release commit.",
+  "Operator path fixes: OPX-02 (re-FIND or a fresh `found` after DOWNLOAD_MISSING), OPX-05 (store final_message as data and stop rejecting characters), OPX-06 (README action plus a bounded refusal), S-01 (_Env1 uses upload_cfg), OPX-04 (README decision rule for each outcome value, fail-closed default UNSURE, transcript=not_available stated).",
+  "O63 is implemented as set out in o63_implementation. The owner makes the prompt-clause decision described there, recorded as a dated owner decision, before any qualification run.",
+  "Measured stage times on the operator VM (the foreground hold of 1,200 s against the longest stage). A reset drill on invented data on the operator VM that includes a refused-upload-then-reset case and a same-boot local clear. A restated operator budget in total tool calls per run and per qualification (OPX-10).",
+  "score_check gets its own admission before any scoring. Its known gaps are fixed or accepted by the owner: MAINT-5 (record and require verify_frozen) and MAINT-8 (re-derive or pin the plan sha).",
+  "Owner approval of the release kit and of the operator README. Runner v4 stays byte-identical (sha256 7505e98a...) unless the owner chooses runner re-admission under O63 option (b)."
+ ],
+ "non_blocking": [
+  "INT-R2-03 (minor): the conversation id the Dot attests at restore is asked for and then discarded. Record it in the RESTORE resolution and the O52 sheet, and pass it as `interrupt --conversation-id`.",
+  "INT-R2-04 (minor): the fold does not require `consumed` on a consumer STAGE (I11 is enforced only by the worker). Add it to g20/g24, with a test and a mutant.",
+  "S-03 (minor): a truncated download-back is classified as a sticky FORK and the bytes are deleted. The spec prescribes this, but the build should refuse with DOWNLOAD_INCOMPLETE when the size differs from the attested FIND size, and keep the bytes of a real fork.",
+  "S-04 (minor): pending STATE.post actions are never resumed, and the next commit drops them.",
+  "S-05 (minor): PNG parts are not checked against the recorded png whole_sha256 before PENDING is written.",
+  "S-06 (minor): a profile folder containing '{' or '}' passes validation but can never be printed.",
+  "S-07 (minor): the helper-tree and runner pins do not cover the __pycache__ bytecode that actually runs under -B. Use a private pycache prefix and load cps_job.py from the hashed bytes.",
+  "S-08 (minor): session_start.sh writes the setup-ok marker before it checks that HEAD equals --commit.",
+  "S-09 (plausible, minor): the inbox/verify DOWNLOAD target folder is never created, and FakeDot hides this.",
+  "S-10 (minor, same root as OPX-02): a mistyped id leaves a VERIFY block with no way out.",
+  "S-11 (minor): a raw OSError outside a stage prints no block. Map it to DISK_FULL or WRITE_FAILED in run_command.",
+  "S-12 (minor, arguably major): the real-subprocess SIGKILL test required by delta §X.14 is missing; it is listed as a release condition.",
+  "OPX-01 (minor): the stale RESTORE_WORK alias in session_step prints END_CONVERSATION twice after a reset, and the C10 fallback commits a second entry under one seq.",
+  "OPX-07 (minor): after a same-boot stage death the STOP prints head=000000 kit=none and HALT.json records head_seq 0.",
+  "OPX-08 (minor): `--kit none` from the last CPSV line is a usage error in session_start.sh, and the README gives no route.",
+  "OPX-09 (minor): six README wording mismatches with the code (run order, STOP IDLE, file name in HANDBACK A, TOOLS pattern, rounding, NO_BLOCK case).",
+  "OPX-10 (plausible, minor): the time budget counts only Drive calls. The real operator load is about 50 tool calls per run and about 2,400 per qualification.",
+  "T5-T10 (minor): untested guards: g11 interrupts, finish() pending-entry check, started_utc > ended_utc, session DOWNLOAD_MISSING, 0-byte transcript, S5 changeable keys. T11 (minor): --only with an unknown name passes with 0 tests. Also test_session_rebase_and_recheck_fork probably FORKs for the wrong reason.",
+  "MAINT-5 (minor): score_check accepts an assembly built without --verify-frozen. MAINT-8 (minor): score_check check trusts SCORE_PLAN.json bytes without re-deriving them. Both belong to the score_check admission.",
+  "MAINT-6 (minor): MK-1 and MK-2 are still open in deploy/make_kit.py although the spec lists their fixes, and the MK-1 test exercises a different slip.",
+  "MAINT-7 (minor): a D series shares CPS/reports with reports, so a complete listing is refused (folder rows) or unclean. Give drills their own folder.",
+  "MAINT-9 (minor): rebase-review owner windows get no clock tolerance.",
+  "MAINT-10 (minor): GENESIS jobs are never compared with the kit's JOBS.json; probe_p5 reports FAIL when --seconds is under --min-gap.",
+  "Line-number drift in some review findings (assemble.py at HEAD has 243 lines) does not affect their substance."
+ ],
+ "size_and_complexity": "Too large and too intricate for what it has to do, and brittle for an LLM operator off the happy path. The operator surface is small: three commands (go, found, answer) plus the bootstrap. The happy path matches the README and the call budget (15+3p Drive calls per normal run). Behind it are about 8,400 lines: a fold table of roughly 60 guarded transitions, the session and head-search machinery, savepoints, the worker, maint and kit intake, plus 412 tests that take 32-50 minutes. Three facts from this review show what that size costs. First, the reviewers' own mutants found four critical-rule guards (O46, O61, A-before-B, the RECHECK fork) with no killing test, and the mutation harness that was meant to prove otherwise does not run at HEAD. Second, a spec-mandated recovery path (§13.5) was simply not built, and the only disclosure is a docstring. Third, an alias bug in session glue produced a self-made duplicate seq. For the operator, each run costs about 50 tool calls, about 2,400 over a qualification, with about 1,000 exact id:size transcriptions. Realistic slips (one id character, one size digit, a '<' in a final message, missing inputs after a reset) currently end in an unbounded loop or a sticky STOP that only a VM reset clears. An LLM can carry out one run; it cannot be expected to get through 72 runs unattended under this design. The next candidate should shrink rather than grow: re-ask instead of STOP or loop on every transcription slip, have one clear mechanism for all local stops, defer the everyday (E) scope out of the first release if that removes code, and keep the fold as the single verifier with a direct test for every guard. Every fix in the conditions should come with a test that a mutant can kill.",
+ "o63_implementation": "O63 has four parts: the prompt prohibition, a tools-used statement frozen with the final message, the tools present in the generation record, and an isolation statement in the qualification report. Implement it in two layers.\n\n(1) Helper layer, in the next candidate, with no runner change:\n- G: the `tools` answer must be the complete list of tools the new conversation had, as shown by the platform. A gate fixed from M006 (tools always present) makes the helper refuse `none`. The TOOLS pattern is widened, or a documented normalization is added, so that real platform tool names (capitals, spaces) can be recorded (OPX-09d). worker.generation_record writes this list to tools_enabled.\n- worker.generation_record writes the optional runner field `notes` (GEN_OPTIONAL at cps_job.py:1840; the record is frozen as raw bytes) with one fixed sentence pinned in the helper source: 'O63: generator isolation by instruction only, not enforced or audited; tools present are listed in tools_enabled; tools-used statement: <in final_message | per owner decision Oxx>'.\n- S and V: the helper's AI entries carry an attested tools_present field, folded and audited and shown on the O52 sheet. The S final message and the V reviewer's closing message are archived verbatim in the AI entry, so that any tools-used statement is frozen with them.\n- final_message is stored as data, without the brace and angle-bracket rejection (OPX-05), so that a tools-used line can never be refused. The README states that the Dot never sends a follow-up message to obtain a statement, since single_user_message and the pinned prompt_sha256 must stay true, and never edits the final message.\n- score_check, or the qualification report it feeds, emits the fixed O63 isolation sentence and refuses to build a plan for a series whose generation records or AI entries lack the tools-present attestation.\n\n(2) Prompt layer. The helper cannot add the prompt clauses. Runner v4 pins the prompt bytes (GENERATION_RECORD_PROMPT_MISMATCH at cps_job.py:1907-1908, --reader-prompt-sha256, RUNNER_FILES pins VISUAL_REVIEW_PROMPT_TEMPLATE.md), and RUN_JOB_COMMANDS.md forbids follow-up messages. The frozen 046g generator and scope templates end with 'Your final message reports only: ...'; the visual template forbids only other paths, the web and other agents. None of them names the Drive, GitHub, message, calendar or contacts tools. The owner must therefore make one dated decision before any qualification run, choosing between:\n(a) A fixed, owner-approved O63 suffix added to the generator, scope-reader and visual-review templates. It forbids by name every tool except reading and writing the listed files (Drive, GitHub, web, messages, calendar, contacts, any connector), and it requires a last final-message line 'Tools used: <comma list>' in plain characters. The suffix is also added to each 'reports only' list, so the prompt does not contradict itself. This needs an owner ruling on whether a harness-template change is a new candidate under O42. It also needs runner re-admission (v5) for the visual template's pin, with v4 kept as the frozen record.\n(b) An amendment of O63 that accepts the frozen prompts' existing restrictions as the prohibition, and replaces the in-message tools-used statement with the helper's attested tools-present lists plus the fixed isolation statement.\n\nMy recommendation is (a), because O63 as decided requires the prompts themselves to name and forbid the tools, and isolation by instruction is only as good as the instruction. Choose (b) only if the owner rules that (a) reopens the 046g candidate under O42. In either case the qualification report states that isolation was by instruction, not enforced or audited.",
+ "rationale": "Two of the admission rules each block this candidate on their own. MAINT-1 is a confirmed critical (unsafe extraction): a journal-supplied job_dir is placed anywhere on the maintainer's machine after a clean audit. There are also several confirmed majors on integrity rules:\n- MAINT-3: the O59 CLEAR authorization is not audited.\n- The missing §13.5 local clear (the O59 recovery path).\n- INT-R2-01: evidence and scoring are stranded by a duplicate seq after a reset during a pending approval.\n- T1, T2, T3 and T4: the guards for O61 and no hidden retry, A-before-B, the RECHECK fork and O46 boot binding have no killing test.\n- OPX-04: the attestation that decides a rule-3 restart has no documented basis.\n\nBeyond the rules, the builders' mutant evidence cannot be reproduced at HEAD. I confirmed that mutants.py:276 copies without dirs_exist_ok, and the reset-killed mutants would be killed by SESSION_REPO_DIRTY rather than by the mutation. O63, a binding owner decision made before this candidate, is not addressed at all. ADMIT_WITH_CONDITIONS is not available, because many non-minor items remain in the code: S-01, OPX-02, OPX-05, OPX-06, MAINT-2 and the missing harness.\n\nThe candidate does have real strengths, and these should be kept:\n- The hard properties are mostly closed by mechanism and fail closed: B before A frozen, one rule-3 restart, O46 FREEZE_LOST, O55 OWNER_CHECK, O54 rebase binding, rule-V download-back, no reveal before commit, and a single outcomes() function that the audit re-folds independently.\n- Every v1 finding maps to a concrete mechanism.\n- The REUSE_MANIFEST hashes were verified independently by three reviewers.\n- Runner v4 is unchanged.\n- No path exposes a reserved answer.\n- The full suite passed 412/412.\n\nSo the defects are concentrated in recovery, operator-slip handling, audit completeness and test strength, not in the core fold logic. That makes a focused v2.1 realistic, but it still needs a fresh independent admission review at its own commit.",
+ "findings": [
+  {
+   "lens": "integrity",
+   "id": "INT-R2-01",
+   "reported_severity": "critical",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "A refused upload whose approval is still pending at a reset lands later with the old bytes. The RESTORE has reused that seq, so the series gets two different copies of one entry: the audit is unclean and scoring is blocked.",
+   "where": "deploy/vm2/cpsvm2/core/session.py head_search/_status (lines 52-67, 70-114) and _commit (530-556); deploy/vm2/cpsvm2/vio/savepoint.py on_found refused branch (271-273). The claim it contradicts is in docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md:110 (X.5.6.6). Consequence: deploy/vm2/cpsvm2/maint/audit.py names() AUD_DUPLICATE_SEQ, refold() AUD_UNFOLDED_ENTRY, and score_check.py:50 AUDIT_NOT_CLEAN.",
+   "fix_hint": "Make 'an approval is pending for name X' survive a reset. For example, the Dot records it in its notes and the restore asks for it (an attested answer), and the helper then refuses to reuse that seq until the owner confirms the approval was denied or completed. Alternatively, define the audit and score_check treatment of a late original whose seq was superseded by a confirmed RESTORE. Add a reset-while-refused-pending scenario to test_resets.",
+   "verifier_evidence": "I re-ran the reviewer's probe (copied to verify_integrity/probes/p_refuse_reset.py) in a fresh clone at 1d31801, using fakes.World D1 and the real runner v4. It reproduced: ARMED refuse CPSJ_D1_000005.tgz -> HANDBACK A -> reset -> the restore commits a RESTORE as seq 5 -> FakeDrive.approve() lands the captured AI bytes. The run ends at `DO: STOP FINAL HANDBACK B`. Drive then holds two copies of CPSJ_D1_000005.tgz (3406 and 9009 bytes, different sha), and the audit gives `AUDIT UNCLEAN anomalies=2` with AUD_DUPLICATE_SEQ and AUD_UNFOLDED_ENTRY. score_check.plan (score_check.py:50) raises AUDIT_NOT_CLEAN, and no override exists. Code: session._commit skips RECHECK on the hint path (`if not (F.is_q(st) and hs['via'] != 'hint')`). PENDING.json is a tmpfs cache file that load_cache drops. FakeDrive.approve is never called by any test (grep), so this path is untested. Delta X.5.6.6's claim that a late copy is 'one more copy with our bytes' is therefore false once a RESTORE reuses the seq. The secondary REBASE_PART_APPEARED recurrence is by design (spec C5b, INT-05) and is not a defect. Downgraded from critical: the failure is fail-closed (no wrong pass, no evidence lost). It also needs three things at once: an upload refusal, a reset while approval is pending, and the approved call landing captured bytes after the restore's two absences w apart. That last behaviour is the fake's model and is unverified on the platform. The README has the Dot run `go` only after the owner says it is approved (or to continue), which makes that ordering less likely but does not rule it out."
+  },
+  {
+   "lens": "integrity",
+   "id": "INT-R2-02",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "A local sticky STOP cannot be cleared in the same boot, and any same-boot cache invalidation ends in PLACE_TARGET_NOT_EMPTY. Either way the series is stuck until an unscheduled VM reset.",
+   "where": "deploy/vm2/cpsvm2/cli.py:441-448 (sticky_halt; its docstring says the §13.5 clear 'is not built'), run_command ordering (sticky_halt runs before go/found/answer) and load_cache (123-151); deploy/vm2/cpsvm2/vio/place.py:73 and :105 (PLACE_TARGET_NOT_EMPTY); cleared_local is never set anywhere (cli.py:251, 276, 1034 only copy or clear it).",
+   "fix_hint": "Implement §13.5's local clear in the session path: compare HALT.json with the kit's `clear`, move it to cleared_<utc14>/, and record cleared_local. Also define a same-boot restore that accepts existing targets whose strict walk equals the placement plan, or that moves them aside, instead of PLACE_TARGET_NOT_EMPTY. Add tests for both.",
+   "verifier_evidence": "I re-ran p_sameboot.py in a fresh clone. After BLOCK.json head_seq is made one behind STATE, the next `go` ends `DO: STOP PLACE_TARGET_NOT_EMPTY HANDBACK C`, the cache moves to outbox/v2/invalid_<utc14>/, and HALT.json is written (code PLACE_TARGET_NOT_EMPTY, head_seq 5). load_cache (cli.py:139-150) invalidates on `bl.get('head_seq') != hs`. The same-boot restore then hits place.py:74/106 because the targets exist. cli.sticky_halt (cli.py:441-448) only prints HALT.json; its docstring says the §13.5 same-boot clear 'is not built'. session_start.sh has no HALT/clear handling (grep gives nothing). cleared_local is only copied or reset (cli.py:251, 276, 1034) and never set from a clear. No build report or README text discloses the gap. Spec §13.5 requires the local clear (HALT.json moved to cleared_<utc14>/, recorded in cleared_local). A local sticky stop or a same-boot cache invalidation therefore leaves the series stuck until an unscheduled VM reset, with no documented lever."
+  },
+  {
+   "lens": "integrity",
+   "id": "INT-R2-03",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The conversation id the Dot attests at restore is asked for and then thrown away. The O55 owner check and the runner's interrupt record lose it.",
+   "where": "deploy/vm2/cpsvm2/core/session.py restore_keys (267-277, asks `conversation`) and build_item (280-300, never reads answers['conversation']); deploy/vm2/cpsvm2/core/fold.py e42 resolution record (785-786); deploy/vm2/cpsvm2/worker.py argv() interrupt branch (`if ro['opened']`); deploy/vm2/cpsvm2/core/outcome.py:111 (OWNER_CHECK items have window None).",
+   "fix_hint": "Record the attested conversation in the RESTORE resolution, which needs a schema field and a fold copy into ROLE.resolution, and show it in the O52 sheet and the OWNER_CHECK item. Pass it to `interrupt --conversation-id`.",
+   "verifier_evidence": "session.restore_keys (session.py:267-277) adds `conversation: CONV` when the conversation is not known. cli.apply_answer (cli.py:1267-1272) stores the answers only in RESTORE_WORK's `resolve.answers`, which is local. session.build_item (280-300) never reads answers['conversation']. RESOLUTION_KEYS (entry.py:48) and spec §3.5 line 622 have no conversation field. worker.argv's interrupt branch sets `conversation` only `if ro['opened']`, and with the delta's p1_conversation_list=yes no OPENED is committed (delta line 91). The attested id is therefore discarded and never reaches the journal, the O52 sheet or `interrupt --conversation-id`, although spec line 1016 says to pass it 'if known'. This is partly a spec gap, but asking for a value and throwing it away is a real defect. It costs owner-check information only, so it stays minor."
+  },
+  {
+   "lens": "integrity",
+   "id": "INT-R2-04",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The fold does not enforce I11 presence: a consumer STAGE or FROZEN that lists no `consumed` while an ARCHIVED role is unconsumed is accepted by T20/T24, and so by the audit.",
+   "where": "deploy/vm2/cpsvm2/core/fold.py _consumed_ok (175-181), g20 (239-243), g24 (287-294)",
+   "fix_hint": "In g20/g24, require that when commands[0].sub is in CONSUMER.values(), body.consumed names exactly the ARCHIVED, unconsumed role of that letter. Add a table row test and a mutant for it.",
+   "verifier_evidence": "New probe verify_integrity/probes/p_empty_consumed.py drives core_world.World Q1 through GENESIS, PREPARE_SCOPE_READER, AI, SCOPE_FINISH, AI. It takes the legal FINISH STAGE and sets body.consumed=[]. F.apply accepts it: the run moves to VISUAL_REVIEW, and G1 stays ARCHIVED with consumed None. fold._consumed_ok (175-181) iterates only the listed items, and g20/g24 never require a consumed entry when commands[0] is a CONSUMER sub. The audit re-folds with the same fold, so it would accept this too. The live worker always measures and fills `consumed`, so this is defence in depth only: minor."
+  },
+  {
+   "lens": "safety",
+   "id": "S-01",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "The SETUP_FAILED log upload crashes (TypeError) when no kit config is installed, which is the normal state at setup time on a fresh VM",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:337-346 (setup_block builds _Env1 with env.cfg), savepoint.py:207, called from cli.py:757 ph_setup -> cli.py:772 upload_files",
+   "fix_hint": "Give _Env1 env.upload_cfg (or the cap) when env.cfg is None. Add a World-level test with an empty BASE/runtime.",
+   "verifier_evidence": "Reproduced in-process with the suite World and both runtime/VM_HELPER_CONFIG.json and RELEASE.json removed (the state right after a reset), plus a failed marker for this boot and commit and a setup log. `go` raised a traceback ending ph_setup cli.py:757 -> upload_files cli.py:772 -> savepoint.setup_block :339 -> block :207 `env.cfg['max_upload_bytes']` -> TypeError: 'NoneType' object is not subscriptable. _Env1 (savepoint.py:344) copies env.cfg, which is None before kit intake, instead of env.upload_cfg (cli.py:80-82). run_command (cli.py:398-428) catches only Out/DurableError/Halt, so no block is printed and the log is never uploaded. The test passes only because its World keeps the runtime config."
+  },
+  {
+   "lens": "safety",
+   "id": "S-02",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "A local sticky HALT can never be cleared in the same boot (§13.5 local clearing not built), so every local STOP strands the series until an uncontrolled VM reset",
+   "where": "deploy/vm2/cpsvm2/cli.py:441-448 (sticky_halt; its docstring says clearing 'is not built'), cli.py:218-224 (stop_block writes HALT.json); nothing moves HALT.json to cleared_<utc14>/ or sets cleared_local (grep finds only reads); session_start.sh does not touch it",
+   "fix_hint": "Build §13.5's local path: session_start.sh, then the session takes in a config-only kit with clear={series,seq,code} matching HALT.json, moves HALT.json to cleared_<utc14>/ and records cleared_local in the next commit. Test it in the same boot for SETUP_FAILED and FOREGROUND_DIED.",
+   "verifier_evidence": "sticky_halt (cli.py:441-448) runs on every command before go/found/answer dispatch (cli.py:401) and has no clearing branch; its own docstring says §13.5 clearing 'is not built'. grep shows HALT.json (env.p.halt) is only written (cli.py:221) and read (cli.py:444). Nothing moves it to cleared_<utc14>/, session_start.sh does not touch it, and nothing sets cleared_local. Probe: a truncated md5-hidden download-back gave STOP FORK, and the next `go` printed the same STOP FORK from HALT.json. Spec §13.5 requires local clearing by a config-only kit. Recovery is only a VM reset (tmpfs) or an out-of-procedure delete, so this is major rather than critical."
+  },
+  {
+   "lens": "safety",
+   "id": "S-03",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A cut-short download-back (or a download of the wrong id) is classified as a sticky STOP FORK, and the downloaded bytes are deleted",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:288-309 (on_verify), cli.py:963-978 (verify_head sets head_error FORK on a size difference from the FIND), core/session.py:133-147 rule_v ('bad' sha -> LINK_MISMATCH or FORK at session.py:366, 384, 555)",
+   "fix_hint": "When the downloaded size differs from the attested FIND size of that id, refuse (for example REFUSED DOWNLOAD_INCOMPLETE) and reprint the DOWNLOAD instead of FORK. Keep the bytes of a real fork under outbox/v2/ for the maintainer instead of deleting them.",
+   "verifier_evidence": "Probe (World with p2_md5_visible=no): after `found`, half of the real entry bytes were written to the printed inbox/verify/<name>.1 path, then `go` gave 'DO: STOP FORK HANDBACK C' (local sticky) and the download was deleted. However, this is exactly what the delta §X.5.5 step 3 prescribes: 'Any difference is STOP FORK ... Downloads are deleted after the comparison.' It fails closed, with no wrong pass and no hidden retry. Nothing is really lost: PENDING and the local entry and parts remain, and the Drive copy is untouched, so the deleted bytes are only a re-downloadable copy. The real harm is a false-FORK availability stall, made unrecoverable in the boot by S-02. That is a spec-level weakness, so minor."
+  },
+  {
+   "lens": "safety",
+   "id": "S-04",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Post-commit actions in STATE.post are never resumed, and the next commit silently overwrites them",
+   "where": "deploy/vm2/cpsvm2/cli.py:308-345 (run_post is called only from finish_commit, cli.py:317), savepoint.py:319-326 (finish sets post = pend.post + DROP_LOCAL, discarding cache['post']), cli.py:418-423 (a HALT-class code from run_post is committed as a HALT entry)",
+   "fix_hint": "Run the remaining STATE.post at the start of every command, after the cache check and before any new commit. Refuse a new commit (or carry the old actions over) while STATE.post is non-empty.",
+   "verifier_evidence": "Probe: savepoint.finish called with cache.post=[EVICT ..., DROP_LOCAL ...] returned post=[['DROP_LOCAL', [<this commit's tgz>]]], so the old actions were dropped. savepoint.py:319-325 builds the new STATE with post=pend['post']+DROP_LOCAL, overriding cache['post']. run_post has a single caller (cli.py:317, finish_commit). host.halt_code maps REFUSED JOB_BUSY to a WAIT (cli.py:414-415), leaving EVICT in STATE.post, and no command start re-runs it. A run_post Halt is committed as a HALT entry, whose finish discards the rest."
+  },
+  {
+   "lens": "safety",
+   "id": "S-05",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "PNG parts are uploaded without checking them against the png whole_sha256 and file shas the entry records",
+   "where": "deploy/vm2/cpsvm2/cli.py:272-274 (write_commit's returned PNG stream sha is discarded: `pend, entry, _ =`), vio/savepoint.py:69-90 and :122-124 (PartWriter's per-part sha is overwritten by the re-read in seal, never compared), worker.py:309-315 (whole_sha256 comes from a separate earlier read, png_whole)",
+   "fix_hint": "Compare the PartWriter whole sha (and the per-file shas from the tar stream) with draft payload_png before PENDING is written. Halt otherwise.",
+   "verifier_evidence": "Probe: place.snapshot + worker.png_whole recorded the whole sha. One PNG was then rewritten with the same size and other bytes, and savepoint.write_commit was run. PENDING was written; the recorded whole sha != the PartWriter whole sha, while entry.payload.png.whole_sha256 still held the stale recorded value. cli.commit discards the returned whole (cli.py:274 `pend, entry, _ =`), and write_commit compares nothing. JobLock is held only during the snapshot walk (place.py:37), not during the part write. A concurrent writer is needed, so minor."
+  },
+  {
+   "lens": "safety",
+   "id": "S-06",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A profile folder containing '{' or '}' passes the DELIVERY validation but can never be printed, so the everyday delivery is stranded after the entry is on Drive",
+   "where": "deploy/vm2/cpsvm2/cli.py:1380-1383 (profile_folder: ASCII printable, no quote or backslash; braces allowed, as spec §11.3), vio/drive.py:475 (check_grammar rejects '{' and '}' on any line)",
+   "fix_hint": "Apply the printing rules (drive.q plus check_grammar's character set) to profile_folder in delivery_commit and refuse with COPY_LOG_MISMATCH before anything is committed.",
+   "verifier_evidence": "Probe: the delivery_commit profile_folder predicate (cli.py:1380-1383) accepts 'Dots Folder/Users/Team {A}', and drive.check_grammar of a header plus `UPLOAD ... TO <q(pf+'/deliveries')> AS CPSJ_E1_000009_DELIV01.xlsx` returns 'token' (drive.py:96 rejects any '{' or '}'). render() then raises INTERNAL_PRINT (cli.py:207-208). The entry goes to the series folder and prints fine; only the DELIV/DLOG parts block, after the entry is confirmed, fails. Braces in a profile folder name are rare, so minor."
+  },
+  {
+   "lens": "safety",
+   "id": "S-07",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The helper-tree and runner pins do not cover the bytecode that actually runs (stale __pycache__ is loaded under -B)",
+   "where": "deploy/vm2/cpsvm2/vio/host.py:205-215 (helper_tree_sha256 skips __pycache__), .gitignore:25 (__pycache__/ ignored, so session_start.sh's `git status --untracked-files=no` never sees it), vio/runner.py:17-28 (load_runner hashes cps_job.py, then exec_module through SourceFileLoader, which uses deploy/run/__pycache__)",
+   "fix_hint": "Have vm.sh export PYTHONDONTWRITEBYTECODE and run with a private pycache prefix (-X pycache_prefix=<fresh tmp>), or refuse to start when any __pycache__ exists under deploy/. Load cps_job.py from the hashed bytes (compile(bytes) / exec) instead of the path.",
+   "verifier_evidence": "Probe: m.py was compiled with X = 2, then the source was rewritten to X = 1 (same size) with its mtime restored. `python3 -I -B -c 'import m'` imported X = 2, because -B stops writing bytecode but not reading it. host.helper_tree_sha256 skips __pycache__ (host.py:73). git check-ignore reports both deploy/vm2/cpsvm2/__pycache__/*.pyc and deploy/run/__pycache__/cps_job.cpython-313.pyc ignored by .gitignore:25, so session_start.sh's clean check misses them. runner.load_runner hashes cps_job.py, then exec_module via a SourceFileLoader (runner.py:24-27), which honours a stale pyc. This needs a deliberately planted pyc, so minor."
+  },
+  {
+   "lens": "safety",
+   "id": "S-08",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "session_start.sh runs the setup and writes the ok marker for the claimed --commit before it checks that HEAD is that commit",
+   "where": "deploy/vm2/session_start.sh:50-70 (step 4 setup and marker at lines 54-65, then the HEAD == --commit check at lines 69-70); consumed by cli.py:748-751 ph_setup",
+   "fix_hint": "Move the HEAD == --commit check before step 4, or write the marker with `git rev-parse HEAD` and compare it to --commit.",
+   "verifier_evidence": "session_start.sh runs step 4 (setup, then `echo \"$BOOT $COMMIT\" > cps_vm2_setup_ok` at lines 54-65) before the HEAD == --commit check (lines 68-70). The marker records the claimed COMMIT, not `git rev-parse HEAD`. The README bootstrap joins fetch and checkout with ';' (README.md:18), so session_start.sh runs after a failed checkout. After a successful repeat, session_start skips setup and ph_setup accepts the marker (cli.py:748-751). One limit: this needs the wrong HEAD to contain this same script version (for example an older v2 release commit on a VM that was not reset). Minor."
+  },
+  {
+   "lens": "safety",
+   "id": "S-09",
+   "reported_severity": "minor",
+   "verdict": "PLAUSIBLE",
+   "severity_after_verification": "minor",
+   "title": "The md5-hidden DOWNLOAD target folder inbox/verify (and inbox/journal after DROP_DOWNLOADS) is never created by the helper",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:262-265 (verify paths under inbox/verify, no mkdir), core/session.py:149-153 (_dl_block to inbox/verify or inbox/journal), cli.py:1068 (DROP_DOWNLOADS removes those folders after every RESTORE); other DOWNLOAD paths do mkdir the parent (cli.py:795, 874, 1163)",
+   "fix_hint": "mkdir the parent of every printed DOWNLOAD path before printing, as fetch/ensure_local already do. Make FakeDot fail on a missing parent.",
+   "verifier_evidence": "The probe confirmed that after an md5-hidden `found` the printed DOWNLOAD target folder BASE/inbox/verify does not exist (os.path.isdir False), and grep finds no mkdir of inbox/verify anywhere in cpsvm2 or session_start.sh. The suite's own t_cli_md5_hidden_download_back mkdirs the parent itself (test_vio.py:977), as do dot_do and FakeDot. Whether the real Dot's download step fails without a parent folder is not recorded in the probe results, so the REFUSED DOWNLOAD_MISSING loop was not reproduced on the platform."
+  },
+  {
+   "lens": "safety",
+   "id": "S-10",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A mistyped id in `found` (md5 hidden) leaves a VERIFY block with no way out",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:189-192 (a non-empty verify list always reprints the same DOWNLOAD block), cli.py:483-485 (missing file -> REFUSED DOWNLOAD_MISSING), on_found fixes pend['verify'] from the attested ids (savepoint.py:262-283)",
+   "fix_hint": "After N DOWNLOAD_MISSING refusals for the same block, or on an explicit answer, drop the unverified copies back to need='find' and re-FIND by name, or stop with a defined handback code.",
+   "verifier_evidence": "Probe (World, md5 hidden): `found` with one character of the id changed was accepted (exit 0) and printed DOWNLOAD ... ID <mistyped id>. Three `go` commands each gave exit 4 REFUSED DOWNLOAD_MISSING. A repeated `found` was REFUSED (STALE_AT; with the current --at, the expect is `go`, so COMMAND_NOT_EXPECTED). savepoint.block always reprints the verify downloads (savepoint.py:189-192), and no path returns to FIND or to a handback code."
+  },
+  {
+   "lens": "safety",
+   "id": "S-11",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A raw OSError outside a foreground stage is not mapped to a block (no DISK_FULL/WRITE_FAILED), giving a traceback with no DO line",
+   "where": "deploy/vm2/cpsvm2/cli.py:398-428 (run_command catches only Out, DurableError and Halt), with non-durable writes outside stages, for example place.place_member (vio/place.py:187-198) from cli.ensure_text/ensure_copy (cli.py:1227-1255), load_cache's invalid_ mkdir/replace (cli.py:144-149), HelperLock open (v1reuse HelperLock.__enter__)",
+   "fix_hint": "Catch OSError in run_command and map ENOSPC/EDQUOT to DISK_FULL and anything else to WRITE_FAILED, as run_stage does.",
+   "verifier_evidence": "Probe: cli.go_checks was patched to raise OSError(ENOSPC), then `go` was run on the World. The OSError escaped cli.main with no block. run_command catches only Out, DurableError and Halt (cli.py:414-428), and main has only a finally. Real unmapped sites exist outside stages: place.place_member uses raw open('xb')/write (place.py:187-198), called from ensure_text/ensure_copy (cli.py:1227-1255). Spec §2.4 requires only a HALT block on a write failure."
+  },
+  {
+   "lens": "safety",
+   "id": "S-12",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "No real-subprocess SIGKILL test of a foreground stage; the in-process Kill seam runs the cleanups a real kill never runs",
+   "where": "deploy/vm2/tests/test_resets.py:100-103 (D_kill_* scenarios use fakes.Kill, an in-process BaseException), tests/fakes.py:229-236; delta §X.14 requires test_foreground_died_same_boot_stops (a real subprocess killed mid-chain)",
+   "fix_hint": "Add the delta's real-subprocess test (Popen vm2.py go, SIGKILL after the RUNNING line, assert FOREGROUND_DIED, the job folder unchanged and the cache files kept).",
+   "verifier_evidence": "grep of deploy/vm2/tests finds no SIGKILL, os.kill or send_signal; the only .kill() is the lock holder (test_resets.py:552). The FOREGROUND_DIED coverage is D_kill_finish_same_boot and D_kill_prepare_same_boot (test_resets.py:100-103), which use fakes.Kill, an in-process BaseException (fakes.py:233). The delta §X.14 (lines 330, 356, 363) names test_foreground_died_same_boot_stops as a real-subprocess SIGKILL test and as the killer of mutants G24 and G31, but it does not exist; G31 is listed against D_kill_finish_same_boot instead. The behaviour itself is correct by the reviewer's probe, so this is a test gap: minor (arguably major under the 'required test missing on a critical path' rule)."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-01",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Stale RESTORE_WORK alias in cli.session_step drops writes: END_CONVERSATION printed twice, and the C10 HaltStep path commits a second different entry under the same seq (self-made journal fork)",
+   "where": "deploy/vm2/cpsvm2/cli.py:673-709 (session_step: w = env.work, then save_work at 678 replaces env.work; writes at 697 and 706 go to the old dict); durable.write_doc returns a new dict (cpsvm2/vio/durable.py:99-104)",
+   "fix_hint": "In session_step re-read w = env.work after every save_work (or mutate env.work directly). Add a glue-level test for C10 and for a single END per restore.",
+   "verifier_evidence": "The code shows the alias bug. cli.py session_step sets `w = env.work`. save_work (cli.py:158-159) then replaces env.work with the new dict that durable.write_doc returns (durable.py:99-104). Any later `w[...] =` followed by save_work(env) writes the new dict without the change. I reran end2.py in a fresh clone at 1d31801. The first END block was printed while RESTORE_WORK.json held phase=RESOLVE_END and resolve={}. The next go printed 'DO: END_CONVERSATION role=G' a second time, and only that second print saved resolve={'end': True}. I reran c10.py with classify forced to C10 after a reset. It ended 'STOP HALTED_UNCLASSIFIED', and Drive held CPSJ_D1_000003.tgz twice (fakedriveid...08 and ...09). In my run the two copies had identical bytes (sha bcaf3b89...), because both drafts fell in the same wall-clock second; draft utc=env.now(). With real seconds between Dot calls, the bytes would differ, which is the reviewer's STOP FORK. Severity: the only session HaltStep is the C10 'UNCLASSIFIED' fallback (core/session.py:469), and test_core_more:427 reaches it only with a hand-built inconsistent state. Both outcomes are a halted series that needs the maintainer, and no evidence is lost. The realistic part, END printed twice after a reset during G, is a harmless duplicate action. Minor, not major."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-02",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "A mistyped (pattern-valid) Drive id in `found` gives a DOWNLOAD_MISSING loop with no exit",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:258-266 (unknown id goes to verify); cli.py:483-485 (go_checks refuses DOWNLOAD_MISSING and reprints the same block); README.md:142-143",
+   "fix_hint": "When a verify download is missing, offer a re-FIND (back to need=find for that name) after one refusal, or accept a fresh `found` for the same name. Document the case in the README.",
+   "verifier_evidence": "I reran typo.py id in a fresh clone. `found --file <id with last char changed>:<size>` was accepted: check_id is a pattern check only, and on md5-hidden an unknown id goes to verify (savepoint.py:258-266). The helper printed 'DOWNLOAD CPS/reports ID fakedriveid000000000000000 TO .../inbox/verify/CPSJ_D1_000002.tgz.1'. Four later `go` calls each gave exit 4 'REFUSED DOWNLOAD_MISSING' with the same at=000001-0002-... (go_checks, cli.py:483-485). `found` is now refused COMMAND_NOT_EXPECTED, because the block expects `go` (cli.py:512-514). README §3.1.6 only says to ask the owner to approve the download, which cannot help with a nonexistent id. Only a VM reset, which wipes the tmpfs cache, frees the series."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-03",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "A size slip in `found` is an immediate local sticky STOP FORK, and the §13.5 local-sticky clear is not built, so only a VM reset frees the series",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:251-253 (size differs: stop FORK, no re-ask); cli.py:441-449 (sticky_halt prints HALT.json on every command; its docstring says the clear 'is not built'); no code moves HALT.json to cleared_<utc14> (grep finds no 'cleared_' writer); spec §13.5 'Local sticky HALT ... the session machine ... moves HALT.json to outbox/v2/cleared_<utc14>/'",
+   "fix_hint": "Build the §13.5 local clear (session_start plus a config-only kit with `clear` moves HALT.json aside and records cleared_local). Consider re-asking once (REFUSED) on a size mismatch before declaring FORK.",
+   "verifier_evidence": "I reran typo.py size. `--file <correct id>:<size+1>` gave exit 3 'DO: STOP FORK HANDBACK C' (savepoint.py:251-253), and three later `go` calls printed the same STOP. stop_block writes HALT.json for every code except NOT_STICKY=('FINAL','RELEASE_GATE_OPEN') (cli.py:35, 218-224). sticky_halt runs before the session machine (cli.py:400 vs 611). Its docstring says the §13.5 same-boot clear 'is not built'. grep finds no writer of `cleared_<utc14>` and no HALT handling in session_start.sh. Spec §13.5 requires the local-sticky clear (move HALT.json to outbox/v2/cleared_<utc14>/, record cleared_local). A required recovery path for every local sticky code (FORK, FOREGROUND_DIED, UPLOAD_FAILED, DISK_FULL, UPLOAD_TOO_LARGE) is therefore missing, and only a reset or a manual rm frees the series. The suggestion to re-ask once on a size mismatch is a design point: the spec's rule V makes a size difference a FORK."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-04",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "README never says how to choose NOTHING_WRITTEN / WRITTEN / UNSURE / NO_CONVERSATION, which decides a rule-3 restart",
+   "where": "deploy/vm2/README.md:160-162 (lists the four values only); delta §X.9 requires 'The README says the Dot's NOTHING_WRITTEN reading is made from the conversation's recorded messages and turn status'; spec T44/T45 (NOTHING_WRITTEN gives INTERRUPT or REPLACE with OWNER_CHECK)",
+   "fix_hint": "Add the delta's sentence and a decision rule for each outcome value (fail-closed default UNSURE). State that transcript=not_available on this platform.",
+   "verifier_evidence": "A grep of deploy/vm2/README.md finds none of 'recorded messages', 'turn status' or a decision rule for the outcome values. Lines 160-162 only list NOTHING_WRITTEN/WRITTEN/UNSURE/NO_CONVERSATION. The delta §X.9 (VM_HELPER_V2_SPEC_DELTA_PROBES.md:245) explicitly requires: 'The README says the Dot's NOTHING_WRITTEN reading is made from the conversation's recorded messages and turn status.' The README also never says that transcript is always not_available on this platform. Spec T44/§11 (SPEC.md:629, 1201) shows that NOTHING_WRITTEN with not_available gives INTERRUPT, a second generation, in qualification. The OWNER_CHECK flag records it, so it is not fully hidden, but the attestation that decides a rule-3 restart has no documented basis. This is a missing required README item on a critical path."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-05",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "final_message.txt must be verbatim yet is refused if it contains any {...} or <...> span or exceeds 8 KB: no legitimate way forward, and the README omits the rule",
+   "where": "deploy/vm2/cpsvm2/cli.py:1312-1318 (ai_commit); README.md:155 ('write the generator's final message, verbatim'); research/guideline046_007/harness/GENERATOR_PROMPT_TEMPLATE.md:13 (the final message reports policy_checks, scope and similar)",
+   "fix_hint": "Store the message as data (escape or encode it) instead of rejecting braces, or give a documented escape route (for example, accept and flag the message). Put the constraint and its handling in the README.",
+   "verifier_evidence": "cli.py:1317-1318 refuses with FINAL_MESSAGE_INVALID when the text exceeds 8192 bytes or matches `<[^>]*>|\\{[^}]*\\}`. The spec states the same rule (SPEC.md:846, 1434), so the code follows the spec, but the README (line 155) says only 'verbatim' and omits the rule. A probe showed the regex spans newlines: 'warnings: 2 (<3 expected)\\nroute -> v4.3', 'held < 2; scope -> applied' and 'checker: {\"status\": \"ok\"}' all match. So an ordinary '<' anywhere followed by any '->' or '>' later in the message rejects it. test_vio.py:1018 confirms that 'see {placeholder}' is refused. GENERATOR_PROMPT_TEMPLATE.md asks the final message to report checker status, policy_checks and counts, where such characters are natural. No escape route exists: the Dot must alter a 'verbatim' attestation or loop."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-06",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Everyday INPUTS_CHANGED after a reset is an endless `RUN go` loop, and the README gives no action",
+   "where": "deploy/vm2/cpsvm2/cli.py:1460-1468 (start_chain: REFUSED INPUTS_CHANGED with 'DO: RUN ... go', exit 4); README.md §2.3 and §3 (no mention); spec §13 row INPUTS_CHANGED: 'restores the inputs it committed, or tells the owner'",
+   "fix_hint": "Add the §13 action to the README. Consider a bounded refusal count that turns into ASK_USER or abandon.",
+   "verifier_evidence": "I wrote my own probe from test_codes.test_inputs_changed_refused. After `answer case=case01` and `found`, I deleted everyday_inputs/case01 to simulate the tmpfs wipe. Four successive `go` calls each gave exit 4 'REFUSED INPUTS_CHANGED' with 'DO: RUN ... go' (cli.py:1474-1481), and no stage ran. The README has no REFUSED INPUTS_CHANGED entry, and §2.3 does not say to put the files back. Spec §13.1 (SPEC.md:1437) gives the action 'restores the inputs it committed, or tells the owner'. Only the FakeDot special-cases it (fakes.py:444-446 restore_inputs). The refusal count has no bound, so everyday jobs after a reset during prepare can loop."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-07",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A same-boot stage death invalidates the whole cache; the FOREGROUND_DIED STOP prints head=000000 kit=none and HALT.json records head_seq 0",
+   "where": "deploy/vm2/cpsvm2/cli.py:140-141 (load_cache marks the cache bad when BLOCK.head_seq != STATE.head.seq) together with run_stage after finish_commit in the same go",
+   "fix_hint": "Exempt the BLOCK head check when FOREGROUND.json of this boot is present (or write BLOCK before the stage), so the STOP carries the real head and kit.",
+   "verifier_evidence": "I reran drive2.py kill, with Kill injected at the runner's finish. It ended 'CPSV series=D1 head=000000 kit=none ... DO: STOP FOREGROUND_DIED HANDBACK C'. STATE.json, BLOCK.json and RESTORE_WORK.json were moved to outbox/v2/invalid_20261110T215119Z/, and HALT.json recorded head_seq 0 (load_cache bad-check, cli.py:140-151). Nothing is lost, since the files are moved aside, not deleted. But the CPSV line and HALT.json misreport the head and kit, and HALT.head_seq 0 would not match a §13.5 clear keyed on head_seq."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-08",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Bootstrap hint rule fails for a CPSV line with kit=none (session headers, first session blocks): session_start exits 2 and the README gives no route",
+   "where": "deploy/vm2/README.md:11-12, 19; deploy/vm2/session_start.sh:18-19",
+   "fix_hint": "README: 'if kit=none, omit --hint and --kit'. Or accept kit=none in session_start as 'no hint'.",
+   "verifier_evidence": "`bash session_start.sh --commit 1d318019... --hint 000000 --kit none` printed 'usage: --hint <seq6> --kit <hex12>' and exited 2 (session_start.sh:18-19 regex ^[0-9a-f]{12}$). Session and setup blocks print 'kit=none' (BARE_HDR cli.py:38; the render header uses kit from cache or work, otherwise none). README:11-12 says to pass the head and kit of the last CPSV line, without an exception for kit=none. FakeDot silently drops the hint when kit == 'none' (fakes.py:657)."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-09",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "README text disagrees with the code in several operator-visible places",
+   "where": "deploy/vm2/README.md:76-77, 87, 120, 136-137, 152-155, 47-48; cpsvm2/core/plan.py:92-118 (next_run); core/plan.py:161; core/names.py:36",
+   "fix_hint": "Align the README wording with the code (or the code with the README) item by item.",
+   "verifier_evidence": "(a) plan.next_run (core/plan.py:80-105) runs all NA-A and NA-B first, then every A run, then every B run, while README:76-77 says 'for each case reader A, then reader B'. (b) No code path emits STOP IDLE: row 22 is Ask case=CASE_ID (plan.py:161), yet README:87 and 120 list it. (c) The UPLOAD_REFUSED STOP (cli.py:538-539, drive.py:55-58) prints only the code and HANDBACK, no file name, while README:117 and 135 tell the Dot to give the owner 'the file name'. (d) The TOOLS pattern is lowercase only (names.py:36), and the README does not say so. (e) README:149-152 says both 'the start rounded up' and to run date -u, which truncates. (f) The README's NO_BLOCK rule (lines 46-48) covers only a missing DO after a CPSV line. All are wording mismatches with no effect on the journal."
+  },
+  {
+   "lens": "operator",
+   "id": "OPX-10",
+   "reported_severity": "minor",
+   "verdict": "PLAUSIBLE",
+   "severity_after_verification": "minor",
+   "title": "The delta's time budget counts only Drive calls; the measured per-run operator tool-call load is about 2x",
+   "where": "docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md §X.5.5 budget paragraph ('about 9-12.5 h at 20 s per call')",
+   "fix_hint": "Restate the budget as total operator tool calls per run and per qualification, separating Drive, helper and conversation calls.",
+   "verifier_evidence": "Delta lines 86-101 label the table 'Drive calls (md5 hidden ...)' and give 'Qualification overall: about 1,650-2,250 calls ... about 9-12.5 h at 20 s per call'. That counts Drive calls only. Helper commands and conversation handling (date -u, create, poll, write final_message, list) are not counted, so the stated hours understate the operator's total tool-call load. The text is labelled correctly as Drive calls, so this is a planning omission, not a wrong statement. I did not independently verify the reviewer's figure of about 50 calls per run and about 2,400 in total."
+  },
+  {
+   "lens": "tests",
+   "id": "T1",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Resolving a CONTINUED visual reviewer as NOTHING_WRITTEN or REPLACE is untested, and the test named for it has a vacuous loop",
+   "where": "deploy/vm2/cpsvm2/core/fold.py:624 (resolution_action, CONTINUED branch); deploy/vm2/tests/test_v1_regressions.py:173-175; deploy/vm2/tests/core_world.py:203",
+   "fix_hint": "Feed the fold, not build_item, a CONTINUED item with outcome NOTHING_WRITTEN, WRITTEN or UNSURE (with and without a START) and assert T48. Drop the vacuous loop or make it construct the item directly.",
+   "verifier_evidence": "I applied N06 (fold.py:624 changed to `if item['outcome'] == 'CONTINUED': return T46`, otherwise fall through) together with the other 10 mutants in a fresh clone. 196/196 non-reset tests passed (core_table, core_props, core_more, v1_regressions, maint, codes, vio, probe_p5). After a local commit, so session_start's dirty check would not interfere, 197/197 test_resets scenarios also passed. Probe after PREPARE_GENERATE, AI, FINISH, AI, REVIEW_INCOMPLETE (V1 CONTINUED): F.resolution_action on HEAD gives ('T48', None, False) for outcome NOTHING_WRITTEN, WRITTEN, UNSURE and NO_CONVERSATION. The mutant gives ('T45','REPLACE',True), ('T47','FREEZE_VISUAL_FAILED',False) twice, and ('T43','SUPERSEDE',False). The test_f1 loop is vacuous: CW.oracle_item sets out='CONTINUED' whenever the role is continued (core_world.py:203), and the probe printed 'NOTHING_WRITTEN -> CONTINUED FREEZE_VISUAL_FAILED' and the same for the other two. Also, session.py:286 forces outcome CONTINUED for a continued role, so on a regression or under audit the fold is the only guard. That guard has no test, and the test named for it cannot fail."
+  },
+  {
+   "lens": "tests",
+   "id": "T2",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Rule 'reader B starts only after A's final run is frozen' is untested while A still owes its restart",
+   "where": "deploy/vm2/cpsvm2/core/fold.py:463-464 (g10); deploy/vm2/tests/test_core_table.py:524 (test_t10_reader_b_needs_a_frozen)",
+   "fix_hint": "Add a core_table test where A is FROZEN, restart-eligible, has no RESET_DIVERGED and is not a restart run, and assert that a B new-run entry is T14. Add the RESET_DIVERGED and A-restart1 variants as the positive controls.",
+   "verifier_evidence": "N07 (g10 reduced to `if L is None or L['status'] != 'FROZEN':`) survived both the combined non-reset run and the full reset run. Probe: drive PREPARE_STOP_SOURCE_UNREADABLE, then ACK. A/case01 is FROZEN with restart_eligible=True, flags [] and interrupts []. A B/case01 new-run STAGE (built as in test_t10) gives 'ChainInvalid T14' on HEAD; the mutant folds it as ['T10','T30']. test_t10 and tst07 only try B when A has no chain. The plan's own guard (M2-08) is tested, but the fold, which is also the audit verifier, is not."
+  },
+  {
+   "lens": "tests",
+   "id": "T3",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "The step-6 re-check's detection of a second writer at N+2/N+3 is untested",
+   "where": "deploy/vm2/cpsvm2/core/session.py:548 (_commit RECHECK)",
+   "fix_hint": "Add a session test where, after the commit and wait, the re-check FINDs show N+1 ours and N+2 (or N+3) present, and assert ('RECHECK', Stop('FORK')).",
+   "verifier_evidence": "N18 (session.py:548 reduced to `if not f[names[0]]['present']:`) survived 196 non-reset tests and all 197 reset scenarios. Direct probe of SE._commit with via='gallop', a committed N+1 whose md5 and size match ours, and post-commit lookups later than w_abs: with N+2 present, HEAD returns ('RECHECK', Stop('FORK','C')) and the mutant returns ('DONE', None). The same happens with N+3 present. With neither present, both return DONE. A related weakness: when I rebuilt test_session_rebase_and_recheck_fork with our own md5, it still returned FORK. The earlier lookups left in wk show N+1 as absent, so that test probably FORKs through the absent-N+1 branch rather than through the md5 check it means to test."
+  },
+  {
+   "lens": "tests",
+   "id": "T4",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "Boot binding of the AI rows is partly untested (T38 continued_boot, and the START-boot half of T37)",
+   "where": "deploy/vm2/cpsvm2/core/fold.py:571 (g38) and :564 (g37)",
+   "fix_hint": "Add negative fold tests: a T38 AI entry whose boot_id differs from continued_boot must fold as T39, and an AI entry with start_boot_id equal to e.boot_id but different from the START's boot must also be T39.",
+   "verifier_evidence": "N05 (drops `e['boot_id'] == ro['continued_boot']` from g38) and N04 (g37 reduced to `b['start_boot_id'] == e['boot_id']`) survived 196 non-reset tests and 197 reset scenarios. Probe 1: V1 CONTINUED in boot 21dae65f, w.reset(), then an AI entry for revision 2 in boot 88ed72b9. HEAD gives 'ChainInvalid T39'; the mutant folds it as ['T38']. Probe 2: G1 STARTED in boot 21dae65f, reset, then an AI entry for revision 1 with start_boot_id equal to the entry boot 88ed72b9. HEAD gives T39; the mutant folds it as ['T37']. cli.py:1337 copies lt['boot_id'], so N04 only matters for chains checked under audit, as the finding says. N05 is the more serious half: under O46 that output must be treated as lost, but it would be archived as a valid review."
+  },
+  {
+   "lens": "tests",
+   "id": "T5",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "T11 does not test its check that no in-place interrupt was used",
+   "where": "deploy/vm2/cpsvm2/core/fold.py:478 (g11)",
+   "fix_hint": "Add a g11 test with R.interrupts non-empty and restart_eligible True, and assert False/T14.",
+   "verifier_evidence": "N52 (drops `or L['interrupts']` from g11) survived all non-reset and reset tests. Probe: A frozen at STOP_SOURCE_UNREADABLE with restart_eligible=True and interrupts planted as [{'seq':1}], then CW._prepare(A-restart1). HEAD gives 'ChainInvalid T14'; the mutant folds it as ['T11','T30']. Minor is right, because the runner's restart_problem is the first line of defence."
+  },
+  {
+   "lens": "tests",
+   "id": "T6",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "finish() does not test its check that the local entry is the pending one",
+   "where": "deploy/vm2/cpsvm2/vio/savepoint.py:316",
+   "fix_hint": "Add a t_commit test that swaps PENDING's entry file for another valid entry before the last FIND and asserts STOP INTERNAL_ILLEGAL_TRANSITION with nothing installed.",
+   "verifier_evidence": "N37 (`if False:` at savepoint.py:316) survived all tests. Probe using the test_vio helpers: write_png_commit, drive_pending until everything is confirmed, then set pend['state_after_sha256']='f'*64 and call finish. HEAD halts with INTERNAL_ILLEGAL_TRANSITION and STATE.json is not written. The mutant installs STATE.json and removes PENDING.json."
+  },
+  {
+   "lens": "tests",
+   "id": "T7",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Rule 'started_utc must not be later than ended_utc' in the G attestation is untested",
+   "where": "deploy/vm2/cpsvm2/cli.py:595",
+   "fix_hint": "Add an answer test with started_utc later than ended_utc, both inside the window, and assert REFUSED UTC_OUT_OF_WINDOW with the cache unchanged.",
+   "verifier_evidence": "N40 (`if False:` in place of the started_utc > ended_utc refusal at cli.py:595) survived all 196 non-reset and 197 reset tests. The only started_utc answer test (test_vio.py:1009) uses '2001-01-01T00:00:00Z', which N.check_answers already rejects as out of window. No test has both values inside the window in the wrong order."
+  },
+  {
+   "lens": "tests",
+   "id": "T8",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "DOWNLOAD_MISSING after a session (head or verify) DOWNLOAD block is untested",
+   "where": "deploy/vm2/cpsvm2/cli.py:484-485 (go_checks)",
+   "fix_hint": "Add a cli test: a HEAD DOWNLOAD block, then `go` with the file absent, asserting REFUSED DOWNLOAD_MISSING and an unchanged RESTORE_WORK.",
+   "verifier_evidence": "N42 (removes the go_checks DOWNLOAD_MISSING refusal at cli.py:484-485) survived all tests. The only cli test, t_cli_md5_hidden_download_back (test_vio.py:975), is a pending-commit verify, and savepoint.on_verify refuses that case itself (test_vio.py:352). Without the check, record_downloads (cli.py:730) calls sha_file on the missing path. main() catches only Out, DurableError and Halt (cli.py:409-413), so the OSError is not turned into a REFUSED block. I did not run the crash end to end."
+  },
+  {
+   "lens": "tests",
+   "id": "T9",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Refusing an empty (0-byte) exported transcript is untested",
+   "where": "deploy/vm2/cpsvm2/cli.py:1293 (transcript_problem)",
+   "fix_hint": "Add a test with a 0-byte transcript file that asserts REFUSED TRANSCRIPT_FILE_MISSING.",
+   "verifier_evidence": "N44 (drops `or os.lstat(path).st_size == 0` at cli.py:1293) survived all tests. Both TRANSCRIPT_FILE_MISSING tests (test_codes.py:257 and test_vio.py:1017) use a missing file; neither uses a 0-byte one."
+  },
+  {
+   "lens": "tests",
+   "id": "T10",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The S5 limit on which config keys a config-only kit change may touch is untested in the fold",
+   "where": "deploy/vm2/cpsvm2/core/fold.py:159 (_s5)",
+   "fix_hint": "Add a structural test: a config-only kit_change with config_keys_changed=['series'] (or another key outside CHANGEABLE_KEYS) must raise RELEASE_NOT_ACCEPTED.",
+   "verifier_evidence": "N50 (drops `and set(kc['config_keys_changed']) <= CHANGEABLE_KEYS` at fold.py:159) survived all tests. Probe: after a frozen A and a reset, a RESTORE whose config-only kit_change declares config_keys_changed of ['clear'], ['series'] or ['drive_id_re']. HEAD gives ['T42'] for the first and 'ChainInvalid RELEASE_NOT_ACCEPTED' for the other two. The mutant gives ['T42'] for all three."
+  },
+  {
+   "lens": "tests",
+   "id": "T11",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "run_tests.py --only with a name that matches nothing passes with 0 tests",
+   "where": "deploy/vm2/tests/run_tests.py:85-88",
+   "fix_hint": "Exit 2 (usage) when any --only name matches no suite, test or scenario, and list the unknown names.",
+   "verifier_evidence": "`python3 -I -B run_tests.py --work <new> --only test_no_such_name_typo` printed {\"tests\": 0, \"passed\": 0, \"seconds\": 0.1} and exited 0. run_tests.py:85-88 silently skips suites with no matching name, and no check fires when nothing matches."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-1",
+   "reported_severity": "critical",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "critical",
+   "title": "assemble places runs at unvalidated absolute job_dir paths (default --root /); neither the fold nor the audit restricts job_dir to the genesis layout",
+   "where": "deploy/vm2/cpsvm2/maint/assemble.py:259-266 (target), 300-340 (place), 369-374 (ledger at genesis.base), 397 (--root default '/'); deploy/vm2/cpsvm2/core/fold.py:415/434 and core/entry.py:45 (job_dir copied, never checked); maint/audit.py (no job_dir check)",
+   "fix_hint": "In the fold (new_run guard) and in the audit, require job_dir == genesis.layout.qual + '/' + <tag dir> + '/' + case. In assemble, refuse any job_dir or ledger path outside af['genesis']['layout'], and require an explicit, empty, dedicated --root (no '/' default).",
+   "verifier_evidence": "I re-ran p_jobdir.py in a fresh clone, with core_world.job_dir patched so A/case01 gets '/root/.config/git'. Output: 'audit rc 0 clean True []' and 'assemble rc 0 clean True []'. RUN_RECORD.json, FROZEN.json, qa/visual_deliverable/{p1.png,VISUAL_QA_MANIFEST.json} and carrier/convert/carrier.json were placed at <root>/root/.config/git/. In the code, Assembler.target (assemble.py:81-88 at HEAD, not 259-266) only checks that the path is absolute, normalized and in the allowed character set, and that the target does not exist yet. The --root default is '/' (assemble.py:219), as spec §10.2 line 1295 documents. The fold copies nr['job_dir'] without checking it (fold.py:415, 434), and entry.py:45 checks only the key set. The audit never compares job_dir with the layout: grep finds job_dir in audit.py only at :121. Only the worker derives job_dir from Layout.job_dir (worker.py:78/83, v1reuse.py:203), so neither the audit nor assemble enforces the layout. The severity stays critical because this is unsafe extraction from downloaded journal content, onto the maintainer's machine, after a clean pre-gate audit. Mitigations that lower practical risk: existing paths are never overwritten (PLACE_TARGET_NOT_EMPTY), and an attacker would need entries that fold validly into the real series without a FORK."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-2",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "O63 is not implemented by v2, and its prompt clauses cannot be met with runner v4 and the frozen prompts unchanged",
+   "where": "deploy/vm2/cpsvm2/worker.py:180-205 (generation_record: tools_enabled only, no notes); deploy/vm2/README.md:150-155; docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md:22 ('no code change', M006 pending); deploy/run/cps_job.py:1448-1451 (prompt built from the frozen harness template), 1907-1908 (GENERATION_RECORD_PROMPT_MISMATCH), 1690-1692 (scope prompt sha), 74 (RUNNER_FILES pins VISUAL_REVIEW_PROMPT_TEMPLATE.md); deploy/run/RUN_JOB_COMMANDS.md:115-117",
+   "fix_hint": "Helper-only, minimal: (a) worker.generation_record writes the optional runner field 'notes' (GEN_OPTIONAL, cps_job.py:1840; the record is frozen as raw bytes) with a fixed O63 sentence: 'isolation by instruction only (O63), not enforced or audited; the frozen 046g prompt does not request a tools-used statement'. (b) The S and V AI entries also attest the tools present. (c) The README tells the Dot to list every tool the conversation had (refuse 'none' on this platform). The tools-used statement then needs an owner decision, either accepting the frozen prompts' restrictions in its place, or new templates (a new package candidate against O42, or runner re-admission for the visual template).",
+   "verifier_evidence": "A grep for O63, tools_used and 'tools used' in deploy/vm2, VM_HELPER_V2_SPEC.md, VM_HELPER_V2_DESIGN.md and VM_HELPER_V2_SPEC_DELTA_PROBES.md finds nothing. The delta, line 22, still says 'M006 pending ... no code change'. O63 (CURRENT_STATE.json owner_decision_O63_2026_11_10, commit d00a309, made before the 1d31801 candidate) requires two prompt clauses: forbid every tool except the listed files, and end with a statement of the tools used. The frozen templates do neither. GENERATOR_PROMPT_TEMPLATE.md rule 4 and SCOPE_READER rule 5 say 'Your final message reports only: ...', and VISUAL_REVIEW_PROMPT_TEMPLATE.md:4 forbids only other paths, the web and other agents. worker.generation_record (worker.py:182-205) writes tools_enabled from the attestation and never writes the optional 'notes' field (GEN_OPTIONAL, cps_job.py:1840). README.md:150-155 allows tools 'none'. M006 shows that answer is false on this platform. The runner pins the prompt: GENERATION_RECORD_PROMPT_MISMATCH at cps_job.py:1907-1908 (runner sha 7505e98a... verified), and RUN_JOB_COMMANDS.md:115-117 forbids any follow-up message, so the helper cannot add the clauses itself. Part of the gap lies outside the helper (frozen prompts, runner), but the candidate neither records nor handles it."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-3",
+   "reported_severity": "major",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "major",
+   "title": "The audit does not verify that a CLEAR was authorized as O59 requires: the to-kit's config 'clear' naming the series, halt seq and code is never checked, and a CLEAR with no kit change passes",
+   "where": "deploy/vm2/cpsvm2/maint/audit.py:203-223 (kit_change), 267-268; core/fold.py:858-863 (g59 cannot see the config)",
+   "fix_hint": "In Audit.kit_change for kind CLEAR: require kc['from_kit_sha256'] != kc['to_kit_sha256'] and sjson(to config)['clear'] == {'series': self.series, 'seq': body.halt_seq, 'code': body.code}, else AUD_KIT_CHANGE. Add a test with real kit zips.",
+   "verifier_evidence": "I re-ran p_clear.py. Each case builds a HALT, then a CLEAR with a real config-only kit whose clear is (a) right, (b) {D9,999,OTHER} or (c) null. All three print 'rc 0 clean True codes []'. I also re-ran p_clear2.py, a CLEAR with from_kit == to_kit: 'rc 0 clean True []'. In the code, Audit.kit_change (audit.py:203-223) compares the member lists, config_only, the changed keys, the changeable-keys subset and doc_samples, but never the to-config's 'clear' and never from != to. g59 (fold.py:858-863) cannot see the config. F.config_only(m1, m1) is true for identical lists. The CLEAR authorization required by spec line 1494 and O59 is checked only on the Dot side (session classify, plan row), so the mandatory pre-gate audit cannot catch an unauthorized CLEAR."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-4",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The audit does not re-derive the session's gates and series rules for a non-config-only kit change",
+   "where": "deploy/vm2/cpsvm2/maint/audit.py:212-223 vs core/session.py:194-201 (GATES_CHANGED, series CONFIG_CHANGE_NOT_ALLOWED)",
+   "fix_hint": "In Audit.kit_change, also flag c2['gates'] != state.genesis.gates or c2['series'] != c1['series'].",
+   "verifier_evidence": "I re-ran p_gates.py: a RESTORE kit change to a new accepted release whose config also changes gates.p2_lag_seconds. It prints \"keys changed ['accepts_release_sha256', 'gates']\" and 'audit rc 0 clean True []'. session.kit_change (session.py:194-201) returns GATES_CHANGED or CONFIG_CHANGE_NOT_ALLOWED for a changed series, but Audit.kit_change's non-config-only branch (audit.py:220-221) checks only CLEAR and run_in_flight. The audit therefore does not re-derive the session's gates and series rules."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-5",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "score_check build accepts an assembly that never ran verify-frozen; ASSEMBLE.json does not record whether verify was asked",
+   "where": "deploy/vm2/cpsvm2/maint/assemble.py:411-412; maint/score_check.py:57",
+   "fix_hint": "Record 'verify_frozen': true in ASSEMBLE.json, and have score_check refuse unless it is true and every run's verify is DONE.",
+   "verifier_evidence": "assemble.py:233-234 (not 411-412): clean = no problems and every verify in (None, 'DONE'), with the all-DONE requirement only under --verify-frozen. ASSEMBLE.json (assemble.py:209-212) has no verify_frozen field. score_check.plan (score_check.py:57) checks only asm['clean'], series and problems, so a build without verify-frozen is accepted. This is mitigated, which is why it stays minor: each FROZEN entry already needed verify-frozen NEXT DONE on the VM (spec T24/X9), and assemble checks the strict walk against the members plus the FROZEN.json and carrier shas. The design (line 275) and spec §15.2 step 8 require verify-frozen procedurally, but nothing enforces it."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-6",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "MK-1 and MK-2 are still open in deploy/make_kit.py, although spec §1.3 and §15.2 step 4 list their fixes; the MK-1 regression test exercises a different slip",
+   "where": "deploy/make_kit.py:132-147 (pack), 186-263 (parse_part/assemble), unchanged since 6450792; deploy/vm2/tests/test_v1_regressions.py:105-108, 568-576",
+   "fix_hint": "Key candidates by (sha, size), and select the path by majority across copies, ignoring unsafe paths when another copy agrees on the sha. Refuse duplicate binary names in pack. Make the MK-1 test slip the member path.",
+   "verifier_evidence": "deploy/make_kit.py was last changed in 6450792 (git log). I reproduced both defects on invented files. MK-2: pack of a/src.xls and b/src.xls exits with 'pack rc 0', then assemble fails with 'FAILED b/src.xls: binary file missing or its sha256 differs' (rc 1). MK-1: changing only copy A's '@@ text NOTE.md' to 'NOTE.mx' gives a 4-member kit whose sha 'differs from --expect' (rc 1), and changing it to 'NOT~.md' gives \"FAILED 'NOT~.md': unsafe path\" (rc 1), although copy B is intact. test_v1_regressions.py:568-576 runs only test_damaged_header_line_in_one_copy and test_slipped_header_sha_in_one_copy, so it does not exercise the member-path slip. The test table (lines 105-108) itself says make_kit is unchanged and MK-2 is 'reported open', while spec line 105 and §15.2 step 4 (line 1733) list both fixes."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-7",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "A drill (D) series' folder is CPS/reports, which also holds reports; a complete listing is refused or the audit is unclean, so the drill's 'clean audit' gate is unreachable without filtering",
+   "where": "deploy/vm2/cpsvm2/core/names.py:11-12; maint/audit.py:42-57, 143-151",
+   "fix_hint": "Give D series their own folder (for example CPS/drills/D<n>), or have the audit ignore folder rows and non-CPSJ names for D only, and report them.",
+   "verifier_evidence": "names.py:11-12: FOLDERS['D'] == FOLDERS['reports'] == 'CPS/reports'. cli.py:757 uploads setup logs into FOLDERS['reports'], and DEPLOYMENT_MODEL puts mailbox replies under CPS/reports. I re-ran p_listing.py: load_listing on a Drive folder row (no 'size') raises \"KeyError 'size'\", which audit main turns into 'REFUSED VALUE_PATTERN listing' (audit.py:392-393). Audit.names (audit.py:143-151) adds AUD_FOREIGN_FILE for any name that is not in the series, which includes the logs and earlier D series. A complete listing of the drill folder therefore cannot give a clean audit."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-8",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "score_check check trusts SCORE_PLAN.json bytes; nothing re-derives or binds the plan to what build wrote",
+   "where": "deploy/vm2/cpsvm2/maint/score_check.py:121, 125-154",
+   "fix_hint": "Give check the four build inputs (or the recorded paths), re-run plan() and compare; or have build print the plan sha for the score record and have check require it.",
+   "verifier_evidence": "score_check.check (score_check.py:125-154) reads carrier_sha256 and carrier_path straight from SCORE_PLAN.json and checks only the manifest and the files against them. It never re-runs plan() from audit_sha256, assemble_sha256 or owner_checks_sha256. build (lines 106-122) prints no plan sha that could be pinned. CHECK.json records plan_sha256, so a later reviewer could catch an edited plan by rebuilding, but check itself cannot. An edited plan gives CONSISTENT."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-9",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "Rebase-review owner items (AUD_REBASE_OVER_PRESENT_PART) use a window without the clock tolerance that outcomes applies to every other window",
+   "where": "deploy/vm2/cpsvm2/maint/audit.py:317-319 vs core/outcome.py:76, 96",
+   "fix_hint": "Apply the same utc_minus(+/-tol) widening in Audit.review.",
+   "verifier_evidence": "Audit.review (audit.py:312-323) sets window=[head['utc'], restore['utc']] with no tolerance. outcome.outcomes (outcome.py:76, 96) widens each SUPERSEDED_WINDOW by p3_clock_tolerance_seconds through utc_minus(+/-tol). The owner-review windows are therefore narrower than every other window, although clock sync is unknown (P3)."
+  },
+  {
+   "lens": "maint",
+   "id": "MAINT-10",
+   "reported_severity": "minor",
+   "verdict": "CONFIRMED",
+   "severity_after_verification": "minor",
+   "title": "The audit never compares GENESIS body.jobs with the kit's JOBS.json; probe_p5 reports FAIL for a surviving worker when --seconds is under --min-gap",
+   "where": "deploy/vm2/cpsvm2/maint/audit.py (no reference to genesis jobs; kit_info reads JOBS.json but it is unused); deploy/vm2/probe_p5.py:81-96, 119-123",
+   "fix_hint": "The audit derives the expected jobs list from the genesis kit's release qualification.jobs_file member and compares it with genesis.jobs (AUD_KIT). probe_p5 start refuses --seconds < --min-gap.",
+   "verifier_evidence": "(a) audit.py never mentions jobs: grep finds only kit_change and RELEASE.json checks (audit.py:216, 265). t01 (fold.py:898-905) checks only that jobs is non-null for Q/D. cli.py:1106-1109 builds body.jobs from the release jobs_file, but nothing re-derives it. A GENESIS that omits a non-pool reserved case is accepted by the fold, final_ready and the audit. score_check catches only pool cases (POOL_INVALID, score_check.py:77-79). The cli builds GENESIS honestly, so this needs a faulty or forged GENESIS; I confirmed it from the code and did not reproduce it. (b) probe_p5.py: start accepts any --seconds (default 900, line 66). check sets ok only if lived >= min_gap-5 and min_gap >= 480 (line 119). The worker beats for at most --seconds, so start --seconds 300 always gives FAIL even with done=true. probe_p5 no longer gates anything."
+  }
+ ],
+ "files_sha256": {
+  "deploy/vm2/README.md": "b27491c9be251980e7756c42cf610ba192a345cf64a3bd65ae9365c4771ac38b",
+  "deploy/vm2/REUSE_MANIFEST.json": "1c5b408f1cd4c261adfaf3251585e1457a1a38b37484d3209792593aab3274e9",
+  "deploy/vm2/cpsvm2/__init__.py": "add51c7c5ab733f2eb2611fc40c923636076f9d3a76743a1a8a8c554bf00c25d",
+  "deploy/vm2/cpsvm2/cli.py": "c155b8aa5867331eba4bcc129cd6a0a4f59d32d4547a3aac2f231bd19ac117e7",
+  "deploy/vm2/cpsvm2/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "deploy/vm2/cpsvm2/core/entry.py": "95d038221bed92824642943f2aa46baaf22b4fd1ed451ad7b8fd51f419c88740",
+  "deploy/vm2/cpsvm2/core/fold.py": "74f35c90214b51618f83304c3ce3e53845bc83a989291acaea44e2cd64a2f187",
+  "deploy/vm2/cpsvm2/core/names.py": "756c05ce839d629725bad49d9d0645fdd71fbb83546e9512fd777d4a18e7c6b5",
+  "deploy/vm2/cpsvm2/core/outcome.py": "4af27723170fc1e6380a5b96126689d2fb7a438ef899196c2e5f70251f4b1693",
+  "deploy/vm2/cpsvm2/core/plan.py": "7e4be5f8fec56a2424b608ce7f155ed8967ec047be29391bf81e4d00503cb964",
+  "deploy/vm2/cpsvm2/core/session.py": "64ab06ce76774f1002ae857a71980f4c08a00ead47617b1c6add89ee18960460",
+  "deploy/vm2/cpsvm2/core/step.py": "0b3cecc61e4a4cd88f3e4e053b0772adc14994455946edd89c1ce39192ed907e",
+  "deploy/vm2/cpsvm2/maint/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "deploy/vm2/cpsvm2/maint/assemble.py": "a815b779344fc2dc7f4c88bc3208896571161dd24e233021ffb7217a4a9c07e8",
+  "deploy/vm2/cpsvm2/maint/audit.py": "8d892ab124df5edb5741f8e5607a9a0e63dfd55a7abe70865b3c02660e824249",
+  "deploy/vm2/cpsvm2/maint/score_check.py": "005b11c6ae731f7af37a53b4a602f0a2c2e3bcb137fd03d3d703c7553965c403",
+  "deploy/vm2/cpsvm2/vio/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "deploy/vm2/cpsvm2/vio/drive.py": "e3064fdc008dd99b82009b319ad748f0dd0ce4538d645d3a8786047c82780f98",
+  "deploy/vm2/cpsvm2/vio/durable.py": "32444fa5f5e4c9d2fd9a59e6119afad2339b6dbcb67bd6352186fe6e108bc4c2",
+  "deploy/vm2/cpsvm2/vio/host.py": "5f3c32a2526c86411933f30938e2daac3d9efdf6ae2dbda0e10684a77066f254",
+  "deploy/vm2/cpsvm2/vio/place.py": "fc16faeb738c3d05dd04ce94f97db958e3fec0c868f78f102c366e7d58d34141",
+  "deploy/vm2/cpsvm2/vio/runner.py": "a2afd7e595283ac73481df0e8a34d5fdbd7fb6cfceb688e9493686bca9f2c466",
+  "deploy/vm2/cpsvm2/vio/savepoint.py": "040c68adeda1e14dc98b1db8f061aaddab1d4c41c318deac62cdf19ecca14668",
+  "deploy/vm2/cpsvm2/vio/v1compat.py": "0c015db4fb2f352029a562ba1a19c85c96d27deea119dbc47e7b38e3b8008c8f",
+  "deploy/vm2/cpsvm2/vio/v1mod.py": "13909edf36118917cb22c9e829bc928dcd487af0650da28f0bb41155288c27ed",
+  "deploy/vm2/cpsvm2/vio/v1reuse.py": "bfa7625b815c53b086d9d0e36d275153e8904abd91c5b71cde5945e853df7d10",
+  "deploy/vm2/cpsvm2/worker.py": "866853950873adc3b8b68cc38e01619fe066eeeb7cb05349cf48b4b289ef0be7",
+  "deploy/vm2/probe_p5.py": "efce19efff908590a9910c8650fc420894e1f9a24f84b95363aa4853ca84c359",
+  "deploy/vm2/session_start.sh": "65cc1a56f53b83ea8d9c9cde072949da48bbf7da5fdb07ad90042539b386ed90",
+  "deploy/vm2/tests/core_world.py": "6aec68d0ad7b7e5536673f28c6ab73caa98a08205645a48f9c0cdde1cd5b83a4",
+  "deploy/vm2/tests/fakes.py": "7819bb4fcc6fa463c7d08525f3be07c9434356ce28a158d706bb9beaa64555a2",
+  "deploy/vm2/tests/mutants.py": "44a302cc1bbfd219b8c831f3c85e25955347255cd43f6f3341a34e0c89ecbb67",
+  "deploy/vm2/tests/run_tests.py": "9ca193e9a1381b221e3d57f86545aa2c367e15c608cdd48040af16ff6257cd69",
+  "deploy/vm2/tests/seen.py": "3dd70a3ea24916936493cf15224b21fd7792098906c5a2b057e0687f01d18ac3",
+  "deploy/vm2/tests/table_golden.json": "5318df1168d502f4f460bea79a507eedcff23e3dfd51e268566481b1f94fa62b",
+  "deploy/vm2/tests/test_codes.py": "b2bdba82c6ba11dd5d62e6dabb2fcc602152dac7b4071f7b17441babac1f66a2",
+  "deploy/vm2/tests/test_core_more.py": "9823fb1c81b5dea1fb12dbe9fa31cf5bef5788c85936604b14cbc120fa9585e9",
+  "deploy/vm2/tests/test_core_props.py": "dc4d8ae418e669aebc1dcf69f8121fe4939abbe8314dd082cfd95e45f0e411e2",
+  "deploy/vm2/tests/test_core_table.py": "e27999a00385e90d5ea7152ffdf1336ac7bfa6790296bf882e291fb909acc4c3",
+  "deploy/vm2/tests/test_lints.py": "3b4ae380ecbedbed3cea23ffb9ab57cfc74b83648ce033dde016d96fddc064f8",
+  "deploy/vm2/tests/test_maint.py": "8f5de0316d1d24ee0ec07a7b7640eddd485ccb53b67a96f356e4458b3b38c064",
+  "deploy/vm2/tests/test_probe_p5.py": "7215898a3879e1f7f6c0abf4ff29293f7418786b431d081944e65cd61d980d69",
+  "deploy/vm2/tests/test_resets.py": "1d6e03bb77508c6b2082fb0259fa123b80a957fca05f344d9a67504b421fbadc",
+  "deploy/vm2/tests/test_reuse.py": "94fe60567d5d5b92e3a555f07745b5efe687c57a3a2736a71e3b1d9ec987539a",
+  "deploy/vm2/tests/test_v1_regressions.py": "8cbffaabe664ccaa44a0402890cf5e01acac1d22412ff57f929132d445bf2916",
+  "deploy/vm2/tests/test_vio.py": "fd754aff4fdcb5c6ac6830a70a867f98f42dbc79f9e0268a05922058683710c0",
+  "deploy/vm2/vm2.py": "c632d2f9a422fa438c6af772400df52941916215311c90b8f5b93527d90b538d"
+ },
+ "unchanged": "runner v4 deploy/run/cps_job.py (7505e98a) stays the admitted runner; helper v1 stays rejected (ADMISSION_VM_HELPER_V1.json); the frozen evaluator and aggregators are untouched; no reserved answer was needed or opened"
+}
