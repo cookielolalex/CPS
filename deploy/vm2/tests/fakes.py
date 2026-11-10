@@ -659,7 +659,8 @@ class FakeDot:
         commit = self.notes['repo'] if notes != 'none' else None
         if commit is None:
             got = w.drive.find(N.FOLDERS['static'], 'VM2_RELEASE.md')
-            if not got:
+            if not got:                                   # README step 0: the Dot's own handback (§6.1)
+                seen.scan(['DO: STOP SESSION_NO_COMMIT HANDBACK C'])
                 return 3, ['DO: STOP SESSION_NO_COMMIT HANDBACK C']
             commit = w.drive.download(got[0]['id']).decode().split('commit: ', 1)[1].strip()
         return self.bootstrap(commit, hint)

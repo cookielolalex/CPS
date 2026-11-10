@@ -504,7 +504,7 @@ def hidden_drive(cw, wk, verified_sha=None, t=None, limit=200, stop_at=()):
                     wk['head'] = {'entry': dict(x, state=cw.state, state_sha256=EN.state_sha256(cw.state))}
                     break
                 want = cw.entries[-1]['prev_sha256'] if 'parts' in x else x['sha256']
-                if wk.get('committed') and name == N.entry_name(cw.series, cw.entries[-1]['seq'] + 1):
+                if wk.get('committed') and name == N.entry_name(cw.series, wk['committed']['seq']):
                     want = wk['committed']['sha256']
                 got = verified_sha(name) if verified_sha else want
                 wk.setdefault('verified', {})[did] = [got or want, 0]
@@ -546,7 +546,15 @@ def test_session_md5_hidden_rule_v_paths():
     wk = base()
     wk['lookups'].append({'name': part, 'result': 'present', 'copies': [['IDX', None, 7]], 'utc': CW.utc(cw.t)})
     ph, st, wk, t = hidden_drive(cw, wk)
-    assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)
+    assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)                      # a part copy of another size
+    wk = base()
+    for k, size in (('IDX', 7), ('IDY', 8)):
+        wk['lookups'].append({'name': part, 'result': 'present', 'copies': [[k, None, size]], 'utc': CW.utc(cw.t)})
+    ph, st, wk, t = hidden_drive(cw, wk)
+    assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)                      # two sizes for one part
+    wk = dict(base(), hint={'seq': cw.state['seq'], 'kit': None}, _deleted=[pn])
+    ph, st, wk, t = hidden_drive(cw, wk)
+    assert (ph, st) == ('HEAD', Stop_('LINK_MISMATCH')), (ph, st)             # N-1 absent
     wk = base()
     wk['done'] = [d for d in wk['done'] if d != 'PASS']
     ph, st, wk, t = hidden_drive(cw, wk)
@@ -579,6 +587,14 @@ def test_session_md5_hidden_rule_v_paths():
     ph, st, wk, t = hidden_drive(g1, dict(TC.work(), kit=dict(TC.work()['kit'], config={'gates': g1.gates}),
                                           identity={'home': g1.entries[0]['home'], 'uid': g1.entries[0]['uid']}))
     assert ph == 'CLASSIFY' and isinstance(st, HaltStep) and st.code == 'UNCLASSIFIED', (ph, st)
+    wd = CW.World('E1')
+    wd.commit(CW.genesis(wd))
+    TC.drive(wd, 'INPUTS', 'PREPARE_E', 'AI', 'FINISH', 'AI', 'DELIVER_CHECK', 'DELIVERY')
+    dp = wd.entries[-1]['parts'][0]['name']
+    wk = dict(TC.work(), kit=dict(TC.work()['kit'], config={'gates': wd.gates}), _deleted=[dp], reuploaded=True,
+              identity={'home': wd.entries[-1]['home'], 'uid': wd.entries[-1]['uid']})
+    ph, st, wk, t = hidden_drive(wd, wk)                  # C4 after its re-upload: the rest of the classification (C7)
+    assert ph in ('COMMIT', 'CLASSIFY', 'DONE', 'PLACE'), (ph, st)
 
 
 def Stop_(code):
@@ -630,6 +646,28 @@ def test_more_guard_lines():
     s5 = copy.deepcopy(w.state)
     s5['runs']['A/case01']['roles']['G1']['opened'] = {'conversation': 'conv-00000001', 'utc': CW.utc(CW.T0)}
     assert P.next_action(view(s5, w.boot)).code == 'UNCLASSIFIED'
+
+
+@test
+def test_g22_non_config_kit_does_not_clear_a_halt():
+    """§13.5 (G22, IMP-05, INT-08): a committed HALT is cleared only by a config-only kit. With `clear` naming the HALT
+    and a kit that also changes a table (no run in flight, same release and series), the session stops with
+    HALTED_<code>; the config-only kit of test_session_c2_clear_rebase_conflict_head_error clears it."""
+    cw = TC.q_world()
+    TC.drive(cw, 'HALT')
+    assert cw.state['phase'] == 'HALTED' and not F.run_in_flight(cw.state)
+    v = {'series': 'Q1', 'seq': cw.state['seq'], 'code': cw.state['halt']['code']}
+    wk = TC.work(hint={'seq': cw.state['seq'], 'kit': None})
+    wk['kit'] = {'sha256': CW.KIT2, 'members': CW.MEMBERS[:2] + [['tables/t.json', CW.hx('t2')]],
+                 'release_sha256': CW.REL, 'config': {'gates': cw.gates, 'clear': v}}
+    wk['head_kit'] = {'sha256': CW.KIT, 'members': CW.MEMBERS, 'config': {'gates': cw.gates, 'clear': None}}
+    orig = SE.session_next
+    SE.session_next = lambda view_: orig(dict(view_, clear=v))
+    try:
+        ph, st, wk = TC.run_session(cw, wk)
+    finally:
+        SE.session_next = orig
+    assert (ph, st) == ('CLASSIFY', Stop_('HALTED_' + v['code'])), (ph, st)
 
 
 def run(only=None):

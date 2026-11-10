@@ -519,6 +519,12 @@ def test_tst08_under_stage_direct():
     assert under_stage('/s/stage', 'a/b') and under_stage('/s/stage', 'a')
     for bad in ('../x', 'a/../../x', '/etc/passwd', '..', 'a/../../stage2/x'):
         assert not under_stage('/s/stage', bad), bad
+    d = Path(tempfile.mkdtemp(prefix='tst08_', dir=WORK))
+    (d / 'stage/sub').mkdir(parents=True)
+    (d / 'outside').mkdir()
+    os.symlink(d / 'outside', d / 'stage/lnk')                  # a link on the way leaves the stage
+    assert under_stage(str(d / 'stage'), 'sub/x') and not under_stage(str(d / 'stage'), 'lnk/x')
+    shutil.rmtree(d)
 
 
 def test_tst09_no_catch_all_assertions():
@@ -578,13 +584,13 @@ def test_mk2_duplicate_binary_names_refused():
     from cpsvm2.vio.v1reuse import kit_members
     d = Path(tempfile.mkdtemp(prefix='mk2_', dir=WORK))
     z = d / 'k.zip'
-    with zipfile.ZipFile(z, 'w') as zf:
-        zf.writestr('RELEASE.json', b'{}')
-        zf.writestr('RELEASE.json', b'{"x": 1}')
-        zf.writestr('SHA256SUMS', b'')
     import warnings
     with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
+        warnings.simplefilter('ignore')                 # zipfile warns about the duplicate name it is asked to write
+        with zipfile.ZipFile(z, 'w') as zf:
+            zf.writestr('RELEASE.json', b'{}')
+            zf.writestr('RELEASE.json', b'{"x": 1}')
+            zf.writestr('SHA256SUMS', b'')
         try:
             kit_members(z)
             raise AssertionError('a kit with a duplicate member was accepted')
@@ -840,8 +846,19 @@ WORLD = [
          vis='change_output', stop='HALTED_AI_OUTPUT_CHANGED', extra='x_int07'),
     dict(name='test_kit2_zip_route_rehashes_the_kit', cfg='X', target=None, point=None,
          special='test_kit2_zip_route_rehashes_the_kit'),
+    dict(name='test_imp04_no_commit_file_stops', cfg='X', target=None, point=None,
+         special='test_imp04_no_commit_file_stops'),
 ]
 x_tst06 = x_halted('PROMPT_CHANGED')
+
+
+def test_imp04_no_commit_file_stops(w):
+    """IMP-04, README step 0: the Dot's notes are gone and CPS/VM2_RELEASE.md is not on Drive: the Dot stops with
+    SESSION_NO_COMMIT (case C) and never guesses a commit; with the file it finds the commit (D_notes_none_step0)."""
+    w.drive.folders[N.FOLDERS['static']].pop('VM2_RELEASE.md')
+    code, lines = w.dot.reset(notes='none')
+    assert (code, lines) == (3, ['DO: STOP SESSION_NO_COMMIT HANDBACK C']), (code, lines)
+    assert not (w.base / 'repo').exists(), 'nothing was cloned'
 
 
 def test_kit2_zip_route_rehashes_the_kit(w):
@@ -875,8 +892,8 @@ def run(only=None, work=None):
                 t()
             else:
                 mod = __import__(t[2])
-                if t[2] == 'test_maint':
-                    mod.WORK = WORK
+                if t[2] in ('test_maint', 'test_probe_p5'):
+                    mod.WORK = tempfile.mkdtemp(prefix=t[2] + '_', dir=WORK)
                 fn = getattr(mod, name)
                 fn()
             passed += 1

@@ -91,7 +91,11 @@ def t_l1_codes_registered_and_tested():
     import seen
     got = seen.collect(os.environ['CPSVM2_SEEN_DIR']) | seen.CODES
     REPORT['codes_seen_at_runtime'] = len(got & N.CODES)
-    REPORT['codes_seen_not_registered'] = sorted(c for c in got if not N.is_code(c))
+    maint = set()                                   # the maintainer tools' own result codes (§10.2, §10.3; not §13)
+    for n in ('assemble.py', 'score_check.py'):
+        maint |= set(re.findall(r"(?:Refused|Bad)\('([A-Z][A-Z0-9_]+)'", open(os.path.join(VM2, 'cpsvm2/maint', n)).read()))
+    REPORT['maintainer_codes_seen'] = sorted(c for c in got if not N.is_code(c) and c in maint)
+    REPORT['codes_seen_not_registered'] = sorted(c for c in got if not N.is_code(c) and c not in maint)
     never = sorted(N.CODES - got)
     REPORT['codes_never_raised'] = never
     assert not never, 'L1: registry codes no test raised: %s' % never
@@ -168,6 +172,7 @@ def t_l4_core_line_coverage():
     mon.use_tool_id(tid, 'vm2-lint-L4')
     mon.register_callback(tid, mon.events.LINE, on_line)
     mon.set_events(tid, mon.events.LINE)
+    test_core_table.ENUM.clear()                   # the enumeration is cached per process: run it again here
     try:
         for p in sorted(files):                    # module-level lines ran at import, before monitoring: run them again
             exec_module_body(p)

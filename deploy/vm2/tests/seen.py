@@ -35,6 +35,20 @@ def _wrap_init(cls, get):
     cls.__init__ = init
 
 
+def _wrap_ret(mod, name, get):
+    fn = getattr(mod, name)
+
+    def w(*a, **k):
+        r = fn(*a, **k)
+        try:
+            add(get(r))
+        except (TypeError, KeyError, IndexError, AttributeError):
+            pass
+        return r
+    w.__wrapped__ = fn
+    setattr(mod, name, w)
+
+
 def install():
     if _DONE:
         return
@@ -54,6 +68,21 @@ def install():
     _wrap_init(outcome.OwnerChecksInvalid, lambda e: e.code)
     _wrap_init(score_check.Refused, lambda e: e.code)
     _wrap_init(assemble.Bad, lambda e: e.args[0] if e.args else None)
+    from cpsvm2.core import names, plan, session
+    from cpsvm2.vio import drive, savepoint
+    # functions whose contract is to return a refusal or stop code (the caller prints it): record the code returned
+    for mod, name, get in ((cli, 'transcript_problem', lambda r: r), (cli, 'delivery_commit', lambda r: r),
+                           (cli, 'apply_answer', lambda r: r), (cli, 'ai_commit', lambda r: r),
+                           (cli, 'inputs_commit', lambda r: r), (drive, 'check_found', lambda r: r[0]),
+                           (savepoint, 'on_found', lambda r: r[1]), (savepoint, 'on_verify', lambda r: r[1]),
+                           (savepoint, 'setup_found', lambda r: r[1]), (savepoint, 'setup_verify', lambda r: r[1]),
+                           (session, 'kit_change', lambda r: r[0]), (session, 'classify', lambda r: r[1].get('stop')),
+                           (session, 'head_search', lambda r: r.get('code')),
+                           (plan, 'chain_next', lambda r: r['code'] if r.get('entry') == 'HALT' or
+                            r.get('action') == 'stop' else None),
+                           (names, 'check_value', lambda r: r[0] if r else None),
+                           (names, 'check_answers', lambda r: r[0][0] if r[0] else None)):
+        _wrap_ret(mod, name, get)
     emit0, bare0 = cli.emit, cli.bare
 
     def emit(env, state_code, blk, expect, refused=None):

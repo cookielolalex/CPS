@@ -397,7 +397,34 @@ def test_inputs_changed_refused():
         {k: v for k, v in snap.items() if k != 'BLOCK.json'}
 
 
-TESTS = [test_rewalk_reports_a_file_not_in_the_snapshot, test_fingerprint_change_stops_the_chain,
+def test_foreign_md5_same_size_is_fork():
+    """§5.1 step 6 (G2) with md5 visible: a copy of the entry's name with the local size and another md5 is FORK."""
+    import test_vio as V
+    V.WORK = WORK
+    root = tmp('fork_md5')
+    env = V.SPEnv(root, gates={'p2_md5_visible': 'yes'})
+    pend, entry, _, _ = V.write_png_commit(env, V.make_job(root, pngs=0))
+    same = {entry['name']: ['%s:%s:%d' % ('id%020d' % 98, 'f' * 32, pend['entry']['bytes'])]}
+    assert savepoint.on_found(env, pend, same, lambda v: None) == ('stop', 'FORK')
+    ok = {entry['name']: ['%s:%s:%d' % ('id%020d' % 97, pend['entry']['md5'], pend['entry']['bytes'])]}
+    assert savepoint.on_found(env, pend, ok, lambda v: None) == ('ok', None)
+
+
+def test_marks_survive_every_commit():
+    """§2.3 (G16, r2 INT-01): STATE.marks are copied unchanged by every commit of the boot (savepoint.finish), so no
+    OPEN, AWAIT, CONTINUE or DELIVER printed before a commit (OPENED, HALT, CLEAR, ACK) is printed again."""
+    import test_vio as V
+    V.WORK = WORK
+    root = tmp('marks')
+    env = V.SPEnv(root)
+    pend, entry, _, _ = V.write_png_commit(env, V.make_job(root, pngs=1))
+    V.drive_pending(env, V.FakeDrive(), pend)
+    marks = {'OPEN:A/case01:G1:1:4': '2026-11-10T00:00:00Z', 'DELIVER_USER:E/c:7:0': '2026-11-10T00:00:01Z'}
+    st = savepoint.finish(env, {'marks': dict(marks), 'post': []}, pend)
+    assert st['marks'] == marks and st['head']['seq'] == 1, st['marks']
+
+
+TESTS = [test_foreign_md5_same_size_is_fork, test_marks_survive_every_commit, test_rewalk_reports_a_file_not_in_the_snapshot, test_fingerprint_change_stops_the_chain,
          test_place_ledger_sha_checked, test_evict_frozen_sha_checked, test_inputs_changed_refused, test_archive_codes, test_kit_codes, test_layout_codes, test_ledger_codes, test_clock_behind,
          test_png_and_ai_limits, test_evict_failed_and_post_action_failed, test_write_readback_mismatch,
          test_job_busy_too_long, test_transcript_and_copy_codes, test_internal_step_overflow,
