@@ -1,4 +1,4 @@
-# Dot probe results (M001–M007, 2026-11-09/11)
+# Dot probe results (M001–M008, 2026-11-09/11)
 
 What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in its replies in the Drive folder `CPS/reports/M00n_*`. The replies themselves are the evidence; this file summarizes them without Drive file ids, conversation ids or business content. Recorded 2026-11-10.
 
@@ -56,8 +56,19 @@ Recorded 2026-11-11 from the Dot's reply files, checked by the maintainer agains
 - **Upload review is literal.** The automatic review refused the probe upload that step 3 asked for, because the message's final list of files to upload did not name it ("outside the authorized payload"). After the owner approved it, it went through. Messages must list every upload in one place. The standing rules the Dot quoted come from owner messages: the 5-at-once and 20-a-day document limits were written for a different storage service (Synology Drive/File Station) and, by their scope, are not Google Drive quotas; the CPS mailbox rules forbid deleting, replacing, renaming or moving Drive files. The Dot confirms that the owner can approve in advance a bounded class of new-file uploads into `CPS/qualification/` and `CPS/reports/` and their subfolders, in the owner's conversation with the Dot or through the platform's custom-rules confirmation; such an approval does not authorize qualification itself.
 - **Read-only job folders.** As uid 1000 (not root), `rm -rf` of the suite's work folder failed with "Permission denied" on read-only frozen fixture directories; it worked after `chmod u+w` on the directories only (no symlink followed), with the owner's approval. Every helper and runner test so far ran as root, which ignores these permission bits; the helper's v2.1 suite adds a non-root run (plan decision D16).
 
+## M008: large invented render and a 30-minute hold (2026-11-11)
+
+Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message.
+
+- Steps 1 and 2 matched: the setup commit, `visual_qa.py` sha256 `68814f14…8ac0`, and the invented workbook's cell hash `27d563a0…a0e2` (3,100 rows; 335 pages and 332 s on the maintainer's busy machine).
+- **The render was killed by an interruption, not by the renderer.** The command was started once in the foreground; after its first return, a poll of that session was interrupted. On resumption the Dot's tool reported `cell belongs to a stale code-mode host generation`, and polling the process gave `Unknown process id`. No visual QA, LibreOffice or pdftoppm process remained; `render.out` and `render.err` were empty and the render folder had no files (no PDF); `/tmp` held about 16 MB more than before, consistent with a LibreOffice start that was cut off. Files on the VM were otherwise intact (`~/cps-tools`, the probe folder): this was not a VM reset. The render time on the Dot is still unmeasured.
+- **The 30-minute hold completed** in one uninterrupted run: 1,800 s, 31 beats, exit 0, with five polls of about 300 s each and a sixth that completed. So a foreground command longer than 1,200 s can complete, as long as nothing interrupts the Dot's work.
+- Consequence: a running command dies when the Dot's command host is replaced, which happens on an interruption, even without a VM reset. Runner stages last minutes, so the operating rules must keep anything from interrupting the Dot while a command runs. For the helper, `FOREGROUND_DIED` in the same boot is a real, expected event, not only a theoretical one. What caused the interruption is asked in M009.
+- Cleanup passed; nothing was uploaded besides CLAIM.md and REPLY.md.
+
 ## Not yet known
 
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
 - Which VM a scheduled mailbox run receives (the Dot could not yet confirm it).
-- The Dot's time for the largest real-size visual QA render, and whether a foreground hold longer than 1,200 s completes (M008).
+- The Dot's time for the largest real-size visual QA render (M008's render was killed by an interruption; repeated in M009).
+- What interrupted the Dot during M008 step 3: its own message to the owner ending the turn, an owner action, or the platform (asked in M009).
