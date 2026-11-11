@@ -1,4 +1,4 @@
-# Dot probe results (M001–M011, 2026-11-09/11)
+# Dot probe results (M001–M012, 2026-11-09/11)
 
 What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in its replies in the Drive folder `CPS/reports/M00n_*`. The replies themselves are the evidence; this file summarizes them without Drive file ids, conversation ids or business content. Recorded 2026-11-10.
 
@@ -109,6 +109,18 @@ Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message. All te
 
 **Consequence for the helper.** The standard route can write `/tmp`, sees the same files as the elevated route, and honours the same locks. The helper keeps its files, the runner's jobs roots and the release under the base folder set by `CPS_VM_BASE` (default `~/cps`). The `vm.sh` launcher does not carry that variable, so every command would have to set it. The runner writes to the jobs root it is given (the job folders and a temporary `.validate_` folder), to the qualification ledger the release names, and to temporary folders under `TMPDIR`. Its tools keep `$HOME`, except LibreOffice and `pdftoppm` in visual QA, which get a temporary one. Reading the code does not settle whether Chromium (the view screenshots), node or git try to write under `$HOME`, or whether fontconfig needs to update its cache in `~/cps-tools`. If none of them does, a run with its base under `/tmp` needs no elevated route and goes through no automatic review. Only `session_start.sh` would need the elevated route, when it runs the light setup, which writes `~/cps-tools` and runs again after a reset and whenever the named commit changes. M012 tests this with the runner's own test suite, run entirely through the standard route under `/tmp`. If it fails, every helper command uses the elevated route, and the README must say that a request stopped in review has not run: retry it once, then ask the owner.
 
+## M012: the runner suite through the standard route (2026-11-11)
+
+Recorded 2026-11-11 from the Dot's REPLY.md and its runner_tests.log (74 bytes, the suite's six-line summary), checked against the message. The test commands and the cleanup ran in the coordinating conversation that the claim names; a mailbox worker claimed the message, assembled and uploaded the reply, and read the message and the log once each after the tests (disclosed as a deviation). The owner approved the batch in chat before it ran.
+
+- **The runner's test suite passed through the standard route alone:** 249 of 249, suite exit 0, 636 s by the shell (634.9 s in the summary), at the setup commit `eafe9b2`, with the repository copy, `--work` and `TMPDIR` all under `/tmp`. No command used the elevated route, none was stopped by a review, and no setup was needed. The suite runs the runner's stages on 25 invented jobs (134 stages) and needs the same tools as a real job: LibreOffice, `pdftoppm`, node with the writer, and Playwright Chromium.
+- **No refused write was logged.** The search of the runner log and of every file the suite left in its work folder found no `Read-only file system` or `EROFS` line. The Dot's `XDG_CACHE_HOME`, `XDG_CONFIG_HOME` and `XDG_RUNTIME_DIR` point under the read-only home folder; the tools ran without writing there. This covers the error strings searched for in this suite's output, not every possible file access.
+- **What the standard route can write:** `/tmp`, `/dev/shm`, `/var/tmp` and the command's working directory, but not `/home/agent` or `~/cps-tools/var`.
+- **Time.** The suite took 636 s against 585.9 s in M007 and the largest `finish` stage 81.9 s against 72.5 s. The runs were not controlled for load, so this does not show that the standard route is slower. The work folder used 145 MB of `/tmp`.
+- Cleanup passed; the reply folder holds CLAIM.md, runner_tests.log and REPLY.md, as the message asked.
+
+**Consequence for the helper (decided for the v2.1 amendment).** A run can keep every CPS write under `/tmp` and run through the standard route: no elevated route and no automatic review for the commands of a run. The helper's base folder moves under `/tmp` (`CPS_VM_BASE`, carried by the `vm.sh` launcher and named in the README instead of `~/cps`). Only `session_start.sh` needs the elevated route, when it runs the light setup that writes `~/cps-tools` (after a reset, or when the named commit changes). The real-size render of M009 and the helper's own commands have not yet run through the standard route; the reset drill before qualification does that.
+
 ## Not yet known
 
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
@@ -116,6 +128,5 @@ Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message. All te
 - The Dot's time for a real job's `finish` stage (projected at roughly 350 to 550 s from M009's invented render, not measured).
 - What killed M008's render: something specific to its separate child conversation, or a platform event (M010's separate-worker test did not run; a command in the coordinating conversation survived a wait and wake).
 - Whether a wait with a wake-up ends a turn in the platform's sense, and whether waiting while a command runs is safe in general. M010 showed one 10-minute wait and wake; M008's render died while the coordinating conversation waited.
-- Whether the runner's stages (LibreOffice, pdftoppm, the node writer, Chromium for the view screenshots) work through the standard route with every CPS write under `/tmp` (tested in M012).
 - Whether a native worker or a separate conversation can use the elevated route (the reply cites M009's worker; M010's worker had none), and what network access a command has.
 - What the automatic review of elevated commands decides on, how long its deadline is, what `prefix_rule` would cover, and whether any approval carries over to other conversations or across a reset.
