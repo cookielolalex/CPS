@@ -1,4 +1,4 @@
-# Dot probe results (M001–M008, 2026-11-09/11)
+# Dot probe results (M001–M009, 2026-11-09/11)
 
 What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in its replies in the Drive folder `CPS/reports/M00n_*`. The replies themselves are the evidence; this file summarizes them without Drive file ids, conversation ids or business content. Recorded 2026-11-10.
 
@@ -66,9 +66,21 @@ Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message.
 - Consequence: a running command dies when the Dot's command host is replaced, which happens on an interruption, even without a VM reset. Runner stages last minutes, so the operating rules must keep anything from interrupting the Dot while a command runs. For the helper, `FOREGROUND_DIED` in the same boot is a real, expected event, not only a theoretical one. What caused the interruption is asked in M009.
 - Cleanup passed; nothing was uploaded besides CLAIM.md and REPLY.md.
 
+## M009: render timing, progress notes, the M008 readback (2026-11-11)
+
+Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message: the setup commit, `visual_qa.py` sha256 `68814f14…8ac0` and the invented workbook's cell hash `27d563a0…a0e2` matched; the reply folder holds only CLAIM.md and REPLY.md.
+
+- **The render completed on the Dot.** `visual_qa.py` exit 0, status `RENDERED_AWAITING_VISUAL_INSPECTION`, `complete_render` true, **619 s** for **403 pages** (550 MB). The same workbook gives 335 pages on the maintainer's machine (332 s there), so the Dot's LibreOffice paginates it into about 20% more pages. Per page that is 1.54 s against 0.99 s, about 1.6 times slower.
+- **`pdftoppm` alone** on the same PDF: exit 0, **706 s** for 403 pictures (530 MB), against 287 s for 335 here: 1.75 s against 0.86 s per page, about 2 times slower. It took longer than the whole render step that contains the same call, so timings on the Dot vary by at least 15% between runs.
+- **Consequence for real jobs (projection, not a measurement).** M007's 4.5 times came from the suite's small jobs, where start-up costs dominate; on a large render the Dot is about 1.6 to 2 times slower per page. The largest real `finish` stage (190 s here; one `pdftoppm` call over 336 real pages, which are lighter than the invented ones) projects to roughly 400 to 550 s on the Dot, allowing 20% more pages. That leaves about 1.6 times margin under `visual_qa.render`'s 900 s per-call timeout and more under the proven holds (1,800 s). The denser invented pages already used 706 s of the 900 s in one call, so a real job far larger than any seen so far could reach the timeout.
+- **No interruption in M009.** All commands ran once in the foreground with 300 s polls of the same session; no `stale code-mode host generation` or `Unknown process id` error.
+- **Messages during a running command are safe.** The requested one-line progress note was sent while the 6-minute hold ran; the hold completed (360 s, 7 beats). The owner also asked two questions while step 4 and step 5 ran; the Dot answered them, and the running commands completed. Sending a message does not end the Dot's turn.
+- **The cause of M008's interruption is still unknown.** The readback exposes only the latest turn of the conversation that ran M008 (completed), not the turn in which the render started. New facts: M008 ran in a separate conversation that the Dot's coordinating conversation created; the coordinating conversation sent its progress note, then waited, and a clock-triggered turn at 04:13 found the render dead. The owner sent nothing in that interval. M009 ran under the coordinating conversation's own claim and kept its turn open. M010 tests the two remaining suspects with invented holds: a command left running when the turn ends, and a command run in a separate conversation while the coordinating one waits.
+- **Approval wait.** The Dot paused M009's commands for the owner's explicit confirmation, which came 36 minutes after the claim.
+- Cleanup passed; nothing was uploaded besides CLAIM.md and REPLY.md.
+
 ## Not yet known
 
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
 - Which VM a scheduled mailbox run receives (the Dot could not yet confirm it).
-- The Dot's time for the largest real-size visual QA render (M008's render was killed by an interruption; repeated in M009).
-- What interrupted the Dot during M008 step 3: its own message to the owner ending the turn, an owner action, or the platform (asked in M009).
+- What killed M008's render: the end of the turn while the command ran, running it in a separate conversation while the coordinating one waited, or the platform (tested in M010).
