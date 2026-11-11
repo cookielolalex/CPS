@@ -1,4 +1,4 @@
-# Dot probe results (M001–M005, 2026-11-09/10)
+# Dot probe results (M001–M007, 2026-11-09/11)
 
 What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in its replies in the Drive folder `CPS/reports/M00n_*`. The replies themselves are the evidence; this file summarizes them without Drive file ids, conversation ids or business content. Recorded 2026-11-10.
 
@@ -43,7 +43,21 @@ What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in
 - A model can be chosen when a conversation is created (the native worker lists five model ids); the resolved model is not returned, so the generation record must state the requested model.
 - The owner can approve a bounded class of actions in advance (for example uploads into `CPS/qualification/`); some actions (running new software outside the sandbox's writable paths, permission changes, deletion) still need approval each time. Writing outside the sandbox's writable paths used the platform's elevated route.
 
+## M007: timing, raw downloads, upload approvals (2026-11-11)
+
+Recorded 2026-11-11 from the Dot's reply files, checked by the maintainer against what the message asked: the runner summary log, the stage-time output and both saved search objects were downloaded and decoded, and the probe file's sha256 was recomputed.
+
+- **Another real VM reset** (the first recorded one was during M005). At the claim both `~/cps/.git` and `~/cps-tools/env.sh` were gone. The Dot waited about two hours for the owner's approval before re-running the light setup (161 s; `check_env` all_met; node sha256 `94efd062…9a90` unchanged). Resets are frequent: the restore path will run often, and each reset may wait for an owner approval unless that is approved in advance.
+- **Runner suite on the Dot** at the setup commit `eafe9b2`: 249/249 passed, exit 0, 585.9 s. The maintainer's rehearsal of the same command took 250.1 s, so the Dot is about 2.3 times slower on the suite.
+- **Stage times** (max over the suite's 25 invented jobs, 134 stages), Dot against the maintainer's rehearsal: `finish` 72.5 s against 16.2 s (about 4.5 times), `prepare` 5.0 s against 3.2 s, `scope-finish` 1.9 s against 1.1 s; every other stage 0.0 s.
+- **Consequence for real jobs (projection, not a measurement).** The longest real `finish` stage on the maintainer machine (046g dev trial) was 190 s, dominated by one step: the internal visual QA, whose single `pdftoppm` call renders 336 A3 pages at 150 dpi (about 193 s alone; the LibreOffice PDF export takes about 7 s). At about 4.5 times, that stage would take roughly 850 s on the Dot. That is under the longest proven foreground hold (1,200 s, M003) and under `visual_qa.render`'s 900 s per-call timeout, but with little margin. An invented-data render of the same size on the Dot (M008) measures it before the helper's stage limits are set.
+- **Raw downloads work byte-exact without base64.** The Drive fetch tool with `download_raw_file=true` and `include_base64=false` returns a file reference; the platform's download tool then writes the original bytes to a local attachment file and returns its path and size; the Dot copies that file with `cp`. The downloaded probe's sha256 equalled the original (`1442d97c…8982`, 11 bytes).
+- **Saved tool results.** The Dot serializes the returned object with `JSON.stringify` in its orchestration code and writes it to the VM with a Python heredoc; it states that the same works for upload and folder-listing results. The saved search object has exactly the M004 envelope (`content`, `structuredContent.results[]`, `isError`), sizes as strings; an empty search is `{"results": []}`.
+- **Upload review is literal.** The automatic review refused the probe upload that step 3 asked for, because the message's final list of files to upload did not name it ("outside the authorized payload"). After the owner approved it, it went through. Messages must list every upload in one place. The standing rules the Dot quoted come from owner messages: the 5-at-once and 20-a-day document limits were written for a different storage service (Synology Drive/File Station) and, by their scope, are not Google Drive quotas; the CPS mailbox rules forbid deleting, replacing, renaming or moving Drive files. The Dot confirms that the owner can approve in advance a bounded class of new-file uploads into `CPS/qualification/` and `CPS/reports/` and their subfolders, in the owner's conversation with the Dot or through the platform's custom-rules confirmation; such an approval does not authorize qualification itself.
+- **Read-only job folders.** As uid 1000 (not root), `rm -rf` of the suite's work folder failed with "Permission denied" on read-only frozen fixture directories; it worked after `chmod u+w` on the directories only (no symlink followed), with the owner's approval. Every helper and runner test so far ran as root, which ignores these permission bits; the helper's v2.1 suite adds a non-root run (plan decision D16).
+
 ## Not yet known
 
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
 - Which VM a scheduled mailbox run receives (the Dot could not yet confirm it).
+- The Dot's time for the largest real-size visual QA render, and whether a foreground hold longer than 1,200 s completes (M008).
