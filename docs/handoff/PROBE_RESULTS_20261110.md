@@ -1,4 +1,4 @@
-# Dot probe results (M001–M010, 2026-11-09/11)
+# Dot probe results (M001–M011, 2026-11-09/11)
 
 What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in its replies in the Drive folder `CPS/reports/M00n_*`. The replies themselves are the evidence; this file summarizes them without Drive file ids, conversation ids or business content. Recorded 2026-11-10.
 
@@ -94,6 +94,20 @@ Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message. The re
 
 **Operating rules this gives the helper's README (for the v2.1 amendment; to be confirmed by M011):** run each helper command in the foreground, through the elevated route, in the coordinating conversation that the claim names as owner, never in a worker or another conversation it starts. Poll that same session until the command exits, and prefer polling to waiting: a wait with a wake-up survived once (M010), but M008's render died while the coordinating conversation waited. A progress note or an answer to the owner is allowed while a command runs (M009, M010). Never judge a command alive or dead with `ps` or a process id. Never start a command again after it died, for example after a poll error such as `Unknown process id`: record it and let the helper's next command report it (`FOREGROUND_DIED`). If the elevated route is not approved, or a command fails with `Read-only file system`, stop, report the exact error and wait for the owner. Never retry such a command unprivileged, in another folder, or in a worker or conversation without the elevated route. Do not count on the scheduled mailbox check to wake the conversation while work is claimed: it does nothing then.
 
+## M011: writable paths, approvals, locks across commands (2026-11-11)
+
+Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message. All test commands ran in the coordinating conversation that the claim names; a mailbox worker assembled the reply and ran one extra read-only absence check afterwards (disclosed). The reply omits the raw mount lines as platform infrastructure detail and marks which outputs it did not keep verbatim.
+
+- **Two command routes.** The Dot's command tool takes a per-command `sandbox_permissions` value: `use_default` (the standard route) or `require_escalated` (the elevated route, with a written justification). It also has an optional `prefix_rule` field for a reusable command prefix; M011 left it unset, and what it would cover is unknown.
+- **What the standard route can write.** `/tmp` and the command's working directory: yes. `/home/agent` and `~/cps-tools`: no (read-only file system). Through the elevated route every tested place was writable. Both routes ran as uid 1000 with the same boot id.
+- **Both routes see the same files.** A line written through the elevated route under `$HOME` and in `/tmp` was read back through the standard route, and a line the standard route wrote in `/tmp` was read through the elevated route; the device and inode numbers matched in every case.
+- **A `flock` held by one command blocks other commands, through either route.** An elevated command locked the folder `~/cps-m011` (the runner's kind of lock). While it held the lock, an elevated probe and a standard probe were both refused; after it released the lock, both got it. Every line showed the same device and inode and the same boot id. So the helper's and the runner's locks work on the Dot, including from a command without the elevated route.
+- **Every elevated command passes an automatic review.** The first elevated request did not run: the review timed out (`The automatic permission approval review did not finish before its deadline. Do not assume the action is unsafe based on the timeout alone. You may retry once, or ask the user for guidance or explicit approval.`). The one retry ran. The deadline is not shown. A request stopped in review has not run, so retrying it once is safe; this differs from a command that started and died, which must not be re-run.
+- **Owner approvals were chat messages.** The owner wrote "yes go, all M series tasks are automatically approved" (08:23:33Z) and, when the Dot said its elevated check was waiting for the platform's approval, "Approved" (08:26:07Z). The Dot cannot see whether the platform showed the owner any prompt, nor any standing grant that may exist, nor whether an approval carries over to other conversations or across a reset. No standing approval was created.
+- Cleanup passed; nothing was uploaded besides CLAIM.md and REPLY.md.
+
+**Consequence for the helper.** The standard route can write `/tmp`, sees the same files as the elevated route, and honours the same locks. If every CPS command keeps its writes under `/tmp` (the helper's base folder is set by `CPS_VM_BASE`; the runner writes only to its job folders and `TMPDIR`), the commands of a run need no elevated route and pass no automatic review; only the light setup after a reset, which writes `~/cps-tools`, would. M012 tests this with the runner's own test suite, run entirely through the standard route under `/tmp`. If it fails, every helper command uses the elevated route, and the README must say that a request stopped in review has not run: retry it once, then ask the owner.
+
 ## Not yet known
 
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
@@ -101,5 +115,5 @@ Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message. The re
 - The Dot's time for a real job's `finish` stage (projected at roughly 350 to 550 s from M009's invented render, not measured).
 - What killed M008's render: something specific to its separate child conversation, or a platform event (M010's separate-worker test did not run; a command in the coordinating conversation survived a wait and wake).
 - Whether a wait with a wake-up ends a turn in the platform's sense, and whether waiting while a command runs is safe in general. M010 showed one 10-minute wait and wake; M008's render died while the coordinating conversation waited.
-- Which paths a command can write without the elevated route, how far one owner approval of the elevated route reaches, and whether a command prefix can be approved in advance (asked in M011).
-- Whether a `flock` held by one command blocks another command (asked in M011).
+- Whether the runner's stages (LibreOffice, pdftoppm, the node writer) work through the standard route with all writes under `/tmp` (tested in M012).
+- What the automatic review of elevated commands decides on, how long its deadline is, what `prefix_rule` would cover, and whether any approval carries over to other conversations or across a reset.
