@@ -1,4 +1,4 @@
-# Dot probe results (M001–M009, 2026-11-09/11)
+# Dot probe results (M001–M010, 2026-11-09/11)
 
 What the operator ("the Dot", a ChatGPT agent with its own cloud VM) reported in its replies in the Drive folder `CPS/reports/M00n_*`. The replies themselves are the evidence; this file summarizes them without Drive file ids, conversation ids or business content. Recorded 2026-11-10.
 
@@ -79,9 +79,26 @@ Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message: the se
 - **Approval wait.** The Dot paused M009's commands for the owner's explicit confirmation, which came 36 minutes after the claim.
 - Cleanup passed; nothing was uploaded besides CLAIM.md and REPLY.md.
 
+## M010: turn end, separate worker, sandbox (2026-11-11)
+
+Recorded 2026-11-11 from the Dot's REPLY.md, checked against the message. The reply marks which output lines it kept verbatim and which it only summarized; the summary below uses the verbatim ones.
+
+- **The home folder is read-only without the elevated route.** The first, unprivileged setup command failed with `mkdir: cannot create directory '/home/agent/cps-m010': Read-only file system`. The Dot re-ran it through the platform's elevated route, which the owner had approved for this message ("yes go", one approval covering every command of the message), and it passed (`hold.py` sha256 `e1afe3e1…57ac5`, self-test exit 0). So every command that writes under `$HOME` (setup, runner, helper) needs the elevated route and its approval. How far one approval reaches, and whether a command prefix can be approved in advance, is asked in M011.
+- **Test B (separate worker) did not run.** The Dot gave the command to a newly created native worker without the elevated route; its first write failed (`OSError: [Errno 30] Read-only file system`), so no hold ran. It was not retried. Whether a command survives in a separate conversation stays untested.
+- **Test A: a command survived its conversation's wait and wake.** The coordinating conversation started the 1,200 s hold itself (07:26:13Z), sent the "my turn ends now on purpose" note, set a one-time wake-up and began a 600 s clock wait. A clock-triggered turn resumed it at 07:36:05Z; it wrote "M010 resumed", polled the same session (still running), and polled it to the end: `hold done seconds=1200`, exit 0, 41 beats with no gap. The wake-up it had set arrived seconds after it resumed and was ignored as a duplicate. Whether the platform counts such a wait as the end of a turn is not visible; what is shown is that a running command survives the wait-and-wake cycle.
+- **`ps` cannot see other commands' processes.** While the hold was still running, a separate check command found no process with the hold's id (5) (`ps exit=1`). Each command runs in its own process namespace, and process ids are small and repeat. A process id or `ps` says nothing about a command started by another command; only polling that command's own session does. The helper and runner already use file locks (`flock`) and the boot id, not process ids, to decide whether a command is still running; process ids only name temporary files, whose leftovers are removed. M011 checks that a `flock` held by one command is seen by another.
+- **How earlier probes ran.** M009's commands ran in a native worker that the coordinating conversation started and kept polling, not in the coordinating conversation itself. M008's ran in a separate child conversation, whose creation route the readback does not show. The scheduled mailbox checks are carried out by native workers that the coordinating conversation starts; a check at 07:22:33Z found M010's fresh claim and did nothing, as the mailbox rules say.
+- **No visible limit** on a turn, a wait or a command. Commands of 619, 706, 1,200 and 1,800 s have completed; these are demonstrated durations, not limits.
+- **What killed M008's render is still unknown.** Of the configurations tried, the ones that worked are a command in the coordinating conversation (M010, across a wait and wake) and a command in a polled native worker (M009). The one that failed is a separate child conversation (M008).
+- Cleanup passed; nothing was uploaded besides CLAIM.md and REPLY.md.
+
+**Operating rules this gives the helper's README (for the v2.1 amendment):** run each helper command in the conversation that claimed the work, through the elevated route, in the foreground; poll that same session until it exits; a wait with a wake-up, a progress note or an answer to the owner is allowed while it runs; never judge a command alive or dead with `ps` or a process id; never hand a helper command to another conversation or a worker.
+
 ## Not yet known
 
 - Behaviour of a conversation whose VM resets mid-run (not testable without forcing a reset).
 - Which VM a scheduled mailbox run receives (the Dot could not yet confirm it).
 - The Dot's time for a real job's `finish` stage (projected at roughly 350 to 550 s from M009's invented render, not measured).
-- What killed M008's render: the end of the turn while the command ran, running it in a separate conversation while the coordinating one waited, or the platform (tested by M010).
+- What killed M008's render: something specific to its separate child conversation, or a platform event (M010's separate-worker test did not run; a command in the coordinating conversation survived a wait and wake).
+- Which paths a command can write without the elevated route, how far one owner approval of the elevated route reaches, and whether a command prefix can be approved in advance (asked in M011).
+- Whether a `flock` held by one command blocks another command (asked in M011).
