@@ -5,7 +5,6 @@ import json
 import os
 import re
 import subprocess
-from pathlib import Path
 
 from .v1compat import HELPER_REPO, stop
 from .v1reuse import current_boot_id, sha_bytes, sha_file, sjson
@@ -47,7 +46,6 @@ class Paths:
         self.state, self.pending, self.block, self.halt, self.work = (self.v2 / n for n in (
             'STATE.json', 'PENDING.json', 'BLOCK.json', 'HALT.json', 'RESTORE_WORK.json'))
         self.hint, self.foreground = self.v2 / 'HINT.json', self.v2 / 'FOREGROUND.json'
-        self.deliveries = Path(lay.home or '/nonexistent') / 'cps-deliveries'
 
 
 class Ctx2:

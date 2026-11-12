@@ -1,6 +1,5 @@
 """go / found / answer (spec §6): the glue that carries out the Steps core returns and decides nothing itself.
 Only `go` runs a stage, in its own foreground (§X.7.2). Exit 0 follow, 3 STOP, 4 refused, 2 usage."""
-import errno
 import os
 import re
 import secrets
@@ -91,7 +90,7 @@ class Env:
     def idcfg(self, case=''):
         c = self.cfg or {}
         return {'drive_id_re': c.get('drive_id_re'), 'conversation_re': c.get('conversation_re') or r'(?!)',
-                'doc_samples': c.get('doc_samples') or [], 'home': self.lay.home or '', 'case': case}
+                'doc_samples': c.get('doc_samples') or [], 'base': str(self.lay.base), 'case': case}
 
     def file_id(self, name):
         c = self.cache or {}
@@ -470,8 +469,12 @@ def main(argv):
         lock.__enter__()
     except Halt:
         return busy(lay)
+    except OSError as e:                            # A3: an OSError (EROFS) anywhere ends in a block, never a traceback
+        return safe_stop(None, durable.DurableError(e.errno).code)
     try:
         return run_command(lay, lock, argv)
+    except OSError as e:                            # A3: also one raised while a STOP is being handled
+        return safe_stop(None, durable.DurableError(e.errno).code)
     finally:
         lock.release()
 
@@ -542,14 +545,15 @@ def run_command(lay, lock, argv):
     return 0
 
 
-def safe_stop(env, code):
+def safe_stop(env, code):                     # env None (A3): the bare block
     try:
-        stop_block(env, code)
+        stop_block(env, code) if env else None
     except Out as o:
         return o.code
     except (Halt, durable.DurableError, OSError):
-        print(BARE_HDR + 'STOP\nDO: STOP %s HANDBACK C' % code)
-        return 3
+        pass
+    print(BARE_HDR + 'STOP\nDO: STOP %s HANDBACK C' % code, flush=True)
+    return 3
 
 
 def clear_check(env):
@@ -1511,7 +1515,7 @@ def inputs_commit(env, case):
 def delivery_commit(env, ctx, got):
     """§11.3: DELIVERY after the personal copy and its log are checked; the profile folder must print (S-06)."""
     R = env.state['runs'][ctx['run']]
-    a, b = N.copypath(got['copy'], env.lay.home, R['case']), N.copypath(got['log'], env.lay.home, R['case'])
+    a, b = N.copypath(got['copy'], str(env.lay.base), R['case']), N.copypath(got['log'], str(env.lay.base), R['case'])
     if a[2] != 'PERSONAL_COPY.xlsx' or b[2] != 'PERSONALIZATION_LOG.json' or a[:2] != b[:2] or \
             a[1] < host.utc14(env.block['printed_utc']):
         return 'COPY_INVALID'
@@ -1627,6 +1631,11 @@ def run_stage(env, kind, info):
     from . import worker
     first = info.get('first') if kind == 'chain' else None
     mx = env.cfg['stage_max_seconds'][first or kind]
+    if marker(env.lay.tools / SETUP_DONE) != [env.boot, host.repo_commit(env.lay) or '']:      # A5: TOOLS gone
+        emit(env, 'STOP', PrintBlock('STOP', do=('STOP', {'code': 'SETUP_MISSING', 'handback': 'C'})), {'command': 'none'})
+    remove_tree(env.lay.base / 'tmp')               # A6: a killed stage's temporary files go; the runner's TMPDIR
+    (env.lay.base / 'tmp').mkdir()
+    os.environ['TMPDIR'] = str(env.lay.base / 'tmp')
     if kind == 'chain':
         require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')
     since = env.now()
@@ -1641,7 +1650,7 @@ def run_stage(env, kind, info):
     except durable.DurableError as e:
         res = {'status': 'halt', 'code': e.code}
     except OSError as e:
-        res = {'status': 'halt', 'code': 'DISK_FULL' if e.errno in (errno.ENOSPC, errno.EDQUOT) else 'WRITE_FAILED'}
+        res = {'status': 'halt', 'code': durable.DurableError(e.errno).code}
     durable.remove(env.p.foreground)
     absorb(env, kind, info, res)
 

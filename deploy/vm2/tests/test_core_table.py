@@ -1118,7 +1118,7 @@ def test_next_run_order_and_final():
 
 # ============================================================ names (§3.2, §6.3)
 CFG = {'drive_id_re': N.DEFAULT_DRIVE_ID_RE, 'conversation_re': r'conv-[a-z0-9]{8}', 'doc_samples': ['conv-abcd1234',
-       'gpt-example'], 'home': '/home/agent', 'case': 'case01'}
+       'gpt-example'], 'base': '/tmp/cps', 'case': 'case01'}
 
 
 @test
@@ -1127,7 +1127,7 @@ def test_names_patterns():
             ('MODEL', 'gpt-5.1'), ('EFFORT', 'high'), ('YES', 'yes'), ('YESNO', 'no'), ('TOOLS', 'inventory'),
             ('TOOLS', 'file:/home/agent/tools.txt'), ('APPROVAL', 'none'), ('APPROVAL', 'pending'), ('OUTCOME', 'UNSURE'), ('TRANSCRIPT', 'not_available'), ('CASE_ID', 'case01'),
             ('CONV', 'conv-0a1b2c3d'),
-            ('COPYPATH', '/home/agent/cps-deliveries/case01/u1/20261110T010203Z/PERSONAL_COPY.xlsx')]
+            ('COPYPATH', '/tmp/cps/deliveries/case01/u1/20261110T010203Z/PERSONAL_COPY.xlsx')]
     for pat, v in good:
         assert N.check_value('k', pat, v, CFG) is None, (pat, v)
     bad = [('ID', 'short', 'VALUE_PATTERN'), ('SIZE', '012', 'VALUE_PATTERN'), ('TOOLS', 'none', 'VALUE_PATTERN'),
@@ -1140,7 +1140,8 @@ def test_names_patterns():
            ('CONV', 'CONV', 'VALUE_PLACEHOLDER'), ('MODEL', 'model', 'VALUE_PLACEHOLDER'),
            ('MODEL', 'gpt-example', 'VALUE_PLACEHOLDER'), ('CONV', 'conv-abcd1234', 'VALUE_PLACEHOLDER'),
            ('CASE_ID', '', 'VALUE_FORBIDDEN'),
-           ('COPYPATH', '/home/agent/cps-deliveries/case02/u1/20261110T010203Z/PERSONAL_COPY.xlsx', 'VALUE_PATTERN'),
+           ('COPYPATH', '/tmp/cps/deliveries/case02/u1/20261110T010203Z/PERSONAL_COPY.xlsx', 'VALUE_PATTERN'),
+           ('COPYPATH', '/home/agent/cps-deliveries/case01/u1/20261110T010203Z/PERSONAL_COPY.xlsx', 'VALUE_PATTERN'),
            ('CONV', 'xconv-0a1b2c3d', 'VALUE_PATTERN'), ('CONV', 'conv-0a1b2c3dx', 'VALUE_PATTERN')]
     for pat, v, code in bad:
         assert N.check_value('k', pat, v, CFG) == (code, 'k'), (pat, v, N.check_value('k', pat, v, CFG))

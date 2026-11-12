@@ -16,7 +16,8 @@ class DurableError(Exception):
 
     @property
     def code(self):
-        return 'DISK_FULL' if self.errno in (errno.ENOSPC, errno.EDQUOT) else 'WRITE_FAILED'
+        e = self.errno
+        return 'DISK_FULL' if e in (errno.ENOSPC, errno.EDQUOT) else 'READ_ONLY_FS' if e == errno.EROFS else 'WRITE_FAILED'
 
 
 def _sha(b):

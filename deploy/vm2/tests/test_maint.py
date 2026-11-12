@@ -1206,6 +1206,29 @@ def test_gap06_audit_lists_approvals_and_same_boot_restores():
     assert len(want) == 3 and rep['same_boot_restores'] == [e['seq']], rep['same_boot_restores']
 
 
+def test_a1_verify_view_root_under_tmpfs_ancestor():
+    """Amendment A1 (W119): the GAP-2 namespace view works for a /tmp/cps-shaped GENESIS base when the tmpfs covers the
+    ancestor that holds the assembly root itself (the maintainer's scratch is under /tmp): `cd` into that ancestor comes
+    before the tmpfs mount, so the relative bind sources still name the real tree. Two shapes: a base whose deepest
+    existing ancestor also holds the root and a stand-in runner file, and the literal /tmp/cps with the root under the
+    work folder; in both, <root><base> is seen at <base> and the bound runner file at its own path."""
+    import subprocess
+    top = tempfile.mkdtemp(dir=WORK, prefix='a1view_')
+    for base in (top + '/cps', '/tmp/cps'):
+        root = tempfile.mkdtemp(dir=top, prefix='root_')
+        os.makedirs(root + base + '/qual/A/c1')
+        with open(root + base + '/qual/A/c1/FROZEN.json', 'w') as f:
+            f.write('invented frozen\n')
+        run = os.path.join(top, 'runner.py')
+        with open(run, 'w') as f:
+            f.write('invented runner\n')
+        argv, ns = AS.view(base, os.path.realpath(root), run)
+        assert base == '/tmp/cps' or ns['tmpfs'] == top, ns          # the root lies inside the tmpfs's ancestor
+        p = subprocess.run(argv + ['sh', '-c', 'cat %s/qual/A/c1/FROZEN.json %s' % (base, run)], capture_output=True,
+                           text=True, timeout=60)
+        assert (p.returncode, p.stdout) == (0, 'invented frozen\ninvented runner\n'), (base, ns, p.stdout, p.stderr)
+
+
 TESTS = [test_audit_clean_series, test_f5_audit_planted_restore_unknown_to_final,
          test_audit_planted_foreign_release_entry, test_audit_state_ledger_outcomes_tamper,
          test_audit_names_gap_foreign_second_series_time_pass, test_int04_drill_rebase_audit_clean,
@@ -1219,6 +1242,7 @@ TESTS = [test_audit_clean_series, test_f5_audit_planted_restore_unknown_to_final
          test_maint1_audit_refuses_hostile_new_run, test_maint1_forged_all_frozen_job_dir,
          test_maint1_assemble_base_from_genesis, test_maint1_wrong_mapping_refused,
          test_maint1_self_consistent_hostile_base_confined, test_maint1_symlink_after_begin_refused,
+         test_a1_verify_view_root_under_tmpfs_ancestor,
          test_maint1_assemble_root_required_empty_dedicated, test_gap10_generation_record_tied_to_g_entry,
          test_maint2_score_check_requires_tools_attestation_and_states_isolation,
          test_gap8_isolation_statement_matches_inventory_attestation,

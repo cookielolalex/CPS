@@ -227,11 +227,11 @@ def test_f6_every_block_has_exactly_one_terminal_action():
     suites passes drive.check_grammar (FakeDot.cmd, test_vio.parse_block)."""
     from cpsvm2.core.step import PrintBlock
     from cpsvm2.vio import drive
-    for blk in (PrintBlock('KIT', downloads=(('CPS/setup', 'x' * 24, '/home/agent/cps/inbox/kit/k.zip'),)),
+    for blk in (PrintBlock('KIT', downloads=(('CPS/setup', 'x' * 24, '/tmp/cps/inbox/kit/k.zip'),)),
                 PrintBlock('WORK')):
-        body = drive.body_lines(blk, '/home/agent/cps/vm.sh')
+        body = drive.body_lines(blk, '/tmp/cps/vm.sh')
         assert [ln for ln in body if ln.startswith('DO: ')] == [body[-1]], body
-        assert body[-1] == 'DO: RUN bash /home/agent/cps/vm.sh go', body
+        assert body[-1] == 'DO: RUN bash /tmp/cps/vm.sh go', body
     h = 'CPSV series=D1 head=000001 kit=0123456789ab at=000001-0001-abcdef mode=drill state=WORK'
     for bad in ([h, 'DOWNLOAD CPS/setup ID abc TO /x'], [h, 'DO: RUN x', 'FIND CPS NAME a'], [h, 'DO: A', 'DO: B']):
         assert drive.check_grammar(bad) is not None, bad
@@ -334,7 +334,7 @@ def test_safe05_trailing_newline_and_bad_id_refused():
 
 
 def run_session_start(home, repo, commit, boot='0f0e0d0c-0b0a-4908-8706-050403020100', env_over=None):
-    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(home / 'cps'), CPS_TOOLS=str(home / 'cps-tools'),
+    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(home.parent / 'tmp/cps'), CPS_TOOLS=str(home / 'cps-tools'),
                CPS_VM_BOOT_ID_PATH=str(home / 'boot_id'))
     env.update(env_over or {})
     (home / 'boot_id').write_text(boot + '\n')
@@ -362,11 +362,12 @@ def test_safe06_session_start_git_error_prints_stop_block():
     subprocess.run(g + ['add', '-A'], check=True)
     subprocess.run(g + ['commit', '-q', '-m', 'invented'], check=True)
     commit = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
-    home = root / 'h'
-    (home / 'cps').mkdir(parents=True)
-    os.symlink(repo, home / 'cps/repo')
+    home, base = root / 'h', root / 'tmp/cps'                   # A1: BASE outside HOME, as /tmp/cps on the Dot
+    home.mkdir()
+    base.mkdir(parents=True)
+    os.symlink(repo, base / 'repo')
     code, out = run_session_start(home, repo, commit)
-    assert code == 0 and out[-1] == 'DO: RUN bash %s/cps/vm.sh go' % home and 'CPSV-REPO commit=' + commit in out, out
+    assert code == 0 and out[-1] == 'DO: RUN bash %s/vm.sh go' % base and 'CPSV-REPO commit=' + commit in out, out
     code, out = run_session_start(home, repo, 'f' * 40)
     assert (code, out[-1]) == (3, 'DO: STOP SESSION_COMMIT_MISMATCH HANDBACK C'), out
     (repo / 'f.txt').write_text('changed\n')
@@ -659,12 +660,13 @@ def test_no_conversation_list_gate_required():
 
 def _session_world(tag):
     root = Path(tempfile.mkdtemp(prefix=tag, dir=WORK))
-    home = root / 'home'
-    (home / 'cps').mkdir(parents=True)
-    os.symlink(REPO, home / 'cps/repo')
+    home, base = root / 'home', root / 'tmp/cps'                # A1: BASE outside HOME
+    home.mkdir()
+    base.mkdir(parents=True)
+    os.symlink(REPO, base / 'repo')
     boot = root / 'boot'
     boot.write_text('0f0e0d0c-0b0a-4908-8706-050403020100\n')
-    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(home / 'cps'), CPS_TOOLS=str(home / 'tools'),
+    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(base), CPS_TOOLS=str(home / 'tools'),
                CPS_VM_BOOT_ID_PATH=str(boot))
     return home, env
 
@@ -679,11 +681,12 @@ def test_s08_wrong_head_stops_before_setup():
     home, env = _session_world('s08')
     (home / 'tools/var').mkdir(parents=True)
     (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % ('f' * 40))
-    p = subprocess.run(['bash', str(home / 'cps/repo/deploy/vm2/session_start.sh'), '--commit', 'f' * 40],
+    p = subprocess.run(['bash', str(home.parent / 'tmp/cps/repo/deploy/vm2/session_start.sh'), '--commit', 'f' * 40],
                        capture_output=True, text=True, env=env, timeout=120)
     assert p.returncode == 3 and 'DO: STOP SESSION_COMMIT_MISMATCH HANDBACK C' in p.stdout, p.stdout
-    assert 'CPSV-RUNNING' not in p.stdout and not (home / 'cps/vm.sh').exists()
-    assert not list((home / 'cps/outbox').glob('setup_*.log')) if (home / 'cps/outbox').is_dir() else True
+    assert 'CPSV-RUNNING' not in p.stdout and not (home.parent / 'tmp/cps/vm.sh').exists()
+    assert not list((home.parent / 'tmp/cps/outbox').glob('setup_*.log')) if (home.parent / 'tmp/cps/outbox').is_dir() \
+        else True
 
 
 def test_opx08_kit_none_bootstraps_without_hint():
@@ -692,12 +695,12 @@ def test_opx08_kit_none_bootstraps_without_hint():
     commit = _head()
     (home / 'tools/var').mkdir(parents=True)
     (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
-    (home / 'cps/outbox/v2').mkdir(parents=True)
-    (home / 'cps/outbox/v2/HINT.json').write_text('{"kit": "aaaaaaaaaaaa", "seq": 3}\n')
-    p = subprocess.run(['bash', str(home / 'cps/repo/deploy/vm2/session_start.sh'), '--commit', commit,
+    (home.parent / 'tmp/cps/outbox/v2').mkdir(parents=True)
+    (home.parent / 'tmp/cps/outbox/v2/HINT.json').write_text('{"kit": "aaaaaaaaaaaa", "seq": 3}\n')
+    p = subprocess.run(['bash', str(home.parent / 'tmp/cps/repo/deploy/vm2/session_start.sh'), '--commit', commit,
                         '--hint', '000003', '--kit', 'none'], capture_output=True, text=True, env=env, timeout=120)
     assert p.returncode == 0 and 'CPSV-REPO commit=' + commit in p.stdout, p.stdout
-    assert not (home / 'cps/outbox/v2/HINT.json').exists(), 'a no-hint bootstrap removes an older HINT.json'
+    assert not (home.parent / 'tmp/cps/outbox/v2/HINT.json').exists(), 'a no-hint bootstrap removes an older HINT.json'
 
 
 def test_gap11_session_start_removes_pycache():
@@ -709,7 +712,7 @@ def test_gap11_session_start_removes_pycache():
     pyc = Path(VM2) / 'cpsvm2/__pycache__'
     pyc.mkdir(exist_ok=True)
     (pyc / 'x.cpython-313.pyc').write_bytes(b'not code')
-    p = subprocess.run(['bash', str(home / 'cps/repo/deploy/vm2/session_start.sh'), '--commit', commit],
+    p = subprocess.run(['bash', str(home.parent / 'tmp/cps/repo/deploy/vm2/session_start.sh'), '--commit', commit],
                        capture_output=True, text=True, env=env, timeout=120)
     assert p.returncode == 0, p.stdout
     assert not pyc.exists(), 'every __pycache__ under the checkout is removed'
@@ -738,6 +741,45 @@ def test_d16_evict_runner_frozen_folder_nonroot():
 REPORT_D16 = []
 
 
+def test_a1_base_required_outside_home_and_carried_by_launcher():
+    """Amendment A1 (W116, W117, W118): session_start.sh takes BASE only from CPS_VM_BASE. Without it, with a base inside
+    HOME (the old ~/cps) or with a quote in it, it stops SESSION_LAYOUT before it writes anything. With /tmp/cps-shaped
+    base it makes BASE/tmp and writes a vm.sh that exports CPS_VM_BASE and CPS_TOOLS with quoted absolute values, so a
+    fresh shell with neither variable set runs the helper with them (python3 is a stand-in that prints them)."""
+    home, env = _session_world('a1')
+    base, commit = Path(env['CPS_VM_BASE']), _head()
+    (home / 'tools/var').mkdir(parents=True)
+    (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
+    sh = str(base / 'repo/deploy/vm2/session_start.sh')
+    old = home / 'cps'
+    old.mkdir()
+    os.symlink(REPO, old / 'repo')
+    for over in ({'CPS_VM_BASE': ''}, {'CPS_VM_BASE': str(old)}, {'CPS_VM_BASE': str(home)}):
+        e = {k: v for k, v in dict(env, **over).items() if v}
+        p = subprocess.run(['bash', sh if over['CPS_VM_BASE'] != str(old) else str(old / 'repo/deploy/vm2/session_start.sh'),
+                            '--commit', commit], capture_output=True, text=True, env=e, timeout=120)
+        assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), (over, p.stdout)
+        assert not (base / 'vm.sh').exists() and not (old / 'vm.sh').exists() and not (old / 'outbox').exists(), over
+    q = Path(str(base).replace('/cps', "/c'ps"))
+    q.mkdir(parents=True)
+    os.symlink(REPO, q / 'repo')
+    p = subprocess.run(['bash', str(q / 'repo/deploy/vm2/session_start.sh'), '--commit', commit], capture_output=True,
+                       text=True, env=dict(env, CPS_VM_BASE=str(q)), timeout=120)
+    assert (p.returncode, p.stdout.splitlines()[-1]) == (3, 'DO: STOP SESSION_LAYOUT HANDBACK C'), p.stdout
+    p = subprocess.run(['bash', sh, '--commit', commit], capture_output=True, text=True, env=env, timeout=120)
+    assert p.returncode == 0 and p.stdout.splitlines()[-1] == 'DO: RUN bash %s/vm.sh go' % base, p.stdout
+    vm = (base / 'vm.sh').read_text()
+    assert "export CPS_VM_BASE='%s' CPS_TOOLS='%s'\n" % (base, home / 'tools') in vm and (base / 'tmp').is_dir(), vm
+    stub = home.parent / 'stub'
+    stub.mkdir()
+    (stub / 'python3').write_text('#!/bin/sh\necho "base=$CPS_VM_BASE tools=$CPS_TOOLS args=$*"\n')
+    os.chmod(stub / 'python3', 0o755)
+    p = subprocess.run(['env', '-i', 'PATH=%s:/usr/bin:/bin' % stub, 'HOME=%s' % home, 'bash', str(base / 'vm.sh'), 'go'],
+                       capture_output=True, text=True, timeout=60)
+    assert p.stdout.strip() == 'base=%s tools=%s args=-I -B -X pycache_prefix=/dev/null %s/repo/deploy/vm2/vm2.py go' % (
+        base, home / 'tools', base), (p.stdout, p.stderr)
+
+
 DIRECT = [test_f1_core_continued_v_is_t46, test_f2_second_start_only_after_no_conversation,
           test_f3_core_classify_reads_only_the_head, test_f6_every_block_has_exactly_one_terminal_action,
           test_f7_core_transcript_member_required, test_safe01_unsupported_entries_halt_nothing_deleted,
@@ -754,7 +796,7 @@ DIRECT = [test_f1_core_continued_v_is_t46, test_f2_second_start_only_after_no_co
           test_fork_at_restore_lagging_n_plus_1, test_rewalk_forces_written,
           test_no_conversation_list_gate_required, test_s08_wrong_head_stops_before_setup,
           test_opx08_kit_none_bootstraps_without_hint, test_gap11_session_start_removes_pycache,
-          test_d16_evict_runner_frozen_folder_nonroot]
+          test_d16_evict_runner_frozen_folder_nonroot, test_a1_base_required_outside_home_and_carried_by_launcher]
 DELEGATE = {'test_f4_outcomes_total_over_frozen_shapes': 'test_core_table',
             'test_tst01_second_start_same_attempt_chain_invalid': 'test_core_table',
             'test_f5_audit_planted_restore_unknown_to_final': 'test_maint',

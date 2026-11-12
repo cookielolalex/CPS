@@ -393,6 +393,50 @@ HAND.append(M('W115', 'README.md', [("any characters, up to the kit's max_ai_out
                ['t_l14_readme_rules'], 'GAP-9: the README final-message sentence of 746ea98'))
 HAND.append(M('W112', ASM, [('mount -c --bind "$2" "$1"; ', '')], ['D_baseline'],
                'GAP-2: the namespace has its tmpfs but no bind of <root><base> onto <base>'))
+# Amendment from probes M008-M012 (delta v2.1 §9): W116-W131.
+SS, V1M = 'session_start.sh', 'cpsvm2/vio/v1mod.py'
+A1T = ['test_a1_base_required_outside_home_and_carried_by_launcher']
+HAND += [
+    M('W116', SS, [('BASE="${CPS_VM_BASE:-}"', 'BASE="${CPS_VM_BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)}"')],
+      A1T, 'A1: a missing CPS_VM_BASE silently takes the base from the script\'s location'),
+    M('W117', SS, [('case "$BASE/" in "$HOME"/*) stop SESSION_LAYOUT ;; esac\n', '')], A1T,
+      'A1: a base inside HOME (the old ~/cps) is accepted'),
+    M('W118', SS, [('\\nexport CPS_VM_BASE=', '\\nCPS_VM_BASE=')], A1T,
+      'A1: vm.sh sets BASE and TOOLS without exporting them, so the helper does not see them'),
+    M('W119', ASM, [('(\'cd "$1"; mount -t tmpfs cps_vm2 "$1"; shift; ', '(\'mount -t tmpfs cps_vm2 "$1"; cd "$1"; shift; ')],
+      ['test_a1_verify_view_root_under_tmpfs_ancestor'], 'A1: the tmpfs is mounted before cd, so a root under it is hidden'),
+    M('W120', CLI, [('    except OSError as e:                            # A3: an OSError (EROFS) anywhere ends in a block, '
+                     'never a traceback\n', '    except KeyboardInterrupt as e:\n'),
+                    ('    except OSError as e:                            # A3: also one raised while a STOP is being handled\n',
+                     '    except KeyboardInterrupt as e:\n')],
+      ['test_a3_erofs_ends_in_stop_block'], 'A3: an OSError outside run_command\'s own handler is a traceback'),
+    M('W121', DUR, [("else 'READ_ONLY_FS' if e == errno.EROFS else 'WRITE_FAILED'", "else 'WRITE_FAILED'")],
+      ['test_a3_erofs_ends_in_stop_block'], 'A3: EROFS is reported as WRITE_FAILED'),
+    M('W122', V1M, [("lay.runtime.glob('.tmp_[0-9]*_*'), ", '')],
+      ['t_a4_stale_temp_names_in_runtime_ignored', 'D_sameboot_damaged_cache_restores'],
+      'A4a: a killed write_atomic\'s temp name in runtime/ stays and changes the kit check'),
+    M('W123', V1M, [(", (lay.inbox / 'journal').glob('.*')]", ']')], ['t_a4_stale_png_stream_and_validate_removed'],
+      'A4b: a killed placement\'s .png_stream_<pid> stays in inbox/journal for the rest of the boot'),
+    M('W124', V1M, [("            globs.append(root.glob('*/.validate_*'))\n", '')],
+      ['t_a4_stale_png_stream_and_validate_removed'], 'A4c: the runner\'s stale .validate_ folders stay'),
+    M('W125', CLI, [("    remove_tree(env.lay.base / 'tmp')               # A6: a killed stage's temporary files go; the "
+                     "runner's TMPDIR\n    (env.lay.base / 'tmp').mkdir()\n", "    (env.lay.base / 'tmp').mkdir(exist_ok=True)\n")],
+      ['t_a6_stage_empties_tmp_and_sets_tmpdir'], 'A6: BASE/tmp is not emptied before a stage'),
+    M('W126', CLI, [("    os.environ['TMPDIR'] = str(env.lay.base / 'tmp')\n", '')], ['t_a6_stage_empties_tmp_and_sets_tmpdir'],
+      'A6: the stage\'s tools keep the inherited TMPDIR'),
+    M('W127', CLI, [("    if marker(env.lay.tools / SETUP_DONE) != [env.boot, host.repo_commit(env.lay) or '']:", "    if False:")],
+      ['t_a5_stage_stops_setup_missing', 'D_tools_wiped_same_boot_continues'],
+      'A5: a stage runs without the setup of this boot and commit'),
+    M('W128', NAMES, [('STAGE_FREE_BYTES = 1048576, 2000, 1500000000', 'STAGE_FREE_BYTES = 1048576, 2000, 1000000000')],
+      ['t_d16_stage_refuses_low_space_before_runner'], 'A7: the stage check of r5 (1 GB), under the M009 peak on /tmp'),
+    M('W129', NAMES, [("pre = base.rstrip('/') + '/deliveries/' + case + '/'", "pre = base.rstrip('/') + '/cps-deliveries/' + case + '/'")],
+      ['test_transcript_and_copy_codes', 'test_names_patterns'], 'A1: the personal copy is not taken from BASE/deliveries'),
+    M('W130', 'README.md', [('through the elevated route (`sandbox_permissions` set to\n`require_escalated`)',
+                             'through the standard route (`sandbox_permissions` set to\n`use_default`)')],
+      ['t_l14_readme_rules'], 'A2: the README sends the bootstrap through the standard route'),
+    M('W131', 'README.md', [('never start that command again yourself. Run\n   `go` once', 'run that command again. Run\n   `go` once')],
+      ['t_l14_readme_rules'], 'A3: the README lets the Dot re-run a command that died'),
+]
 HAND_OPEN = {'W57': 'retired in r4 (APPROVAL comes before HEAD): no mutant'}
 # Builder mutants whose path v2.1 deleted (§2.13, §2.15.1): no substitution, recorded with the reason.
 DELETED = {'G2': 'md5-visible mode is deleted: every copy with an unknown id is downloaded back (rule V, §2.1); G26 and '

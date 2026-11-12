@@ -49,7 +49,7 @@ FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads'
 
 # Upload cap, size limits and free space (§X.2, delta v2.1 §2.3, §2.8, §2.16.5); the O63 texts (D9).
 UPLOAD_CAP_BYTES = 94_371_840
-RAW_MAX_BYTES, MAX_TOOL_LINES, STAGE_FREE_BYTES = 1048576, 2000, 1000000000
+RAW_MAX_BYTES, MAX_TOOL_LINES, STAGE_FREE_BYTES = 1048576, 2000, 1500000000
 BASE_RE = r'/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*'
 O63_NOTE = ('O63: generator isolation by instruction only, not enforced or audited; tools present: %s; any tools-used '
             'statement is in final_message.')
@@ -82,7 +82,7 @@ LAYOUT_RUNNER_NOT_PINNED LEDGER_MISSING LEDGER_NO_IDENTITY CLOCK_BEHIND HOME_CHA
 SESSION_LAYOUT SESSION_GIT_ERROR SESSION_REPO_DIRTY JOB_BUSY_TOO_LONG QUALIFICATION_DIVERGED_RESTART_CONFLICT
 REBASE_PART_APPEARED REBASE_LIMIT REBASE_CONFLICT CONFIG_CHANGE_NOT_ALLOWED GATES_CHANGED QUALIFICATION_SERIES_EXISTS
 SESSION_COMMIT_MISMATCH SESSION_NO_COMMIT INTERNAL_STEP_OVERFLOW UPLOAD_REFUSED UPLOAD_TOO_LARGE FINAL
-UNCLASSIFIED SLIP_LIMIT WAIT_APPROVAL'''.split())
+UNCLASSIFIED SLIP_LIMIT WAIT_APPROVAL READ_ONLY_FS SETUP_MISSING'''.split())
 CODES_HALT = frozenset('''RUNNER_REFUSED RUNNER_OUTPUT_UNPARSEABLE UNCLASSIFIED AI_OUTPUT_CHANGED WALK_UNSUPPORTED_ENTRY
 EVICT_MISMATCH EVICT_FAILED POST_ACTION_FAILED FROZEN_FOLDER_CHANGED FREEZE_INCOMPLETE PNG_MANIFEST_UNSAFE PROMPT_CHANGED
 GENERATION_RECORD_EXISTS AI_OUTPUT_TOO_LARGE PLACED_FROZEN_CHANGED'''.split())
@@ -184,9 +184,9 @@ def check_config_patterns(conversation_re, doc_samples):
     return None
 
 
-def copypath(value, home, case):
-    """§6.3 COPYPATH: (user, utc14, file) of $HOME/cps-deliveries/<case>/<user>/<utc14>/<file>, else None."""
-    pre = home.rstrip('/') + '/cps-deliveries/' + case + '/'
+def copypath(value, base, case):
+    """§6.3 COPYPATH (amendment A1): (user, utc14, file) of BASE/deliveries/<case>/<user>/<utc14>/<file>, else None."""
+    pre = base.rstrip('/') + '/deliveries/' + case + '/'
     if not isinstance(value, str) or not value.startswith(pre):
         return None
     m = re.fullmatch(r'([a-z0-9_-]{1,40})/([0-9]{8}T[0-9]{6}Z)/(PERSONAL_COPY\.xlsx|PERSONALIZATION_LOG\.json)',
@@ -215,7 +215,7 @@ def check_value(key, pattern, value, cfg, window=None):
     elif pattern == 'CONV':
         rx = cfg.get('conversation_re')
     elif pattern == 'COPYPATH':
-        return None if copypath(value, cfg.get('home', ''), cfg.get('case', '')) else ('VALUE_PATTERN', key)
+        return None if copypath(value, cfg.get('base', ''), cfg.get('case', '')) else ('VALUE_PATTERN', key)
     else:
         rx = PATTERNS.get(pattern)
     if rx is None or not fm(rx, value):

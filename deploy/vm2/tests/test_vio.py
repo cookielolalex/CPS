@@ -700,10 +700,10 @@ def t_runner_parse():
 
 
 def t_runner_argv_refuses_unsafe_values():
-    a = {'base': '/home/agent/cps', 'model': 'gpt-x', 'job_dir': '/home/agent/cps/qual/A/c1'}
+    a = {'base': '/tmp/cps', 'model': 'gpt-x', 'job_dir': '/tmp/cps/qual/A/c1'}
     v = runner.argv_for('freeze', a)
-    assert v == ['freeze', '--job-dir', '/home/agent/cps/qual/A/c1', '--operator-model', 'gpt-x']
-    expect_halt('INTERNAL_PRINT', runner.argv_for, 'freeze', dict(a, job_dir='/home/agent/cps/a b'))
+    assert v == ['freeze', '--job-dir', '/tmp/cps/qual/A/c1', '--operator-model', 'gpt-x']
+    expect_halt('INTERNAL_PRINT', runner.argv_for, 'freeze', dict(a, job_dir='/tmp/cps/a b'))
     expect_halt('INTERNAL_PRINT', runner.argv_for, 'freeze', dict(a, model='gpt x'))
 
 
@@ -729,7 +729,7 @@ def t_grammar_and_quoting():
     blk = type('B', (), {'uploads': (('/x/y.tgz', 'Dots Folder/CPS_JOB_RECORDS', 'CPSJ_E1_000002.tgz'),),
                          'finds': (('Dots Folder/CPS_JOB_RECORDS', 'NAME', 'CPSJ_E1_000002.tgz'),), 'lists': (),
                          'downloads': (), 'do': ('ATTEST_FOUND', {'names': ['CPSJ_E1_000002.tgz']})})()
-    lines = drive.body_lines(blk, '/home/agent/cps/vm.sh')
+    lines = drive.body_lines(blk, '/tmp/cps/vm.sh')
     assert shlex.split(lines[0]) == ['UPLOAD', '/x/y.tgz', 'TO', 'Dots Folder/CPS_JOB_RECORDS', 'AS',
                                      'CPSJ_E1_000002.tgz']
 
@@ -820,7 +820,7 @@ class World:
     def __init__(self, gates=None):
         self.root = tmpdir('cli')
         r = self.root
-        os.environ.update({'HOME': str(r / 'home'), 'CPS_VM_BASE': str(r / 'home/cps'),
+        os.environ.update({'HOME': str(r / 'home'), 'CPS_VM_BASE': str(r / 'tmp/cps'),           # A1: BASE outside HOME
                            'CPS_TOOLS': str(r / 'home/cps-tools'), 'CPS_VM_BOOT_ID_PATH': str(r / 'boot_id')})
         (r / 'boot_id').write_text(BOOT + '\n')
         self.lay = Layout()
@@ -1547,7 +1547,7 @@ def t_maint2_tools_none_refused_inventory_file_accepted():
     assert N.check_value('tools', 'TOOLS', 'none', cfg) == ('VALUE_PATTERN', 'tools')
     assert N.check_value('tools', 'TOOLS', 'web,files', cfg) == ('VALUE_PATTERN', 'tools')
     assert N.check_value('tools', 'TOOLS', 'inventory', cfg) is None
-    assert N.check_value('tools', 'TOOLS', 'file:/home/agent/cps/attest/tools.txt', cfg) is None
+    assert N.check_value('tools', 'TOOLS', 'file:/tmp/cps/attest/tools.txt', cfg) is None
     assert N.check_value('tools', 'TOOLS', 'file:attest/tools.txt', cfg) == ('VALUE_PATTERN', 'tools')
     assert N.tool_list(b'a\nb\n') == ['a', 'b']
     for bad in (b'', b'a', b'a\na\n', b' a\n', b'a\x01\n', b'\xff\n', b'\n', b'a\n\nb\n', ('x' * 201 + '\n').encode()):
@@ -2538,8 +2538,11 @@ def t_d5_halted_restore_no_cleared_local():
 
 def t_d16_stage_refuses_low_space_before_runner():
     """D16 (SD-69, W108): free space one byte below STAGE_FREE_BYTES plus the margin: STOP DISK_FULL step stage before
-    FOREGROUND.json and before the runner; at exactly that value the stage runs."""
+    FOREGROUND.json and before the runner; at exactly that value the stage runs. Amendment A7 (W128): the value covers
+    the largest stage's peak on /tmp, M009's 403-page render (about 550 MB) held twice (visual_qa renders into TMPDIR,
+    now BASE/tmp, then copies into the job folder) plus the LibreOffice profile (about 16 MB, M008)."""
     from cpsvm2.vio import v1reuse
+    assert N.STAGE_FREE_BYTES >= 2 * 550 * 10 ** 6 + 16 * 10 ** 6, N.STAGE_FREE_BYTES
     for short, want_stop in ((1, True), (0, False)):
         with fw() as w:
             code, idle = to_idle(w)
@@ -2563,6 +2566,141 @@ def t_d16_stage_refuses_low_space_before_runner():
                 assert len(w.dot.running) == n and not w.seams.subs, 'the runner never started'
             else:
                 assert len(w.dot.running) > n and w.seams.subs, 'at exactly the limit the stage runs'
+
+
+def stage_env(tag, marker=True):
+    """Amendment A5/A6: an Env for cli.run_stage alone (BASE outside HOME, the setup marker of this boot and commit)."""
+    r = tmpdir(tag)
+    os.environ.update({'HOME': str(r / 'home'), 'CPS_VM_BASE': str(r / 'tmp/cps'), 'CPS_TOOLS': str(r / 'home/cps-tools'),
+                       'CPS_VM_BOOT_ID_PATH': str(r / 'boot_id')})
+    (r / 'boot_id').write_text(BOOT + '\n')
+    lay = Layout()
+    (lay.base / 'outbox/v2').mkdir(parents=True)
+    os.symlink(host.HELPER_REPO, lay.base / 'repo')
+    (lay.tools / 'var').mkdir(parents=True)
+    if marker:
+        (lay.tools / 'var/cps_vm2_setup_ok').write_text('%s %s\n' % (BOOT, host.repo_commit(lay)))
+    env = cli.Env(lay, None)
+    env.cfg = {'stage_max_seconds': {k: 60 for k in N.STAGE_KEYS}}
+    return env
+
+
+def run_stage_seen(env, kind='chain'):
+    """cli.run_stage with worker.dispatch replaced: (exit or None, printed lines, what the stage saw when it started)."""
+    from cpsvm2 import worker
+    seen_at, out, tmp0 = {}, io.StringIO(), os.environ.get('TMPDIR')
+
+    def fake(k, info, e):
+        t = e.lay.base / 'tmp'
+        seen_at.update(tmpdir=os.environ.get('TMPDIR'), left=sorted(os.listdir(t)) if t.is_dir() else None,
+                       foreground=e.p.foreground.is_file())
+        return {'status': 'done'}
+    real, space = worker.dispatch, cli.require_space
+    worker.dispatch, cli.require_space = fake, lambda *a: None
+    code = None
+    try:
+        with contextlib.redirect_stdout(out):
+            cli.run_stage(env, kind, {'run': 'E20261110T000000Z/c1', 'first': 'prepare'} if kind == 'chain' else {})
+    except cli.Out as o:
+        code = o.code
+    finally:
+        worker.dispatch, cli.require_space = real, space
+        os.environ.pop('TMPDIR', None) if tmp0 is None else os.environ.update(TMPDIR=tmp0)
+    return code, out.getvalue().splitlines(), seen_at
+
+
+def t_a6_stage_empties_tmp_and_sets_tmpdir():
+    """Amendment A6 (W125, W126): before every stage, under the lock, BASE/tmp is emptied (a killed render's files and
+    a read-only folder go) and TMPDIR is BASE/tmp, which every runner command inherits (run_runner passes the
+    environment); the stage starts with an empty BASE/tmp."""
+    for kind in ('chain', 'place'):
+        env = stage_env('a6' + kind)
+        t = env.lay.base / 'tmp'
+        (t / 'cps_visual_x/in').mkdir(parents=True)
+        (t / 'cps_visual_x/in/page-1.png').write_bytes(b'invented page' * 100)
+        (t / 'render-copy.pdf').write_bytes(b'%PDF invented')
+        os.chmod(t / 'cps_visual_x/in', 0o555)
+        code, lines, at = run_stage_seen(env, kind)
+        assert code is None and lines[0].startswith('CPSV-RUNNING kind=%s ' % kind), lines
+        assert at == {'tmpdir': str(t), 'left': [], 'foreground': True}, at
+
+
+def t_a5_stage_stops_setup_missing():
+    """Amendment A5 (W127): a stage needs the setup marker of this boot and commit in TOOLS. Without it (TOOLS gone) or
+    with another boot's, `go` prints STOP SETUP_MISSING before FOREGROUND.json and the runner, writes no HALT.json
+    (nothing sticky) and leaves BASE/tmp as it was; with the marker the stage runs."""
+    for case in ('gone', 'other_boot', 'other_commit'):
+        env = stage_env('a5' + case)
+        m = env.lay.tools / 'var/cps_vm2_setup_ok'
+        if case == 'gone':
+            fakes_rm(env.lay.tools)
+        else:
+            boot, commit = m.read_text().split()
+            m.write_text('%s %s\n' % (('f' * 8 + boot[8:], commit) if case == 'other_boot' else (boot, 'f' * 40)))
+        (env.lay.base / 'tmp').mkdir()
+        (env.lay.base / 'tmp/kept').write_text('x')
+        code, lines, at = run_stage_seen(env)
+        assert code == 3 and lines[-1] == 'DO: STOP SETUP_MISSING HANDBACK C' and lines[0].startswith('CPSV '), lines
+        assert not at and not env.p.halt.exists() and not env.p.foreground.exists(), case
+        assert (env.lay.base / 'tmp/kept').is_file(), case
+    env = stage_env('a5ok')
+    code, lines, at = run_stage_seen(env)
+    assert code is None and at['foreground'], lines
+
+
+def fakes_rm(p):
+    for dp, dns, fns in os.walk(p):
+        for n in dns:
+            os.chmod(os.path.join(dp, n), 0o755)
+    shutil.rmtree(p)
+
+
+def t_a4_stale_temp_names_in_runtime_ignored():
+    """Amendment A4a (W122): a killed write_atomic leaves .tmp_<pid>_<name> in runtime/. With a run in flight the kit
+    check (unpack_kit) must not see it: cleanup_leftovers, which every command runs under the lock first, removes
+    such names, and the verdict is the one without them ('same'; 'config' for a config-only change), never
+    KIT_CHANGE_WITH_RUN_IN_FLIGHT. A kit member stays."""
+    from cpsvm2.vio import v1mod, v1reuse
+    env = SPEnv(tmpdir('a4rt'))
+    lay = env.lay
+    m = {'RELEASE.json': b'{"invented": 1}\n', 'VM_HELPER_CONFIG.json': b'{"invented": 2}\n', 'tables/T.json': b'{}\n'}
+    assert v1reuse.unpack_kit(lay, m, False) == 'unpacked'
+    for cfg, want in ((m['VM_HELPER_CONFIG.json'], 'same'), (b'{"invented": 3}\n', 'config')):
+        for n in ('.tmp_2_VM_HELPER_CONFIG.json', '.tmp_3_x'):
+            (lay.runtime / n).write_bytes(b'left by a killed command')
+        v1mod.cleanup_leftovers(lay)
+        assert v1reuse.unpack_kit(lay, dict(m, **{'VM_HELPER_CONFIG.json': cfg}), True) == want
+        assert sorted(os.listdir(lay.runtime)) == ['RELEASE.json', 'VM_HELPER_CONFIG.json', 'tables']
+
+
+def t_a4_stale_png_stream_and_validate_removed():
+    """Amendment A4b/A4c (W123, W124): in the same boot, cleanup_leftovers removes a killed placement's
+    inbox/journal/.png_stream_<pid> (and any other hidden file there) and the runner's stale .validate_<case>_<pid>
+    folders in every jobs root it is given (qual/<root>/, qual/nonattempts_<reader>/, jobs/<utc14>/); downloads, job
+    folders and the boot mark stay."""
+    from cpsvm2.vio import v1mod
+    from cpsvm2.vio.v1reuse import current_boot_id
+    env = SPEnv(tmpdir('a4pv'))
+    lay = env.lay
+    lay.inbox.mkdir(parents=True, exist_ok=True)
+    (lay.inbox / '.boot').write_text(current_boot_id() + '\n')
+    j = lay.inbox / 'journal'
+    j.mkdir()
+    for n in ('.png_stream_2', '.png_stream_7', '.tmp_2_ab12cd34_CPSJ_D1_000003.tgz', 'CPSJ_D1_000003.tgz'):
+        (j / n).write_bytes(b'invented')
+    keep = [lay.qual / 'A/9990101/run/x.txt', lay.jobs / '20261110T000000Z/c1/x.txt']
+    for p in keep:
+        p.parent.mkdir(parents=True)
+        p.write_text('a job file')
+    stale = [lay.qual / 'A/.validate_9990101_2', lay.qual / 'nonattempts_B/.validate_9990102_3',
+             lay.jobs / '20261110T000000Z/.validate_c1_2']
+    for d in stale:
+        d.mkdir(parents=True)
+        (d / 'JOB.json').write_text('{}')
+        os.chmod(d, 0o555)
+    v1mod.cleanup_leftovers(lay)
+    assert sorted(os.listdir(j)) == ['CPSJ_D1_000003.tgz'] and (lay.inbox / '.boot').is_file()
+    assert not any(os.path.lexists(d) for d in stale) and all(p.is_file() for p in keep)
 
 
 def to_g_end(w):
@@ -2869,7 +3007,8 @@ def t_gap04_moved_pending_foreign_copy_forks():
     env.work = None
 
 
-TESTS = [t_d5_clear_check_found_accepted, t_d11_drill_genesis_refuses_existing_ledger, t_d11_session_download_names_kept, t_d11_local_download_checked_at_go, t_d11_link_copy_download_keeps_the_head, t_d11_head_download_slips_and_no_block, t_d11_session_slip_voids_only_its_name, t_d11_clear_check_routes_found_only_to_its_find, t_d5_settle_root_mode_link_and_file_targets, t_d11_stop_block_sticky_only_for_handback_c, t_d11_on_found_handback_and_absent, t_d11_found_raw_path_rules, t_maint2_inventory_rehashed_at_attest, t_d11_parse_raw_edges, t_gap02_files_found_before_settle, t_gap04_moved_pending_foreign_copy_forks, t_c1_post_failure_finishes_pending_halt_first, t_d5_kit_in_use_never_checks, t_d5_halted_kit_never_checks, t_commit_entry_then_parts, t_commit_duplicates_same_md5_kept, t_commit_fork_foreign_md5,
+TESTS = [t_a6_stage_empties_tmp_and_sets_tmpdir, t_a5_stage_stops_setup_missing, t_a4_stale_temp_names_in_runtime_ignored,
+         t_a4_stale_png_stream_and_validate_removed, t_d5_clear_check_found_accepted, t_d11_drill_genesis_refuses_existing_ledger, t_d11_session_download_names_kept, t_d11_local_download_checked_at_go, t_d11_link_copy_download_keeps_the_head, t_d11_head_download_slips_and_no_block, t_d11_session_slip_voids_only_its_name, t_d11_clear_check_routes_found_only_to_its_find, t_d5_settle_root_mode_link_and_file_targets, t_d11_stop_block_sticky_only_for_handback_c, t_d11_on_found_handback_and_absent, t_d11_found_raw_path_rules, t_maint2_inventory_rehashed_at_attest, t_d11_parse_raw_edges, t_gap02_files_found_before_settle, t_gap04_moved_pending_foreign_copy_forks, t_c1_post_failure_finishes_pending_halt_first, t_d5_kit_in_use_never_checks, t_d5_halted_kit_never_checks, t_commit_entry_then_parts, t_commit_duplicates_same_md5_kept, t_commit_fork_foreign_md5,
          t_commit_bounded_reupload, t_commit_late_appearing_copy_is_harmless, t_commit_md5_hidden_download_back,
          t_commit_refused_upload_find_before_reupload, t_commit_rebase_absence_third_check,
          t_commit_refuses_second_and_limits, t_commit_illegal_transition_leaves_nothing,

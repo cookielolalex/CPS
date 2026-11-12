@@ -66,11 +66,11 @@ def patched(mod, name, value):
 
 
 def layout(root, repo_link=True):
-    home = root / 'home'
-    (home / 'cps/outbox/v2').mkdir(parents=True, exist_ok=True)
-    if repo_link and not (home / 'cps/repo').exists():
-        os.symlink(host.HELPER_REPO, home / 'cps/repo')
-    with env_vars(HOME=home, CPS_VM_BASE=home / 'cps', CPS_TOOLS=home / 'cps-tools'):
+    home, base = root / 'home', root / 'tmp/cps'                   # A1: BASE outside HOME
+    (base / 'outbox/v2').mkdir(parents=True, exist_ok=True)
+    if repo_link and not (base / 'repo').exists():
+        os.symlink(host.HELPER_REPO, base / 'repo')
+    with env_vars(HOME=home, CPS_VM_BASE=base, CPS_TOOLS=home / 'cps-tools'):
         return v1reuse.Layout()
 
 
@@ -255,22 +255,29 @@ def test_transcript_and_copy_codes():
     e = SimpleNamespace(cfg={'max_transcript_bytes': 5})
     assert cli.transcript_problem(e, str(d / 't.json')) == 'TRANSCRIPT_TOO_LARGE'
     assert cli.transcript_problem(e, str(d / 'missing.json')) == 'TRANSCRIPT_FILE_MISSING'
-    home = d / 'home'
-    u = home / 'cps-deliveries/c1/user01/20261110T000005Z'
+    home, base = d / 'home', d / 'tmp/cps'                         # A1: the copy is under BASE/deliveries
+    u = base / 'deliveries/c1/user01/20261110T000005Z'
     u.mkdir(parents=True)
     (u / 'PERSONAL_COPY.xlsx').write_bytes(b'invented copy')
-    u2 = home / 'cps-deliveries/c1/user02/20261110T000005Z'
+    old = home / 'cps-deliveries/c1/user01/20261110T000005Z'       # the old place in HOME, which the standard route
+    old.mkdir(parents=True)                                         # cannot write: refused
+    for n in ('PERSONAL_COPY.xlsx', 'PERSONALIZATION_LOG.json'):
+        (old / n).write_bytes(b'invented')
+    u2 = base / 'deliveries/c1/user02/20261110T000005Z'
     u2.mkdir(parents=True)
     (u2 / 'PERSONALIZATION_LOG.json').write_text('{}')
     (u / 'PERSONALIZATION_LOG.json').write_text(json.dumps({'standard_file': {'sha256': '0' * 64},
                                                              'profile_folder': 'Dots Folder/profiles/user01'}))
     run = 'E20261110T000000Z/c1'
     env = SimpleNamespace(state={'runs': {run: {'case': 'c1', 'saved_qa': {'deliverable_sha256': '1' * 64}}}},
-                          lay=SimpleNamespace(home=str(home)), block={'printed_utc': '2026-11-10T00:00:00Z'},
+                          lay=SimpleNamespace(home=str(home), base=base), block={'printed_utc': '2026-11-10T00:00:00Z'},
                           cfg={'png_part_bytes': 10 ** 6})
     ctx = {'run': run}
     good = {'copy': str(u / 'PERSONAL_COPY.xlsx'), 'log': str(u / 'PERSONALIZATION_LOG.json')}
     assert cli.delivery_commit(env, ctx, dict(good, log=str(u2 / 'PERSONALIZATION_LOG.json'))) == 'COPY_INVALID'
+    cfg = {'base': str(base), 'case': 'c1'}
+    assert N.check_value('copy', 'COPYPATH', good['copy'], cfg) is None
+    assert N.check_value('copy', 'COPYPATH', str(old / 'PERSONAL_COPY.xlsx'), cfg) == ('VALUE_PATTERN', 'copy')
     assert cli.delivery_commit(env, ctx, good) == 'COPY_LOG_MISMATCH'
 
 
@@ -313,7 +320,7 @@ def test_head_error_codes_stop_the_session():
                  'FORK'):
         w = TC.work(head_error=code, hint={'seq': 3, 'kit': None}, lookups=json.loads(json.dumps(d.lookups)))
         ph, st = SE.session_next({'work': w, 'series': 'Q1', 'gates': d.gates, 'clear': None, 'now': CW.utc(d.t),
-                                  'base': '/home/agent/cps', 'transcript_ext': 'json'})
+                                  'base': '/tmp/cps', 'transcript_ext': 'json'})
         assert ph == 'HEAD' and type(st).__name__ == 'Stop' and (st.code, st.handback) == (code, 'C'), (code, ph, st)
 
 
@@ -460,7 +467,9 @@ def test_s06_profile_folder_with_brace_refused_before_commit():
 
 
 def test_s11_oserror_outside_stage_prints_stop_block():
-    """S-11 (W15): an OSError outside a stage prints the STOP block (DISK_FULL for ENOSPC), never a traceback."""
+    """S-11 (W15): an OSError outside a stage prints the STOP block (DISK_FULL for ENOSPC), never a traceback: the block
+    of run_command itself, with the journal's header and the local sticky HALT.json, not only the bare block that
+    cli.main prints when an OSError escapes run_command (amendment A3)."""
     import errno
     import test_vio as V
     from cpsvm2 import cli
@@ -477,6 +486,51 @@ def test_s11_oserror_outside_stage_prints_stop_block():
         finally:
             cli.go_checks = orig
         assert code == 3 and out[-1] == 'DO: STOP DISK_FULL HANDBACK C', out
+        assert out[0].startswith('CPSV series=E1 ') and json.loads((w.base / 'outbox/v2/HALT.json').read_text())[
+            'code'] == 'DISK_FULL', out
+
+
+def test_a3_erofs_ends_in_stop_block():
+    """Amendment A3 (W120, W121): an OSError with errno EROFS anywhere in a helper command ends in a full block with STOP
+    READ_ONLY_FS HANDBACK C, never a traceback without a block: before the lock (the bare block), while the command
+    runs (the journal's header, HALT.json written), and while a STOP is being handled (the bare block)."""
+    import errno
+    import test_vio as V
+    from cpsvm2 import cli
+    V.WORK = WORK
+    bare = ['CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup state=STOP',
+            'DO: STOP READ_ONLY_FS HANDBACK C']
+
+    def erofs(*a, **k):
+        raise OSError(errno.EROFS, 'Read-only file system')
+    with V.fw() as w:
+        V.to_idle(w)
+        before = sorted(os.listdir(w.base / 'outbox/v2'))
+
+        class Lock(cli.HelperLock):
+            __enter__ = erofs
+
+        def halt(env):                                  # a STOP whose HALT.json write meets the read-only file system
+            raise cli.Halt('STOP', 'INTERNAL_PRINT', 'invented')
+        for name, repl in (('HelperLock', Lock), ('go_checks', halt)):
+            orig, wh = getattr(cli, name), cli.write_halt
+            setattr(cli, name, repl)
+            cli.write_halt = erofs
+            try:
+                code, out = w.dot.cmd('go')
+            finally:
+                setattr(cli, name, orig)
+                cli.write_halt = wh
+            assert (code, out) == (3, bare), (name, out)
+            assert sorted(os.listdir(w.base / 'outbox/v2')) == before, name
+        orig = cli.go_checks
+        cli.go_checks = erofs
+        try:
+            code, out = w.dot.cmd('go')
+        finally:
+            cli.go_checks = orig
+        assert code == 3 and out[0].startswith('CPSV series=E1 ') and out[-1] == 'DO: STOP READ_ONLY_FS HANDBACK C', out
+        assert json.loads((w.base / 'outbox/v2/HALT.json').read_text())['code'] == 'READ_ONLY_FS'
 
 
 def test_opx06_inputs_changed_bounded_then_slip_limit():
@@ -514,6 +568,7 @@ TESTS = [test_foreign_md5_same_size_is_fork, test_marks_survive_every_commit, te
          test_job_busy_too_long, test_transcript_and_copy_codes, test_internal_step_overflow,
          test_chain_invalid_at_assemble, test_head_error_codes_stop_the_session,
          test_s06_profile_folder_with_brace_refused_before_commit, test_s11_oserror_outside_stage_prints_stop_block,
+         test_a3_erofs_ends_in_stop_block,
          test_opx06_inputs_changed_bounded_then_slip_limit, test_place_job_output_not_empty]
 
 

@@ -740,10 +740,12 @@ class FakeDot:
         w = self.w
         script = []
         for ln in readme_bootstrap():
+            ln = ln.replace('/tmp/cps', str(w.base))             # the README's base (A1) is this World's base
             if ln.startswith('COMMIT='):
                 ln = 'COMMIT=%s' % commit
             elif 'git clone' in ln:
-                ln = '[ -d ~/cps/repo/.git ] || { mkdir -p ~/cps && ln -s %s ~/cps/repo; }' % shlex.quote(str(REPO))
+                ln = '[ -d {0}/repo/.git ] || {{ mkdir -p {0} && ln -s {1} {0}/repo; }}'.format(
+                    shlex.quote(str(w.base)), shlex.quote(str(REPO)))
             elif 'session_start.sh' in ln:
                 ln = ln.replace(' [--hint <seq6> --kit <hex12>]', '')
                 if hint:
@@ -822,8 +824,8 @@ class World:
         self.root.mkdir(parents=True, exist_ok=True)
         self.series, self.gates = series, dict(GATES, **(gates or {}))
         self.cases = list(cases)
-        self.home = self.root / 'home'
-        self.base, self.tools = self.home / 'cps', self.home / 'cps-tools'
+        self.home = self.root / 'home'                  # the Dot's layout (amendment A1): BASE /tmp/cps outside HOME
+        self.base, self.tools = self.root / 'tmp/cps', self.home / 'cps-tools'
         self.boot_path = self.root / 'boot_id'
         self.fixed = self.root / 'fixed'
         self.clock = Clock()
@@ -1108,7 +1110,7 @@ class World:
         u = host.utc14(self.clock.now())
         cur = json.loads((self.base / 'outbox/v2/STATE.json').read_text())['state']['current']
         case = cur.split('/', 1)[1]
-        d = self.home / 'cps-deliveries' / case / 'user01' / u
+        d = self.base / 'deliveries' / case / 'user01' / u
         d.mkdir(parents=True, exist_ok=True)
         (d / 'PERSONAL_COPY.xlsx').write_bytes(st + b'')
         (d / 'PERSONALIZATION_LOG.json').write_text(json.dumps({
@@ -1141,6 +1143,8 @@ class World:
         force_rmtree(dest)
         dest.mkdir(parents=True)
         shutil.copytree(self.home, dest / 'home', symlinks=True)
+        if self.base.exists():
+            shutil.copytree(self.base, dest / 'base', symlinks=True)
         d = self.dot
         return {'dir': dest, 'drive': copy.deepcopy(self.drive), 'offset': self.clock.offset, 'nboot': self.nboot,
                 'boot': self.boot, 'everyday': list(self.everyday), 'kinds': dict(self.kinds),
@@ -1150,7 +1154,10 @@ class World:
     def restore(self, snap):
         self.kill_boot()
         force_rmtree(self.home)
+        force_rmtree(self.base)
         shutil.copytree(snap['dir'] / 'home', self.home, symlinks=True)
+        if (snap['dir'] / 'base').exists():
+            shutil.copytree(snap['dir'] / 'base', self.base, symlinks=True)
         self.drive = copy.deepcopy(snap['drive'])
         self.nboot, self.boot, self.everyday = snap['nboot'], snap['boot'], list(snap['everyday'])
         self.kinds = dict(snap['kinds'])

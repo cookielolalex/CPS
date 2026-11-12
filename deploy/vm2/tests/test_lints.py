@@ -379,14 +379,33 @@ README_RULES = (                                # D10, OPX-04, OPX-09, D3, D4, D
     'for everyday jobs into the everyday records folder `Dots Folder/CPS_JOB_RECORDS` and the profile\'s `deliveries` folder',
     'both must be inside the owner\'s standing pre-approval of uploads (section 7)',
     'With `tools=inventory` the record holds the kit\'s list (by its sha256), the platform\'s usual set, not a list read',
+    # amendment A1-A3 (W130, W131): the base under /tmp, the two routes, the operating rules and their codes
+    'export CPS_VM_BASE=/tmp/cps',
+    'Run `bash /tmp/cps/vm.sh go`, then do the block it prints, exactly.',
+    'through the elevated route (`sandbox_permissions` set to `require_escalated`)',
+    'Run everything else for the helper through the standard route (`use_default`)',
+    'Never move a helper command to the elevated route because it failed',
+    'leave `prefix_rule` empty',
+    'run no helper command',
+    'never end your turn and never set a wait or a wake-up',
+    '`CPS paused while a helper command ran: reply continue to resume.`',
+    'Never use `ps`, `kill` or a process id to judge whether a helper command runs',
+    'never start that command again yourself. Run `go` once and do the block it prints.',
+    'Retry it once through the same route. If the review stops it again, stop and tell the owner `REVIEW_STOPPED`',
+    'Never run it again through the elevated route or in another folder. Stop and tell the owner `READ_ONLY_FS`',
+    '`go` stops with `STOP SETUP_MISSING HANDBACK C` before the stage',
+    'A runner stage needs 1.5 GB free there',
 )
-README_ABSENT = ('STOP IDLE', 'then=', 'AWAIT_CONVERSATION', 'OPENED', 'LIST ')
+README_ABSENT = ('STOP IDLE', 'then=', 'AWAIT_CONVERSATION', 'OPENED', 'LIST ', '/home/agent/cps', '~/cps/',
+                 '~/cps-deliveries')
 
 
 def t_l14_readme_rules():
-    """L14 (W20, W95, W104, W105): the README keeps its rules verbatim (the outcome rule with UNSURE as the default,
-    the refused-upload notes, the never-work-around and never-repeat sentences, NO_BLOCK, the RAW_INVALID table, the
-    INPUTS_CHANGED step, the attested times, the DOWNLOAD route) and none of the removed tokens."""
+    """L14 (W20, W95, W104, W105, W130, W131): the README keeps its rules verbatim (the outcome rule with UNSURE as the
+    default, the refused-upload notes, the never-work-around and never-repeat sentences, NO_BLOCK, the RAW_INVALID
+    table, the INPUTS_CHANGED step, the attested times, the DOWNLOAD route; amendment A1-A3: the /tmp/cps base, the two
+    routes, the operating rules with REVIEW_STOPPED, READ_ONLY_FS and SETUP_MISSING, the disk need) and none of the
+    removed tokens (also no old ~/cps or /home/agent/cps path)."""
     readme = open(os.path.join(VM2, 'README.md'), encoding='utf-8').read()
     flat = ' '.join(readme.split())
     missing = [r for r in README_RULES if ' '.join(r.split()) not in flat]

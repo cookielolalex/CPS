@@ -1,6 +1,6 @@
 #!/bin/bash
 # cps-vm-helper.v2.1 bootstrap after a reset or in a new operator chat (spec section 6.6, delta v2.1 2.10.3-2.10.7).
-# Usage: bash ~/cps/repo/deploy/vm2/session_start.sh --commit <40 hex> [--hint <seq6> --kit <hex12>|none]
+# Usage: CPS_VM_BASE=/tmp/cps bash /tmp/cps/repo/deploy/vm2/session_start.sh --commit <40hex> [--hint <seq6> --kit <hex12>]
 # Every failure prints a full block (no set -e). The setup runs in the foreground (delta X.6.6: no detached process).
 umask 022
 HDR='CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup'
@@ -20,13 +20,14 @@ if [ -n "$HINT$KIT" ]; then
   [[ "$HINT" =~ ^[0-9]{6}$ && "$KIT" =~ ^[0-9a-f]{12}$ ]] || { echo "usage: --hint <seq6> --kit <hex12>"; exit 2; }
 fi
 
-# 1. HOME, BASE, TOOLS: absolute, no whitespace; BASE is not a git checkout
+# 1. HOME, BASE, TOOLS: absolute, no whitespace or quote; BASE is set (no default), outside HOME, not a git checkout
 case "${HOME:-}" in /*) ;; *) stop SESSION_LAYOUT ;; esac
-BASE="${CPS_VM_BASE:-$HOME/cps}"
+BASE="${CPS_VM_BASE:-}"
 TOOLS="${CPS_TOOLS:-$HOME/cps-tools}"
 case "$BASE" in /*) ;; *) stop SESSION_LAYOUT ;; esac
 case "$TOOLS" in /*) ;; *) stop SESSION_LAYOUT ;; esac
-case "$HOME$BASE$TOOLS" in *[[:space:]]*) stop SESSION_LAYOUT ;; esac
+case "$HOME$BASE$TOOLS" in *[[:space:]\'\"\\\$\`]*) stop SESSION_LAYOUT ;; esac
+case "$BASE/" in "$HOME"/*) stop SESSION_LAYOUT ;; esac
 [ -e "$BASE/.git" ] && stop SESSION_LAYOUT
 
 # 2. this script runs from BASE/repo, a clean checkout; a git error is a STOP, never a pass (SAFE-06)
@@ -37,16 +38,16 @@ ST=$(git -C "$BASE/repo" status --porcelain --untracked-files=no 2>/dev/null) ||
 
 # 3. folders (never BASE/ledger)
 mkdir -p "$BASE"/runtime "$BASE"/jobs "$BASE"/qual "$BASE"/transcripts "$BASE"/everyday_inputs "$BASE"/inbox \
-  "$BASE"/outbox/v2 "$BASE"/outbox/journal "$BASE"/attest "$BASE"/deliver "$TOOLS"/var || stop SESSION_LAYOUT
+  "$BASE"/outbox/v2 "$BASE"/outbox/journal "$BASE"/attest "$BASE"/deliver "$BASE"/tmp "$TOOLS"/var || stop SESSION_LAYOUT
 
 # 6. the checked-out commit is the one named, before anything runs from it (S-08)
 HEAD=$(git -C "$BASE/repo" rev-parse HEAD 2>/dev/null) || stop SESSION_GIT_ERROR
 [ "$HEAD" = "$COMMIT" ] || stop SESSION_COMMIT_MISMATCH
 
-# 5. no bytecode (S-07, SD-63), the launcher (atomically, 0755; it reads no .pyc) and the hint (none: no hint)
+# 5. no bytecode (S-07, SD-63), the launcher (atomic, 0755, no .pyc, BASE and TOOLS exported) and the hint
 find "$REPO" -name __pycache__ -type d -prune -exec rm -rf {} + || stop SESSION_LAYOUT
-printf '#!/bin/bash\n[ -f %q ] && . %q\nexec python3 -I -B -X pycache_prefix=/dev/null %q "$@"\n' "$TOOLS/env.sh" \
-  "$TOOLS/env.sh" "$BASE/repo/deploy/vm2/vm2.py" > "$BASE/.vm.sh.tmp" && chmod 0755 "$BASE/.vm.sh.tmp" &&
+printf '#!/bin/bash\nexport CPS_VM_BASE='\''%s'\'' CPS_TOOLS='\''%s'\''\n[ -f %q ] && . %q\nexec python3 -I -B -X pycache_prefix=/dev/null %q "$@"\n' \
+  "$BASE" "$TOOLS" "$TOOLS/env.sh" "$TOOLS/env.sh" "$BASE/repo/deploy/vm2/vm2.py" > "$BASE/.vm.sh.tmp" && chmod 0755 "$BASE/.vm.sh.tmp" &&
   mv "$BASE/.vm.sh.tmp" "$BASE/vm.sh" || stop SESSION_LAYOUT
 if [ -n "$HINT" ]; then
   printf '{"kit": "%s", "seq": %d}\n' "$KIT" "$((10#$HINT))" > "$BASE/outbox/v2/.HINT.json.tmp" &&

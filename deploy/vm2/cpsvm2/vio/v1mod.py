@@ -101,13 +101,14 @@ def check_layout_release(lay, rel, helper_tree_sha256, commit):
 
 
 def cleanup_leftovers(lay):
-    """T-23 (v2, §X.1): a killed helper's staging folders, temp files and older inbox downloads; never a job."""
+    """T-23 (v2, §X.1; amendment A4): a killed command's staging folders, temp files and older inbox downloads."""
     globs = [lay.base.glob('.cps_vm_stage_*'), lay.outbox.glob('.tmp_*'), (lay.outbox / 'journal').glob('.tmp_*'),
-             (lay.outbox / 'v2').glob('.tmp_*')]
+             (lay.outbox / 'v2').glob('.tmp_*'), lay.runtime.glob('.tmp_[0-9]*_*'), (lay.inbox / 'journal').glob('.*')]
     for root in (lay.qual, lay.jobs):
         if root.is_dir():
             globs.append(root.glob('*/.cps_vm_stage_*'))
             globs.append(root.glob('*/.cps_vm_evict_*'))
+            globs.append(root.glob('*/.validate_*'))
     for g in globs:
         for p in list(g):
             try:

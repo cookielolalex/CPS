@@ -332,6 +332,8 @@ def D_sameboot_damaged_cache_restores(w):
             done.append(1)
             p = w.base / 'outbox/v2/STATE.json'
             p.write_bytes(p.read_bytes()[:-7] + b'damaged')
+            for n in ('.tmp_2_VM_HELPER_CONFIG.json', '.tmp_3_x'):      # A4 (W122): a killed write_atomic's leftovers
+                (w.base / 'runtime' / n).write_bytes(b'{"left": "by a killed command"}')
             return 'stop'
     w.dot.hook = h
     code, lines = w.dot.run(code, lines)
@@ -341,6 +343,62 @@ def D_sameboot_damaged_cache_restores(w):
     assert done and list((w.base / 'outbox/v2').glob('invalid_*/STATE.json')), 'the damaged cache moved aside'
     rs = [e for e in restores(w) if e['kind'] == 'RESTORE']
     assert rs and rs[0]['boot_id'] == entry(w, rs[0]['seq'] - 1)['boot_id'], 'a same-boot RESTORE'
+    assert not list((w.base / 'runtime').glob('.tmp_*')), 'A4: the leftovers left runtime, the kit stayed the same'
+    return finish(w, code, lines)
+
+
+def notes_hint(w):
+    h = dict(x.split('=', 1) for x in w.dot.notes['cpsv'].split()[1:])
+    return None if h['kit'] == 'none' else (h['head'], h['kit'])
+
+
+def D_base_wiped_same_boot_restores(w):
+    """Amendment A5 (i): BASE is gone in the same boot (the Dot's /tmp/cps) while TOOLS and its setup marker for this boot
+    and commit stay. The Dot runs the bootstrap (README section 1: vm.sh is missing): no setup runs, the session restores
+    from the journal in the same boot, and the audit lists that RESTORE as a same-boot restore."""
+    code, lines = go(w)
+    w.dot.hook = lambda dot, ls: 'stop' if hdr(ls).get('head') == '000005' else None
+    code, lines = w.dot.run(code, lines)
+    w.dot.hook = None
+    assert hdr(lines).get('head') == '000005', lines
+    mark, n0 = (w.tools / 'var/cps_vm2_setup_ok').read_text(), len(restores(w))
+    fakes.force_rmtree(w.base)
+    w.dot.opened, w.dot.convs, w.dot.current = {}, dict(w.dot.convs), None       # as FakeDot.reset, without a new boot
+    code, ls = w.dot.bootstrap(w.dot.notes['repo'], notes_hint(w))
+    assert code == 0 and not any(x.startswith('CPSV-RUNNING') for x in w.dot.blocks[-1]['lines']), ls
+    assert (w.tools / 'var/cps_vm2_setup_ok').read_text() == mark and (w.base / 'tmp').is_dir()
+    code, lines = w.dot.cmd('go')
+    code, lines = w.dot.run(code, lines)
+    rs = [e for e in restores(w)[n0:] if e['kind'] == 'RESTORE']
+    assert rs and rs[0]['boot_id'] == entry(w, rs[0]['seq'] - 1)['boot_id'], 'a same-boot RESTORE'
+    last = finish(w, code, lines)
+    c, rep, out = w.audit(str(w.root) + '_aud2')
+    assert rep['clean'] and rs[0]['seq'] in rep['same_boot_restores'], (rep['same_boot_restores'], rs[0]['seq'])
+    return last
+
+
+def D_tools_wiped_same_boot_continues(w):
+    """Amendment A5 (ii) (W127): TOOLS (~/cps-tools) is gone in the same boot while BASE stays. The next stage stops with
+    STOP SETUP_MISSING before the runner, and nothing is sticky (no HALT.json). The light setup runs again (simulated, as
+    in every World) and the Dot runs the bootstrap; the helper continues from BASE: no RESTORE after the wipe, FINAL."""
+    code, lines = go(w)
+    w.dot.hook = lambda dot, ls: 'stop' if hdr(ls).get('head') == '000003' else None
+    code, lines = w.dot.run(code, lines)
+    w.dot.hook = None
+    n0, st0 = len(restores(w)), json.loads((w.base / 'outbox/v2/STATE.json').read_text())['boot_id']
+    fakes.force_rmtree(w.tools)
+    code, lines = w.dot.run(code, lines)
+    assert lines[-1] == 'DO: STOP SETUP_MISSING HANDBACK C', lines
+    assert not (w.base / 'outbox/v2/HALT.json').exists() and not (w.base / 'outbox/v2/FOREGROUND.json').exists()
+    code, again = w.dot.cmd('go')
+    assert again[-1] == 'DO: STOP SETUP_MISSING HANDBACK C', again
+    w.simulate_setup()
+    code, ls = w.dot.bootstrap(w.dot.notes['repo'], notes_hint(w))
+    assert code == 0, ls
+    code, lines = w.dot.cmd('go')
+    code, lines = w.dot.run(code, lines)
+    assert not [e for e in restores(w)[n0:] if e['kind'] == 'RESTORE'], 'continued from BASE, no restore'
+    assert json.loads((w.base / 'outbox/v2/STATE.json').read_text())['boot_id'] == st0
     return finish(w, code, lines)
 
 
@@ -460,4 +518,5 @@ SPEC = {n: ('E1', ()) if n.startswith('E_') else ('D1', None) for n in (
     'D_slip_short_download_refinds', 'D_slip_stale_raw_head_search', 'D_slip_limit_then_clear',
     'E_inputs_lost_after_reset_bounded', 'test_foreground_died_same_boot_stops', 'D_clear_same_boot_foreground_died',
     'D_sameboot_damaged_cache_restores', 'D_clear_committed_halt_same_boot', 'D_clear_same_boot_fork_foreign_only',
-    'D_clear_same_boot_open_generator', 'D_hint_restore_late_copy_at_n1_forks_at_recheck')}
+    'D_clear_same_boot_open_generator', 'D_hint_restore_late_copy_at_n1_forks_at_recheck',
+    'D_base_wiped_same_boot_restores', 'D_tools_wiped_same_boot_continues')}

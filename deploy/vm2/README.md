@@ -4,37 +4,52 @@ This page is for the Dot, the operator of CPS jobs on the VM. The helper prints 
 what the block says, then run what its last line says. You never decide anything about the journal yourself.
 
 Specification: `docs/handoff/VM_HELPER_V2_SPEC.md`, changed by `docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md` and
-`docs/handoff/VM_HELPER_V21_DELTA.md`.
+`docs/handoff/VM_HELPER_V21_DELTA.md`. This page includes the v2.1 amendment from probes M008 to M012 (delta section
+9): the helper's files are under `/tmp/cps`, each command has its route, and section 2.4 gives the operating rules.
 
 ## 1. After a reset, or in a new operator chat
 
-After a reset `/home/agent` is empty. Restore the repository at the release commit, then start the session. Run
-these lines exactly. `COMMIT` is the 40-hex commit of your last `CPSV-REPO` line. With a hint, also pass the `head`
-and `kit` values of your last `CPSV` line. When that `kit` value is `none`, leave out `--hint` and `--kit`
-(`--kit none` also means no hint).
+The helper keeps every file it writes under `/tmp/cps` (its base). The light setup keeps the tools in `~/cps-tools`.
+Run the bootstrap below, then `go`:
+- after a reset (`/home/agent` is empty), and in a new operator chat;
+- when `/tmp/cps/vm.sh` or `~/cps-tools/env.sh` is missing, for example when `bash /tmp/cps/vm.sh go` says
+  `No such file or directory`. When an owner or maintainer message starts your work, check both files with `ls`.
+
+Run the lines exactly, as one command, through the elevated route (`sandbox_permissions` set to
+`require_escalated`): the git lines use the network, and the setup that `session_start.sh` runs writes
+`~/cps-tools`. `COMMIT` is the 40-hex commit of your last `CPSV-REPO` line. With a hint, also pass the `head` and
+`kit` values of your last `CPSV` line. When that `kit` value is `none`, leave out `--hint` and `--kit` (`--kit none`
+also means no hint).
 
 <!-- bootstrap:begin -->
 ```
 COMMIT=<the 40-hex commit of your last CPSV-REPO line>
-[ -d ~/cps/repo/.git ] || git clone -q https://github.com/cookielolalex/CPS.git ~/cps/repo
-git -C ~/cps/repo fetch -q origin "$COMMIT"; git -C ~/cps/repo checkout -q --detach "$COMMIT"
-bash ~/cps/repo/deploy/vm2/session_start.sh --commit "$COMMIT" [--hint <seq6> --kit <hex12>]
+export CPS_VM_BASE=/tmp/cps
+[ -d /tmp/cps/repo/.git ] || git clone -q https://github.com/cookielolalex/CPS.git /tmp/cps/repo
+git -C /tmp/cps/repo fetch -q origin "$COMMIT"; git -C /tmp/cps/repo checkout -q --detach "$COMMIT"
+bash /tmp/cps/repo/deploy/vm2/session_start.sh --commit "$COMMIT" [--hint <seq6> --kit <hex12>]
 ```
 <!-- bootstrap:end -->
 
+- The base is set only by the line `export CPS_VM_BASE=/tmp/cps`. Without it `session_start.sh` stops with
+  `SESSION_LAYOUT`, and it refuses a base inside `/home/agent`. The launcher it writes, `/tmp/cps/vm.sh`, carries the
+  base and the tools folder itself, so no later command sets anything.
 - **Step 0, when your notes are gone.** Find `VM2_RELEASE.md` in the folder `CPS` by exact name and download it.
   Its one line `commit: <40 hex>` gives `COMMIT`. If the file is not there, stop and tell the owner
   `SESSION_NO_COMMIT` (case C). Never guess a commit.
-- If the checkout fails after a partial clone, remove `~/cps/repo` (it holds no state) and run the three git lines
+- If the checkout fails after a partial clone, remove `/tmp/cps/repo` (it holds no state) and run the bootstrap
   once more. A second failure: stop and tell the owner `SESSION_GIT_ERROR` (case C).
 - `session_start.sh` prints `CPSV-REPO commit=<40 hex>`. Keep that line in your notes together with the last `CPSV`
   line you saw.
 - When a maintainer message gives you a bootstrap line (for example with a new `--kit` value to clear a stop, section
   6), run exactly that line instead, then run `go`.
+- A stage needs the setup of this boot and commit. If `~/cps-tools` is gone or was set up for another boot or commit,
+  `go` stops with `STOP SETUP_MISSING HANDBACK C` before the stage, and nothing changes: tell the owner, and run the
+  bootstrap when the maintainer's message gives you its line.
 
 ## 2. The rule
 
-Run `bash /home/agent/cps/vm.sh go`, then do the block it prints, exactly. Every block is:
+Run `bash /tmp/cps/vm.sh go`, then do the block it prints, exactly. Every block is:
 
 ```
 CPSV series=<S> head=<seq6> kit=<hex12|none> at=<at> mode=<mode> state=<STATE>
@@ -52,6 +67,14 @@ starts with `CPSV ` through the `DO:` line, which is always the last line. If th
 `CPSV ` line, or no `DO:` line after the last `CPSV ` line, run `go` once; if that happens again, stop and tell the
 owner `NO_BLOCK` (case C).
 
+**Routes.** Your command tool runs each command through one of two routes, chosen by `sandbox_permissions`. Run the
+bootstrap of section 1 through the elevated route (`require_escalated`). Run everything else for the helper through
+the standard route (`use_default`): every helper command (`bash /tmp/cps/vm.sh ...`) and every file you write for the
+helper (the saved search results under `/tmp/cps/attest`, the `cp` of a download to the path a DOWNLOAD line names,
+the final message and tool lists, the everyday inputs and the personal copy). The standard route can write `/tmp`,
+where all of these are. Never move a helper command to the elevated route because it failed (section 2.4). Create no
+standing approval and no prefix rule: leave `prefix_rule` empty.
+
 A refusal (exit 4) adds one line `REFUSED <CODE>` right after the header, sometimes followed by the key or the file
 name it is about. Your last answer was not used. Do the block that follows the REFUSED line: usually it is the block
 you had before (correct your answer and run it again); after a failed download it is a FIND block for that file
@@ -66,7 +89,7 @@ returns a tool error or times out, run that line once more before you run the he
 search in that folder; when a search says it has more pages, fetch them all.
 
 **Save what the search tool returns, never retype it.** For each block, write what its FIND lines returned into a
-**new** file, for example `/home/agent/cps/attest/raw_0001.json`, then run the block's
+**new** file, for example `/tmp/cps/attest/raw_0001.json`, then run the block's
 `found --at <at> --raw <the path of that file>`. Serialize each returned object unchanged (for example with
 `JSON.stringify` in your orchestration code) and write that text to the file (for example with a Python heredoc).
 The helper moves the file away once it has read it, so a path is used only once. The file holds:
@@ -114,7 +137,7 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
 
 1. With no job running the block asks `case=CASE_ID`. Answer it only when a user asked for a job: first put the user's
    three files (`JOB.json`, `JOB_TITLE.json` and the source workbook it names) in
-   `/home/agent/cps/everyday_inputs/<case>/`, then answer with that case id. Before you answer `case=`, keep the exact
+   `/tmp/cps/everyday_inputs/<case>/`, then answer with that case id. Before you answer `case=`, keep the exact
    text of `JOB.json` and `JOB_TITLE.json` and the place of the user's workbook in your notes.
 2. Follow the blocks through prepare, the generator, finish and the visual reviewer, exactly as in qualification.
    Every upload goes into the everyday records folder (`Dots Folder/CPS_JOB_RECORDS`) or the profile's `deliveries`
@@ -130,11 +153,37 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
    then run `go` until the helper stops with `STOP SLIP_LIMIT HANDBACK C` (it refuses at most 3 times). A maintainer
    clear of that stop abandons this job; a new job starts only at the user's request.
 
+### 2.4 Operating rules
+
+1. Work in the conversation that the owner's or the maintainer's message started. Never hand a helper command, a
+   stage or a block's UPLOAD, FIND or DOWNLOAD lines to another conversation or worker. The conversations the helper
+   asks you to open (the generator, the scope reader and the visual reviewer) run no helper command; never ask them
+   to run one.
+2. Run each helper command in the foreground and poll its own session until it exits (section 2).
+3. Prefer polling to waiting. While a helper command runs, never end your turn and never set a wait or a wake-up.
+   The scheduled mailbox check does nothing while your work is claimed, so it will not resume this conversation. If
+   your turn ends anyway, end your last message to the owner with exactly this line:
+   `CPS paused while a helper command ran: reply continue to resume.`
+   When the owner replies `continue`, poll that command's session; if you no longer have it, follow rule 5.
+4. Never use `ps`, `kill` or a process id to judge whether a helper command runs: each command has its own process
+   space, and the ids repeat. Only the helper's own lines decide: `CPSV-RUNNING`, `CPSV-BUSY` and the block.
+5. If a poll says that the process is unknown, or the session is gone, never start that command again yourself. Run
+   `go` once and do the block it prints. After a stage died, that block is `STOP FOREGROUND_DIED HANDBACK C` (after
+   the self-test: `STOP SELFTEST_DIED HANDBACK C`, or, the first time, the self-test once more). If the dead command
+   ran no stage, it is the block to follow. If the command still runs, `go` prints `CPSV-BUSY` and `DO: POLL`.
+6. A request that the platform's automatic review stopped before it ran (for example a review timeout) has not run.
+   Retry it once through the same route. If the review stops it again, stop and tell the owner `REVIEW_STOPPED`, the
+   command and the review's message. Only the bootstrap goes through the elevated route and its review.
+7. Any `Read-only file system` in a command's output means that the command wrote outside `/tmp` or ran through the
+   wrong route. Never run it again through the elevated route or in another folder. Stop and tell the owner
+   `READ_ONLY_FS`, that line and your last `CPSV` line. A helper command that meets a read-only file system prints
+   `STOP READ_ONLY_FS HANDBACK C` itself.
+
 ## 3. The actions (the `DO:` line)
 
 | action | you do | then |
 |---|---|---|
-| `RUN bash /home/agent/cps/vm.sh go` | run it | follow the new block |
+| `RUN bash /tmp/cps/vm.sh go` | run it | follow the new block |
 | `ATTEST ... found --at A --raw FILE [--refused NAME]` | do the block's UPLOAD and FIND lines, save the FIND results in one new file (section 2), run `found` with that file | follow the output |
 | `ATTEST ... answer --at A k1=PATTERN1 ...` | run `answer` with a real value for each key, matching the pattern named | follow the output |
 | `ATTEST after=T bash ... answer ...` | as above; `list_shows_none=yes` means your conversation list shows **no** conversation of that role (section 4) with `attachedAt` at or after T, and `conversation=` is the id of the conversation of that role with `attachedAt` at or after T | follow the output |
@@ -145,9 +194,9 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
 | `EXPORT_TRANSCRIPT role=R to=P [conversation=C] [after=UTC]` | export that conversation's transcript to P; if your platform cannot, do nothing | run `go` |
 | `NOTIFY_OWNER file=P ATTEST ... notified=YES` | tell the owner the content of P | run the answer |
 | `ASK_USER file=P ATTEST ... k=PATTERN` | ask the user the question in P | run the answer with the user's reply |
-| `DELIVER file=P to=copy ATTEST ... copy=COPYPATH log=COPYPATH` | everyday: make the user's personal copy of P with that user's preferences, as `PERSONAL_COPY.xlsx` with its `PERSONALIZATION_LOG.json` in `~/cps-deliveries/<case>/<user>/<utc14>/` | run the answer with the two paths |
+| `DELIVER file=P to=copy ATTEST ... copy=COPYPATH log=COPYPATH` | everyday: make the user's personal copy of P with that user's preferences, as `PERSONAL_COPY.xlsx` with its `PERSONALIZATION_LOG.json` in `/tmp/cps/deliveries/<case>/<user>/<utc14>/` | run the answer with the two paths |
 | `DELIVER file=P to=user ATTEST ... sent=YES` | everyday: send P to the requesting user, under the standard file name from the `JOB_TITLE.json` you wrote | run the answer |
-| `WAIT seconds=N` | wait N seconds | run `go` |
+| `WAIT seconds=N` | run `sleep N` in the foreground (standard route); set no wait or wake-up of the platform | run `go` |
 | `STOP UPLOAD_REFUSED HANDBACK A name=N` | keep N in your notes as refused; tell the owner the code, the file name N and your last `CPSV` line, and ask the owner to approve or deny the upload in the platform | run `go` when the owner says so. Take N out of your notes only when the owner tells you the upload was approved or denied; if the owner only says to continue, keep N in your notes |
 | `STOP WAIT_APPROVAL HANDBACK A` | an upload of this series still waits for the owner (you answered `approval=pending`): ask the owner to approve or deny it | run `go` when the owner says so. Take it out of your notes only when the owner tells you it was approved or denied; if the owner only says to continue, keep it and answer `approval=pending` again |
 | `STOP <CODE> HANDBACK C` | stop; upload nothing more; tell the owner the code, your last `CPSV` line and, for `SLIP_LIMIT`, the last REFUSED line you saw | nothing until a maintainer message (section 6) |
@@ -221,13 +270,13 @@ The platform's automatic approval review sometimes refuses an upload, and a time
   follow-up message, never answer its questions, never attach anything. When it has ended, write its final message
   exactly as it is (any characters, up to the kit's max_ai_output_bytes, larger: `STOP AI_OUTPUT_TOO_LARGE HANDBACK C`;
   never edit, shorten or summarize it) to
-  `/home/agent/cps/attest/final_message.txt`, then run `go` and answer. If the conversation shows no final message,
+  `/tmp/cps/attest/final_message.txt`, then run `go` and answer. If the conversation shows no final message,
   create the file empty. Write the message with your file-write tool; if you use the shell, use a quoted heredoc whose
   delimiter line does not occur in the message. After a review continuation, write its new final message the same way.
 - **Tools** (`tools=` in the first answer about each conversation): answer `tools=inventory` when you created the
   conversation exactly as section 3 says (Create Thread, same environment, no extra settings); its tools are then the
   platform's usual set, which the kit lists. If you created it in any other way, or you know that its tools differ,
-  save the list of tools you know it had, one name per line, to a file under `/home/agent/cps/attest/` and answer
+  save the list of tools you know it had, one name per line, to a file under `/tmp/cps/attest/` and answer
   `tools=file:<the absolute path of that file>`. Never answer `none`: conversations on this platform always have tools.
   With `tools=inventory` the record holds the kit's list (by its sha256), the platform's usual set, not a list read
   from that conversation.
@@ -262,7 +311,7 @@ The platform's automatic approval review sometimes refuses an upload, and a time
   scoring; in an everyday job it never restarts.
 - **An owner notice:** `notified=yes` after you told the owner.
 - **Everyday, idle:** `case=CASE_ID`, only when a user asked for a job and its three input files are in
-  `/home/agent/cps/everyday_inputs/<case>/`.
+  `/tmp/cps/everyday_inputs/<case>/`.
 - **Everyday delivery:** the two paths of the personal copy and its log, then `sent=yes` once you sent it.
 - **Everyday, after a reset during a delivery:** `arrived=yes` or `arrived=no` (ask the user).
 - **Everyday, after a failed job:** `asked=yes` once you told the user the job failed (a new job starts only at the
@@ -311,6 +360,11 @@ once every 5 minutes.
 | a restore without your notes after about 400 journal entries (an estimate, not measured) | about 50 | about 45 | about 23 | 0 to 2 | 3 | about 120 |
 | a maintainer clear (the kit check, then a restore) | +2 | +2 | +1 | 0 | 0 | a restore + 5 |
 | one refused upload | +2 | +3 | +1 | 0 | 0 | about +6, plus the owner's time |
+
+**Disk.** `/tmp` is a 4.9 GB file system held in memory. It holds the repository copy, everything under `/tmp/cps`
+and the runner's temporary files in `/tmp/cps/tmp`, which the helper empties before every stage. A runner stage needs
+1.5 GB free there; with less the helper stops with `STOP DISK_FULL HANDBACK C` before the runner starts. Never delete
+the helper's files to make room.
 
 A qualification (38 runs, 34 nonattempts, about 10 scope readers and continuations, about 10 restores, the start and
 the end of the series) is about 3,600 tool calls: about 20 hours at 20 seconds per call, plus the conversations' own
