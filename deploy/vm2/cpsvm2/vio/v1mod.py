@@ -1,7 +1,5 @@
-"""The 6 modified v1 functions (spec §1.6), each reviewed as a diff against its v1 segment (REUSE_MANIFEST.json
-`modified` names the v1 lines and segment hash). The FOLDER_MANIFEST row helpers below them (MANIFEST_ROW, KIT_NAME,
-KIT_SHA_LINE, kit_rows, kit_parts_plan) are copied unchanged from v1 (lines 2679, 2760-2795) because the modified
-session_kit and rebuild_kit read them; they are not in §1.4's reuse list."""
+"""The 6 modified v1 functions (spec §1.6, REUSE_MANIFEST `modified`), and the FOLDER_MANIFEST row helpers
+copied unchanged from v1 (lines 2679, 2760-2795) that session_kit and rebuild_kit read."""
 import os
 import re
 import stat
@@ -14,9 +12,7 @@ from .v1reuse import current_boot_id, kit_members, remove_tree, sha_file, sjson,
 
 
 def tree_list(root):
-    """Strict (SAFE-01): sorted [rel, 'dir'|'file', mode, bytes|None, sha256|None] of every entry below root. Any
-    walk error, unreadable entry, link, device, socket, FIFO, setuid/setgid/sticky bit, unsafe or non-UTF-8 name
-    raises Halt('STOP', 'WALK_UNSUPPORTED_ENTRY') naming the path class, never the path (no lenient mode)."""
+    """Strict (SAFE-01): sorted [rel, kind, mode, bytes, sha256] below root; anything else is WALK_UNSUPPORTED_ENTRY."""
     def bad(why):
         raise Halt('STOP', 'WALK_UNSUPPORTED_ENTRY', 'an entry the archive format does not keep', detail={'class': why})
 
@@ -63,8 +59,7 @@ def tree_list(root):
 
 
 def check_layout_release(lay, rel, helper_tree_sha256, commit):
-    """2.2 (v2): the release names exactly this layout's paths, pins the helper tree (deploy/vm2/**, by the §3.4 tree
-    sha in RELEASE.json vm_helper.tree_sha256) and the runner; repository.commit is the checked-out commit."""
+    """2.2 (v2): the release names this layout's paths, pins the helper tree and runner, and the commit."""
     mode = {'RELEASED_FOR_QUALIFICATION': 'qualification', 'RELEASED_FOR_USE': 'everyday'}.get(
         (rel or {}).get('status'), 'setup')
     bad = []
@@ -106,15 +101,14 @@ def check_layout_release(lay, rel, helper_tree_sha256, commit):
 
 
 def cleanup_leftovers(lay):
-    """T-23 (v2, foreground delta §X.1): leftovers of a killed earlier helper, removed under the helper lock after the
-    FOREGROUND check (no stage of this boot can be running: only `go` runs one, holding the lock): staging folders,
-    temporary files of durable writes, and inbox downloads of an earlier boot. Never a job folder."""
+    """T-23 (v2, §X.1; amendment A4): a killed command's staging folders, temp files and older inbox downloads."""
     globs = [lay.base.glob('.cps_vm_stage_*'), lay.outbox.glob('.tmp_*'), (lay.outbox / 'journal').glob('.tmp_*'),
-             (lay.outbox / 'v2').glob('.tmp_*')]
+             (lay.outbox / 'v2').glob('.tmp_*'), lay.runtime.glob('.tmp_[0-9]*_*'), (lay.inbox / 'journal').glob('.*')]
     for root in (lay.qual, lay.jobs):
         if root.is_dir():
             globs.append(root.glob('*/.cps_vm_stage_*'))
             globs.append(root.glob('*/.cps_vm_evict_*'))
+            globs.append(root.glob('*/.validate_*'))
     for g in globs:
         for p in list(g):
             try:
@@ -138,13 +132,10 @@ def cleanup_leftovers(lay):
 
 
 def place_frozen(lay, job_dir, frozen_bytes, frozen_sha256):
-    """§7.7 (v2): put an earlier run's FROZEN.json back at its job folder for a reader-B or restart prepare. The bytes
-    come from outbox/frozen_json/ or the run's FROZEN entry (the caller reads them); sha(bytes) must be the state's
-    frozen_sha256 and the ledger's last freeze entry of that folder. Returns the placed folder."""
+    """§7.7 (v2.1): an earlier run's FROZEN.json back at its job folder (sha and ledger checked), settled."""
+    from .place import settle
     from .v1reuse import sha_bytes, write_new
     jd = Path(job_dir)
-    if os.path.lexists(jd):
-        stop('PLACE_TARGET_NOT_EMPTY', 'the earlier job folder exists')
     if sha_bytes(frozen_bytes) != frozen_sha256:
         stop('PLACE_SHA_MISMATCH', 'the kept FROZEN.json is not the frozen one')
     led = []
@@ -158,9 +149,14 @@ def place_frozen(lay, job_dir, frozen_bytes, frozen_sha256):
             led.append(e)
     if not led or led[-1].get('frozen_sha256') != frozen_sha256:
         stop('PLACE_SHA_MISMATCH', 'the ledger does not record this FROZEN.json for that folder')
-    jd.mkdir(parents=True, mode=0o755)
-    os.chmod(jd, 0o755)
-    write_new(jd / 'FROZEN.json', frozen_bytes, 0o444)
+    sd = jd.parent / ('.cps_vm_stage_%s_%d' % (jd.name, os.getpid()))
+    if os.path.lexists(sd):
+        remove_tree(sd)
+    sd.mkdir(parents=True, mode=0o755)
+    os.chmod(sd, 0o755)
+    write_new(sd / 'FROZEN.json', frozen_bytes, 0o444)
+    settle(lay, jd, {'FROZEN.json': ['file', 0o444, len(frozen_bytes), frozen_sha256]}, 0o755, sd,
+           lambda: os.rename(sd, jd))
     return str(jd)
 
 
@@ -198,9 +194,7 @@ def kit_parts_plan(rows, kname):
 
 
 def rebuild_kit(lay, inbox, block, kname, size, sha, rows):
-    """§8.2 (v2): the parts route. A missing part copy or binary is asked for by exact name (block.download(None,
-    'CPS/<folder>/<name>', path): the glue prints FIND then DOWNLOAD by id); make_kit.py assemble rebuilds the zip, and
-    the rebuilt zip is re-hashed before it is returned (KIT-2)."""
+    """§8.2 (v2): the parts route; missing files asked by exact name, the rebuilt zip re-hashed (KIT-2)."""
     parts, bins, bdir = kit_parts_plan(rows, kname)
     out = inbox / 'cps' / 'rebuilt' / kname
     if not (out.is_file() and os.lstat(out).st_size == size and sha_file(out) == sha):
@@ -226,10 +220,7 @@ def rebuild_kit(lay, inbox, block, kname, size, sha, rows):
 
 
 def session_kit(lay, inbox, block):
-    """§8.2 (v2), the FOLDER_MANIFEST route (KIT-2). Zip route: the cps_runtime/SESSION_KIT_<v>.zip row, downloaded by
-    exact name and checked with verify_drive_files.py; parts route: rebuild_kit. Either way the zip used is re-hashed
-    (sha256 and size equal to the manifest's) and read with kit_members before it is returned. Returns
-    ({'name', 'sha256', 'route', 'path'}, members); installing it is the caller's (unpack_kit after acceptance)."""
+    """§8.2 (v2), FOLDER_MANIFEST route (KIT-2): ({'name', 'sha256', 'route', 'path'}, members), re-hashed."""
     man = inbox / 'cps' / 'FOLDER_MANIFEST.md'
     if not man.is_file():
         block.download(None, 'CPS/FOLDER_MANIFEST.md', man)

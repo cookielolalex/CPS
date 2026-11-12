@@ -1,23 +1,11 @@
 """next_action (§7.1), the chain table chain_next (§7.3), the run order (§7.11). Pure: no I/O, no clock.
-
-next_action(view) -> Step. view = {
-  'state':   the fold state at the confirmed head, or None (no entry found, §8.4),
-  'marks':   STATE.marks {mark key: utc} of this boot (§2.3),
-  'local':   {'gates_ok': bool} (release gates of §12.1, evaluated by the glue on every command),
-  'now':     UTC_S of this command, 'boot_id': this boot's id,
-  'base':    BASE (absolute, ASCII), 'cfg': the kit's VM_HELPER_CONFIG.json (transcript_ext, clear, series)}.
-It is total: rows are evaluated top to bottom and the last is Stop('UNCLASSIFIED', 'C'). Row 3's CLEAR draft carries
-halt_seq and code; the glue adds kit_sha256 and kit_change (session.kit_change against the halted kit, §13.5) and stops
-with that function's code when the kit is not config-only. Rows that write a mark return
-a PrintBlock (or an Ask) whose `mark` (context['mark']) the glue writes durably before printing."""
-from .fold import (ROLE_OF_NEXT, chain, final_ready, is_q, latest, newest, nonattempt, open_roles,
-                   pending_resolution)
+next_action(view) is total (its last row is Stop UNCLASSIFIED); view = {'state', 'marks', 'local', 'now',
+'boot_id', 'base', 'cfg'}. A row that writes a mark returns a block whose `mark` the glue writes first."""
+from .fold import (CONSUMER, QUAL_ROOT as ROOT, ROLE_OF_NEXT, chain, final_ready, is_q, latest, newest,
+                   nonattempt, open_roles, pending_resolution)
 from .names import REVIEW_CONTINUABLE, run8
 from .step import Ask, Commit, PrintBlock, RunChain, Stop
 
-CONSUMER = {'S': 'scope-finish', 'G': 'finish', 'V': 'visual-record'}
-ROOT = {'A': 'A', 'B': 'B', 'A-restart1': 'A_restart1', 'B-restart1': 'B_restart1', 'NA-A': 'nonattempts_A',
-        'NA-B': 'nonattempts_B'}
 G_KEYS = ('ended', 'conversation', 'started_utc', 'ended_utc', 'platform', 'model', 'effort', 'single_user_message',
           'memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents', 'tools', 'transcript')
 G_PAT = {'ended': 'YES', 'conversation': 'CONV', 'started_utc': 'UTC', 'ended_utc': 'UTC', 'platform': 'PLATFORM',
@@ -26,17 +14,17 @@ MAX_CHAIN = 6
 
 
 def mark_key(kind, run, rkey, st):
-    """§2.3 mark key OPEN/AWAIT/EXPORT/END:<run>:<role key>:<start_no>:<start seq>."""
+    """§2.3 mark key OPEN/EXPORT:<run>:<role key>:<start_no>:<start seq>."""
     return '%s:%s:%s:%d:%d' % (kind, run, rkey, st['start_no'], st['seq'])
 
 
 def end_keys(ro):
-    """§6.5 keys asked when an S, G or V (revision 1) conversation ended."""
+    """§6.5 keys asked when an S, G or V (revision 1) conversation ended; every one attests its tools (D9)."""
     if ro['role'] == 'G':
         return {k: G_PAT.get(k, 'YESNO') for k in G_KEYS}
     if ro['role'] == 'S':
-        return {'ended': 'YES', 'conversation': 'CONV', 'prompt_pasted': 'YES'}
-    return {'ended': 'YES', 'conversation': 'CONV'}
+        return {'ended': 'YES', 'conversation': 'CONV', 'prompt_pasted': 'YES', 'tools': 'TOOLS'}
+    return {'ended': 'YES', 'conversation': 'CONV', 'tools': 'TOOLS'}
 
 
 def transcript_path(base, run, ro, st, ext):
@@ -45,8 +33,7 @@ def transcript_path(base, run, ro, st, ext):
 
 
 def pending_chain(state):
-    """The RunChain rows 12-15, 19 and 20 of §7.1 for the current run, as (first sub, info), or None. info carries
-    'rerun' {'after_seq'} when the run has rerun_expected (§7.10 unbound re-run)."""
+    """The RunChain rows 12-15, 19 and 20 of §7.1 for the current run, as (first sub, info), or None."""
     cur = state['current']
     R = state['runs'].get(cur) if cur else None
     if R is None or open_roles(state):
@@ -115,7 +102,7 @@ def _run_chain(tag, case, reader, first, restart_of, place):
 
 def next_action(view):
     """§7.1, rows 1-23 in order (see the module docstring for `view`)."""
-    s, marks, base, cfg, now = view['state'], view['marks'], view['base'], view['cfg'], view['now']
+    s, marks, base, cfg = view['state'], view['marks'], view['base'], view['cfg']
     if s is None:
         return Commit({'kind': 'GENESIS', 'body': None})                                       # row 1
     if s['phase'] == 'FINAL':
@@ -148,8 +135,7 @@ def next_action(view):
                         'file': '%s/deliver/%s/STANDARD.xlsx' % (base, run8(cur))})
         if d.get('prepared_seq') and not d['sent'] and d['resend_ok']:                         # rows 17, 18
             key = 'DELIVER_USER:%s:%d:%d' % (cur, d['prepared_seq'], d.get('ack_seq') or 0)
-            ctx = {'state_code': 'DELIVER', 'run': cur, 'prepared_seq': d['prepared_seq'],
-                   'then': ('freeze', {'delivery_sent': True})}
+            ctx = {'state_code': 'DELIVER', 'run': cur, 'prepared_seq': d['prepared_seq']}
             if sent_mark(cur, d['prepared_seq'], d) in marks:                                # §X.5 step 8
                 return RunChain(cur, 'freeze', {'delivery_sent': True})
             if key not in marks:
@@ -163,8 +149,7 @@ def next_action(view):
 
 
 def sent_mark(run, prepared_seq, delivery):
-    """The mark `answer sent=yes` writes (§X.5 step 8: an answer never runs a stage; the next `go` runs the freeze
-    chain of row 17). Keyed like the DELIVER_USER mark: one per permission."""
+    """The mark `answer sent=yes` writes (§X.5 step 8); the next `go` runs row 17's freeze chain."""
     return 'DELIVER_SENT:%s:%d:%d' % (run, prepared_seq, (delivery or {}).get('ack_seq') or 0)
 
 
@@ -182,8 +167,7 @@ def _open_role(s, R, rkey, marks, view, gates):
     ro, run, base, now = R['roles'][rkey], R['key'], view['base'], view['now']
     st = latest(ro)
     ids = {'run': run, 'role': ro['role'], 'attempt': ro['attempt'], 'start_no': st['start_no']}
-    om, am, em = (mark_key(k, run, rkey, st) for k in ('OPEN', 'AWAIT', 'EXPORT'))
-    no_list = gates.get('p1_conversation_list') == 'no'
+    om, em = mark_key('OPEN', run, rkey, st), mark_key('EXPORT', run, rkey, st)
     if ro['status'] == 'CONTINUED':                                                             # rows 10, 11
         n = ro['continuations']
         ck = 'CONTINUE:%s:%s:%d' % (run, rkey, n)
@@ -192,27 +176,14 @@ def _open_role(s, R, rkey, marks, view, gates):
             return PrintBlock('AI', do=('CONTINUE_CONVERSATION', {'role': 'V', 'conversation':
                                         ro['archives'][0]['conversation'], 'message': msg}), mark=ck)
         return Ask({'ended': 'YES'}, dict(ids, action='AI', state_code='ATTEST', revision=len(ro['archives']) + 1))
-    if ro['status'] == 'STARTED' and ro['opened'] is None and om not in marks:                 # row 5
+    if om not in marks:                                                                         # row 5
         if st['boot_id'] != view['boot_id']:
             return Stop('UNCLASSIFIED', 'C')
         return PrintBlock('AI', do=('OPEN_CONVERSATION', {'role': ro['role'], 'prompt': st['prompt'],
-                                                           'folder': st['folder'],
-                                                           'then': 'now' if no_list else 'when_ended'}), mark=om)
-    if ro['status'] == 'STARTED' and no_list:                                                   # row 6
-        return Ask({'conversation': 'CONV', 'opened_utc': 'UTC'},
-                   dict(ids, action='OPENED', state_code='ATTEST', window={'opened_utc': [st['utc'], now]}))
-    if ro['status'] == 'OPENED' and am not in marks:                                            # row 7
-        return PrintBlock('AI', do=('AWAIT_CONVERSATION', {'role': ro['role'],
-                                                            'conversation': ro['opened']['conversation']}), mark=am)
-    waited = (ro['status'] == 'STARTED' and om in marks) or (ro['status'] == 'OPENED' and am in marks)
-    if not waited:
-        return Stop('UNCLASSIFIED', 'C')
+                                                           'folder': st['folder']}), mark=om)
     tpath = transcript_path(base, run, ro, st, view['cfg'].get('transcript_ext', 'json'))
     if ro['role'] == 'G' and gates.get('p1_transcript_export') == 'yes' and em not in marks:   # row 8
-        args = {'role': 'G', 'to': tpath}
-        if ro['opened']:
-            args['conversation'] = ro['opened']['conversation']
-        return PrintBlock('AI', do=('EXPORT_TRANSCRIPT', args), mark=em)
+        return PrintBlock('AI', do=('EXPORT_TRANSCRIPT', {'role': 'G', 'to': tpath}), mark=em)
     keys = end_keys(ro)                                                                         # row 9
     win = {k: [st['utc'], now] for k in ('started_utc', 'ended_utc') if k in keys}
     return Ask(keys, dict(ids, action='AI', state_code='ATTEST', revision=1, window=win,
@@ -220,13 +191,8 @@ def _open_role(s, R, rkey, marks, view, gates):
 
 
 def chain_next(sub, result, counters, mode, bind):
-    """§7.3, first match wins. sub: the command just run. result: {'result': 'NEXT'|'REFUSED'|'UNPARSEABLE',
-    'next': NEXT first token or REFUSED code, 'codes': [str], 'record_changed', 'ledger_changed', 'tree_changed':
-    bool, 'bound': {bound values measured after this command} or None}. counters: {'n': commands run including this
-    one, 'freeze_retries': int, 'v_review_incomplete': the V role's review_incomplete, 'diverged': bool}. mode: the
-    series mode. bind: None or R.rebase_bind['bound'] ({'commands': [[sub, next, sorted codes], ...], 'values': {...}}).
-    Returns {'row', 'action': 'run'|'retry'|'end'|'stop', 'sub', 'entry': 'STAGE'|'FROZEN'|'HALT'|None, 'code',
-    'flags': [], 'diverged': bool, 'review_incomplete': bool, 'start': role letter or None}."""
+    """§7.3, first match wins, for the result of `sub`: {'row', 'action': run|retry|end|stop, 'sub', 'entry',
+    'code', 'flags', 'diverged', 'review_incomplete', 'start'}."""
     r = _chain_row(sub, result, counters, mode, bind)
     if r['action'] == 'run' and counters['n'] >= MAX_CHAIN:
         return dict(r, row='LIMIT', action='stop', sub=None, entry=None, code='INTERNAL_CHAIN_TOO_LONG')
@@ -295,8 +261,7 @@ def _chain_row(sub, res, cn, mode, bind):
 
 
 def frozen_notify(mode, final_next, flags, delivery_sent):
-    """§7.9, §11.4: the FROZEN body's `notify`. Q/D: NOTIFY_OWNER for a runner STOP_*/OWNER_DECISION, else None.
-    E: None when delivered; NOTIFY_OWNER for a runner stop; ASK_USER for any other everyday freeze."""
+    """§7.9, §11.4: the FROZEN body's `notify` (NOTIFY_OWNER, ASK_USER or None)."""
     stop = final_next.startswith('STOP_') or final_next == 'OWNER_DECISION'
     if mode != 'everyday':
         return 'NOTIFY_OWNER' if stop else None

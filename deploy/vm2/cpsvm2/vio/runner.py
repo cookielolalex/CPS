@@ -1,12 +1,12 @@
-"""Runner v4 argv (spec §7.4), one command through the reused run_runner, and result parsing (§7.2, R2, R3). The runner
-module is loaded only after its sha256 equals the pin (for its Ledger class and restart_problem, §3.5 FROZEN)."""
-import importlib.util
+"""Runner v4 argv (spec §7.4), one command, result parsing (§7.2, R2, R3), the pinned runner module."""
+import hashlib
 import json
 import re
+import types
 
 from . import v1compat, v1reuse
 from .v1compat import Halt, runner_path
-from .v1reuse import run_runner, sha_file
+from .v1reuse import run_runner
 
 PIN = '7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431'
 CONTINUE_STEPS = ('SCOPE_READER', 'GENERATE', 'VISUAL_REVIEW', 'DELIVER_CHECK', 'FREEZE', 'DELIVER', 'DONE')
@@ -15,22 +15,22 @@ MODEL = re.compile(r'[A-Za-z0-9._:-]{2,64}')
 
 
 def load_runner():
-    """The runner module (cps_job.py) after the pin check; sets v1compat.CJ and v1reuse.CJ."""
+    """cps_job.py compiled from the pinned bytes, never from bytecode (S-07); sets v1compat.CJ and v1reuse.CJ."""
     if v1compat.CJ is not None:
         return v1compat.CJ
     p = runner_path()
-    if sha_file(p) != PIN:
+    raw = p.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != PIN:
         raise Halt('STOP', 'LAYOUT_RUNNER_NOT_PINNED', 'the runner is not the pinned v4')
-    spec = importlib.util.spec_from_file_location('cps_job_v4', str(p))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = types.ModuleType('cps_job_v4')
+    mod.__file__ = str(p)
+    exec(compile(raw, str(p), 'exec'), mod.__dict__)
     v1compat.CJ = v1reuse.CJ = mod
     return mod
 
 
 def argv_for(sub, a):
-    """§7.4. a: {'base', 'model', 'job_dir', 'case', 'reader', 'root', 'admission', 'utc14', 'qualification' (bool),
-    'prompt_sha256', 'conversation', 'run_dir', 'generator_model', 'transcript', 'started_utc', 'ended_utc'}."""
+    """§7.4: the runner argv of one command."""
     B, M, D = a['base'], a['model'], a.get('job_dir')
     rel = B + '/runtime/RELEASE.json'
     if sub == 'prepare' and a['qualification']:
@@ -80,9 +80,7 @@ def argv_for(sub, a):
 
 
 def parse(sub, code, lines):
-    """R2/R3: the last two non-empty stdout lines must be one JSON object then `NEXT: <step>` or `REFUSED: <code>`,
-    and the exit must agree (0 CONTINUE_STEPS, 3 STOP_/OWNER_DECISION, 4 REFUSED). Returns {'result': 'NEXT' |
-    'REFUSED' | 'UNPARSEABLE', 'next', 'codes', 'args', 'json'} (args: the NEXT line's key=value words)."""
+    """R2/R3: {'result': NEXT | REFUSED | UNPARSEABLE, 'next', 'codes', 'args', 'json'}."""
     bad = {'result': 'UNPARSEABLE', 'next': 'RUNNER_OUTPUT_UNPARSEABLE', 'codes': [], 'args': {}, 'json': None}
     if len(lines) < 2:
         return bad
@@ -115,7 +113,6 @@ def parse(sub, code, lines):
 
 
 def run(ctx2, sub, argv, log):
-    """One runner command (argv only, -I -B; stdout and stderr appended to the worker log, never printed).
-    Returns (parsed result, exit code, stdout sha256)."""
+    """One runner command (-I -B, output to the worker log): (parsed result, exit code, stdout sha256)."""
     code, lines, _, _, out_sha = run_runner(ctx2, argv, log)
     return parse(sub, code, lines), code, out_sha

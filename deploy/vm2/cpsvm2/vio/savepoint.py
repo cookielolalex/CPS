@@ -1,21 +1,15 @@
-"""commit(): the save-point mechanics (spec §5). The glue (cli.py, worker.py) gives a draft, the archive members, the
-part sources and a `complete` function that folds the draft (core.fold, §5.1 step 2); this module writes the parts,
-the entry and PENDING durably (steps 3-4), prints nothing itself, and runs the upload-FIND-attest loop (steps 5-7,
-§X.5.5 md5 hidden, §X.5.6 refused uploads) on PENDING. Every PENDING change is written durably before the caller
-prints the block it implies. FIND is always by exact name (the prefix variant is deleted, §X.5).
-
-PENDING.tries[name] = {'uploads', 'finds_since_upload', 'refused', 'need'} where need is upload | find | wait | verify
-| done.
-The entry is confirmed first; parts only after (their number reveals the outcome). PENDING.absent lists names that must
-be absent at the entry's FIND (a rebase RESTORE's missing parts, §5.1 step 5)."""
+"""The save-point mechanics (spec §5): write_commit writes the parts, the entry and PENDING durably (steps 1-4);
+block, on_found, on_verify and slip run the upload-FIND-attest loop (rule V, refused uploads, slips; delta v2.1
+§2.1, §2.2) on one loop dict (PENDING, or a setup-file loop in RESTORE_WORK), written durably before printing."""
+import itertools
 import os
-import re
 
 from . import durable
 from .v1compat import Halt, stop
-from .v1reuse import (Archive, PartWriter, md5_file, png_tar_members, require_space, sha_bytes, sha_file, sjson,
+from .v1reuse import (Archive, PartWriter, md5_file, png_tar_members, require_space, sha_bytes, sha_file,
                       write_tar_stream, write_tgz)
 
+SLIP_ASKS = 3
 PENDING_SCHEMA = 'cps.vm2-pending.v1'
 STATE_SCHEMA = 'cps.vm2-cache.v1'
 ROOTS = ('job', 'ledger', 'ai', 'transcript', 'attest', 'delivery', 'final')
@@ -28,8 +22,7 @@ def _manifest_order(m):
 
 
 def payload_rows(members):
-    """members: [(arcname, 'dir'|'file', mode, src bytes|path|None)] -> sorted payload rows [path, kind, mode, bytes,
-    sha256] (§3.8)."""
+    """members -> sorted payload rows [path, kind, mode, bytes, sha256] (§3.8)."""
     rows = []
     for name, kind, mode, src in members:
         if kind == 'dir':
@@ -66,14 +59,25 @@ def member_bytes(path, name):
         a.close()
 
 
-def _png_parts(env, series, seq, src):
-    """Write the PNG tar stream (MANIFEST.json + job/qa/... files) cut into parts at png_part_bytes (§3.7)."""
+def _png_parts(env, series, seq, src, want_whole):
+    """The PNG tar stream cut into parts (§3.7); streamed bytes must be the entry's (S-05), else PNG_MANIFEST_UNSAFE."""
     jd, rels = src['job_dir'], src['rels']
     man = {'schema': 'cps.vm2-png.v1', 'run': src['run'], 'files': src['files']}
+    want = {f[0]: f[3] for f in src['files']}
+
+    def checked():
+        for name, kind, mode, mt, path in png_tar_members(jd, rels):
+            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb') as f:
+                b = f.read()
+            if sha_bytes(b) != want.get(name):
+                raise Halt('STOP', 'PNG_MANIFEST_UNSAFE', 'a PNG changed before its part was written')
+            yield name, kind, mode, mt, b
     pw = PartWriter(env.journal, env.cfg['png_part_bytes'], '.tmp_png_%d_' % os.getpid())
     try:
-        write_tar_stream(pw, [('MANIFEST.json', 'file', 0o444, 0, durable.doc_bytes(man))] + png_tar_members(jd, rels))
+        write_tar_stream(pw, itertools.chain([('MANIFEST.json', 'file', 0o444, 0, durable.doc_bytes(man))], checked()))
         parts, whole = pw.finish()
+        if whole != want_whole:
+            raise Halt('STOP', 'PNG_MANIFEST_UNSAFE', 'the PNG stream is not the one the entry names')
     except BaseException:
         pw.discard()
         raise
@@ -91,10 +95,7 @@ def _png_parts(env, series, seq, src):
 
 
 def write_commit(env, draft, members, part_sources, post, complete):
-    """§5.1 steps 1-4. draft: the entry without confirms/prev_sha256/parts/payload/state (seq and name set by the
-    caller). members: archive members after MANIFEST.json. part_sources: [{'kind': 'PNG', 'job_dir', 'rels', 'files',
-    'run'} | {'kind': K, 'data': bytes, 'folder'}]. complete(entry) -> entry with state and state_sha256 (the fold; it
-    raises for an illegal transition). Returns (PENDING doc, entry, png whole sha or None)."""
+    """§5.1 steps 1-4: (PENDING doc, entry, png whole sha or None); complete(entry) is the fold."""
     if os.path.lexists(env.v2 / 'PENDING.json'):
         stop('INTERNAL_PENDING_EXISTS', 'a commit is pending')
     env.journal.mkdir(parents=True, exist_ok=True)
@@ -109,7 +110,7 @@ def write_commit(env, draft, members, part_sources, post, complete):
     try:
         for src in part_sources:
             if src['kind'] == 'PNG':
-                ps, whole = _png_parts(env, series, seq, src)
+                ps, whole = _png_parts(env, series, seq, src, (draft.get('payload_png') or {}).get('whole_sha256'))
             else:
                 k = 1 + sum(1 for p in parts if p['kind'] == src['kind'])
                 ext = {'DELIV': 'xlsx', 'DLOG': 'json', 'LEDGER': 'jsonl', 'ALLFZ': 'json'}[src['kind']]
@@ -164,48 +165,48 @@ def _pending(env, draft, entry, path, parts, n, sh, m5, post):
                       'bytes': n, 'copies': None},
             'parts': [{'name': p['name'], 'path': str(env.journal / p['name']), 'folder': p['folder'],
                        'sha256': p['sha256'], 'md5': p['md5'], 'bytes': p['bytes'], 'copies': None} for p in parts],
-            'tries': {nm: {'uploads': 0, 'finds_since_upload': 0, 'refused': 0, 'need': 'upload'} for nm in names},
-            'verify': [], 'absent': list(((draft.get('body') or {}).get('rebase') or {}).get('missing_parts') or [])
+            'tries': _tries(names), 'verify': [], 'slips': 0,
+            'absent': list(((draft.get('body') or {}).get('rebase') or {}).get('missing_parts') or [])
             if draft['kind'] == 'RESTORE' else [],
             'state_after_sha256': entry['state_sha256'], 'post': post, 'created_utc': env.now()}
 
 
-def _files(pend):
-    return [pend['entry']] + pend['parts']
+def _tries(names):
+    return {nm: {'uploads': 0, 'finds_since_upload': 0, 'refused': 0, 'need': 'upload'} for nm in names}
 
 
-def _group(pend):
-    """The files of the current phase: the entry until it is confirmed, then the parts."""
-    if pend['entry']['copies'] is None:
-        return [pend['entry']]
-    return [p for p in pend['parts'] if p['copies'] is None]
+def _files(loop):
+    return ([loop['entry']] if loop.get('entry') else []) + loop['parts']
 
 
-def block(env, pend, kind='journal'):
-    """§5.1 steps 5-7: the next SAVE block for PENDING, as (uploads, finds, downloads, do, expect_names), after
-    updating PENDING's tries in place (the caller writes PENDING durably before printing). None when every file is
-    confirmed (step 8). Every file named in an UPLOAD line is at most max_upload_bytes (§X.3; kind 'setup' gives
-    UPLOAD_TOO_LARGE, a journal file ENTRY_TOO_LARGE or PART_TOO_LARGE)."""
-    if pend['verify']:
-        pend['phase'] = 'VERIFY'
-        dl = tuple((v['folder'], v['id'], v['path']) for v in pend['verify'])
-        return (), (), dl, ('RUN', {}), None
-    grp = _group(pend)
+def _group(loop):
+    """The files of the current phase: the entry until it is confirmed, then the parts (a setup loop has no entry)."""
+    if loop.get('entry') and loop['entry']['copies'] is None:
+        return [loop['entry']]
+    return [p for p in loop['parts'] if p['copies'] is None]
+
+
+def block(loop, cap, lag, folder, reprint=False):
+    """§5.1 steps 5-7: the next (uploads, finds, downloads, do, names) of one loop, or None when all is confirmed."""
+    if loop['verify']:
+        return (), (), tuple((v['folder'], v['id'], v['path']) for v in loop['verify']), ('RUN', {}), None
+    grp = _group(loop)
     if not grp:
         return None
-    pend['phase'] = 'ENTRY' if pend['entry']['copies'] is None else 'PARTS'
-    tr = pend['tries']
-    if any(tr[f['name']]['need'] == 'wait' for f in grp):
+    if loop.get('entry'):
+        loop['phase'] = 'ENTRY' if loop['entry']['copies'] is None else 'PARTS'
+    tr = loop['tries']
+    if not reprint and any(tr[f['name']]['need'] == 'wait' for f in grp):
         for f in grp:
             if tr[f['name']]['need'] == 'wait':
                 tr[f['name']]['need'] = 'find'
-        return (), (), (), ('WAIT', {'seconds': max(30, 2 * (env.gates.get('p2_lag_seconds') or 0))}), None
+        return (), (), (), ('WAIT', {'seconds': max(30, 2 * (lag or 0))}), None
     ups, names = [], []
     for f in grp:
         t = tr[f['name']]
-        if t['need'] == 'upload':
-            if os.lstat(f['path']).st_size > env.cfg['max_upload_bytes']:
-                code = 'UPLOAD_TOO_LARGE' if kind == 'setup' else (
+        if t['need'] == 'upload' and not reprint:
+            if os.lstat(f['path']).st_size > cap:
+                code = 'UPLOAD_TOO_LARGE' if not loop.get('entry') else (
                     'ENTRY_TOO_LARGE' if f['name'].endswith('.tgz') else 'PART_TOO_LARGE')
                 raise Halt('STOP', code, 'a file over max_upload_bytes')
             ups.append((f['path'], f['folder'], f['name']))
@@ -213,105 +214,83 @@ def block(env, pend, kind='journal'):
             t['finds_since_upload'] = 0
             t['need'] = 'find'
         names.append(f['name'])
-    absent = pend['absent'] if pend['phase'] == 'ENTRY' else []
-    finds = [(f['folder'], 'NAME', f['name']) for f in grp] + [(env.series_folder, 'NAME', n) for n in absent]
-    return tuple(ups), tuple(finds), (), ('ATTEST_FOUND', {
-        'names': names + list(absent), 'md5_hidden': env.gates.get('p2_md5_visible') == 'no',
-        'uploaded': [u[2] for u in ups]}), names + list(absent)
+    absent = loop['absent'] if loop.get('entry') and loop['entry']['copies'] is None else []
+    finds = [(f['folder'], 'NAME', f['name']) for f in grp] + [(folder, 'NAME', n) for n in absent]
+    return tuple(ups), tuple(finds), (), ('ATTEST_FOUND', {'names': names + list(absent),
+                                                           'uploaded': [u[2] for u in ups]}), names + list(absent)
 
 
-def on_found(env, pend, got, check_id, refused=(), known=None):
-    """§5.1 step 6, §X.5.5 and §X.5.6 for every name of the current block. got: {name: [copy strings] | None};
-    refused: the names attested `--refused`; known(name) -> the Drive ids already recorded for that name (rule V's id
-    shortcut). check_id(value) -> None or a REFUSED code for an ID value. Returns ('refused', code) with PENDING
-    unchanged, ('stop', code), ('handback', 'UPLOAD_REFUSED') or ('ok', None) with PENDING updated in place."""
-    from .drive import parse_copy
-    hidden = env.gates.get('p2_md5_visible') == 'no'
-    grp = {f['name']: f for f in _group(pend)}
-    absent = set(pend['absent']) if pend['entry']['copies'] is None else set()
-    parsed = {}
-    for name, files in got.items():
-        cps = []
-        for s in files or []:
-            c = parse_copy(s, hidden)
-            if c is None:
-                return 'refused', 'FOUND_SYNTAX'
-            code = check_id(c[0])
-            if code:
-                return 'refused', code
-            if not re.fullmatch(r'[1-9][0-9]{0,11}', c[-1]) or (
-                    not hidden and not re.fullmatch(r'[0-9a-f]{32}', c[1])):
-                return 'refused', 'VALUE_PATTERN'
-            cps.append(c)
-        parsed[name] = cps
-    for name, cps in parsed.items():
-        if name in absent and cps:
-            return 'stop', 'REBASE_PART_APPEARED'
+def on_found(loop, got, refused, known, verify_dir):
+    """§5.1 step 6 with rule V: ('stop', code), ('handback', a refused name not found) or ('ok', None)."""
+    grp = {f['name']: f for f in _group(loop)}
+    absent = set(loop['absent']) if loop.get('entry') and loop['entry']['copies'] is None else set()
+    if any(got.get(n) for n in absent):
+        return 'stop', 'REBASE_PART_APPEARED'
+    vf, handback = [], None
     for name, f in grp.items():
-        cps = parsed.get(name) or []
-        if any(int(c[-1]) != f['bytes'] or (not hidden and c[1] != f['md5']) for c in cps):
-            return 'stop', 'FORK'
-    vf, handback = [], False
-    for name, f in grp.items():
-        cps, t = parsed.get(name) or [], pend['tries'][name]
-        t.setdefault('refused', 0)
+        cps, t = got.get(name) or [], loop['tries'][name]
         if name in refused:
             t['refused'] += 1
-        ids = set(known(name)) if known else set()
+        ids = set(known(name))
         unknown = [c for c in cps if c[0] not in ids]
-        if cps and hidden and unknown:
-            vf += [{'name': name, 'id': c[0], 'folder': f['folder'],
-                    'path': str(env.lay.inbox / 'verify' / ('%s.%d' % (name, k)))} for k, c in enumerate(cps, 1)
-                   if c[0] not in ids]
-            f['copies'] = [[c[0], f['md5'], int(c[-1])] for c in cps if c[0] in ids] or None
-            t['need'] = 'verify'
-        elif cps:
-            f['copies'] = [[c[0], f['md5'] if hidden else c[1], int(c[-1])] for c in cps]
-            t['need'] = 'done'
+        if cps:
+            vf += [{'name': name, 'id': c[0], 'size': c[1], 'folder': f['folder'],
+                    'path': '%s/%s.%d' % (verify_dir, name, k)} for k, c in enumerate(cps, 1) if c[0] not in ids]
+            f['copies'] = [[c[0], f['md5'], f['bytes']] for c in cps if c[0] in ids] or None
+            t['need'] = 'verify' if unknown else 'done'
         elif name in refused:
             t['need'], t['finds_since_upload'] = 'find', 0
-            handback = True
+            handback = handback or name
         elif t['finds_since_upload'] == 0:
             t['finds_since_upload'], t['need'] = 1, 'wait'
         elif t['uploads'] < 3:
             t['need'] = 'upload'
         else:
             return 'stop', 'UPLOAD_FAILED'
-    if vf:
-        need = int(sum(int(c[-1]) for n, cps in parsed.items() for c in cps if n in grp) * 1.1) + 1
-        require_space(env.lay, need, 'verify')
-    pend['verify'] = vf
-    pend['absent'] = [] if absent else pend['absent']
-    return ('handback', 'UPLOAD_REFUSED') if handback else ('ok', None)
+    loop['verify'] = vf
+    loop['absent'] = [] if absent else loop['absent']
+    return ('handback', handback) if handback else ('ok', None)
 
 
-def on_verify(env, pend):
-    """§5.5: compare every downloaded copy with the local file. ('refused', DOWNLOAD_MISSING) | ('stop', FORK) |
-    ('ok', None); downloads are deleted after the comparison."""
-    by = {f['name']: f for f in _files(pend) if 'name' in f}         # a setup-file loop has no entry
-    for v in pend['verify']:
+def on_verify(loop):
+    """The `go` after a DOWNLOAD block: ('ok', None) | ('slip', code, name) | ('stop', 'FORK', None)."""
+    by = {f['name']: f for f in _files(loop)}
+    shas = {}
+    for v in loop['verify']:
         if not os.path.isfile(v['path']):
-            return 'refused', 'DOWNLOAD_MISSING'
-    fork = False
-    for v in pend['verify']:
-        f = by[v['name']]
-        if os.lstat(v['path']).st_size != f['bytes'] or sha_file(v['path']) != f['sha256']:
-            fork = True
-    for v in pend['verify']:
+            return 'slip', 'DOWNLOAD_MISSING', v['name']
+        if os.lstat(v['path']).st_size != v['size']:
+            return 'slip', 'DOWNLOAD_INCOMPLETE', v['name']
+        shas[v['path']] = sha_file(v['path'])
+    ours = {f['sha256'] for f in by.values()}
+    for v in loop['verify']:
+        if shas[v['path']] != by[v['name']]['sha256'] and shas[v['path']] in ours:
+            return 'slip', 'COPY_MISMATCH', v['name']
+    if any(shas[v['path']] != by[v['name']]['sha256'] for v in loop['verify']):
+        return 'stop', 'FORK', None
+    for v in loop['verify']:
         os.unlink(v['path'])
-    if fork:
-        return 'stop', 'FORK'
-    for v in pend['verify']:
         f = by[v['name']]
         f['copies'] = (f['copies'] or []) + [[v['id'], f['md5'], f['bytes']]]
-        pend['tries'][v['name']]['need'] = 'done'
-    pend['verify'] = []
+        loop['tries'][v['name']]['need'] = 'done'
+    loop['verify'] = []
     return 'ok', None
 
 
+def slip(loop, name, code):
+    """The slip rule (delta v2.1 §2.2.1) in one loop: None, or 'SLIP_LIMIT' at the fourth slip."""
+    for v in loop['verify']:
+        if os.path.lexists(v['path']):
+            os.unlink(v['path'])
+        f = [x for x in _files(loop) if x['name'] == v['name']][0]
+        f['copies'], loop['tries'][v['name']]['need'] = None, 'find'
+    loop['verify'] = []
+    loop['slips'] = loop.get('slips', 0) + 1
+    return 'SLIP_LIMIT' if loop['slips'] > SLIP_ASKS else None
+
+
 def finish(env, cache, pend):
-    """§5.1 step 8: the new STATE.json (head, state, confirms for the next entry, post; marks copied unchanged),
-    written durably, then PENDING removed. Returns the STATE doc."""
+    """§5.1 step 8: the new STATE.json written durably, then PENDING removed (owed post actions first, S-04)."""
     man = read_entry(pend['entry']['path'])
     if man['state_sha256'] != pend['state_after_sha256']:
         stop('INTERNAL_ILLEGAL_TRANSITION', 'the local entry is not the pending one')
@@ -322,58 +301,17 @@ def finish(env, cache, pend):
               confirms=[{'name': f['name'], 'copies': [{'id': c[0], 'md5': c[1], 'size': c[2]} for c in f['copies']]}
                         for f in _files(pend)],
               state=man['state'], state_sha256=man['state_sha256'], kit_sha256=man['kit_sha256'],
-              post=list(pend['post']) + [['DROP_LOCAL', [f['path'] for f in _files(pend)]]],
+              post=list((cache or {}).get('post') or []) + list(pend['post']) + [
+                  ['DROP_LOCAL', [f['path'] for f in _files(pend)]]],
               marks=dict((cache or {}).get('marks') or {}), written_utc=env.now())
     st = durable.write_doc(env.v2 / 'STATE.json', st)
     durable.remove(env.v2 / 'PENDING.json')
     return st
 
 
-# ---------------------------------------------------------------- setup files (§5: the same loop without a chain)
-def setup_block(env, loop):
-    """The upload-FIND-attest loop for setup files (PASS, SELFTEST, kit zip, reports). loop: {'files': [{'name', 'path',
-    'folder', 'md5', 'bytes', 'sha256', 'copies'}], 'tries': {...}, 'verify': []} kept by the caller (RESTORE_WORK).
-    Same return shape as block()."""
-    pend = {'entry': {'copies': True}, 'parts': loop['files'], 'tries': loop['tries'], 'verify': loop['verify'],
-            'absent': [], 'series': None, 'seq': 0}
-    return block(_Env1(env), pend, 'setup')
-
-
-class _Env1:
-    def __init__(self, env):
-        self.gates, self.lay, self.series_folder, self.cfg = env.gates, env.lay, None, env.cfg
-
-
-def setup_found(env, loop, got, check_id, refused=()):
-    pend = {'entry': {'copies': True}, 'parts': loop['files'], 'tries': loop['tries'], 'verify': loop['verify'],
-            'absent': [], 'series': None, 'seq': 0}
-    r = on_found(_Env1(env), pend, got, check_id, refused)
-    loop['verify'] = pend['verify']
-    return r
-
-
-def setup_verify(env, loop):
-    pend = {'entry': {'copies': True}, 'parts': loop['files'], 'tries': loop['tries'], 'verify': loop['verify']}
-    r = on_verify(env, pend)
-    loop['verify'] = pend['verify']
-    return r
-
-
 def setup_loop(files):
-    """A new setup-file loop for local files [(path, folder, name)]."""
+    """A new setup-file loop for local files [(path, folder, name)] (PASS, SELFTEST, reports, re-uploaded parts)."""
     fs = [{'name': n, 'path': str(p), 'folder': f, 'md5': md5_file(p), 'bytes': os.lstat(p).st_size,
            'sha256': sha_file(p), 'copies': None} for p, f, n in files]
-    return {'files': fs, 'tries': {f['name']: {'uploads': 0, 'finds_since_upload': 0, 'refused': 0, 'need': 'upload'}
-                                   for f in fs}, 'verify': []}
-
-
-def drop_local(paths):
-    """Post action DROP_LOCAL: remove this commit's local entry and part files."""
-    for p in paths:
-        if os.path.lexists(p):
-            os.unlink(p)
-
-
-def read_pending(env):
-    return durable.read_doc(env.v2 / 'PENDING.json', PENDING_SCHEMA, sjson)
-
+    return {'entry': None, 'parts': fs, 'tries': _tries([f['name'] for f in fs]), 'verify': [], 'absent': [],
+            'slips': 0}

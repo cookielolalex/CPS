@@ -1,0 +1,6413 @@
+{
+ "amendment": {
+  "build_runs": {
+   "commit": "2cfaac5aadfa4cf6ff4624a366f417cdb0c77c66",
+   "date": "2026-11-12",
+   "deviations": [
+    "core_world.BASE (pure core test data) stays /home/agent/cps: changing it rewrites tests/perturb_golden.json (780 of 2,776 cases; 8 also change their T32 counts), tests/session_golden.json (677 of 709) and 5 guard witness rows; tried, measured, reverted. Every session_start-running test and every World uses a base outside HOME.",
+    "TMPDIR is set by the helper (cli.run_stage), not by vm.sh (A6 allowed either).",
+    "COPYPATH moved from $HOME/cps-deliveries to BASE/deliveries (SD-75): the standard route cannot write HOME (beyond the README paths the brief lists).",
+    "A5 needed code: the non-sticky SETUP_MISSING stage check (SD-74).",
+    "A4a fixed by removing stale write_atomic temp names in runtime/ under the lock (cleanup_leftovers), not by a unique temp name: no reused segment changed, REUSE_MANIFEST.json unchanged.",
+    "README section 3 WAIT is a foreground sleep N (SD-76), not named in the brief.",
+    "D2a: C 7,506 against the r4 cap 7,500 (new caps C<=7,506, M<=896, total<=8,402).",
+    "The two new reset scenarios are not in the nonroot group (the non-root pass budget).",
+    "W15 survived the first hand run (cli.main's new OSError catch also prints a STOP); test_s11 strengthened (test-only); W15, W106, W107, the non-root pass and the full suite re-run at the final tree.",
+    "tests/budget_golden.json not re-measured (no counted call changed; the golden comparison passed).",
+    "Delta section 3 (the README draft) not rewritten; README.md is the operator text.",
+    "Guard sets: only cli.py's 81 glue sites were re-run (the only changed module with guard sites; guard ids unchanged)."
+   ],
+   "full_suite_root": {
+    "cap_eff": 2199006478335,
+    "failed": [],
+    "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+    "jobs": 4,
+    "only": [],
+    "passed": 568,
+    "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+    "seconds": 2658.8,
+    "suites": [
+     {
+      "name": "test_core_table",
+      "passed": 81,
+      "seconds": 41.3,
+      "tests": 81
+     },
+     {
+      "name": "test_core_props",
+      "passed": 3,
+      "seconds": 32.6,
+      "tests": 3
+     },
+     {
+      "name": "test_core_more",
+      "passed": 28,
+      "seconds": 0.1,
+      "tests": 28
+     },
+     {
+      "name": "test_reuse",
+      "passed": 7,
+      "seconds": 0.6,
+      "tests": 7
+     },
+     {
+      "name": "test_vio",
+      "passed": 107,
+      "seconds": 118.0,
+      "tests": 107
+     },
+     {
+      "name": "test_maint",
+      "passed": 40,
+      "seconds": 10.7,
+      "tests": 40
+     },
+     {
+      "name": "test_probe_p5",
+      "passed": 7,
+      "seconds": 16.0,
+      "tests": 7
+     },
+     {
+      "name": "test_codes",
+      "passed": 25,
+      "seconds": 34.6,
+      "tests": 25
+     },
+     {
+      "name": "test_v1_regressions",
+      "passed": 44,
+      "seconds": 8.4,
+      "tests": 44
+     },
+     {
+      "name": "test_resets",
+      "passed": 210,
+      "seconds": 2344.8,
+      "tests": 210
+     },
+     {
+      "name": "test_lints",
+      "passed": 16,
+      "seconds": 51.8,
+      "tests": 16
+     }
+    ],
+    "tests": 568,
+    "uid": 0
+   },
+   "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+   "lines_D2a": {
+    "C": [
+     7496,
+     7506
+    ],
+    "M": [
+     896,
+     896
+    ],
+    "caps_D2a": {
+     "C": 7506,
+     "M": 896,
+     "total": 8402
+    },
+    "caps_r4": {
+     "C": 7500,
+     "M": 896,
+     "total": 8396
+    },
+    "rows": [
+     {
+      "after": 1672,
+      "before": 1663,
+      "module": "cpsvm2/cli.py"
+     },
+     {
+      "after": 135,
+      "before": 134,
+      "module": "cpsvm2/vio/durable.py"
+     },
+     {
+      "after": 257,
+      "before": 256,
+      "module": "cpsvm2/vio/v1mod.py"
+     },
+     {
+      "after": 80,
+      "before": 79,
+      "module": "session_start.sh"
+     },
+     {
+      "after": 188,
+      "before": 190,
+      "module": "cpsvm2/vio/host.py"
+     },
+     {
+      "after": 259,
+      "before": 259,
+      "module": "cpsvm2/core/names.py"
+     }
+    ],
+    "total": [
+     8392,
+     8402
+    ]
+   },
+   "mutation": {
+    "am_glue_cli": {
+     "commit": "275145aac57b318e8ff5d0f48733def6db880ff6",
+     "guards": {
+      "by_id_glue": {
+       "killed": 73,
+       "sites": 81,
+       "survivors": [
+        {
+         "equivalent": "`ex.get('command') != 'go'`: a found/answer block whose basis is the current one was reprinted by the line above (reprint raises Out), and one with another basis returns by the second operand, so the first operand never decides",
+         "id": "GM-cli-go_checks-3-r",
+         "result": "SURVIVED",
+         "what": "ex.get('command') != 'go'"
+        },
+        {
+         "equivalent": "`b.get('basis') != basis(env)` for a go block: a go block is stale only if a command died after it saved a loop or RESTORE_WORK and before render wrote the next BLOCK.json. A stale pending/setup block meets an empty verify (on_verify cleared it before the save; see -7-r); a stale fetch block's files stay in inbox/kit and inbox/pass until invalidate, which also moves BLOCK.json; a local block's inbox/journal files are dropped only by a later commit's post actions, and that commit prints its SAVE blocks (a new BLOCK.json) first. So every file a stale block names is present with its size and the mutant's check finds no code",
+         "id": "GM-cli-go_checks-4-r",
+         "result": "SURVIVED",
+         "what": "b.get('basis') != basis(env)"
+        },
+        {
+         "equivalent": "`ex.get('kind') == 'pending'`: while PENDING.json exists advance runs pending_step first, so every go block of another kind was printed with env.pending None; basis covers PENDING's self_sha256, so with the current basis env.pending is still None and the remaining conjunct is false",
+         "id": "GM-cli-go_checks-5-r",
+         "result": "SURVIVED",
+         "what": "ex.get('kind') == 'pending'"
+        },
+        {
+         "equivalent": "`env.pending`: a pending block is printed only while PENDING.json exists and its basis holds PENDING's self_sha256; with PENDING gone the basis differs and go_checks returned above",
+         "id": "GM-cli-go_checks-6-r",
+         "result": "SURVIVED",
+         "what": "env.pending"
+        },
+        {
+         "equivalent": "`env.pending['verify']`: with verify empty, on_verify returns ('ok', None) and changes nothing, and persist rewrites the same document (write_doc's self_sha256 is a function of the content), so the next block is the same",
+         "id": "GM-cli-go_checks-7-r",
+         "result": "SURVIVED",
+         "what": "env.pending['verify']"
+        },
+        {
+         "equivalent": "`(env.work or {}).get(ex['loop'])`: a setup block is printed only while RESTORE_WORK holds that loop, and basis covers RESTORE_WORK's self_sha256; with the loop gone the basis differs and go_checks returned above",
+         "id": "GM-cli-go_checks-9-r",
+         "result": "SURVIVED",
+         "what": "(env.work or {}).get(ex['loop'])"
+        },
+        {
+         "equivalent": "`env.work[ex['loop']]['verify']`: as GM-cli-go_checks-7-r for a setup loop (save_work rewrites the same RESTORE_WORK)",
+         "id": "GM-cli-go_checks-10-r",
+         "result": "SURVIVED",
+         "what": "env.work[ex['loop']]['verify']"
+        },
+        {
+         "equivalent": "`phase == 'HEAD'`: the only other session download block is RECHECK's, reached through _commit, which session_next calls only past `if not w.get('head')` (the HEAD download of N), so w['head'] is set and the second conjunct is false there",
+         "id": "GM-cli-session_downloads-3-r",
+         "result": "SURVIVED",
+         "what": "phase == 'HEAD'"
+        }
+       ]
+      }
+     },
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "killed": 0,
+     "listed_not_failing": {},
+     "mutants": 0,
+     "not_applicable": [],
+     "not_killed": [],
+     "seconds": 2555.3
+    },
+    "am_hand": {
+     "commit": "25873f960f7542a6090236e1e65b3da4a4191fec",
+     "guards": {},
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "killed": 129,
+     "listed_not_failing": {
+      "W15": [
+       "test_s11_oserror_outside_stage_prints_stop_block"
+      ]
+     },
+     "mutants": 132,
+     "not_applicable": [],
+     "not_killed": [
+      {
+       "detail": null,
+       "id": "W15",
+       "result": "SURVIVED"
+      },
+      {
+       "detail": "nonroot: CPSVM2_NONROOT_DIR unset",
+       "id": "W106",
+       "result": "NOT_RUN"
+      },
+      {
+       "detail": "nonroot: CPSVM2_NONROOT_DIR unset",
+       "id": "W107",
+       "result": "NOT_RUN"
+      }
+     ],
+     "seconds": 1335.0
+    },
+    "am_hand2": {
+     "commit": "4ee9d96d2ba7a20803ece67de717e5092a39e0e4",
+     "guards": {},
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "killed": 3,
+     "listed_not_failing": {},
+     "mutants": 3,
+     "not_applicable": [],
+     "not_killed": [],
+     "seconds": 13.4
+    },
+    "am_newtry": {
+     "commit": "52af8bbbcada642720b67b96defcb8481ee6d35f",
+     "guards": {},
+     "helper_tree_sha256": "5165cf4adf0165f19641997bfef86bc57f3cd6ba739ca723882e197b507b8aad",
+     "killed": 16,
+     "listed_not_failing": {},
+     "mutants": 16,
+     "not_applicable": [],
+     "not_killed": [],
+     "seconds": 239.5
+    },
+    "am_revleg": {
+     "commit": "d9f129b56401f79962130c10fed1ac1973da5c5f",
+     "guards": {},
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "killed": 68,
+     "listed_not_failing": {
+      "G9": [
+       "test_next_action_resolution_chains_and_rerun"
+      ],
+      "M2-18": [
+       "test_m18_role_consumed_once"
+      ],
+      "M2-36": [
+       "test_f2_second_start_only_after_no_conversation"
+      ]
+     },
+     "mutants": 68,
+     "not_applicable": [],
+     "not_killed": [],
+     "seconds": 414.8
+    }
+   },
+   "new_codes": {
+    "READ_ONLY_FS": "CODES_STOP",
+    "REVIEW_STOPPED": "the Dot's own code, README only (like NO_BLOCK)",
+    "SETUP_MISSING": "CODES_STOP (non-sticky)"
+   },
+   "new_mutants": [
+    "W116",
+    "W117",
+    "W118",
+    "W119",
+    "W120",
+    "W121",
+    "W122",
+    "W123",
+    "W124",
+    "W125",
+    "W126",
+    "W127",
+    "W128",
+    "W129",
+    "W130",
+    "W131"
+   ],
+   "nonroot_pass": {
+    "cap_eff": 0,
+    "failed": [],
+    "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+    "jobs": 4,
+    "only": [
+     "test_core_table",
+     "test_core_more",
+     "test_core_props",
+     "test_codes",
+     "test_vio",
+     "test_d16_evict_runner_frozen_folder_nonroot",
+     "test_d16_disk_bounded_over_runs",
+     "D_baseline",
+     "E_baseline",
+     "D_clear_same_boot_foreground_died",
+     "D_sameboot_damaged_cache_restores",
+     "test_foreground_died_same_boot_stops"
+    ],
+    "passed": 251,
+    "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+    "seconds": 510.6,
+    "suites": [
+     {
+      "name": "test_core_table",
+      "passed": 81,
+      "seconds": 41.7,
+      "tests": 81
+     },
+     {
+      "name": "test_core_props",
+      "passed": 3,
+      "seconds": 35.2,
+      "tests": 3
+     },
+     {
+      "name": "test_core_more",
+      "passed": 28,
+      "seconds": 0.0,
+      "tests": 28
+     },
+     {
+      "name": "test_vio",
+      "passed": 107,
+      "seconds": 121.6,
+      "tests": 107
+     },
+     {
+      "name": "test_codes",
+      "passed": 25,
+      "seconds": 36.1,
+      "tests": 25
+     },
+     {
+      "name": "test_v1_regressions",
+      "passed": 1,
+      "seconds": 0.0,
+      "tests": 1
+     },
+     {
+      "name": "test_resets",
+      "passed": 6,
+      "seconds": 275.9,
+      "tests": 6
+     }
+    ],
+    "tests": 251,
+    "uid": 1000
+   },
+   "open_issues": [
+    "Runner v5 item: make_job_config's .validate_<case>_<pid> folder is made without exist_ok (the helper removes stale ones before each command).",
+    "Not pid-named, unchanged: a command killed inside unpack_kit of an empty runtime leaves a partial runtime; with a run in flight the next kit check stops KIT_CHANGE_WITH_RUN_IN_FLIGHT (fail-closed).",
+    "A same-boot TOOLS wipe found mid-session waits for a maintainer message (SETUP_MISSING is HANDBACK C) although the bootstrap alone cures it.",
+    "After a TOOLS re-setup the chain prologue's fingerprint check (O47) decides; the World simulates an identical setup only.",
+    "Gates G-1 to G-11 not run; G-3 measurements through the helper and the G-4 drill with A9's additions outstanding; OQ-24 and OQ-25 open; the pdftoppm margin (706 s of 900 s) is the owner's.",
+    "Not shown by any probe: the helper's own commands and a real-size render through the standard route with BASE /tmp/cps, any network command, silent writes under the read-only HOME, the memory peak on /tmp.",
+    "Every EQUIVALENT entry (17 core, 18 glue) waits for G-1."
+   ],
+   "parent": "a2298cb6353f31af866ccd36b731660e5593423a",
+   "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+   "runs": [
+    {
+     "cap_eff": 2199006478335,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "568/568 passed",
+     "run": "full suite root (before the S-11 test change)",
+     "seconds": 2658.8,
+     "snapshot_commit": "98255a94127786141a7f36fdcbadb1995f12476d",
+     "uid": 0
+    },
+    {
+     "cap_eff": 0,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "251/251 passed",
+     "run": "non-root pass (before the S-11 test change)",
+     "seconds": 510.6,
+     "snapshot_commit": "97e5b4973d82d870fbe60dd8ff53576987332543",
+     "uid": 1000
+    },
+    {
+     "cap_eff": null,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "129 of 132 killed; W15 SURVIVED; W106, W107 NOT_RUN",
+     "run": "hand set W01-W131 (before the S-11 test change)",
+     "seconds": 1335.0,
+     "snapshot_commit": "25873f960f7542a6090236e1e65b3da4a4191fec",
+     "uid": null
+    },
+    {
+     "cap_eff": null,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "68/68 killed",
+     "run": "reviewer and legacy",
+     "seconds": 414.8,
+     "snapshot_commit": "d9f129b56401f79962130c10fed1ac1973da5c5f",
+     "uid": null
+    },
+    {
+     "cap_eff": null,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "3/3 killed",
+     "run": "W15, W106, W107 at the final tree",
+     "seconds": 13.4,
+     "snapshot_commit": "4ee9d96d2ba7a20803ece67de717e5092a39e0e4",
+     "uid": null
+    },
+    {
+     "cap_eff": 0,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "251/251 passed",
+     "run": "non-root pass at the final tree",
+     "seconds": 509.2,
+     "snapshot_commit": "dcbcb953304cd041dc686ef78b2f75d08b3e3925",
+     "uid": 1000
+    },
+    {
+     "cap_eff": 2199006478335,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "568/568 passed",
+     "run": "full suite root at the final tree",
+     "seconds": 2692.0,
+     "snapshot_commit": "58811c24f8850cdec3652f45d1d635691f43a3dc",
+     "uid": 0
+    },
+    {
+     "cap_eff": null,
+     "helper_tree_sha256": "3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871",
+     "result": "81 sites, 73 killed, 8 survivors",
+     "run": "guard glue set, the cli.py sites",
+     "seconds": 2555.3,
+     "snapshot_commit": "275145aac57b318e8ff5d0f48733def6db880ff6",
+     "uid": null
+    },
+    {
+     "cap_eff": null,
+     "helper_tree_sha256": "5165cf4adf0165f19641997bfef86bc57f3cd6ba739ca723882e197b507b8aad",
+     "result": "16/16 killed",
+     "run": "trial W116-W131 during the build",
+     "seconds": 239.5,
+     "snapshot_commit": "52af8bbbcada642720b67b96defcb8481ee6d35f",
+     "uid": null
+    }
+   ],
+   "what": "v2.1 post-build amendment from probes M008-M012 (delta v2.1 section 9), items A1-A12"
+  },
+  "commit": "1802e069a7fa4abdbc6931da2c065f4a930de348",
+  "date": "2026-11-12",
+  "every_run_at_the_commit_tree": true,
+  "full_suite_root": {
+   "cap_eff": 2199006478335,
+   "failed": [],
+   "free_bytes_at_start": 7921090560,
+   "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+   "jobs": 4,
+   "only": [],
+   "passed": 572,
+   "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+   "schema": "cps.vm2-tests.v1",
+   "seconds": 2630.0,
+   "snapshot_commit": "f9eb0dad091bb0dd82c84c45c75582222811439a",
+   "suites": [
+    {
+     "counts": {
+      "abstract_states": 709,
+      "golden_entries": 709,
+      "rows": 44,
+      "rows_hit": 44
+     },
+     "name": "test_core_table",
+     "passed": 81,
+     "seconds": 41.2,
+     "tests": 81
+    },
+    {
+     "counts": {
+      "applies": 120712,
+      "cuts": 12820,
+      "illegal_injected": 18475,
+      "sequences": 2000
+     },
+     "name": "test_core_props",
+     "passed": 3,
+     "seconds": 33.5,
+     "tests": 3
+    },
+    {
+     "counts": {},
+     "name": "test_core_more",
+     "passed": 28,
+     "seconds": 0.0,
+     "tests": 28
+    },
+    {
+     "counts": {
+      "UNUSED_REUSED": []
+     },
+     "name": "test_reuse",
+     "passed": 7,
+     "seconds": 0.5,
+     "tests": 7
+    },
+    {
+     "counts": {
+      "blocks_printed": 110,
+      "slowest": [
+       [
+        55.4,
+        "t_maint2_s_v_entries_archive_message_and_tools"
+       ],
+       [
+        37.3,
+        "t_maint2_tools_file_link_refused"
+       ],
+       [
+        36.8,
+        "t_opx05_empty_final_message_accepted"
+       ],
+       [
+        36.6,
+        "t_maint2_generation_record_tools_and_o63_note"
+       ],
+       [
+        36.3,
+        "t_opx05_final_message_any_characters_verbatim"
+       ],
+       [
+        20.3,
+        "t_d11_head_download_slips_and_no_block"
+       ],
+       [
+        18.5,
+        "t_d11_clear_check_routes_found_only_to_its_find"
+       ],
+       [
+        15.3,
+        "t_d16_stage_refuses_low_space_before_runner"
+       ],
+       [
+        11.5,
+        "t_maint2_inventory_rehashed_at_attest"
+       ],
+       [
+        11.3,
+        "t_opx05_oversize_final_message_stops"
+       ],
+       [
+        9.3,
+        "t_d11_local_download_checked_at_go"
+       ],
+       [
+        8.0,
+        "t_d5_clear_check_found_accepted"
+       ]
+      ]
+     },
+     "name": "test_vio",
+     "passed": 108,
+     "seconds": 118.1,
+     "tests": 108
+    },
+    {
+     "counts": {},
+     "name": "test_maint",
+     "passed": 40,
+     "seconds": 10.1,
+     "tests": 40
+    },
+    {
+     "counts": {},
+     "name": "test_probe_p5",
+     "passed": 8,
+     "seconds": 15.9,
+     "tests": 8
+    },
+    {
+     "counts": {},
+     "name": "test_codes",
+     "passed": 26,
+     "seconds": 33.8,
+     "tests": 26
+    },
+    {
+     "counts": {
+      "map": {
+       "F1": [
+        "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+        "world+direct",
+        "a CONTINUED V resolves only by T46 (FREEZE_VISUAL_FAILED): no OPEN or CONTINUE for V after the reset"
+       ],
+       "F2": [
+        "test_f2_second_start_only_after_no_conversation",
+        "direct",
+        "a second START of one attempt exists only through T43 (list shows none, once) or T31 (rebase); T32 refuses it otherwise; random cuts in test_core_props"
+       ],
+       "F3": [
+        "test_f3_classify_reads_only_head_at_every_worker_point",
+        "world+direct",
+        "by construction: classify(head, state, ...) reads only the head; the B prepare fetches A FROZEN.json"
+       ],
+       "F4": [
+        "test_f4_outcomes_total_over_frozen_shapes",
+        "delegate:test_core_table",
+        "one pure outcomes() over the fold state"
+       ],
+       "F5": [
+        "test_f5_audit_planted_restore_unknown_to_final",
+        "delegate:test_maint",
+        "the audit re-folds the journal; it copies nothing from ALL_FROZEN.json"
+       ],
+       "F6": [
+        "test_f6_every_block_has_exactly_one_terminal_action",
+        "direct",
+        "by construction: every PrintBlock renders exactly one DO line (the grammar lint runs on every block)"
+       ],
+       "F7": [
+        "test_f7_written_lost_transcript_in_restore_entry",
+        "world+direct",
+        "an exported transcript is a RESTORE member (T48 without it); with export no (O55) nothing is exported"
+       ],
+       "F8": [
+        "test_f8_dead_commit_plus_next_stage",
+        "world",
+        "a head without a part is rebased (T49), the next stage re-runs bound; the audit is clean"
+       ],
+       "FLAGS-1": [
+        "test_flags1_wrong_shared_or_real_carrier_inconsistent",
+        "delegate:test_maint",
+        "score_check"
+       ],
+       "FLAGS-2": [
+        "test_flags2_empty_carriers_distinct_per_reader",
+        "delegate:test_maint",
+        "score_check"
+       ],
+       "FLAGS-3": [
+        "test_flags3_runner_failed_runs_get_empty_carriers",
+        "delegate:test_maint",
+        "score_check"
+       ],
+       "GATE-1": [
+        "test_gate1_gates_checked_on_every_go",
+        "direct",
+        "gates_check runs before every plan step"
+       ],
+       "KIT-1": [
+        "test_kit1_release_swap_after_genesis_stops",
+        "direct",
+        "S5: every entry carries the genesis release; another release needs a KIT_CHANGE with no run in flight and acceptance"
+       ],
+       "KIT-2": [
+        "test_kit2_zip_route_rehashes_the_kit",
+        "world",
+        "the downloaded kit is hashed: KIT_NOT_VERIFIED"
+       ],
+       "MK-1": [
+        "test_mk1_header_slip_in_one_copy_recovers",
+        "direct",
+        "deploy/make_kit.py (MAINT-6): its own tests of the slipped and damaged member path are run here"
+       ],
+       "MK-2": [
+        "test_mk2_duplicate_binary_names_refused",
+        "direct",
+        "deploy/make_kit.py pack (MAINT-6): two binary members with one file name are refused"
+       ],
+       "OP-01": [
+        "test_op01_start_on_drive_before_first_open",
+        "world",
+        "the START is in the STAGE entry; OPEN is printed only after the entry is confirmed (O1)"
+       ],
+       "OP-02": [
+        "test_op02_lost_restore_upload_three_tries_then_stop",
+        "world",
+        "the RESTORE is a commit like any other: at most 3 uploads, then STOP UPLOAD_FAILED"
+       ],
+       "OP-03": [
+        "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+        "world",
+        "FINAL parts are confirmed before HANDBACK B; a part lost to a reset is re-uploaded (C3)"
+       ],
+       "OP-04": [
+        "test_op04_placeholders_refused_state_unchanged",
+        "direct",
+        "placeholders, key names, pattern names and README examples are VALUE_FORBIDDEN/VALUE_PLACEHOLDER"
+       ],
+       "OP-05": [
+        "test_op05_probe_same_session_refused",
+        "delegate:test_probe_p5",
+        "as SAFE-03"
+       ],
+       "OP-06": [
+        "test_op06_helper_never_needs_a_listing",
+        "direct",
+        "by construction: exact-name FIND and DOWNLOAD by id only; v2.1 deleted the LIST head hint"
+       ],
+       "OP-07": [
+        "test_op07_drive_calls_per_run_within_budget",
+        "world",
+        "measured Drive calls per run and per restore within the \u00a7X.5.5 budget"
+       ],
+       "OP-08": [
+        "test_op08_every_file_uploaded_once_when_drive_is_normal",
+        "world",
+        "by construction: one commit primitive; every journal file is uploaded once on a normal Drive"
+       ],
+       "OP-09": [
+        "test_op09_selftest_worker_death_bounded",
+        "direct",
+        "a dead self-test is retried once (SELFTEST_DIED); nothing is asked between OPEN and the end; everyday asks in order (the world half is test_resets test_selftest_died_retried_once_then_stops)"
+       ],
+       "SAFE-01": [
+        "test_safe01_unsupported_entries_halt_nothing_deleted",
+        "direct",
+        "strict tree_list everywhere (snapshot, AI walk, evict): WALK_UNSUPPORTED_ENTRY, nothing deleted"
+       ],
+       "SAFE-02": [
+        "test_safe02_case_id_refused_before_any_write",
+        "direct",
+        "CASE_ID fullmatch and forbidden characters: REFUSED, every cache file byte-identical"
+       ],
+       "SAFE-03": [
+        "test_safe03_probe_p5_same_call_check_refused",
+        "delegate:test_probe_p5",
+        "probe_p5 refuses a same-call check; P5 is answered (FAIL) and gates nothing (\u00a7X.12.5)"
+       ],
+       "SAFE-04": [
+        "test_safe04_enospc_or_short_write_at_every_durable_write",
+        "direct",
+        "durable.write checks every write, fsync and read-back: DISK_FULL/WRITE_FAILED, no UPLOAD printed"
+       ],
+       "SAFE-05": [
+        "test_safe05_trailing_newline_and_bad_id_refused",
+        "direct",
+        "re.fullmatch with re.ASCII on every attested value; ids match drive_id_re"
+       ],
+       "SAFE-06": [
+        "test_safe06_session_start_git_error_prints_stop_block",
+        "direct",
+        "no set -e; every failure prints a full STOP block"
+       ],
+       "SAFE-07": [
+        "test_safe07_setup_runs_foreground_and_gate_uses_hold",
+        "direct",
+        "setup in the foreground of session_start.sh; the release gate uses the foreground hold"
+       ],
+       "TEST-1": [
+        "test_test1_kit_change_with_run_in_flight_stops",
+        "direct",
+        "KIT_CHANGE_WITH_RUN_IN_FLIGHT"
+       ],
+       "TST-01": [
+        "test_tst01_second_start_same_attempt_chain_invalid",
+        "delegate:test_core_table",
+        "T32"
+       ],
+       "TST-02": [
+        "test_tst02_nothing_written_with_file_found_is_written",
+        "direct",
+        "forced FILES_FOUND -> T47"
+       ],
+       "TST-03": [
+        "test_tst03_not_ended_is_written",
+        "direct",
+        "forced NOT_ENDED -> T47"
+       ],
+       "TST-04": [
+        "test_tst04_md5_hidden_download_back_mismatch_is_fork",
+        "direct",
+        "the download-back sha256 compare (\u00a7X.5.5) meets a mismatching download: FORK"
+       ],
+       "TST-05": [
+        "test_tst05_consumer_tree_sha_mismatch_chain_invalid",
+        "direct+world",
+        "consumed tree sha must equal the archive (fold) and is measured (worker: AI_OUTPUT_CHANGED)"
+       ],
+       "TST-06": [
+        "test_tst06_prompt_changed_halts",
+        "world",
+        "a changed generator prompt halts before the record"
+       ],
+       "TST-07": [
+        "test_tst07_b_before_a_frozen_chain_invalid_and_runner_refuses",
+        "direct",
+        "T10 needs A frozen (T14 otherwise); the plan never proposes B first"
+       ],
+       "TST-08": [
+        "test_tst08_under_stage_direct",
+        "direct",
+        "the reused under_stage, tested directly"
+       ],
+       "TST-09": [
+        "test_tst09_no_catch_all_assertions",
+        "delegate:test_lints",
+        "lint L7"
+       ],
+       "TST-10": [
+        "test_tst10_free_space_preflight",
+        "direct",
+        "run_tests.py refuses under 1 GiB free"
+       ]
+      },
+      "v1_ids": 43,
+      "world_scenarios_in_test_resets": [
+       "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+       "test_op01_start_on_drive_before_first_open",
+       "test_f3_classify_reads_only_head_at_every_worker_point",
+       "test_f7_written_lost_transcript_in_restore_entry",
+       "test_f8_dead_commit_plus_next_stage",
+       "test_op02_lost_restore_upload_three_tries_then_stop",
+       "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+       "test_op07_drive_calls_per_run_within_budget",
+       "test_op07_restore_calls_within_budget",
+       "test_op08_every_file_uploaded_once_when_drive_is_normal",
+       "test_d16_disk_bounded_over_runs",
+       "test_opx10_tool_calls_match_budget_golden",
+       "test_tst06_prompt_changed_halts",
+       "test_int07_output_changed_after_archive_halts_before_consumer",
+       "test_kit2_zip_route_rehashes_the_kit",
+       "test_imp04_no_commit_file_stops"
+      ]
+     },
+     "name": "test_v1_regressions",
+     "passed": 45,
+     "seconds": 8.4,
+     "tests": 45
+    },
+    {
+     "counts": {
+      "groups": 12,
+      "max_upload_bytes_seen": 6287359,
+      "per_config": {
+       "D": 126,
+       "DRI": 6,
+       "DV": 6,
+       "E": 43,
+       "Q": 4,
+       "X": 25
+      },
+      "scenarios": 210,
+      "seconds_per_scenario": {
+       "DRI_AI3_a": 43.1,
+       "DRI_AI3_e": 44.0,
+       "DRI_STAGE3_a": 46.3,
+       "DRI_STAGE3_e": 44.6,
+       "DRI_baseline": 300.1,
+       "DV_ans_G0_no_conv_none": 64.5,
+       "DV_ans_G0_nw_exported": 72.8,
+       "DV_ans_G0_written": 41.0,
+       "DV_ans_V_nw_exported": 42.6,
+       "DV_baseline": 333.7,
+       "D_AI1_a": 64.6,
+       "D_AI1_b": 62.7,
+       "D_AI1_e": 63.0,
+       "D_AI2_a": 43.4,
+       "D_AI2_b": 41.7,
+       "D_AI2_e": 42.2,
+       "D_AI3_a": 32.6,
+       "D_AI3_b": 32.0,
+       "D_AI3_e": 31.9,
+       "D_AI4_a": 10.4,
+       "D_AI4_b": 9.0,
+       "D_AI4_e": 8.8,
+       "D_FINAL1_a": 7.0,
+       "D_FINAL1_b": 6.3,
+       "D_FINAL1_c": 6.7,
+       "D_FINAL1_d": 4.9,
+       "D_FINAL1_e": 4.5,
+       "D_FP1_finish": 67.8,
+       "D_FP1_nonattempt": 75.0,
+       "D_FP1_prepare": 71.7,
+       "D_FP1_visual": 42.7,
+       "D_FP2_finish": 89.0,
+       "D_FP2_nonattempt_verify": 74.8,
+       "D_FP2_prepare": 76.0,
+       "D_FP2_prepare_B": 46.2,
+       "D_FP2_visual": 43.5,
+       "D_FP2_visual_freeze": 42.6,
+       "D_FP2_visual_verify": 42.8,
+       "D_FP3_finish": 84.0,
+       "D_FP3_nonattempt": 75.2,
+       "D_FP3_prepare": 77.7,
+       "D_FP3_visual": 42.1,
+       "D_FP4_finish": 84.3,
+       "D_FP_place_job": 66.4,
+       "D_FP_place_ledger": 68.4,
+       "D_FROZEN1_a": 73.6,
+       "D_FROZEN1_b": 72.0,
+       "D_FROZEN1_e": 72.6,
+       "D_FROZEN2_a": 71.3,
+       "D_FROZEN2_b": 70.6,
+       "D_FROZEN2_e": 72.9,
+       "D_FROZEN3_a": 42.8,
+       "D_FROZEN3_b": 39.6,
+       "D_FROZEN3_e": 40.8,
+       "D_FROZEN4_a": 8.6,
+       "D_FROZEN4_b": 6.8,
+       "D_FROZEN4_e": 6.9,
+       "D_GENESIS1_a": 71.7,
+       "D_GENESIS1_b": 73.9,
+       "D_GENESIS1_e": 74.5,
+       "D_STAGE1_a": 72.6,
+       "D_STAGE1_b": 65.0,
+       "D_STAGE1_e": 64.8,
+       "D_STAGE2_a": 63.7,
+       "D_STAGE2_b": 67.6,
+       "D_STAGE2_c": 68.3,
+       "D_STAGE2_d": 41.3,
+       "D_STAGE2_e": 44.5,
+       "D_STAGE3_a": 38.8,
+       "D_STAGE3_b": 33.7,
+       "D_STAGE3_e": 32.9,
+       "D_STAGE4_a": 31.6,
+       "D_STAGE4_b": 34.1,
+       "D_STAGE4_c": 33.4,
+       "D_STAGE4_d": 10.4,
+       "D_STAGE4_e": 10.1,
+       "D_ans_G0_no_conv_none": 67.3,
+       "D_ans_G0_no_conv_one": 39.1,
+       "D_ans_G0_not_ended": 40.7,
+       "D_ans_G0_nw_not_available": 72.4,
+       "D_ans_G0_unsure": 42.0,
+       "D_ans_G0_written": 41.6,
+       "D_ans_G_no_conv_none": 64.3,
+       "D_ans_G_no_conv_one": 39.6,
+       "D_ans_G_not_ended": 40.0,
+       "D_ans_G_nw_not_available": 72.9,
+       "D_ans_G_unsure": 39.3,
+       "D_ans_G_written": 40.1,
+       "D_ans_V_no_conv_none": 43.7,
+       "D_ans_V_no_conv_one": 42.7,
+       "D_ans_V_not_ended": 40.2,
+       "D_ans_V_nw_not_available": 42.3,
+       "D_ans_V_unsure": 40.6,
+       "D_ans_V_written": 40.7,
+       "D_base_wiped_same_boot_restores": 100.4,
+       "D_baseline": 1221.2,
+       "D_clear_committed_halt_same_boot": 78.7,
+       "D_clear_same_boot_foreground_died": 100.8,
+       "D_clear_same_boot_fork": 78.6,
+       "D_clear_same_boot_fork_foreign_only": 18.6,
+       "D_clear_same_boot_open_generator": 56.8,
+       "D_clear_same_boot_setup_failed": 73.1,
+       "D_head_dup": 63.6,
+       "D_head_foreign_next": 3.5,
+       "D_head_foreign_prev_link": 3.3,
+       "D_head_lag1": 65.0,
+       "D_hint_restore_late_copy_at_n1_forks_at_recheck": 44.3,
+       "D_kill_finish_same_boot": 23.1,
+       "D_kill_prepare_same_boot": 1.2,
+       "D_notes_commit_only_gallop": 41.3,
+       "D_notes_none_step0": 65.1,
+       "D_rebase_missing_part": 68.5,
+       "D_refuse_reset_approval_pending": 79.3,
+       "D_refuse_reset_approval_wrong_none": 84.0,
+       "D_reset_commit_boundary": 101.0,
+       "D_sameboot_damaged_cache_restores": 101.5,
+       "D_slip_limit_then_clear": 77.0,
+       "D_slip_short_download_refinds": 71.8,
+       "D_slip_size_refinds": 74.3,
+       "D_slip_stale_raw_head_search": 72.5,
+       "D_slip_wrong_id_refinds": 73.7,
+       "D_tools_wiped_same_boot_continues": 73.2,
+       "D_two_resets": 46.9,
+       "D_vis_dup_entry": 56.6,
+       "D_vis_dup_parts": 36.0,
+       "D_vis_foreign_same_entry": 0.0,
+       "D_vis_foreign_same_parts": 0.1,
+       "D_vis_foreign_size_entry": 0.0,
+       "D_vis_foreign_size_parts": 0.1,
+       "D_vis_lag1_entry": 59.0,
+       "D_vis_lag1_parts": 37.7,
+       "D_vis_lag2_entry": 59.6,
+       "D_vis_lag2_parts": 38.0,
+       "D_vis_refuse_entry": 57.4,
+       "D_vis_refuse_never_entry": 59.8,
+       "D_vis_refuse_never_parts": 37.5,
+       "D_vis_refuse_parts": 35.2,
+       "D_vis_refuse_three_times": 6.7,
+       "D_vis_timeout_late_entry": 62.0,
+       "D_vis_timeout_late_parts": 38.7,
+       "E_AI1_a": 32.0,
+       "E_AI1_b": 30.0,
+       "E_AI1_e": 30.4,
+       "E_AI2_a": 8.6,
+       "E_AI2_b": 7.4,
+       "E_AI2_e": 7.0,
+       "E_DELIVERY1_a": 5.5,
+       "E_DELIVERY1_b": 7.6,
+       "E_DELIVERY1_c": 7.4,
+       "E_DELIVERY1_d": 5.9,
+       "E_DELIVERY1_e": 5.5,
+       "E_FP1_prepare": 38.3,
+       "E_FP2_finish": 50.7,
+       "E_FP2_visual": 8.2,
+       "E_FROZEN1_a": 5.7,
+       "E_FROZEN1_b": 3.6,
+       "E_FROZEN1_e": 3.7,
+       "E_GENESIS1_a": 37.5,
+       "E_GENESIS1_b": 38.2,
+       "E_GENESIS1_e": 37.6,
+       "E_INPUTS1_a": 36.7,
+       "E_INPUTS1_b": 37.3,
+       "E_INPUTS1_e": 37.0,
+       "E_STAGE1_a": 36.6,
+       "E_STAGE1_b": 31.1,
+       "E_STAGE1_e": 30.6,
+       "E_STAGE2_a": 30.4,
+       "E_STAGE2_b": 32.4,
+       "E_STAGE2_c": 32.0,
+       "E_STAGE2_d": 9.0,
+       "E_STAGE2_e": 8.4,
+       "E_STAGE3_a": 7.0,
+       "E_STAGE3_b": 5.6,
+       "E_STAGE3_e": 5.5,
+       "E_ans_G0_not_ended": 5.1,
+       "E_ans_G0_nw_not_available": 5.2,
+       "E_ans_G0_written": 5.1,
+       "E_ans_V_not_ended": 5.6,
+       "E_ans_V_nw_not_available": 5.7,
+       "E_ans_V_written": 5.7,
+       "E_baseline": 292.9,
+       "E_inputs_lost_after_reset_bounded": 17.4,
+       "E_vis_foreign_same_entry": 0.0,
+       "E_vis_refuse_deliv_parts": 1.9,
+       "Q_FP2_scope_finish": 69.6,
+       "Q_ans_G_after_scope_nw": 66.3,
+       "Q_ans_S_nw_not_available": 76.5,
+       "Q_baseline": 319.8,
+       "test_d16_disk_bounded_over_runs": 1565.0,
+       "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed": 44.2,
+       "test_f3_classify_reads_only_head_at_every_worker_point": 45.4,
+       "test_f7_written_lost_transcript_in_restore_entry": 40.6,
+       "test_f8_dead_commit_plus_next_stage": 70.7,
+       "test_foreground_died_same_boot_stops": 78.4,
+       "test_generation_record_exists_halts": 1.5,
+       "test_head_state_sha_mismatch_stops": 3.4,
+       "test_helper_busy_second_command_refused": 34.8,
+       "test_imp04_no_commit_file_stops": 1.2,
+       "test_int07_output_changed_after_archive_halts_before_consumer": 1.4,
+       "test_kit2_zip_route_rehashes_the_kit": 1.3,
+       "test_op01_start_on_drive_before_first_open": 73.9,
+       "test_op02_lost_restore_upload_three_tries_then_stop": 10.3,
+       "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b": 6.5,
+       "test_op07_drive_calls_per_run_within_budget": 1377.5,
+       "test_op07_restore_calls_within_budget": 63.4,
+       "test_op08_every_file_uploaded_once_when_drive_is_normal": 1222.4,
+       "test_opx10_tool_calls_match_budget_golden": 1379.0,
+       "test_selftest_died_retried_once_then_stops": 4.7,
+       "test_selftest_failed_stops": 5.8,
+       "test_tst06_prompt_changed_halts": 1.3
+      },
+      "seconds_wall": 2315.1,
+      "stage_seconds_max": {
+       "chain": 1.4,
+       "finish": 24.0,
+       "freeze": 1.8,
+       "interrupt": 1.8,
+       "nonattempt": 1.7,
+       "place": 0.6,
+       "prepare": 8.0,
+       "scope-finish": 3.2,
+       "visual-record": 2.0
+      }
+     },
+     "name": "test_resets",
+     "passed": 210,
+     "seconds": 2315.1,
+     "tests": 210
+    },
+    {
+     "counts": {
+      "UNUSED_REUSED": [],
+      "codes_never_raised": [],
+      "codes_not_named_in_any_test": [],
+      "codes_raised_in_source": 68,
+      "codes_registry": 114,
+      "codes_seen_at_runtime": 114,
+      "codes_seen_not_registered": [],
+      "core_coverage": {
+       "lines": 1566,
+       "missed": 0,
+       "missed_lines": {},
+       "percent": 100.0
+      },
+      "maintainer_codes_seen": [
+       "ASSEMBLE_NOT_VERIFIED",
+       "AUDIT_NOT_CLEAN",
+       "CARRIER_MISMATCH",
+       "O63_ATTESTATION_MISSING",
+       "PLAN_MISMATCH",
+       "POOL_INVALID"
+      ]
+     },
+     "name": "test_lints",
+     "passed": 16,
+     "seconds": 53.4,
+     "tests": 16
+    }
+   ],
+   "tests": 572,
+   "uid": 0,
+   "vm2_clean": true,
+   "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+  },
+  "gaps": [
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_lints.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "PF-1",
+    "mutants": [
+     "W142"
+    ],
+    "note": "Real: the mailbox protocol abandons a claim at 6 hours. README 2.4 rule 8 states the rule as the protocol has it; a series starts only when its starting message says how the mailbox check is handled, else the Dot reports MAILBOX_UNSETTLED (case C) and runs no go (SD-80). Section 2.2 step 1 points to it. Owner track OQ-28 added. G-4 records what a check does while a helper command runs and once a claim is 6 hours old.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/fakes.py",
+     "deploy/vm2/tests/test_v1_regressions.py",
+     "deploy/vm2/tests/test_lints.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "PF-2",
+    "mutants": [
+     "W139",
+     "W140"
+    ],
+    "note": "Real (reproduced: the one-line clear printed STOP SESSION_LAYOUT, exit 3, in env -i). The clear message is now the README section 1 block with COMMIT, --hint and --kit filled in, run as one command through require_escalated (SD-78). README sections 1, 2 and 6 say this, and delta 2.4.2 is marked superseded. FakeDot bootstraps without CPS_VM_BASE or CPS_TOOLS.",
+    "status": "done",
+    "tests": [
+     "test_pf2_clear_bootstrap_runs_in_a_fresh_shell",
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_lints.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "PF-3",
+    "mutants": [
+     "W141"
+    ],
+    "note": "Real. Rule 3 now also covers an open S, G or V conversation: no turn end and no platform wait or wake-up; sleep 300 in the foreground between checks. The owner line is now \"CPS paused while a helper command or a CPS conversation ran: reply continue to resume.\" OPEN_CONVERSATION, CONTINUE_CONVERSATION and section 7 match. Added to G-4.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_lints.py"
+    ],
+    "id": "PF-4",
+    "mutants": [],
+    "note": "Real. Rule 1 now names the coordinating conversation, the one that CLAIM.md names. A worker or scheduled check never runs the bootstrap or a helper command. README text only; L14 holds the sentence.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_lints.py"
+    ],
+    "id": "PF-5",
+    "mutants": [],
+    "note": "Real (same as CC-4). Rule 6 now covers command requests only. Uploads are never retried and follow section 3.1.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_lints.py"
+    ],
+    "id": "PF-6",
+    "mutants": [],
+    "note": "Real. REVIEW_STOPPED: ask the owner to approve; after approval, run the command again, and rule 6 applies afresh. A READ_ONLY_FS the Dot sees itself is case C. Rule 7 now says the helper prints READ_ONLY_FS only for its own writes; a runner-side error shows as another stop of the helper (for example RUNNER_REFUSED).",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_lints.py"
+    ],
+    "id": "PF-7",
+    "mutants": [],
+    "note": "Real. README section 1: the bootstrap holds nothing of the series, so it may be run again once through the elevated route after a death, a lost session, or a run through the standard route by mistake. Rules 5 and 7 name this exception.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/rs_v21.py",
+     "deploy/vm2/tests/test_lints.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "PF-8",
+    "mutants": [
+     "W143",
+     "W127"
+    ],
+    "note": "Real. SETUP_MISSING is the one HANDBACK C stop the Dot clears itself: one bootstrap, then go; a second SETUP_MISSING waits for the maintainer (SD-79). The README handback paragraph and section 3 row were updated, the code is unchanged, and the scenario follows the README. G-4 records whether /tmp/cps and the boot id survive a reset that empties /home/agent.",
+    "status": "done",
+    "tests": [
+     "D_tools_wiped_same_boot_continues",
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "PF-9",
+    "mutants": [],
+    "note": "Real (documents). Delta 9.5 and OQ-29 record the conflict with DEPLOYMENT_MODEL.md (~/cps-deliveries) and with the private documents. The owner must update them before everyday use. The A1 row now has the owner track. No code.",
+    "status": "done",
+    "tests": []
+   },
+   {
+    "files": [
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "PF-10",
+    "mutants": [],
+    "note": "Real (documents). Delta 9.7 and G-4 now list four unverified /tmp assumptions: (a) a Create Thread conversation reads and writes /tmp/cps; (b) an upload works straight from /tmp/cps/outbox; (c) CPSV-BUSY against a lock holder on the standard route; (d) MemAvailable at every stage start. No code.",
+    "status": "done",
+    "tests": []
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "docs/handoff/VM_HELPER_V21_DELTA.md",
+     "deploy/vm2/tests/test_lints.py"
+    ],
+    "id": "PF-11",
+    "mutants": [],
+    "note": "Real (documents). The 1.2 rows OPX-10 and D16-F2 and CBR-9 now point at M009 and 9 A8. G-3, 5.4 and 6.3 say \"pdftoppm run alone on the same PDF took 706 s\". README section 7 calls its polls and checks estimates until they are measured, and L14 checks this.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/fakes.py",
+     "deploy/vm2/tests/test_v1_regressions.py",
+     "deploy/vm2/tests/test_lints.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "G1",
+    "mutants": [
+     "W139",
+     "W140"
+    ],
+    "note": "Same gap as PF-2 (reproduced). Fixed as PF-2. The oracle is a World-free v1r test that runs the documented clear in env -i, plus an L14 check of the block export.",
+    "status": "done",
+    "tests": [
+     "test_pf2_clear_bootstrap_runs_in_a_fresh_shell",
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/tests/test_vio.py",
+     "deploy/vm2/tests/mutants.py"
+    ],
+    "id": "G2",
+    "mutants": [
+     "W132"
+    ],
+    "note": "Real test gap (X1 survived again at 2cfaac5). New test: a planted file in BASE/tmp, with free space faked so it depends on that file; the stage runs and does not stop DISK_FULL. The code order was already right.",
+    "status": "done",
+    "tests": [
+     "t_g2_tmp_emptied_before_space_check"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/tests/test_codes.py",
+     "deploy/vm2/tests/mutants.py",
+     "deploy/vm2/README.md"
+    ],
+    "id": "G3",
+    "mutants": [
+     "W136"
+    ],
+    "note": "Real (X4 survived again). New test raises EROFS from worker.dispatch and asserts STOP READ_ONLY_FS with the journal header, HALT.json READ_ONLY_FS and no FOREGROUND.json. The README sentence is qualified (see PF-6). EROFS is not mapped in run_post or evict: both already end in a full STOP block, HANDBACK C.",
+    "status": "done",
+    "tests": [
+     "test_g3_erofs_inside_a_stage_stops_read_only_fs"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/tests/test_vio.py",
+     "deploy/vm2/tests/mutants.py"
+    ],
+    "id": "G4",
+    "mutants": [
+     "W133"
+    ],
+    "note": "Real test gap (X2 survived again). t_a4_stale_temp_names_in_runtime_ignored now also plants .tmp_48213_VM_HELPER_CONFIG.json.",
+    "status": "done",
+    "tests": [
+     "t_a4_stale_temp_names_in_runtime_ignored"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/session_start.sh",
+     "deploy/vm2/tests/test_v1_regressions.py",
+     "deploy/vm2/tests/mutants.py"
+    ],
+    "id": "G5",
+    "mutants": [
+     "W134",
+     "W135",
+     "W117"
+    ],
+    "note": "Real (X3 survived; the bash checks reproduced). session_start.sh line 30 now compares resolved paths (cd && pwd -P for BASE and HOME), and a missing BASE or HOME stops. The line count is unchanged. test_a1 gains four cases: BASE=HOME, a path through .., a link into HOME, and HOME with a trailing slash, each with a repo link so only the HOME check can stop it.",
+    "status": "done",
+    "tests": [
+     "test_a1_base_required_outside_home_and_carried_by_launcher"
+    ]
+   },
+   {
+    "files": [
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "G6",
+    "mutants": [],
+    "note": "Real (audit line). Delta 9.3 gains a row for outbox/selftest_<utc14>/.tmp_<pid>_RUN.json: not a defect, because each attempt has its own folder, RUN.json is read by its exact name, and the folder is never uploaded or walked.",
+    "status": "done",
+    "tests": []
+   },
+   {
+    "files": [
+     "deploy/vm2/tests/run_tests.py",
+     "deploy/vm2/tests/mutants.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "G7",
+    "mutants": [],
+    "note": "Real (records). run_tests.git_record() writes snapshot_commit, vm2_git_tree (deploy/vm2 including tests) and vm2_clean into TEST_RESULTS.json and MUTANTS_RESULTS.json. The 9.6 sentence is corrected. INTEGRATION.json amendment now heads with the final-tree runs of this round; the builder runs move to build_runs, and the top-level candidate_commit is labelled.",
+    "status": "done",
+    "tests": []
+   },
+   {
+    "files": [
+     "deploy/vm2/probe_p5.py",
+     "deploy/vm2/tests/test_probe_p5.py",
+     "deploy/vm2/tests/mutants.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "G8",
+    "mutants": [
+     "W138"
+    ],
+    "note": "Real. probe_p5.py --dir is now required, with no default under HOME (SD-82). G-3 and 5.4 rule step 3 name --dir /tmp/cps_probe_p5 and the standard route.",
+    "status": "done",
+    "tests": [
+     "test_g8_dir_required_never_under_home"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "CC-1",
+    "mutants": [
+     "W139",
+     "W140"
+    ],
+    "note": "Same gap as PF-2 and G1. Fixed there; the route is require_escalated, stated in README sections 1, 2 and 6 and in delta 9.8.",
+    "status": "done",
+    "tests": [
+     "test_pf2_clear_bootstrap_runs_in_a_fresh_shell",
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/cpsvm2/core/names.py",
+     "deploy/vm2/README.md",
+     "deploy/vm2/tests/test_vio.py",
+     "deploy/vm2/tests/mutants.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "CC-2",
+    "mutants": [
+     "W137",
+     "W128"
+    ],
+    "note": "Real: commit_end runs inside the chain stage, and the 2015773 verify check left at 746ea98. STAGE_FREE_BYTES goes from 1.5e9 to 2e9 to cover about 1,770 MB: the job folder, the entry plus parts, and the download-back (SD-77). The 5.4 table and peaks are restated (entry, download-back, place stream, self-test work folder); the verify-check claims are removed; 2.16.5 is corrected; README 7 now says 2 GB. t_d16 asserts >= 3 x 590 MB.",
+    "status": "done",
+    "tests": [
+     "t_d16_stage_refuses_low_space_before_runner"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/tests/test_lints.py",
+     "deploy/vm2/tests/fakes.py",
+     "deploy/vm2/tests/test_v1_regressions.py",
+     "deploy/vm2/tests/mutants.py"
+    ],
+    "id": "CC-3",
+    "mutants": [
+     "W139"
+    ],
+    "note": "Real (X5 survived again). L14 now checks for exactly one export line, before session_start.sh, inside the bootstrap markers. The v1r test runs the block in env -i. FakeDot bootstraps without a preset base. A World bootstrap stop never counts as a kill, so W139 is carried by the two direct tests.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules",
+     "test_pf2_clear_bootstrap_runs_in_a_fresh_shell"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md"
+    ],
+    "id": "CC-4",
+    "mutants": [],
+    "note": "Same gap as PF-5; fixed there.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/README.md",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "CC-5",
+    "mutants": [],
+    "note": "Same gap as the README half of PF-6 and G3. Rule 7 and the 9.1 A3 row now say the helper prints READ_ONLY_FS for its own writes; a read-only error in the runner shows as a runner stop.",
+    "status": "done",
+    "tests": [
+     "t_l14_readme_rules"
+    ]
+   },
+   {
+    "files": [
+     "deploy/vm2/tests/run_tests.py",
+     "deploy/vm2/tests/mutants.py",
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "CC-6",
+    "mutants": [],
+    "note": "Same gap as G7; fixed there.",
+    "status": "done",
+    "tests": []
+   },
+   {
+    "files": [
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "CC-7",
+    "mutants": [],
+    "note": "Real (documents). CBR-9 and the D16-F2 and OPX-10 rows now point at M009 and 9 A8. The 8.0 GAP-2 prerequisite is restated for a /tmp/cps base: the tmpfs covers /tmp, with the root and runner bound from under it.",
+    "status": "done",
+    "tests": []
+   },
+   {
+    "files": [
+     "docs/handoff/VM_HELPER_V21_DELTA.md"
+    ],
+    "id": "CC-8",
+    "mutants": [],
+    "note": "Same gap as G6; fixed there.",
+    "status": "done",
+    "tests": []
+   }
+  ],
+  "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+  "lines_D2a": {
+   "C": 7506,
+   "M": 896,
+   "caps_D2a": {
+    "C": 7506,
+    "M": 896,
+    "total": 8402
+   },
+   "changed_counted_files": {
+    "cpsvm2/core/names.py": [
+     259,
+     259
+    ],
+    "probe_p5.py": [
+     131,
+     131
+    ],
+    "session_start.sh": [
+     80,
+     80
+    ]
+   },
+   "total": 8402
+  },
+  "mutation": {
+   "guards": {
+    "glue half 1": {
+     "killed": 71,
+     "sites": 84,
+     "survivors": [
+      "GM-savepoint-block-3-n",
+      "GM-savepoint-block-11-n",
+      "GM-savepoint-block-13-r",
+      "GM-savepoint-on_found-1-r",
+      "GM-savepoint-on_found-4-n",
+      "GM-savepoint-on_found-8-n",
+      "GM-cli-go_checks-3-r",
+      "GM-cli-go_checks-4-r",
+      "GM-cli-go_checks-5-r",
+      "GM-cli-go_checks-6-r",
+      "GM-cli-go_checks-7-r",
+      "GM-cli-go_checks-9-r",
+      "GM-cli-go_checks-10-r"
+     ],
+     "without_equivalent": []
+    },
+    "glue half 2": {
+     "killed": 79,
+     "sites": 84,
+     "survivors": [
+      "GM-cli-session_downloads-3-r",
+      "GM-place-settle-1-r",
+      "GM-place-settle-2-r",
+      "GM-drive-parse_raw-0-r",
+      "GM-drive-parse_raw-10-n"
+     ],
+     "without_equivalent": []
+    },
+    "guard_fold": {
+     "killed": 531,
+     "sites": 545,
+     "survivors": [
+      "GM-fold-g24-2-r",
+      "GM-fold-_new_run_progress-4-r",
+      "GM-fold-g10-12-r",
+      "GM-fold-g10-15-r",
+      "GM-fold-g12-1-r",
+      "GM-fold-forced_for-4-r",
+      "GM-fold-no_conversation_admissible-0-r",
+      "GM-fold-resolution_action-14-r",
+      "GM-fold-resolution_action-16-r",
+      "GM-fold-resolution_action-22-r",
+      "GM-fold-resolution_action-23-r",
+      "GM-fold-_items_check-5-r",
+      "GM-fold-g42-9-r",
+      "GM-fold-g42-23-r"
+     ],
+     "without_equivalent": []
+    },
+    "guard_session": {
+     "killed": 199,
+     "sites": 202,
+     "survivors": [
+      "GM-session-_facts-0-r",
+      "GM-session-classify-7-r",
+      "GM-session-_resolve-9-r"
+     ],
+     "without_equivalent": []
+    }
+   },
+   "hand": {
+    "commit": "6b8cd62c96b9ed777d23c582ee33a8ea8077a4b1",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 144,
+    "mutants": 144,
+    "seconds": 1325.5,
+    "snapshot_commit": "6b8cd62c96b9ed777d23c582ee33a8ea8077a4b1",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   "hand_survivors": [],
+   "listed_not_failing": {
+    "G9": [
+     "test_next_action_resolution_chains_and_rerun"
+    ],
+    "M2-18": [
+     "test_m18_role_consumed_once"
+    ],
+    "M2-36": [
+     "test_f2_second_start_only_after_no_conversation"
+    ]
+   },
+   "reviewer_legacy": {
+    "commit": "05c14b9d20147d4219f350f6a77fde9a3c3ca3b2",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 68,
+    "mutants": 68,
+    "seconds": 390.2,
+    "snapshot_commit": "05c14b9d20147d4219f350f6a77fde9a3c3ca3b2",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   "revleg_survivors": []
+  },
+  "nonroot_pass": {
+   "cap_eff": 0,
+   "failed": [],
+   "free_bytes_at_start": 7920660480,
+   "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+   "jobs": 4,
+   "only": [
+    "test_core_table",
+    "test_core_more",
+    "test_core_props",
+    "test_codes",
+    "test_vio",
+    "test_d16_evict_runner_frozen_folder_nonroot",
+    "test_d16_disk_bounded_over_runs",
+    "D_baseline",
+    "E_baseline",
+    "D_clear_same_boot_foreground_died",
+    "D_sameboot_damaged_cache_restores",
+    "test_foreground_died_same_boot_stops"
+   ],
+   "passed": 253,
+   "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+   "schema": "cps.vm2-tests.v1",
+   "seconds": 505.5,
+   "snapshot_commit": "0e7f9d2eb5030369d48e691f79b79a9545018590",
+   "suites": [
+    {
+     "counts": {
+      "abstract_states": 709,
+      "golden_entries": 709,
+      "rows": 44,
+      "rows_hit": 44
+     },
+     "name": "test_core_table",
+     "passed": 81,
+     "seconds": 44.4,
+     "tests": 81
+    },
+    {
+     "counts": {
+      "applies": 120712,
+      "cuts": 12820,
+      "illegal_injected": 18475,
+      "sequences": 2000
+     },
+     "name": "test_core_props",
+     "passed": 3,
+     "seconds": 35.3,
+     "tests": 3
+    },
+    {
+     "counts": {},
+     "name": "test_core_more",
+     "passed": 28,
+     "seconds": 0.1,
+     "tests": 28
+    },
+    {
+     "counts": {
+      "blocks_printed": 110,
+      "slowest": [
+       [
+        55.5,
+        "t_maint2_s_v_entries_archive_message_and_tools"
+       ],
+       [
+        36.8,
+        "t_opx05_empty_final_message_accepted"
+       ],
+       [
+        36.6,
+        "t_maint2_generation_record_tools_and_o63_note"
+       ],
+       [
+        36.4,
+        "t_opx05_final_message_any_characters_verbatim"
+       ],
+       [
+        36.4,
+        "t_maint2_tools_file_link_refused"
+       ],
+       [
+        20.9,
+        "t_d11_head_download_slips_and_no_block"
+       ],
+       [
+        19.2,
+        "t_d11_clear_check_routes_found_only_to_its_find"
+       ],
+       [
+        15.4,
+        "t_d16_stage_refuses_low_space_before_runner"
+       ],
+       [
+        12.3,
+        "t_maint2_inventory_rehashed_at_attest"
+       ],
+       [
+        11.7,
+        "t_opx05_oversize_final_message_stops"
+       ],
+       [
+        9.6,
+        "t_d11_local_download_checked_at_go"
+       ],
+       [
+        8.3,
+        "t_d5_clear_check_found_accepted"
+       ]
+      ]
+     },
+     "name": "test_vio",
+     "passed": 108,
+     "seconds": 120.5,
+     "tests": 108
+    },
+    {
+     "counts": {},
+     "name": "test_codes",
+     "passed": 26,
+     "seconds": 36.2,
+     "tests": 26
+    },
+    {
+     "counts": {
+      "map": {
+       "F1": [
+        "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+        "world+direct",
+        "a CONTINUED V resolves only by T46 (FREEZE_VISUAL_FAILED): no OPEN or CONTINUE for V after the reset"
+       ],
+       "F2": [
+        "test_f2_second_start_only_after_no_conversation",
+        "direct",
+        "a second START of one attempt exists only through T43 (list shows none, once) or T31 (rebase); T32 refuses it otherwise; random cuts in test_core_props"
+       ],
+       "F3": [
+        "test_f3_classify_reads_only_head_at_every_worker_point",
+        "world+direct",
+        "by construction: classify(head, state, ...) reads only the head; the B prepare fetches A FROZEN.json"
+       ],
+       "F4": [
+        "test_f4_outcomes_total_over_frozen_shapes",
+        "delegate:test_core_table",
+        "one pure outcomes() over the fold state"
+       ],
+       "F5": [
+        "test_f5_audit_planted_restore_unknown_to_final",
+        "delegate:test_maint",
+        "the audit re-folds the journal; it copies nothing from ALL_FROZEN.json"
+       ],
+       "F6": [
+        "test_f6_every_block_has_exactly_one_terminal_action",
+        "direct",
+        "by construction: every PrintBlock renders exactly one DO line (the grammar lint runs on every block)"
+       ],
+       "F7": [
+        "test_f7_written_lost_transcript_in_restore_entry",
+        "world+direct",
+        "an exported transcript is a RESTORE member (T48 without it); with export no (O55) nothing is exported"
+       ],
+       "F8": [
+        "test_f8_dead_commit_plus_next_stage",
+        "world",
+        "a head without a part is rebased (T49), the next stage re-runs bound; the audit is clean"
+       ],
+       "FLAGS-1": [
+        "test_flags1_wrong_shared_or_real_carrier_inconsistent",
+        "delegate:test_maint",
+        "score_check"
+       ],
+       "FLAGS-2": [
+        "test_flags2_empty_carriers_distinct_per_reader",
+        "delegate:test_maint",
+        "score_check"
+       ],
+       "FLAGS-3": [
+        "test_flags3_runner_failed_runs_get_empty_carriers",
+        "delegate:test_maint",
+        "score_check"
+       ],
+       "GATE-1": [
+        "test_gate1_gates_checked_on_every_go",
+        "direct",
+        "gates_check runs before every plan step"
+       ],
+       "KIT-1": [
+        "test_kit1_release_swap_after_genesis_stops",
+        "direct",
+        "S5: every entry carries the genesis release; another release needs a KIT_CHANGE with no run in flight and acceptance"
+       ],
+       "KIT-2": [
+        "test_kit2_zip_route_rehashes_the_kit",
+        "world",
+        "the downloaded kit is hashed: KIT_NOT_VERIFIED"
+       ],
+       "MK-1": [
+        "test_mk1_header_slip_in_one_copy_recovers",
+        "direct",
+        "deploy/make_kit.py (MAINT-6): its own tests of the slipped and damaged member path are run here"
+       ],
+       "MK-2": [
+        "test_mk2_duplicate_binary_names_refused",
+        "direct",
+        "deploy/make_kit.py pack (MAINT-6): two binary members with one file name are refused"
+       ],
+       "OP-01": [
+        "test_op01_start_on_drive_before_first_open",
+        "world",
+        "the START is in the STAGE entry; OPEN is printed only after the entry is confirmed (O1)"
+       ],
+       "OP-02": [
+        "test_op02_lost_restore_upload_three_tries_then_stop",
+        "world",
+        "the RESTORE is a commit like any other: at most 3 uploads, then STOP UPLOAD_FAILED"
+       ],
+       "OP-03": [
+        "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+        "world",
+        "FINAL parts are confirmed before HANDBACK B; a part lost to a reset is re-uploaded (C3)"
+       ],
+       "OP-04": [
+        "test_op04_placeholders_refused_state_unchanged",
+        "direct",
+        "placeholders, key names, pattern names and README examples are VALUE_FORBIDDEN/VALUE_PLACEHOLDER"
+       ],
+       "OP-05": [
+        "test_op05_probe_same_session_refused",
+        "delegate:test_probe_p5",
+        "as SAFE-03"
+       ],
+       "OP-06": [
+        "test_op06_helper_never_needs_a_listing",
+        "direct",
+        "by construction: exact-name FIND and DOWNLOAD by id only; v2.1 deleted the LIST head hint"
+       ],
+       "OP-07": [
+        "test_op07_drive_calls_per_run_within_budget",
+        "world",
+        "measured Drive calls per run and per restore within the \u00a7X.5.5 budget"
+       ],
+       "OP-08": [
+        "test_op08_every_file_uploaded_once_when_drive_is_normal",
+        "world",
+        "by construction: one commit primitive; every journal file is uploaded once on a normal Drive"
+       ],
+       "OP-09": [
+        "test_op09_selftest_worker_death_bounded",
+        "direct",
+        "a dead self-test is retried once (SELFTEST_DIED); nothing is asked between OPEN and the end; everyday asks in order (the world half is test_resets test_selftest_died_retried_once_then_stops)"
+       ],
+       "SAFE-01": [
+        "test_safe01_unsupported_entries_halt_nothing_deleted",
+        "direct",
+        "strict tree_list everywhere (snapshot, AI walk, evict): WALK_UNSUPPORTED_ENTRY, nothing deleted"
+       ],
+       "SAFE-02": [
+        "test_safe02_case_id_refused_before_any_write",
+        "direct",
+        "CASE_ID fullmatch and forbidden characters: REFUSED, every cache file byte-identical"
+       ],
+       "SAFE-03": [
+        "test_safe03_probe_p5_same_call_check_refused",
+        "delegate:test_probe_p5",
+        "probe_p5 refuses a same-call check; P5 is answered (FAIL) and gates nothing (\u00a7X.12.5)"
+       ],
+       "SAFE-04": [
+        "test_safe04_enospc_or_short_write_at_every_durable_write",
+        "direct",
+        "durable.write checks every write, fsync and read-back: DISK_FULL/WRITE_FAILED, no UPLOAD printed"
+       ],
+       "SAFE-05": [
+        "test_safe05_trailing_newline_and_bad_id_refused",
+        "direct",
+        "re.fullmatch with re.ASCII on every attested value; ids match drive_id_re"
+       ],
+       "SAFE-06": [
+        "test_safe06_session_start_git_error_prints_stop_block",
+        "direct",
+        "no set -e; every failure prints a full STOP block"
+       ],
+       "SAFE-07": [
+        "test_safe07_setup_runs_foreground_and_gate_uses_hold",
+        "direct",
+        "setup in the foreground of session_start.sh; the release gate uses the foreground hold"
+       ],
+       "TEST-1": [
+        "test_test1_kit_change_with_run_in_flight_stops",
+        "direct",
+        "KIT_CHANGE_WITH_RUN_IN_FLIGHT"
+       ],
+       "TST-01": [
+        "test_tst01_second_start_same_attempt_chain_invalid",
+        "delegate:test_core_table",
+        "T32"
+       ],
+       "TST-02": [
+        "test_tst02_nothing_written_with_file_found_is_written",
+        "direct",
+        "forced FILES_FOUND -> T47"
+       ],
+       "TST-03": [
+        "test_tst03_not_ended_is_written",
+        "direct",
+        "forced NOT_ENDED -> T47"
+       ],
+       "TST-04": [
+        "test_tst04_md5_hidden_download_back_mismatch_is_fork",
+        "direct",
+        "the download-back sha256 compare (\u00a7X.5.5) meets a mismatching download: FORK"
+       ],
+       "TST-05": [
+        "test_tst05_consumer_tree_sha_mismatch_chain_invalid",
+        "direct+world",
+        "consumed tree sha must equal the archive (fold) and is measured (worker: AI_OUTPUT_CHANGED)"
+       ],
+       "TST-06": [
+        "test_tst06_prompt_changed_halts",
+        "world",
+        "a changed generator prompt halts before the record"
+       ],
+       "TST-07": [
+        "test_tst07_b_before_a_frozen_chain_invalid_and_runner_refuses",
+        "direct",
+        "T10 needs A frozen (T14 otherwise); the plan never proposes B first"
+       ],
+       "TST-08": [
+        "test_tst08_under_stage_direct",
+        "direct",
+        "the reused under_stage, tested directly"
+       ],
+       "TST-09": [
+        "test_tst09_no_catch_all_assertions",
+        "delegate:test_lints",
+        "lint L7"
+       ],
+       "TST-10": [
+        "test_tst10_free_space_preflight",
+        "direct",
+        "run_tests.py refuses under 1 GiB free"
+       ]
+      },
+      "v1_ids": 43,
+      "world_scenarios_in_test_resets": [
+       "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+       "test_op01_start_on_drive_before_first_open",
+       "test_f3_classify_reads_only_head_at_every_worker_point",
+       "test_f7_written_lost_transcript_in_restore_entry",
+       "test_f8_dead_commit_plus_next_stage",
+       "test_op02_lost_restore_upload_three_tries_then_stop",
+       "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+       "test_op07_drive_calls_per_run_within_budget",
+       "test_op07_restore_calls_within_budget",
+       "test_op08_every_file_uploaded_once_when_drive_is_normal",
+       "test_d16_disk_bounded_over_runs",
+       "test_opx10_tool_calls_match_budget_golden",
+       "test_tst06_prompt_changed_halts",
+       "test_int07_output_changed_after_archive_halts_before_consumer",
+       "test_kit2_zip_route_rehashes_the_kit",
+       "test_imp04_no_commit_file_stops"
+      ]
+     },
+     "name": "test_v1_regressions",
+     "passed": 1,
+     "seconds": 0.0,
+     "tests": 1
+    },
+    {
+     "counts": {
+      "groups": 3,
+      "max_upload_bytes_seen": 1000000,
+      "per_config": {
+       "D": 2,
+       "DRI": 0,
+       "DV": 0,
+       "E": 1,
+       "Q": 0,
+       "X": 3
+      },
+      "scenarios": 6,
+      "seconds_per_scenario": {
+       "D_baseline": 70.2,
+       "D_clear_same_boot_foreground_died": 98.0,
+       "D_sameboot_damaged_cache_restores": 94.6,
+       "E_baseline": 37.4,
+       "test_d16_disk_bounded_over_runs": 71.2,
+       "test_foreground_died_same_boot_stops": 76.4
+      },
+      "seconds_wall": 269.2,
+      "stage_seconds_max": {
+       "finish": 22.3,
+       "freeze": 1.5,
+       "nonattempt": 1.5,
+       "prepare": 6.0,
+       "visual-record": 1.7
+      }
+     },
+     "name": "test_resets",
+     "passed": 6,
+     "seconds": 269.2,
+     "tests": 6
+    }
+   ],
+   "tests": 253,
+   "uid": 1000,
+   "vm2_clean": true,
+   "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+  },
+  "parent": "2cfaac5aadfa4cf6ff4624a366f417cdb0c77c66",
+  "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+  "runs": [
+   {
+    "cap_eff": 2199006478335,
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "passed": 572,
+    "result": "572/572 passed",
+    "run": "full suite, root",
+    "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+    "seconds": 2630.0,
+    "snapshot_commit": "f9eb0dad091bb0dd82c84c45c75582222811439a",
+    "tests": 572,
+    "uid": 0,
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "cap_eff": 0,
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "passed": 253,
+    "result": "253/253 passed",
+    "run": "non-root pass (--only nonroot --require-nonroot)",
+    "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+    "seconds": 505.5,
+    "snapshot_commit": "0e7f9d2eb5030369d48e691f79b79a9545018590",
+    "tests": 253,
+    "uid": 1000,
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "6b8cd62c96b9ed777d23c582ee33a8ea8077a4b1",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 144,
+    "mutants": 144,
+    "result": "144/144 killed",
+    "run": "hand set W01-W143 (W106, W107 as uid 1000)",
+    "seconds": 1325.5,
+    "snapshot_commit": "6b8cd62c96b9ed777d23c582ee33a8ea8077a4b1",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "05c14b9d20147d4219f350f6a77fde9a3c3ca3b2",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 68,
+    "mutants": 68,
+    "result": "68/68 killed",
+    "run": "reviewer N and legacy",
+    "seconds": 390.2,
+    "snapshot_commit": "05c14b9d20147d4219f350f6a77fde9a3c3ca3b2",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "add4227a903f5c0ece0f2c4a4bb9f361191a6e24",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 0,
+    "mutants": 0,
+    "result": "545 sites, 531 killed, 14 survivors (0 without EQUIVALENT)",
+    "run": "guard set guard_fold",
+    "seconds": 3469.8,
+    "snapshot_commit": "add4227a903f5c0ece0f2c4a4bb9f361191a6e24",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "c4408f10d136cbca5aa12a591e872240338d3674",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 0,
+    "mutants": 0,
+    "result": "202 sites, 199 killed, 3 survivors (0 without EQUIVALENT)",
+    "run": "guard set guard_session",
+    "seconds": 1532.5,
+    "snapshot_commit": "c4408f10d136cbca5aa12a591e872240338d3674",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "7bdbf5ec7418d77d5dc2d01c49946dea8f9f5a1f",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 0,
+    "mutants": 0,
+    "result": "84 sites, 71 killed, 13 survivors (0 without EQUIVALENT)",
+    "run": "guard set glue half 1",
+    "seconds": 3583.4,
+    "snapshot_commit": "7bdbf5ec7418d77d5dc2d01c49946dea8f9f5a1f",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "5441c43a050af07432efa06ddad14c93ca9145cf",
+    "helper_tree_sha256": "55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e",
+    "killed": 0,
+    "mutants": 0,
+    "result": "84 sites, 79 killed, 5 survivors (0 without EQUIVALENT)",
+    "run": "guard set glue half 2",
+    "seconds": 2335.2,
+    "snapshot_commit": "5441c43a050af07432efa06ddad14c93ca9145cf",
+    "vm2_clean": true,
+    "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681"
+   },
+   {
+    "commit": "5d67add52fda70dd3732ff096f12b8a92cbffa9b",
+    "helper_tree_sha256": "ef3cf6c21df11c7446938022ce87ff5e47b97b483a6e40baa5d26903ef53c93f",
+    "killed": 14,
+    "mutants": 14,
+    "result": "14/14 killed",
+    "run": "trial of W117, W128, W132-W143 (before the README reflow; tree ef3cf6c2)",
+    "seconds": 29.2,
+    "snapshot_commit": "5d67add52fda70dd3732ff096f12b8a92cbffa9b",
+    "vm2_clean": true,
+    "vm2_git_tree": "c0386bd70099c37e4a1f74cd552063e5de21f8ea"
+   }
+  ],
+  "vm2_git_tree": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681",
+  "vm2_git_tree_of_commit": "4f996ef9c27f9a891912fd03b4fa40c46e8bd681",
+  "what": "v2.1 post-build amendment from probes M008-M012 (delta v2.1 section 9, A1-A12) and its fix round of the critics' gaps on 2cfaac5 (section 9.8)"
+ },
+ "base_commit": "2015773",
+ "budgets_D14": {
+  "ceiling_seconds": 3600,
+  "full_suite_seconds": 3134.9,
+  "lints_seconds": 50.1,
+  "mutation_glue_seconds": 6071.4,
+  "mutation_hand_reviewer_legacy_core_seconds": 7489.3,
+  "non_reset_budget_seconds": 300,
+  "non_reset_suites_seconds": 627.9,
+  "nonroot_budget_seconds": 600,
+  "nonroot_pass_seconds": 874.6,
+  "target_seconds": 3000,
+  "test_resets_seconds": 2456.9,
+  "test_vio_seconds": 482.8
+ },
+ "candidate": "cps-vm-helper.v2.1",
+ "candidate_commit": "a2298cb6353f31af866ccd36b731660e5593423a",
+ "candidate_commit_note": "candidate_commit is the completeness fix round's (a2298cb); the amendment is 2cfaac5 and its fix round is amendment.commit",
+ "first_full_run": {
+  "failed": [
+   "test_lints t_l1_codes_registered_and_tested (RAW_INVALID, FINAL_MESSAGE_INVALID, PLACE_TARGET_NOT_EMPTY never recorded)"
+  ],
+  "note": "under load from two mutation runs",
+  "passed": 547,
+  "seconds": 3572.6,
+  "tests": 548
+ },
+ "first_nonroot_runs": [
+  {
+   "name": "nr1",
+   "result": "invalid: run with env -i, which dropped PLAYWRIGHT_BROWSERS_PATH, so every runner prepare stopped STOP_RENDER_VIEWS_FAILED; an environment error of the integrator, not a helper defect; rerun with the inherited environment"
+  },
+  {
+   "failed": [
+    "t_maint2_inventory_rehashed_at_attest (PermissionError writing the 0444 installed TOOL_INVENTORY.txt: a test fixture bug)"
+   ],
+   "name": "nr2",
+   "passed": 244,
+   "seconds": 920.9,
+   "tests": 245
+  },
+  {
+   "name": "nr3",
+   "only": "t_maint2_inventory_rehashed_at_attest",
+   "passed": 1,
+   "tests": 1
+  },
+  {
+   "name": "nr4 (final)",
+   "passed": 245,
+   "seconds": 874.6,
+   "tests": 245
+  }
+ ],
+ "fix_round": {
+  "budgets_D14": {
+   "ceiling_seconds": 3600,
+   "full_suite_seconds": 2790.7,
+   "lints_seconds": 50.4,
+   "non_reset_budget_seconds": 300,
+   "non_reset_suites_seconds": 261.1,
+   "nonroot_budget_seconds": 600,
+   "nonroot_pass_seconds": 508.1,
+   "target_seconds": 3000,
+   "test_resets_seconds": 2479.2,
+   "test_vio_seconds": 118.6
+  },
+  "commit": "a2298cb6353f31af866ccd36b731660e5593423a",
+  "date": "2026-11-12",
+  "final_full_suite_root": {
+   "cap_eff": 2199006478335,
+   "failed": [],
+   "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+   "jobs": 4,
+   "only": [],
+   "passed": 559,
+   "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+   "seconds": 2970.0,
+   "suites": [
+    {
+     "name": "test_core_table",
+     "passed": 81,
+     "seconds": 44.3,
+     "tests": 81
+    },
+    {
+     "name": "test_core_props",
+     "passed": 3,
+     "seconds": 34.3,
+     "tests": 3
+    },
+    {
+     "name": "test_core_more",
+     "passed": 28,
+     "seconds": 0.1,
+     "tests": 28
+    },
+    {
+     "name": "test_reuse",
+     "passed": 7,
+     "seconds": 0.5,
+     "tests": 7
+    },
+    {
+     "name": "test_vio",
+     "passed": 103,
+     "seconds": 122.2,
+     "tests": 103
+    },
+    {
+     "name": "test_maint",
+     "passed": 39,
+     "seconds": 11.8,
+     "tests": 39
+    },
+    {
+     "name": "test_probe_p5",
+     "passed": 7,
+     "seconds": 16.0,
+     "tests": 7
+    },
+    {
+     "name": "test_codes",
+     "passed": 24,
+     "seconds": 37.9,
+     "tests": 24
+    },
+    {
+     "name": "test_v1_regressions",
+     "passed": 43,
+     "seconds": 8.7,
+     "tests": 43
+    },
+    {
+     "name": "test_resets",
+     "passed": 208,
+     "seconds": 2640.0,
+     "tests": 208
+    },
+    {
+     "name": "test_lints",
+     "passed": 16,
+     "seconds": 54.3,
+     "tests": 16
+    }
+   ],
+   "tests": 559,
+   "uid": 0
+  },
+  "full_suite_root": {
+   "cap_eff": 2199006478335,
+   "failed": [],
+   "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+   "jobs": 4,
+   "only": [],
+   "passed": 559,
+   "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+   "seconds": 2790.7,
+   "suites": [
+    {
+     "name": "test_core_table",
+     "passed": 81,
+     "seconds": 40.8,
+     "tests": 81
+    },
+    {
+     "name": "test_core_props",
+     "passed": 3,
+     "seconds": 32.1,
+     "tests": 3
+    },
+    {
+     "name": "test_core_more",
+     "passed": 28,
+     "seconds": 0.0,
+     "tests": 28
+    },
+    {
+     "name": "test_reuse",
+     "passed": 7,
+     "seconds": 0.5,
+     "tests": 7
+    },
+    {
+     "name": "test_vio",
+     "passed": 103,
+     "seconds": 118.6,
+     "tests": 103
+    },
+    {
+     "name": "test_maint",
+     "passed": 39,
+     "seconds": 10.1,
+     "tests": 39
+    },
+    {
+     "name": "test_probe_p5",
+     "passed": 7,
+     "seconds": 15.8,
+     "tests": 7
+    },
+    {
+     "name": "test_codes",
+     "passed": 24,
+     "seconds": 34.8,
+     "tests": 24
+    },
+    {
+     "name": "test_v1_regressions",
+     "passed": 43,
+     "seconds": 8.4,
+     "tests": 43
+    },
+    {
+     "name": "test_resets",
+     "passed": 208,
+     "seconds": 2479.2,
+     "tests": 208
+    },
+    {
+     "name": "test_lints",
+     "passed": 16,
+     "seconds": 50.4,
+     "tests": 16
+    }
+   ],
+   "tests": 559,
+   "uid": 0
+  },
+  "gaps": {
+   "GAP-1": {
+    "change": "contingency deletions 2 and 3: docstrings that restated r2, the probe delta or data shapes cut to one line with their section reference; section banner comments removed; deletion 1 found nothing (L10 empty); deletion 4 not applied",
+    "lines": "C 7,496 (cap 7,500), M 896 (cap 896), total 8,392 (baseline 8,396); cli.py 1,663 (expected 1,513)",
+    "status": "fixed (caps met; cli.py above its expected count)"
+   },
+   "GAP-10": {
+    "change": "test_vio and test_codes run in a process pool of --jobs workers; the slowest test_vio test stops its world once S, G and V entries exist",
+    "status": "fixed",
+    "timings": "first full run 2,790.7 s, final full run 2,970.0 s; non-reset 261.1 / 275.8 s; lints 50.4 / 54.3 s; non-root 508.1 s"
+   },
+   "GAP-2": {
+    "change": "assemble --verify-frozen runs each runner verify in unshare --user --map-root-user --mount with a tmpfs over the base's deepest existing ancestor and <root><base> bind-mounted on <base>; ASSEMBLE.json view records the mapping; D_baseline O5 requires ASSEMBLE clean, every verify DONE and score_check CONSISTENT; FakeDot G responses differ per reader",
+    "mutants": [
+     "W111",
+     "W112"
+    ],
+    "status": "fixed",
+    "tests": [
+     "D_baseline (O5)",
+     "Q_baseline (O5)"
+    ]
+   },
+   "GAP-3": {
+    "change": "test_maint1_self_consistent_hostile_base_confined removed from W29b kill list and table 2 with the reason; delta section 8 states the 2015773 proof of the blocking rows rests on the W mutants",
+    "status": "fixed"
+   },
+   "GAP-4": {
+    "change": "test_t3_recheck_forks_2015773_form runs unchanged at 2015773 and v2.1",
+    "proof": "keep/n18_proof.json",
+    "status": "fixed for N18 (N40, N42 documented)"
+   },
+   "GAP-5": {
+    "change": "D_slip_wrong_id_refinds asserts the FIND block after REFUSED DOWNLOAD_MISSING and the file on Drive; hand/reviewer/legacy mutants run without --failfast and record listed_not_failing; the scenario now also slips at a SAVE-loop FIND (FakeDot wrong_id_save) so W18 reaches it; listed killers that do not fail on their mutant (W16, W71, W11) left the kill lists",
+    "mutants": [
+     "W18"
+    ],
+    "status": "fixed"
+   },
+   "GAP-6": {
+    "change": "MUTANTS_RESULTS.json records helper_tree_sha256 and commit; all sets re-run at the fix-round helper tree",
+    "status": "fixed"
+   },
+   "GAP-7": {
+    "change": "budget_golden.json restore rows (hint, commit, none) checked by x_opx10_restore; README section 7 rows from the golden; L14 compares them",
+    "mutants": [
+     "W114"
+    ],
+    "status": "fixed (400-entry row stays an estimate)"
+   },
+   "GAP-8": {
+    "change": "O63_REPORT and README section 4 say tools=inventory records the kit inventory by sha256, not the conversation's own list",
+    "mutants": [
+     "W113"
+    ],
+    "status": "fixed",
+    "tests": [
+     "test_gap8_isolation_statement_matches_inventory_attestation"
+    ]
+   },
+   "GAP-9": {
+    "change": "README section 4 max_ai_output_bytes and STOP AI_OUTPUT_TOO_LARGE HANDBACK C; sections 2.3 and 7 name the everyday records folder and the deliveries folder for pre-approval; L14 checks them",
+    "mutants": [
+     "W115"
+    ],
+    "status": "fixed"
+   }
+  },
+  "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+  "mutation": {
+   "m_glue1": {
+    "commit": "96ccc3c28fc34d852f72b8059ec9227f8fe86e0f",
+    "guards": {
+     "by_id_glue": {
+      "killed": 71,
+      "sites": 84,
+      "survivors": [
+       {
+        "equivalent": "loop['phase'] is an informational field of PENDING.json (spec \u00a75.1 step 3) that no code reads (savepoint, cli and maint never read it back)",
+        "id": "GM-savepoint-block-3-n",
+        "result": "SURVIVED",
+        "what": "loop['entry']['copies'] is None"
+       },
+       {
+        "equivalent": "ENTRY_TOO_LARGE vs PART_TOO_LARGE in block: write_commit refuses an entry or a part over max_upload_bytes before PENDING.json exists, with the same cap (the kit config), so a PENDING loop never reaches this test; a setup loop takes the UPLOAD_TOO_LARGE branch",
+        "id": "GM-savepoint-block-11-n",
+        "result": "SURVIVED",
+        "what": "f['name'].endswith('.tgz')"
+       },
+       {
+        "equivalent": "`loop['entry']['copies'] is None` for the absent names: on_found empties loop['absent'] in the first call of the loop (the entry is the first group, still unconfirmed then; t_d11_on_found_handback_and_absent), and the entry is confirmed only in that call or in on_verify after it, so a confirmed entry always has absent == []",
+        "id": "GM-savepoint-block-13-r",
+        "result": "SURVIVED",
+        "what": "loop['entry']['copies'] is None"
+       },
+       {
+        "equivalent": "the same test in on_found: once the entry is confirmed loop['absent'] is [] (see GM-savepoint-block-13-r), so set(loop['absent']) is the empty set either way",
+        "id": "GM-savepoint-on_found-1-r",
+        "result": "SURVIVED",
+        "what": "loop['entry']['copies'] is None"
+       },
+       {
+        "equivalent": "`unknown` decides only t['need'] ('verify' or 'done'): while loop['verify'] holds the name's downloads, block prints the DOWNLOAD block without reading need, and on_verify or slip then sets need; with only known ids f['copies'] is set and the name leaves the group, so need is never read",
+        "id": "GM-savepoint-on_found-4-n",
+        "result": "SURVIVED",
+        "what": "c[0] not in ids"
+       },
+       {
+        "equivalent": "`'verify' if unknown else 'done'`: as GM-savepoint-on_found-4-n, need is not read before on_verify or slip overwrites it",
+        "id": "GM-savepoint-on_found-8-n",
+        "result": "SURVIVED",
+        "what": "unknown"
+       },
+       {
+        "equivalent": "`ex.get('command') != 'go'`: a found/answer block whose basis is the current one was reprinted by the line above (reprint raises Out), and one with another basis returns by the second operand, so the first operand never decides",
+        "id": "GM-cli-go_checks-3-r",
+        "result": "SURVIVED",
+        "what": "ex.get('command') != 'go'"
+       },
+       {
+        "equivalent": "`b.get('basis') != basis(env)` for a go block: a go block is stale only if a command died after it saved a loop or RESTORE_WORK and before render wrote the next BLOCK.json. A stale pending/setup block meets an empty verify (on_verify cleared it before the save; see -7-r); a stale fetch block's files stay in inbox/kit and inbox/pass until invalidate, which also moves BLOCK.json; a local block's inbox/journal files are dropped only by a later commit's post actions, and that commit prints its SAVE blocks (a new BLOCK.json) first. So every file a stale block names is present with its size and the mutant's check finds no code",
+        "id": "GM-cli-go_checks-4-r",
+        "result": "SURVIVED",
+        "what": "b.get('basis') != basis(env)"
+       },
+       {
+        "equivalent": "`ex.get('kind') == 'pending'`: while PENDING.json exists advance runs pending_step first, so every go block of another kind was printed with env.pending None; basis covers PENDING's self_sha256, so with the current basis env.pending is still None and the remaining conjunct is false",
+        "id": "GM-cli-go_checks-5-r",
+        "result": "SURVIVED",
+        "what": "ex.get('kind') == 'pending'"
+       },
+       {
+        "equivalent": "`env.pending`: a pending block is printed only while PENDING.json exists and its basis holds PENDING's self_sha256; with PENDING gone the basis differs and go_checks returned above",
+        "id": "GM-cli-go_checks-6-r",
+        "result": "SURVIVED",
+        "what": "env.pending"
+       },
+       {
+        "equivalent": "`env.pending['verify']`: with verify empty, on_verify returns ('ok', None) and changes nothing, and persist rewrites the same document (write_doc's self_sha256 is a function of the content), so the next block is the same",
+        "id": "GM-cli-go_checks-7-r",
+        "result": "SURVIVED",
+        "what": "env.pending['verify']"
+       },
+       {
+        "equivalent": "`(env.work or {}).get(ex['loop'])`: a setup block is printed only while RESTORE_WORK holds that loop, and basis covers RESTORE_WORK's self_sha256; with the loop gone the basis differs and go_checks returned above",
+        "id": "GM-cli-go_checks-9-r",
+        "result": "SURVIVED",
+        "what": "(env.work or {}).get(ex['loop'])"
+       },
+       {
+        "equivalent": "`env.work[ex['loop']]['verify']`: as GM-cli-go_checks-7-r for a setup loop (save_work rewrites the same RESTORE_WORK)",
+        "id": "GM-cli-go_checks-10-r",
+        "result": "SURVIVED",
+        "what": "env.work[ex['loop']]['verify']"
+       }
+      ]
+     }
+    },
+    "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+    "killed": 0,
+    "listed_not_failing": {},
+    "mutants": 0,
+    "not_applicable": [],
+    "not_killed": [],
+    "seconds": 3544.5
+   },
+   "m_glue2": {
+    "commit": "2ab85639471855dabe08735116912800c8b671ef",
+    "guards": {
+     "by_id_glue": {
+      "killed": 79,
+      "sites": 84,
+      "survivors": [
+       {
+        "equivalent": "`phase == 'HEAD'`: the only other session download block is RECHECK's, reached through _commit, which session_next calls only past `if not w.get('head')` (the HEAD download of N), so w['head'] is set and the second conjunct is false there",
+        "id": "GM-cli-session_downloads-3-r",
+        "result": "SURVIVED",
+        "what": "phase == 'HEAD'"
+       },
+       {
+        "equivalent": "`os.path.isdir(target)` in `same`: walk (v1mod.tree_list) lstats the root and raises WALK_UNSUPPORTED_ENTRY ('root') unless it is a directory, which settle catches as same=False",
+        "id": "GM-place-settle-1-r",
+        "result": "SURVIVED",
+        "what": "os.path.isdir(target)"
+       },
+       {
+        "equivalent": "`not os.path.islink(target)` in `same`: tree_list's lstat of a symlink root is not S_ISDIR, so walk raises and settle catches it as same=False",
+        "id": "GM-place-settle-2-r",
+        "result": "SURVIVED",
+        "what": "not os.path.islink(target)"
+       },
+       {
+        "equivalent": "`len(names) == 1`: for two or more names a dict doc is 'count' either way (els=doc is not a list; els=[doc] has length 1)",
+        "id": "GM-drive-parse_raw-0-r",
+        "result": "SURVIVED",
+        "what": "len(names) == 1"
+       },
+       {
+        "equivalent": "len([k not in sc]) over the two keys is 2 - len([k in sc]); both differ from 1 exactly when the count is not 1",
+        "id": "GM-drive-parse_raw-10-n",
+        "result": "SURVIVED",
+        "what": "k in sc"
+       }
+      ]
+     }
+    },
+    "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+    "killed": 0,
+    "listed_not_failing": {},
+    "mutants": 0,
+    "not_applicable": [],
+    "not_killed": [],
+    "seconds": 2270.9
+   },
+   "m_guard_fold": {
+    "commit": "5fd0672e285b520f92371e3a3be049dc01adf93a",
+    "guards": {
+     "guard_fold": {
+      "killed": 531,
+      "sites": 545,
+      "survivors": [
+       {
+        "equivalent": "`s['mode'] == 'everyday'` in dl: R['delivery'] is set only by e55, whose g55 requires not c['Q'], so a qualification run has no prepared_seq",
+        "id": "GM-fold-g24-2-r",
+        "result": "SURVIVED",
+        "what": "s['mode'] == 'everyday'"
+       },
+       {
+        "equivalent": "`rid == 'T23' and e['kind'] == 'STAGE'`: _progress returns T23 only through the PROGRESS pair ('T23', 'STAGE', ...), i.e. only for a STAGE",
+        "id": "GM-fold-_new_run_progress-4-r",
+        "result": "SURVIVED",
+        "what": "e['kind'] == 'STAGE'"
+       },
+       {
+        "equivalent": "`L['status'] != 'FROZEN'` for B's A chain: g10 requires s['current'] is None (an earlier conjunct) and a Q run that is not FROZEN is the current run (ACTIVE from e_new until e24)",
+        "id": "GM-fold-g10-12-r",
+        "result": "SURVIVED",
+        "what": "L['status'] != 'FROZEN'"
+       },
+       {
+        "equivalent": "`L['tag'] == 'A-restart1'`: A-restart1 is a restart run (g11 requires restart_of) and g24 refuses restart_eligible true when restart_of is set, so the first operand `not restart_eligible` already holds",
+        "id": "GM-fold-g10-15-r",
+        "result": "SURVIVED",
+        "what": "L['tag'] == 'A-restart1'"
+       },
+       {
+        "equivalent": "g12 `e['kind'] == 'FROZEN'`: the row dispatch calls T12's guard only for kinds {'FROZEN'}",
+        "id": "GM-fold-g12-1-r",
+        "result": "SURVIVED",
+        "what": "e['kind'] == 'FROZEN'"
+       },
+       {
+        "equivalent": "`ro['status'] != 'CONTINUED'` for NO_CONVERSATION: for a CONTINUED role resolution_action returns T48 for every outcome but CONTINUED, whatever forced is (the forced compare and the CONTINUED branch both give T48)",
+        "id": "GM-fold-forced_for-4-r",
+        "result": "SURVIVED",
+        "what": "ro['status'] != 'CONTINUED'"
+       },
+       {
+        "equivalent": "`ro['status'] == 'STARTED'`: both callers pass an open role that is not CONTINUED (forced_for tests status != CONTINUED first and resolution_action requires an OPEN role; session.restore_keys returns for CONTINUED first), and OPEN is {STARTED, CONTINUED}",
+        "id": "GM-fold-no_conversation_admissible-0-r",
+        "result": "SURVIVED",
+        "what": "ro['status'] == 'STARTED'"
+       },
+       {
+        "equivalent": "`oc = q and forced is None and ...`: oc is returned only by T44/T45, reached only after `if forced is not None ...: return 'T47'`, so forced is None there",
+        "id": "GM-fold-resolution_action-14-r",
+        "result": "SURVIVED",
+        "what": "forced is None"
+       },
+       {
+        "equivalent": "`oc = ... and item['outcome'] == 'NOTHING_WRITTEN'`: oc is returned only by T44/T45, reached only past `if item['outcome'] != 'NOTHING_WRITTEN' ...: T48`",
+        "id": "GM-fold-resolution_action-16-r",
+        "result": "SURVIVED",
+        "what": "item['outcome'] == 'NOTHING_WRITTEN'"
+       },
+       {
+        "equivalent": "`not item['ended']` in the T48 line: ended is a bool (checked first) and ended False makes forced_for return NOT_ENDED, which returned T47 above",
+        "id": "GM-fold-resolution_action-22-r",
+        "result": "SURVIVED",
+        "what": "not item['ended']"
+       },
+       {
+        "equivalent": "`item['files_found']` in the T48 line: files_found True makes forced_for return FILES_FOUND, which returned T47 above",
+        "id": "GM-fold-resolution_action-23-r",
+        "result": "SURVIVED",
+        "what": "item['files_found']"
+       },
+       {
+        "equivalent": "`len(need) > 1`: invariant: at most one role is open (a START opens a role only when the run has none open: g20 requires not run_open(R), and only the current run has roles), and the items must equal open(s2)",
+        "id": "GM-fold-_items_check-5-r",
+        "result": "SURVIVED",
+        "what": "len(need) > 1"
+       },
+       {
+        "equivalent": "`not c['Q']` before the INPUTS test: status INPUTS is set only by e15, whose g15 requires not c['Q'], so a qualification run is never INPUTS",
+        "id": "GM-fold-g42-9-r",
+        "result": "SURVIVED",
+        "what": "not c['Q']"
+       },
+       {
+        "equivalent": "`b['rebase'] is None` in the rerun clause: with a rebase, _restore_state is undo49, which sets R['rebase_bind'], so the later conjunct `R['rebase_bind'] is None` of the same pure and is false",
+        "id": "GM-fold-g42-23-r",
+        "result": "SURVIVED",
+        "what": "b['rebase'] is None"
+       }
+      ]
+     }
+    },
+    "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+    "killed": 0,
+    "listed_not_failing": {},
+    "mutants": 0,
+    "not_applicable": [],
+    "not_killed": [],
+    "seconds": 3388.0
+   },
+   "m_guard_session": {
+    "commit": "df610b7b04e8f904819b11da9271ad65f7eee9d1",
+    "guards": {
+     "guard_session": {
+      "killed": 199,
+      "sites": 202,
+      "survivors": [
+       {
+        "equivalent": "`lk['name'] in names`: every caller reads the result only at names it passed (head_search passes all looked-up names; absent_twice, session_next step 4, _after_classify C5b and _commit index the names they passed)",
+        "id": "GM-session-_facts-0-r",
+        "result": "SURVIVED",
+        "what": "lk['name'] in names"
+       },
+       {
+        "equivalent": "`kind in ('STAGE', 'FROZEN')`: the head passed validate_entry in cli.verify_head; entry.PART_KINDS_OF allows parts only on STAGE, FROZEN, DELIVERY and FINAL; a FINAL head is phase FINAL (C3 returns first) and DELIVERY returns C4 first",
+        "id": "GM-session-classify-7-r",
+        "result": "SURVIVED",
+        "what": "kind in ('STAGE', 'FROZEN')"
+       },
+       {
+        "equivalent": "`'list_shows_none' in keys`: restore_keys adds list_shows_none only for a STARTED role without files found, and then always conversation too (conversation_known is true only for a CONTINUED role, the archived conversation), so the other operand already holds",
+        "id": "GM-session-_resolve-9-r",
+        "result": "SURVIVED",
+        "what": "'list_shows_none' in keys"
+       }
+      ]
+     }
+    },
+    "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+    "killed": 0,
+    "listed_not_failing": {},
+    "mutants": 0,
+    "not_applicable": [],
+    "not_killed": [],
+    "seconds": 1483.5
+   },
+   "m_hand": {
+    "commit": "0371dacc32bcabbf913e5da64068709c433a53bc",
+    "guards": {},
+    "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+    "killed": 116,
+    "listed_not_failing": {
+     "W11": [
+      "t_s07_runner_loaded_from_hashed_bytes"
+     ],
+     "W16": [
+      "t_opx07_stage_death_stop_names_real_head_and_kit"
+     ],
+     "W18": [
+      "D_slip_wrong_id_refinds"
+     ],
+     "W71": [
+      "t_maint2_inventory_sha_checked"
+     ]
+    },
+    "mutants": 116,
+    "not_applicable": [],
+    "not_killed": [],
+    "seconds": 1150.3
+   },
+   "m_revleg": {
+    "commit": "92b941f82d01104d2ee2b7753ad9e9f9a4140199",
+    "guards": {},
+    "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+    "killed": 68,
+    "listed_not_failing": {
+     "G9": [
+      "test_next_action_resolution_chains_and_rerun"
+     ],
+     "M2-18": [
+      "test_m18_role_consumed_once"
+     ],
+     "M2-36": [
+      "test_f2_second_start_only_after_no_conversation"
+     ]
+    },
+    "mutants": 68,
+    "not_applicable": [],
+    "not_killed": [],
+    "seconds": 391.2
+   }
+  },
+  "nonroot_pass": {
+   "cap_eff": 0,
+   "failed": [],
+   "helper_tree_sha256": "ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e",
+   "jobs": 4,
+   "only": [
+    "test_core_table",
+    "test_core_more",
+    "test_core_props",
+    "test_codes",
+    "test_vio",
+    "test_d16_evict_runner_frozen_folder_nonroot",
+    "test_d16_disk_bounded_over_runs",
+    "D_baseline",
+    "E_baseline",
+    "D_clear_same_boot_foreground_died",
+    "D_sameboot_damaged_cache_restores",
+    "test_foreground_died_same_boot_stops"
+   ],
+   "passed": 246,
+   "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+   "seconds": 508.1,
+   "suites": [
+    {
+     "name": "test_core_table",
+     "passed": 81,
+     "seconds": 40.8,
+     "tests": 81
+    },
+    {
+     "name": "test_core_props",
+     "passed": 3,
+     "seconds": 32.1,
+     "tests": 3
+    },
+    {
+     "name": "test_core_more",
+     "passed": 28,
+     "seconds": 0.0,
+     "tests": 28
+    },
+    {
+     "name": "test_vio",
+     "passed": 103,
+     "seconds": 120.1,
+     "tests": 103
+    },
+    {
+     "name": "test_codes",
+     "passed": 24,
+     "seconds": 35.3,
+     "tests": 24
+    },
+    {
+     "name": "test_v1_regressions",
+     "passed": 1,
+     "seconds": 0.0,
+     "tests": 1
+    },
+    {
+     "name": "test_resets",
+     "passed": 6,
+     "seconds": 279.8,
+     "tests": 6
+    }
+   ],
+   "tests": 246,
+   "uid": 1000
+  },
+  "operator_budget_D15_restore": {
+   "commit": {
+    "drive_calls": 46,
+    "helper_commands": 39,
+    "saved_results": 14,
+    "waits": 2
+   },
+   "hint": {
+    "drive_calls": 15,
+    "helper_commands": 18,
+    "saved_results": 8,
+    "waits": 2
+   },
+   "none": {
+    "drive_calls": 23,
+    "helper_commands": 24,
+    "saved_results": 13,
+    "waits": 2
+   }
+  },
+  "parent": "746ea98",
+  "reviewer_proof_table_N18": {
+   "N40_N42": "not shown at 2015773: v2.1 moved both rules (T7 into names.check_answers, T8 into cli.go_checks and session_slip), so their v2.1 tests fail on plain 2015773 because the 2015773 code lacks the rule there; they are proven by their v2.1 ports (KILLED) only",
+   "fails_at_2015773_with_original_substitution": "FAIL AssertionError {1, 2} (admission_r2 my_mutants.py N18 applied to 2015773 core/session.py)",
+   "fails_at_v21_with_port": "FAIL AssertionError {1, 2} (mutants.py REVIEWER N18 applied to the fix-round core/session.py); N18's kill list now names both T3 tests",
+   "passes_at_2015773": "PASS",
+   "test": "test_t3_recheck_forks_2015773_form (deploy/vm2/tests/test_core_table.py; run at 2015773 by gapfix/n18_probe.py, which copies the function unchanged into 2015773's test_core_table namespace)"
+  },
+  "w18_rerun_after_gap5": {
+   "killed": 1,
+   "mutants": 1,
+   "note": "run_tests.py --mutants --only W18 after the GAP-5 scenario change (fakes.FakeDot.found wrong_id_save, rs_v21.D_slip_wrong_id_refinds), helper tree ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e; MUTANTS_RESULTS.json of that run was not kept, the printed result is recorded here",
+   "results": [
+    {
+     "id": "W18",
+     "killed_by": [
+      "t_opx02_mistyped_id_refinds_then_commits",
+      "D_slip_wrong_id_refinds"
+     ],
+     "listed_not_failing": [],
+     "result": "KILLED"
+    }
+   ],
+   "seconds": 89.4
+  },
+  "weak_listed_killers_removed": {
+   "W11": "t_s07_runner_loaded_from_hashed_bytes",
+   "W16": "t_opx07_stage_death_stop_names_real_head_and_kit",
+   "W71": "t_maint2_inventory_sha_checked"
+  }
+ },
+ "full_suite_root": {
+  "cap_eff": 2199006478335,
+  "failed": [],
+  "helper_tree_sha256": "4b407723b9e11212aee3d729824c5da4fde053ecc734e6c4afb8c6bd10634cf8",
+  "jobs": 4,
+  "only": [],
+  "passed": 557,
+  "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+  "seconds": 3134.9,
+  "suites": [
+   {
+    "counts": {
+     "abstract_states": 709,
+     "golden_entries": 709,
+     "rows": 44,
+     "rows_hit": 44
+    },
+    "name": "test_core_table",
+    "passed": 80,
+    "seconds": 38.7,
+    "tests": 80
+   },
+   {
+    "counts": {
+     "applies": 120712,
+     "cuts": 12820,
+     "illegal_injected": 18475,
+     "sequences": 2000
+    },
+    "name": "test_core_props",
+    "passed": 3,
+    "seconds": 30.7,
+    "tests": 3
+   },
+   {
+    "counts": {},
+    "name": "test_core_more",
+    "passed": 28,
+    "seconds": 0.0,
+    "tests": 28
+   },
+   {
+    "counts": {
+     "UNUSED_REUSED": []
+    },
+    "name": "test_reuse",
+    "passed": 7,
+    "seconds": 0.5,
+    "tests": 7
+   },
+   {
+    "counts": {
+     "blocks_printed": 110
+    },
+    "name": "test_vio",
+    "passed": 103,
+    "seconds": 482.8,
+    "tests": 103
+   },
+   {
+    "counts": {},
+    "name": "test_maint",
+    "passed": 38,
+    "seconds": 8.6,
+    "tests": 38
+   },
+   {
+    "counts": {},
+    "name": "test_probe_p5",
+    "passed": 7,
+    "seconds": 15.9,
+    "tests": 7
+   },
+   {
+    "counts": {},
+    "name": "test_codes",
+    "passed": 24,
+    "seconds": 42.8,
+    "tests": 24
+   },
+   {
+    "counts": {
+     "map": {
+      "F1": [
+       "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+       "world+direct",
+       "a CONTINUED V resolves only by T46 (FREEZE_VISUAL_FAILED): no OPEN or CONTINUE for V after the reset"
+      ],
+      "F2": [
+       "test_f2_second_start_only_after_no_conversation",
+       "direct",
+       "a second START of one attempt exists only through T43 (list shows none, once) or T31 (rebase); T32 refuses it otherwise; random cuts in test_core_props"
+      ],
+      "F3": [
+       "test_f3_classify_reads_only_head_at_every_worker_point",
+       "world+direct",
+       "by construction: classify(head, state, ...) reads only the head; the B prepare fetches A FROZEN.json"
+      ],
+      "F4": [
+       "test_f4_outcomes_total_over_frozen_shapes",
+       "delegate:test_core_table",
+       "one pure outcomes() over the fold state"
+      ],
+      "F5": [
+       "test_f5_audit_planted_restore_unknown_to_final",
+       "delegate:test_maint",
+       "the audit re-folds the journal; it copies nothing from ALL_FROZEN.json"
+      ],
+      "F6": [
+       "test_f6_every_block_has_exactly_one_terminal_action",
+       "direct",
+       "by construction: every PrintBlock renders exactly one DO line (the grammar lint runs on every block)"
+      ],
+      "F7": [
+       "test_f7_written_lost_transcript_in_restore_entry",
+       "world+direct",
+       "an exported transcript is a RESTORE member (T48 without it); with export no (O55) nothing is exported"
+      ],
+      "F8": [
+       "test_f8_dead_commit_plus_next_stage",
+       "world",
+       "a head without a part is rebased (T49), the next stage re-runs bound; the audit is clean"
+      ],
+      "FLAGS-1": [
+       "test_flags1_wrong_shared_or_real_carrier_inconsistent",
+       "delegate:test_maint",
+       "score_check"
+      ],
+      "FLAGS-2": [
+       "test_flags2_empty_carriers_distinct_per_reader",
+       "delegate:test_maint",
+       "score_check"
+      ],
+      "FLAGS-3": [
+       "test_flags3_runner_failed_runs_get_empty_carriers",
+       "delegate:test_maint",
+       "score_check"
+      ],
+      "GATE-1": [
+       "test_gate1_gates_checked_on_every_go",
+       "direct",
+       "gates_check runs before every plan step"
+      ],
+      "KIT-1": [
+       "test_kit1_release_swap_after_genesis_stops",
+       "direct",
+       "S5: every entry carries the genesis release; another release needs a KIT_CHANGE with no run in flight and acceptance"
+      ],
+      "KIT-2": [
+       "test_kit2_zip_route_rehashes_the_kit",
+       "world",
+       "the downloaded kit is hashed: KIT_NOT_VERIFIED"
+      ],
+      "MK-1": [
+       "test_mk1_header_slip_in_one_copy_recovers",
+       "direct",
+       "deploy/make_kit.py (MAINT-6): its own tests of the slipped and damaged member path are run here"
+      ],
+      "MK-2": [
+       "test_mk2_duplicate_binary_names_refused",
+       "direct",
+       "deploy/make_kit.py pack (MAINT-6): two binary members with one file name are refused"
+      ],
+      "OP-01": [
+       "test_op01_start_on_drive_before_first_open",
+       "world",
+       "the START is in the STAGE entry; OPEN is printed only after the entry is confirmed (O1)"
+      ],
+      "OP-02": [
+       "test_op02_lost_restore_upload_three_tries_then_stop",
+       "world",
+       "the RESTORE is a commit like any other: at most 3 uploads, then STOP UPLOAD_FAILED"
+      ],
+      "OP-03": [
+       "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+       "world",
+       "FINAL parts are confirmed before HANDBACK B; a part lost to a reset is re-uploaded (C3)"
+      ],
+      "OP-04": [
+       "test_op04_placeholders_refused_state_unchanged",
+       "direct",
+       "placeholders, key names, pattern names and README examples are VALUE_FORBIDDEN/VALUE_PLACEHOLDER"
+      ],
+      "OP-05": [
+       "test_op05_probe_same_session_refused",
+       "delegate:test_probe_p5",
+       "as SAFE-03"
+      ],
+      "OP-06": [
+       "test_op06_helper_never_needs_a_listing",
+       "direct",
+       "by construction: exact-name FIND and DOWNLOAD by id only; v2.1 deleted the LIST head hint"
+      ],
+      "OP-07": [
+       "test_op07_drive_calls_per_run_within_budget",
+       "world",
+       "measured Drive calls per run and per restore within the \u00a7X.5.5 budget"
+      ],
+      "OP-08": [
+       "test_op08_every_file_uploaded_once_when_drive_is_normal",
+       "world",
+       "by construction: one commit primitive; every journal file is uploaded once on a normal Drive"
+      ],
+      "OP-09": [
+       "test_op09_selftest_worker_death_bounded",
+       "direct",
+       "a dead self-test is retried once (SELFTEST_DIED); nothing is asked between OPEN and the end; everyday asks in order (the world half is test_resets test_selftest_died_retried_once_then_stops)"
+      ],
+      "SAFE-01": [
+       "test_safe01_unsupported_entries_halt_nothing_deleted",
+       "direct",
+       "strict tree_list everywhere (snapshot, AI walk, evict): WALK_UNSUPPORTED_ENTRY, nothing deleted"
+      ],
+      "SAFE-02": [
+       "test_safe02_case_id_refused_before_any_write",
+       "direct",
+       "CASE_ID fullmatch and forbidden characters: REFUSED, every cache file byte-identical"
+      ],
+      "SAFE-03": [
+       "test_safe03_probe_p5_same_call_check_refused",
+       "delegate:test_probe_p5",
+       "probe_p5 refuses a same-call check; P5 is answered (FAIL) and gates nothing (\u00a7X.12.5)"
+      ],
+      "SAFE-04": [
+       "test_safe04_enospc_or_short_write_at_every_durable_write",
+       "direct",
+       "durable.write checks every write, fsync and read-back: DISK_FULL/WRITE_FAILED, no UPLOAD printed"
+      ],
+      "SAFE-05": [
+       "test_safe05_trailing_newline_and_bad_id_refused",
+       "direct",
+       "re.fullmatch with re.ASCII on every attested value; ids match drive_id_re"
+      ],
+      "SAFE-06": [
+       "test_safe06_session_start_git_error_prints_stop_block",
+       "direct",
+       "no set -e; every failure prints a full STOP block"
+      ],
+      "SAFE-07": [
+       "test_safe07_setup_runs_foreground_and_gate_uses_hold",
+       "direct",
+       "setup in the foreground of session_start.sh; the release gate uses the foreground hold"
+      ],
+      "TEST-1": [
+       "test_test1_kit_change_with_run_in_flight_stops",
+       "direct",
+       "KIT_CHANGE_WITH_RUN_IN_FLIGHT"
+      ],
+      "TST-01": [
+       "test_tst01_second_start_same_attempt_chain_invalid",
+       "delegate:test_core_table",
+       "T32"
+      ],
+      "TST-02": [
+       "test_tst02_nothing_written_with_file_found_is_written",
+       "direct",
+       "forced FILES_FOUND -> T47"
+      ],
+      "TST-03": [
+       "test_tst03_not_ended_is_written",
+       "direct",
+       "forced NOT_ENDED -> T47"
+      ],
+      "TST-04": [
+       "test_tst04_md5_hidden_download_back_mismatch_is_fork",
+       "direct",
+       "the download-back sha256 compare (\u00a7X.5.5) meets a mismatching download: FORK"
+      ],
+      "TST-05": [
+       "test_tst05_consumer_tree_sha_mismatch_chain_invalid",
+       "direct+world",
+       "consumed tree sha must equal the archive (fold) and is measured (worker: AI_OUTPUT_CHANGED)"
+      ],
+      "TST-06": [
+       "test_tst06_prompt_changed_halts",
+       "world",
+       "a changed generator prompt halts before the record"
+      ],
+      "TST-07": [
+       "test_tst07_b_before_a_frozen_chain_invalid_and_runner_refuses",
+       "direct",
+       "T10 needs A frozen (T14 otherwise); the plan never proposes B first"
+      ],
+      "TST-08": [
+       "test_tst08_under_stage_direct",
+       "direct",
+       "the reused under_stage, tested directly"
+      ],
+      "TST-09": [
+       "test_tst09_no_catch_all_assertions",
+       "delegate:test_lints",
+       "lint L7"
+      ],
+      "TST-10": [
+       "test_tst10_free_space_preflight",
+       "direct",
+       "run_tests.py refuses under 1 GiB free"
+      ]
+     },
+     "v1_ids": 43,
+     "world_scenarios_in_test_resets": [
+      "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+      "test_op01_start_on_drive_before_first_open",
+      "test_f3_classify_reads_only_head_at_every_worker_point",
+      "test_f7_written_lost_transcript_in_restore_entry",
+      "test_f8_dead_commit_plus_next_stage",
+      "test_op02_lost_restore_upload_three_tries_then_stop",
+      "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+      "test_op07_drive_calls_per_run_within_budget",
+      "test_op07_restore_calls_within_budget",
+      "test_op08_every_file_uploaded_once_when_drive_is_normal",
+      "test_d16_disk_bounded_over_runs",
+      "test_opx10_tool_calls_match_budget_golden",
+      "test_tst06_prompt_changed_halts",
+      "test_int07_output_changed_after_archive_halts_before_consumer",
+      "test_kit2_zip_route_rehashes_the_kit",
+      "test_imp04_no_commit_file_stops"
+     ]
+    },
+    "name": "test_v1_regressions",
+    "passed": 43,
+    "seconds": 7.9,
+    "tests": 43
+   },
+   {
+    "counts": {
+     "groups": 11,
+     "max_upload_bytes_seen": 6287208,
+     "per_config": {
+      "D": 126,
+      "DRI": 6,
+      "DV": 6,
+      "E": 43,
+      "Q": 4,
+      "X": 23
+     },
+     "scenarios": 208,
+     "seconds_per_scenario": {
+      "DRI_AI3_a": 41.0,
+      "DRI_AI3_e": 42.5,
+      "DRI_STAGE3_a": 44.7,
+      "DRI_STAGE3_e": 41.4,
+      "DRI_baseline": 287.4,
+      "DV_ans_G0_no_conv_none": 62.1,
+      "DV_ans_G0_nw_exported": 70.4,
+      "DV_ans_G0_written": 38.6,
+      "DV_ans_V_nw_exported": 41.7,
+      "DV_baseline": 319.9,
+      "D_AI1_a": 63.1,
+      "D_AI1_b": 62.8,
+      "D_AI1_e": 64.2,
+      "D_AI2_a": 40.7,
+      "D_AI2_b": 38.9,
+      "D_AI2_e": 39.1,
+      "D_AI3_a": 32.1,
+      "D_AI3_b": 30.1,
+      "D_AI3_e": 30.1,
+      "D_AI4_a": 9.5,
+      "D_AI4_b": 8.2,
+      "D_AI4_e": 8.4,
+      "D_FINAL1_a": 6.6,
+      "D_FINAL1_b": 6.4,
+      "D_FINAL1_c": 6.4,
+      "D_FINAL1_d": 4.4,
+      "D_FINAL1_e": 4.3,
+      "D_FP1_finish": 62.9,
+      "D_FP1_nonattempt": 73.9,
+      "D_FP1_prepare": 71.3,
+      "D_FP1_visual": 40.6,
+      "D_FP2_finish": 82.8,
+      "D_FP2_nonattempt_verify": 73.4,
+      "D_FP2_prepare": 75.4,
+      "D_FP2_prepare_B": 43.2,
+      "D_FP2_visual": 41.4,
+      "D_FP2_visual_freeze": 40.4,
+      "D_FP2_visual_verify": 40.7,
+      "D_FP3_finish": 83.0,
+      "D_FP3_nonattempt": 73.9,
+      "D_FP3_prepare": 75.1,
+      "D_FP3_visual": 41.3,
+      "D_FP4_finish": 84.1,
+      "D_FP_place_job": 65.2,
+      "D_FP_place_ledger": 65.3,
+      "D_FROZEN1_a": 71.7,
+      "D_FROZEN1_b": 71.4,
+      "D_FROZEN1_e": 70.2,
+      "D_FROZEN2_a": 71.1,
+      "D_FROZEN2_b": 69.9,
+      "D_FROZEN2_e": 68.5,
+      "D_FROZEN3_a": 39.2,
+      "D_FROZEN3_b": 37.9,
+      "D_FROZEN3_e": 37.2,
+      "D_FROZEN4_a": 8.4,
+      "D_FROZEN4_b": 6.6,
+      "D_FROZEN4_e": 6.6,
+      "D_GENESIS1_a": 70.8,
+      "D_GENESIS1_b": 72.6,
+      "D_GENESIS1_e": 72.5,
+      "D_STAGE1_a": 68.8,
+      "D_STAGE1_b": 63.6,
+      "D_STAGE1_e": 65.0,
+      "D_STAGE2_a": 63.1,
+      "D_STAGE2_b": 64.2,
+      "D_STAGE2_c": 64.2,
+      "D_STAGE2_d": 40.3,
+      "D_STAGE2_e": 41.3,
+      "D_STAGE3_a": 38.1,
+      "D_STAGE3_b": 31.9,
+      "D_STAGE3_e": 31.5,
+      "D_STAGE4_a": 30.9,
+      "D_STAGE4_b": 32.3,
+      "D_STAGE4_c": 33.3,
+      "D_STAGE4_d": 9.6,
+      "D_STAGE4_e": 9.7,
+      "D_ans_G0_no_conv_none": 63.8,
+      "D_ans_G0_no_conv_one": 39.4,
+      "D_ans_G0_not_ended": 38.5,
+      "D_ans_G0_nw_not_available": 69.9,
+      "D_ans_G0_unsure": 39.4,
+      "D_ans_G0_written": 39.1,
+      "D_ans_G_no_conv_none": 64.2,
+      "D_ans_G_no_conv_one": 38.8,
+      "D_ans_G_not_ended": 39.2,
+      "D_ans_G_nw_not_available": 71.1,
+      "D_ans_G_unsure": 39.0,
+      "D_ans_G_written": 38.5,
+      "D_ans_V_no_conv_none": 40.8,
+      "D_ans_V_no_conv_one": 38.7,
+      "D_ans_V_not_ended": 39.7,
+      "D_ans_V_nw_not_available": 40.1,
+      "D_ans_V_unsure": 39.2,
+      "D_ans_V_written": 39.2,
+      "D_baseline": 1185.7,
+      "D_clear_committed_halt_same_boot": 77.1,
+      "D_clear_same_boot_foreground_died": 96.3,
+      "D_clear_same_boot_fork": 75.0,
+      "D_clear_same_boot_fork_foreign_only": 17.5,
+      "D_clear_same_boot_open_generator": 52.3,
+      "D_clear_same_boot_setup_failed": 69.3,
+      "D_head_dup": 62.3,
+      "D_head_foreign_next": 3.4,
+      "D_head_foreign_prev_link": 3.4,
+      "D_head_lag1": 65.4,
+      "D_hint_restore_late_copy_at_n1_forks_at_recheck": 42.3,
+      "D_kill_finish_same_boot": 21.5,
+      "D_kill_prepare_same_boot": 1.2,
+      "D_notes_commit_only_gallop": 40.5,
+      "D_notes_none_step0": 62.1,
+      "D_rebase_missing_part": 64.3,
+      "D_refuse_reset_approval_pending": 76.5,
+      "D_refuse_reset_approval_wrong_none": 80.4,
+      "D_reset_commit_boundary": 97.6,
+      "D_sameboot_damaged_cache_restores": 94.1,
+      "D_slip_limit_then_clear": 74.6,
+      "D_slip_short_download_refinds": 69.1,
+      "D_slip_size_refinds": 67.8,
+      "D_slip_stale_raw_head_search": 68.3,
+      "D_slip_wrong_id_refinds": 68.8,
+      "D_two_resets": 43.9,
+      "D_vis_dup_entry": 57.5,
+      "D_vis_dup_parts": 37.3,
+      "D_vis_foreign_same_entry": 0.0,
+      "D_vis_foreign_same_parts": 0.1,
+      "D_vis_foreign_size_entry": 0.0,
+      "D_vis_foreign_size_parts": 0.1,
+      "D_vis_lag1_entry": 59.1,
+      "D_vis_lag1_parts": 36.3,
+      "D_vis_lag2_entry": 60.2,
+      "D_vis_lag2_parts": 40.2,
+      "D_vis_refuse_entry": 56.6,
+      "D_vis_refuse_never_entry": 58.5,
+      "D_vis_refuse_never_parts": 37.5,
+      "D_vis_refuse_parts": 35.4,
+      "D_vis_refuse_three_times": 6.7,
+      "D_vis_timeout_late_entry": 58.2,
+      "D_vis_timeout_late_parts": 37.5,
+      "E_AI1_a": 30.1,
+      "E_AI1_b": 28.7,
+      "E_AI1_e": 29.5,
+      "E_AI2_a": 8.5,
+      "E_AI2_b": 6.8,
+      "E_AI2_e": 6.9,
+      "E_DELIVERY1_a": 5.6,
+      "E_DELIVERY1_b": 7.4,
+      "E_DELIVERY1_c": 7.3,
+      "E_DELIVERY1_d": 5.7,
+      "E_DELIVERY1_e": 5.5,
+      "E_FP1_prepare": 36.4,
+      "E_FP2_finish": 50.3,
+      "E_FP2_visual": 8.1,
+      "E_FROZEN1_a": 5.2,
+      "E_FROZEN1_b": 3.6,
+      "E_FROZEN1_e": 3.6,
+      "E_GENESIS1_a": 36.3,
+      "E_GENESIS1_b": 34.9,
+      "E_GENESIS1_e": 35.3,
+      "E_INPUTS1_a": 35.9,
+      "E_INPUTS1_b": 36.0,
+      "E_INPUTS1_e": 35.5,
+      "E_STAGE1_a": 35.1,
+      "E_STAGE1_b": 29.9,
+      "E_STAGE1_e": 30.5,
+      "E_STAGE2_a": 28.6,
+      "E_STAGE2_b": 31.3,
+      "E_STAGE2_c": 31.0,
+      "E_STAGE2_d": 8.3,
+      "E_STAGE2_e": 8.0,
+      "E_STAGE3_a": 6.9,
+      "E_STAGE3_b": 5.4,
+      "E_STAGE3_e": 5.5,
+      "E_ans_G0_not_ended": 5.0,
+      "E_ans_G0_nw_not_available": 5.0,
+      "E_ans_G0_written": 5.4,
+      "E_ans_V_not_ended": 5.5,
+      "E_ans_V_nw_not_available": 5.5,
+      "E_ans_V_written": 5.8,
+      "E_baseline": 280.4,
+      "E_inputs_lost_after_reset_bounded": 16.7,
+      "E_vis_foreign_same_entry": 0.0,
+      "E_vis_refuse_deliv_parts": 1.9,
+      "Q_FP2_scope_finish": 65.0,
+      "Q_ans_G_after_scope_nw": 61.6,
+      "Q_ans_S_nw_not_available": 77.1,
+      "Q_baseline": 307.7,
+      "test_d16_disk_bounded_over_runs": 1514.0,
+      "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed": 41.6,
+      "test_f3_classify_reads_only_head_at_every_worker_point": 43.9,
+      "test_f7_written_lost_transcript_in_restore_entry": 38.0,
+      "test_f8_dead_commit_plus_next_stage": 64.3,
+      "test_foreground_died_same_boot_stops": 75.6,
+      "test_generation_record_exists_halts": 1.3,
+      "test_head_state_sha_mismatch_stops": 3.3,
+      "test_helper_busy_second_command_refused": 34.6,
+      "test_imp04_no_commit_file_stops": 1.1,
+      "test_int07_output_changed_after_archive_halts_before_consumer": 1.3,
+      "test_kit2_zip_route_rehashes_the_kit": 1.2,
+      "test_op01_start_on_drive_before_first_open": 69.1,
+      "test_op02_lost_restore_upload_three_tries_then_stop": 10.2,
+      "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b": 6.3,
+      "test_op07_drive_calls_per_run_within_budget": 1334.2,
+      "test_op07_restore_calls_within_budget": 62.3,
+      "test_op08_every_file_uploaded_once_when_drive_is_normal": 1186.6,
+      "test_opx10_tool_calls_match_budget_golden": 1335.2,
+      "test_selftest_died_retried_once_then_stops": 4.6,
+      "test_selftest_failed_stops": 5.4,
+      "test_tst06_prompt_changed_halts": 1.2
+     },
+     "seconds_wall": 2456.9,
+     "stage_seconds_max": {
+      "chain": 1.2,
+      "finish": 23.7,
+      "freeze": 1.7,
+      "interrupt": 1.8,
+      "nonattempt": 1.9,
+      "place": 0.6,
+      "prepare": 8.3,
+      "scope-finish": 3.0,
+      "visual-record": 2.0
+     }
+    },
+    "name": "test_resets",
+    "passed": 208,
+    "seconds": 2456.9,
+    "tests": 208
+   },
+   {
+    "counts": {
+     "UNUSED_REUSED": [],
+     "codes_never_raised": [],
+     "codes_not_named_in_any_test": [],
+     "codes_raised_in_source": 68,
+     "codes_registry": 112,
+     "codes_seen_at_runtime": 112,
+     "codes_seen_not_registered": [],
+     "core_coverage": {
+      "lines": 1566,
+      "missed": 0,
+      "missed_lines": {},
+      "percent": 100.0
+     },
+     "maintainer_codes_seen": [
+      "ASSEMBLE_NOT_VERIFIED",
+      "AUDIT_NOT_CLEAN",
+      "CARRIER_MISMATCH",
+      "O63_ATTESTATION_MISSING",
+      "PLAN_MISMATCH",
+      "POOL_INVALID"
+     ]
+    },
+    "name": "test_lints",
+    "passed": 16,
+    "seconds": 50.1,
+    "tests": 16
+   }
+  ],
+  "tests": 557,
+  "uid": 0
+ },
+ "integrator_changes": [
+  "cli.stop_block: the dead `name` parameter is deleted (no caller passed it; its guard site GM-cli-stop_block-3-n was an untestable survivor). No behaviour change.",
+  "vm2.py: the docstring names cps-vm-helper.v2.1.",
+  "tests/seen.py (L1 runtime half): a REFUSED line with a detail word (REFUSED RAW_INVALID missing, REFUSED <SLIP> <name>) and a STOP line with name= are now recorded, and cli.emit's slip refusal (env.refusal) is scanned; the wrapper takes emit's real fifth parameter (hdr). The first full run failed L1 because RAW_INVALID, FINAL_MESSAGE_INVALID and PLACE_TARGET_NOT_EMPTY were never recorded.",
+  "tests/test_vio.py: new direct glue tests t_d11_stop_block_sticky_only_for_handback_c, t_d11_clear_check_routes_found_only_to_its_find, t_d11_session_slip_voids_only_its_name, t_d11_head_download_slips_and_no_block, t_d11_link_copy_download_keeps_the_head, t_d11_session_download_names_kept, t_d11_local_download_checked_at_go, t_d5_settle_root_mode_link_and_file_targets, t_d11_drill_genesis_refuses_existing_ledger (raises PLACE_TARGET_NOT_EMPTY at runtime for L1); t_op02_reprint_has_no_upload_lines extended (GM-savepoint-block-4-r); t_d5_clear_check_found_accepted moved to the front of TESTS so GM-cli-clear_check-20-n is KILLED, not TIMEOUT; t_maint2_inventory_rehashed_at_attest makes the read-only installed TOOL_INVENTORY.txt writable before changing it (it failed only in the non-root pass: root ignores the 0444 mode).",
+  "tests/test_core_table.py GUARD_TESTS: the new tests and test_stale_at_refused are listed for their glue functions.",
+  "tests/mutants.py: the glue set runs [direct_tests, STAGE2] (the plan's stage-2 killing set for the direct survivors); 10 EQUIVALENT entries added (go_checks-3,4,5,6,7,9,10; session_downloads-3; settle-1,2) with arguments.",
+  "tests/test_v1_regressions.py: four map texts that named deleted v2 features (LIST head hint, OPENED, make_kit 'unchanged') are corrected."
+ ],
+ "lines_D2": {
+  "C": [
+   7566,
+   7496
+  ],
+  "M": [
+   830,
+   896
+  ],
+  "at_746ea98": {
+   "C": 7737,
+   "M": 896,
+   "total": 8633
+  },
+  "caps": {
+   "C": 7500,
+   "M": 896,
+   "total": 8396
+  },
+  "cli_expected": 1513,
+  "met": true,
+  "rows": [
+   {
+    "after": 6,
+    "at_2015773": 6,
+    "at_746ea98": 6,
+    "delta": 0,
+    "module": "cpsvm2/__init__.py",
+    "track": "C"
+   },
+   {
+    "after": 1663,
+    "at_2015773": 1526,
+    "at_746ea98": 1705,
+    "delta": 137,
+    "module": "cpsvm2/cli.py",
+    "track": "C"
+   },
+   {
+    "after": 0,
+    "at_2015773": 0,
+    "at_746ea98": 0,
+    "delta": 0,
+    "module": "cpsvm2/core/__init__.py",
+    "track": "C"
+   },
+   {
+    "after": 253,
+    "at_2015773": 248,
+    "at_746ea98": 259,
+    "delta": 5,
+    "module": "cpsvm2/core/entry.py",
+    "track": "C"
+   },
+   {
+    "after": 1062,
+    "at_2015773": 1073,
+    "at_746ea98": 1085,
+    "delta": -11,
+    "module": "cpsvm2/core/fold.py",
+    "track": "C"
+   },
+   {
+    "after": 259,
+    "at_2015773": 252,
+    "at_746ea98": 266,
+    "delta": 7,
+    "module": "cpsvm2/core/names.py",
+    "track": "C"
+   },
+   {
+    "after": 162,
+    "at_2015773": 165,
+    "at_746ea98": 166,
+    "delta": -3,
+    "module": "cpsvm2/core/outcome.py",
+    "track": "C"
+   },
+   {
+    "after": 281,
+    "at_2015773": 316,
+    "at_746ea98": 298,
+    "delta": -35,
+    "module": "cpsvm2/core/plan.py",
+    "track": "C"
+   },
+   {
+    "after": 539,
+    "at_2015773": 565,
+    "at_746ea98": 571,
+    "delta": -26,
+    "module": "cpsvm2/core/session.py",
+    "track": "C"
+   },
+   {
+    "after": 58,
+    "at_2015773": 86,
+    "at_746ea98": 72,
+    "delta": -28,
+    "module": "cpsvm2/core/step.py",
+    "track": "C"
+   },
+   {
+    "after": 0,
+    "at_2015773": 0,
+    "at_746ea98": 0,
+    "delta": 0,
+    "module": "cpsvm2/maint/__init__.py",
+    "track": "M"
+   },
+   {
+    "after": 279,
+    "at_2015773": 243,
+    "at_746ea98": 268,
+    "delta": 36,
+    "module": "cpsvm2/maint/assemble.py",
+    "track": "M"
+   },
+   {
+    "after": 434,
+    "at_2015773": 409,
+    "at_746ea98": 439,
+    "delta": 25,
+    "module": "cpsvm2/maint/audit.py",
+    "track": "M"
+   },
+   {
+    "after": 183,
+    "at_2015773": 178,
+    "at_746ea98": 189,
+    "delta": 5,
+    "module": "cpsvm2/maint/score_check.py",
+    "track": "M"
+   },
+   {
+    "after": 0,
+    "at_2015773": 0,
+    "at_746ea98": 0,
+    "delta": 0,
+    "module": "cpsvm2/vio/__init__.py",
+    "track": "C"
+   },
+   {
+    "after": 215,
+    "at_2015773": 197,
+    "at_746ea98": 224,
+    "delta": 18,
+    "module": "cpsvm2/vio/drive.py",
+    "track": "C"
+   },
+   {
+    "after": 134,
+    "at_2015773": 137,
+    "at_746ea98": 138,
+    "delta": -3,
+    "module": "cpsvm2/vio/durable.py",
+    "track": "C"
+   },
+   {
+    "after": 190,
+    "at_2015773": 202,
+    "at_746ea98": 194,
+    "delta": -12,
+    "module": "cpsvm2/vio/host.py",
+    "track": "C"
+   },
+   {
+    "after": 251,
+    "at_2015773": 242,
+    "at_746ea98": 269,
+    "delta": 9,
+    "module": "cpsvm2/vio/place.py",
+    "track": "C"
+   },
+   {
+    "after": 118,
+    "at_2015773": 121,
+    "at_746ea98": 125,
+    "delta": -3,
+    "module": "cpsvm2/vio/runner.py",
+    "track": "C"
+   },
+   {
+    "after": 317,
+    "at_2015773": 379,
+    "at_746ea98": 340,
+    "delta": -62,
+    "module": "cpsvm2/vio/savepoint.py",
+    "track": "C"
+   },
+   {
+    "after": 84,
+    "at_2015773": 89,
+    "at_746ea98": 86,
+    "delta": -5,
+    "module": "cpsvm2/vio/v1compat.py",
+    "track": "C"
+   },
+   {
+    "after": 256,
+    "at_2015773": 266,
+    "at_746ea98": 270,
+    "delta": -10,
+    "module": "cpsvm2/vio/v1mod.py",
+    "track": "C"
+   },
+   {
+    "after": 934,
+    "at_2015773": 981,
+    "at_746ea98": 934,
+    "delta": -47,
+    "module": "cpsvm2/vio/v1reuse.py",
+    "track": "C"
+   },
+   {
+    "after": 485,
+    "at_2015773": 488,
+    "at_746ea98": 495,
+    "delta": -3,
+    "module": "cpsvm2/worker.py",
+    "track": "C"
+   },
+   {
+    "after": 19,
+    "at_2015773": 19,
+    "at_746ea98": 19,
+    "delta": 0,
+    "module": "vm2.py",
+    "track": "C"
+   },
+   {
+    "after": 79,
+    "at_2015773": 74,
+    "at_746ea98": 79,
+    "delta": 5,
+    "module": "session_start.sh",
+    "track": "C"
+   },
+   {
+    "after": 131,
+    "at_2015773": 134,
+    "at_746ea98": 136,
+    "delta": -3,
+    "module": "probe_p5.py",
+    "track": "C"
+   }
+  ],
+  "target_total": 8390,
+  "total": [
+   8396,
+   8392
+  ]
+ },
+ "lines_D2_746ea98": {
+  "C": [
+   7566,
+   7737
+  ],
+  "M": [
+   830,
+   896
+  ],
+  "caps": {
+   "C": 7500,
+   "M": 896,
+   "total": 8396
+  },
+  "rows": [
+   {
+    "after": 6,
+    "before": 6,
+    "delta": 0,
+    "module": "cpsvm2/__init__.py",
+    "track": "C"
+   },
+   {
+    "after": 1705,
+    "before": 1526,
+    "delta": 179,
+    "module": "cpsvm2/cli.py",
+    "track": "C"
+   },
+   {
+    "after": 0,
+    "before": 0,
+    "delta": 0,
+    "module": "cpsvm2/core/__init__.py",
+    "track": "C"
+   },
+   {
+    "after": 259,
+    "before": 248,
+    "delta": 11,
+    "module": "cpsvm2/core/entry.py",
+    "track": "C"
+   },
+   {
+    "after": 1085,
+    "before": 1073,
+    "delta": 12,
+    "module": "cpsvm2/core/fold.py",
+    "track": "C"
+   },
+   {
+    "after": 266,
+    "before": 252,
+    "delta": 14,
+    "module": "cpsvm2/core/names.py",
+    "track": "C"
+   },
+   {
+    "after": 166,
+    "before": 165,
+    "delta": 1,
+    "module": "cpsvm2/core/outcome.py",
+    "track": "C"
+   },
+   {
+    "after": 298,
+    "before": 316,
+    "delta": -18,
+    "module": "cpsvm2/core/plan.py",
+    "track": "C"
+   },
+   {
+    "after": 571,
+    "before": 565,
+    "delta": 6,
+    "module": "cpsvm2/core/session.py",
+    "track": "C"
+   },
+   {
+    "after": 72,
+    "before": 86,
+    "delta": -14,
+    "module": "cpsvm2/core/step.py",
+    "track": "C"
+   },
+   {
+    "after": 0,
+    "before": 0,
+    "delta": 0,
+    "module": "cpsvm2/maint/__init__.py",
+    "track": "M"
+   },
+   {
+    "after": 268,
+    "before": 243,
+    "delta": 25,
+    "module": "cpsvm2/maint/assemble.py",
+    "track": "M"
+   },
+   {
+    "after": 439,
+    "before": 409,
+    "delta": 30,
+    "module": "cpsvm2/maint/audit.py",
+    "track": "M"
+   },
+   {
+    "after": 189,
+    "before": 178,
+    "delta": 11,
+    "module": "cpsvm2/maint/score_check.py",
+    "track": "M"
+   },
+   {
+    "after": 0,
+    "before": 0,
+    "delta": 0,
+    "module": "cpsvm2/vio/__init__.py",
+    "track": "C"
+   },
+   {
+    "after": 224,
+    "before": 197,
+    "delta": 27,
+    "module": "cpsvm2/vio/drive.py",
+    "track": "C"
+   },
+   {
+    "after": 138,
+    "before": 137,
+    "delta": 1,
+    "module": "cpsvm2/vio/durable.py",
+    "track": "C"
+   },
+   {
+    "after": 194,
+    "before": 202,
+    "delta": -8,
+    "module": "cpsvm2/vio/host.py",
+    "track": "C"
+   },
+   {
+    "after": 269,
+    "before": 242,
+    "delta": 27,
+    "module": "cpsvm2/vio/place.py",
+    "track": "C"
+   },
+   {
+    "after": 125,
+    "before": 121,
+    "delta": 4,
+    "module": "cpsvm2/vio/runner.py",
+    "track": "C"
+   },
+   {
+    "after": 340,
+    "before": 379,
+    "delta": -39,
+    "module": "cpsvm2/vio/savepoint.py",
+    "track": "C"
+   },
+   {
+    "after": 86,
+    "before": 89,
+    "delta": -3,
+    "module": "cpsvm2/vio/v1compat.py",
+    "track": "C"
+   },
+   {
+    "after": 270,
+    "before": 266,
+    "delta": 4,
+    "module": "cpsvm2/vio/v1mod.py",
+    "track": "C"
+   },
+   {
+    "after": 934,
+    "before": 981,
+    "delta": -47,
+    "module": "cpsvm2/vio/v1reuse.py",
+    "track": "C"
+   },
+   {
+    "after": 495,
+    "before": 488,
+    "delta": 7,
+    "module": "cpsvm2/worker.py",
+    "track": "C"
+   },
+   {
+    "after": 136,
+    "before": 134,
+    "delta": 2,
+    "module": "probe_p5.py",
+    "track": "C"
+   },
+   {
+    "after": 79,
+    "before": 74,
+    "delta": 5,
+    "module": "session_start.sh",
+    "track": "C"
+   },
+   {
+    "after": 19,
+    "before": 19,
+    "delta": 0,
+    "module": "vm2.py",
+    "track": "C"
+   }
+  ],
+  "total": [
+   8396,
+   8633
+  ]
+ },
+ "mutation": {
+  "core_and_hand_seconds": 7489.3,
+  "glue_seconds": 6071.4,
+  "guard_core": {
+   "baselines": {
+    "stage1": {
+     "exit": 0,
+     "names": 2,
+     "seconds": 40.1
+    },
+    "stage2": {
+     "exit": 0,
+     "names": 3,
+     "seconds": 75.3
+    }
+   },
+   "killed": 730,
+   "sites": 747,
+   "survivors": [
+    {
+     "equivalent": "`s['mode'] == 'everyday'` in dl: R['delivery'] is set only by e55, whose g55 requires not c['Q'], so a qualification run has no prepared_seq",
+     "id": "GM-fold-g24-2-r",
+     "result": "SURVIVED",
+     "what": "s['mode'] == 'everyday'"
+    },
+    {
+     "equivalent": "`rid == 'T23' and e['kind'] == 'STAGE'`: _progress returns T23 only through the PROGRESS pair ('T23', 'STAGE', ...), i.e. only for a STAGE",
+     "id": "GM-fold-_new_run_progress-4-r",
+     "result": "SURVIVED",
+     "what": "e['kind'] == 'STAGE'"
+    },
+    {
+     "equivalent": "`L['status'] != 'FROZEN'` for B's A chain: g10 requires s['current'] is None (an earlier conjunct) and a Q run that is not FROZEN is the current run (ACTIVE from e_new until e24)",
+     "id": "GM-fold-g10-12-r",
+     "result": "SURVIVED",
+     "what": "L['status'] != 'FROZEN'"
+    },
+    {
+     "equivalent": "`L['tag'] == 'A-restart1'`: A-restart1 is a restart run (g11 requires restart_of) and g24 refuses restart_eligible true when restart_of is set, so the first operand `not restart_eligible` already holds",
+     "id": "GM-fold-g10-15-r",
+     "result": "SURVIVED",
+     "what": "L['tag'] == 'A-restart1'"
+    },
+    {
+     "equivalent": "g12 `e['kind'] == 'FROZEN'`: the row dispatch calls T12's guard only for kinds {'FROZEN'}",
+     "id": "GM-fold-g12-1-r",
+     "result": "SURVIVED",
+     "what": "e['kind'] == 'FROZEN'"
+    },
+    {
+     "equivalent": "`ro['status'] != 'CONTINUED'` for NO_CONVERSATION: for a CONTINUED role resolution_action returns T48 for every outcome but CONTINUED, whatever forced is (the forced compare and the CONTINUED branch both give T48)",
+     "id": "GM-fold-forced_for-4-r",
+     "result": "SURVIVED",
+     "what": "ro['status'] != 'CONTINUED'"
+    },
+    {
+     "equivalent": "`ro['status'] == 'STARTED'`: both callers pass an open role that is not CONTINUED (forced_for tests status != CONTINUED first and resolution_action requires an OPEN role; session.restore_keys returns for CONTINUED first), and OPEN is {STARTED, CONTINUED}",
+     "id": "GM-fold-no_conversation_admissible-0-r",
+     "result": "SURVIVED",
+     "what": "ro['status'] == 'STARTED'"
+    },
+    {
+     "equivalent": "`oc = q and forced is None and ...`: oc is returned only by T44/T45, reached only after `if forced is not None ...: return 'T47'`, so forced is None there",
+     "id": "GM-fold-resolution_action-14-r",
+     "result": "SURVIVED",
+     "what": "forced is None"
+    },
+    {
+     "equivalent": "`oc = ... and item['outcome'] == 'NOTHING_WRITTEN'`: oc is returned only by T44/T45, reached only past `if item['outcome'] != 'NOTHING_WRITTEN' ...: T48`",
+     "id": "GM-fold-resolution_action-16-r",
+     "result": "SURVIVED",
+     "what": "item['outcome'] == 'NOTHING_WRITTEN'"
+    },
+    {
+     "equivalent": "`not item['ended']` in the T48 line: ended is a bool (checked first) and ended False makes forced_for return NOT_ENDED, which returned T47 above",
+     "id": "GM-fold-resolution_action-22-r",
+     "result": "SURVIVED",
+     "what": "not item['ended']"
+    },
+    {
+     "equivalent": "`item['files_found']` in the T48 line: files_found True makes forced_for return FILES_FOUND, which returned T47 above",
+     "id": "GM-fold-resolution_action-23-r",
+     "result": "SURVIVED",
+     "what": "item['files_found']"
+    },
+    {
+     "equivalent": "`len(need) > 1`: invariant: at most one role is open (a START opens a role only when the run has none open: g20 requires not run_open(R), and only the current run has roles), and the items must equal open(s2)",
+     "id": "GM-fold-_items_check-5-r",
+     "result": "SURVIVED",
+     "what": "len(need) > 1"
+    },
+    {
+     "equivalent": "`not c['Q']` before the INPUTS test: status INPUTS is set only by e15, whose g15 requires not c['Q'], so a qualification run is never INPUTS",
+     "id": "GM-fold-g42-9-r",
+     "result": "SURVIVED",
+     "what": "not c['Q']"
+    },
+    {
+     "equivalent": "`b['rebase'] is None` in the rerun clause: with a rebase, _restore_state is undo49, which sets R['rebase_bind'], so the later conjunct `R['rebase_bind'] is None` of the same pure and is false",
+     "id": "GM-fold-g42-23-r",
+     "result": "SURVIVED",
+     "what": "b['rebase'] is None"
+    },
+    {
+     "equivalent": "`lk['name'] in names`: every caller reads the result only at names it passed (head_search passes all looked-up names; absent_twice, session_next step 4, _after_classify C5b and _commit index the names they passed)",
+     "id": "GM-session-_facts-0-r",
+     "result": "SURVIVED",
+     "what": "lk['name'] in names"
+    },
+    {
+     "equivalent": "`kind in ('STAGE', 'FROZEN')`: the head passed validate_entry in cli.verify_head; entry.PART_KINDS_OF allows parts only on STAGE, FROZEN, DELIVERY and FINAL; a FINAL head is phase FINAL (C3 returns first) and DELIVERY returns C4 first",
+     "id": "GM-session-classify-7-r",
+     "result": "SURVIVED",
+     "what": "kind in ('STAGE', 'FROZEN')"
+    },
+    {
+     "equivalent": "`'list_shows_none' in keys`: restore_keys adds list_shows_none only for a STARTED role without files found, and then always conversation too (conversation_known is true only for a CONTINUED role, the archived conversation), so the other operand already holds",
+     "id": "GM-session-_resolve-9-r",
+     "result": "SURVIVED",
+     "what": "'list_shows_none' in keys"
+    }
+   ]
+  },
+  "guard_glue": {
+   "baselines": {
+    "stage1": {
+     "exit": 0,
+     "names": 67,
+     "seconds": 175.0
+    },
+    "stage2": {
+     "exit": 0,
+     "names": 5,
+     "seconds": 575.7
+    }
+   },
+   "killed": 150,
+   "sites": 168,
+   "survivors": [
+    {
+     "equivalent": "loop['phase'] is an informational field of PENDING.json (spec \u00a75.1 step 3) that no code reads (savepoint, cli and maint never read it back)",
+     "id": "GM-savepoint-block-3-n",
+     "result": "SURVIVED",
+     "what": "loop['entry']['copies'] is None"
+    },
+    {
+     "equivalent": "ENTRY_TOO_LARGE vs PART_TOO_LARGE in block: write_commit refuses an entry or a part over max_upload_bytes before PENDING.json exists, with the same cap (the kit config), so a PENDING loop never reaches this test; a setup loop takes the UPLOAD_TOO_LARGE branch",
+     "id": "GM-savepoint-block-11-n",
+     "result": "SURVIVED",
+     "what": "f['name'].endswith('.tgz')"
+    },
+    {
+     "equivalent": "`loop['entry']['copies'] is None` for the absent names: on_found empties loop['absent'] in the first call of the loop (the entry is the first group, still unconfirmed then; t_d11_on_found_handback_and_absent), and the entry is confirmed only in that call or in on_verify after it, so a confirmed entry always has absent == []",
+     "id": "GM-savepoint-block-13-r",
+     "result": "SURVIVED",
+     "what": "loop['entry']['copies'] is None"
+    },
+    {
+     "equivalent": "the same test in on_found: once the entry is confirmed loop['absent'] is [] (see GM-savepoint-block-13-r), so set(loop['absent']) is the empty set either way",
+     "id": "GM-savepoint-on_found-1-r",
+     "result": "SURVIVED",
+     "what": "loop['entry']['copies'] is None"
+    },
+    {
+     "equivalent": "`unknown` decides only t['need'] ('verify' or 'done'): while loop['verify'] holds the name's downloads, block prints the DOWNLOAD block without reading need, and on_verify or slip then sets need; with only known ids f['copies'] is set and the name leaves the group, so need is never read",
+     "id": "GM-savepoint-on_found-4-n",
+     "result": "SURVIVED",
+     "what": "c[0] not in ids"
+    },
+    {
+     "equivalent": "`'verify' if unknown else 'done'`: as GM-savepoint-on_found-4-n, need is not read before on_verify or slip overwrites it",
+     "id": "GM-savepoint-on_found-8-n",
+     "result": "SURVIVED",
+     "what": "unknown"
+    },
+    {
+     "equivalent": "`ex.get('command') != 'go'`: a found/answer block whose basis is the current one was reprinted by the line above (reprint raises Out), and one with another basis returns by the second operand, so the first operand never decides",
+     "id": "GM-cli-go_checks-3-r",
+     "result": "SURVIVED",
+     "what": "ex.get('command') != 'go'"
+    },
+    {
+     "equivalent": "`b.get('basis') != basis(env)` for a go block: a go block is stale only if a command died after it saved a loop or RESTORE_WORK and before render wrote the next BLOCK.json. A stale pending/setup block meets an empty verify (on_verify cleared it before the save; see -7-r); a stale fetch block's files stay in inbox/kit and inbox/pass until invalidate, which also moves BLOCK.json; a local block's inbox/journal files are dropped only by a later commit's post actions, and that commit prints its SAVE blocks (a new BLOCK.json) first. So every file a stale block names is present with its size and the mutant's check finds no code",
+     "id": "GM-cli-go_checks-4-r",
+     "result": "SURVIVED",
+     "what": "b.get('basis') != basis(env)"
+    },
+    {
+     "equivalent": "`ex.get('kind') == 'pending'`: while PENDING.json exists advance runs pending_step first, so every go block of another kind was printed with env.pending None; basis covers PENDING's self_sha256, so with the current basis env.pending is still None and the remaining conjunct is false",
+     "id": "GM-cli-go_checks-5-r",
+     "result": "SURVIVED",
+     "what": "ex.get('kind') == 'pending'"
+    },
+    {
+     "equivalent": "`env.pending`: a pending block is printed only while PENDING.json exists and its basis holds PENDING's self_sha256; with PENDING gone the basis differs and go_checks returned above",
+     "id": "GM-cli-go_checks-6-r",
+     "result": "SURVIVED",
+     "what": "env.pending"
+    },
+    {
+     "equivalent": "`env.pending['verify']`: with verify empty, on_verify returns ('ok', None) and changes nothing, and persist rewrites the same document (write_doc's self_sha256 is a function of the content), so the next block is the same",
+     "id": "GM-cli-go_checks-7-r",
+     "result": "SURVIVED",
+     "what": "env.pending['verify']"
+    },
+    {
+     "equivalent": "`(env.work or {}).get(ex['loop'])`: a setup block is printed only while RESTORE_WORK holds that loop, and basis covers RESTORE_WORK's self_sha256; with the loop gone the basis differs and go_checks returned above",
+     "id": "GM-cli-go_checks-9-r",
+     "result": "SURVIVED",
+     "what": "(env.work or {}).get(ex['loop'])"
+    },
+    {
+     "equivalent": "`env.work[ex['loop']]['verify']`: as GM-cli-go_checks-7-r for a setup loop (save_work rewrites the same RESTORE_WORK)",
+     "id": "GM-cli-go_checks-10-r",
+     "result": "SURVIVED",
+     "what": "env.work[ex['loop']]['verify']"
+    },
+    {
+     "equivalent": "`phase == 'HEAD'`: the only other session download block is RECHECK's, reached through _commit, which session_next calls only past `if not w.get('head')` (the HEAD download of N), so w['head'] is set and the second conjunct is false there",
+     "id": "GM-cli-session_downloads-3-r",
+     "result": "SURVIVED",
+     "what": "phase == 'HEAD'"
+    },
+    {
+     "equivalent": "`os.path.isdir(target)` in `same`: walk (v1mod.tree_list) lstats the root and raises WALK_UNSUPPORTED_ENTRY ('root') unless it is a directory, which settle catches as same=False",
+     "id": "GM-place-settle-1-r",
+     "result": "SURVIVED",
+     "what": "os.path.isdir(target)"
+    },
+    {
+     "equivalent": "`not os.path.islink(target)` in `same`: tree_list's lstat of a symlink root is not S_ISDIR, so walk raises and settle catches it as same=False",
+     "id": "GM-place-settle-2-r",
+     "result": "SURVIVED",
+     "what": "not os.path.islink(target)"
+    },
+    {
+     "equivalent": "`len(names) == 1`: for two or more names a dict doc is 'count' either way (els=doc is not a list; els=[doc] has length 1)",
+     "id": "GM-drive-parse_raw-0-r",
+     "result": "SURVIVED",
+     "what": "len(names) == 1"
+    },
+    {
+     "equivalent": "len([k not in sc]) over the two keys is 2 - len([k in sc]); both differ from 1 exactly when the count is not 1",
+     "id": "GM-drive-parse_raw-10-n",
+     "result": "SURVIVED",
+     "what": "k in sc"
+    }
+   ]
+  },
+  "hand_reviewer_legacy": {
+   "baselines": {
+    "nonroot": {
+     "exit": 0,
+     "seconds": 0.5,
+     "uid": 1000
+    },
+    "root": {
+     "exit": 0,
+     "seconds": 954.1,
+     "uid": 0
+    }
+   },
+   "deleted": {
+    "G2": "md5-visible mode is deleted: every copy with an unknown id is downloaded back (rule V, \u00a72.1); G26 and G32 are the download-back mutants",
+    "G29": "the listing route of the head search is deleted (OPENED and the listing, \u00a72.13); a lookup is a FIND",
+    "G4": "the OPENED status is deleted (\u00a72.13): no START is OPENED, so T43 has no OPENED case",
+    "W57": "retired in r4 (APPROVAL comes before HEAD)"
+   },
+   "hand_open": {
+    "W57": "retired in r4 (APPROVAL comes before HEAD): no mutant"
+   },
+   "killed": 179,
+   "mutants": 179,
+   "not_applicable": [],
+   "seconds": 7489.3,
+   "table": [
+    {
+     "id": "W01",
+     "killed_by": [
+      "test_d6_approval_asked_before_restore_and_genesis"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W02",
+     "killed_by": [
+      "test_d5_clear_verdict_exact_clear_and_config_only"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W03",
+     "killed_by": [
+      "t_snapshot_place_roundtrip_and_evict"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W04",
+     "killed_by": [
+      "test_int_r2_03_restore_conversation_recorded"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W05",
+     "killed_by": [
+      "test_int_r2_04_consumer_stage_without_consumed_is_t25"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W06",
+     "killed_by": [
+      "t_s01_setup_failed_log_uploaded_without_kit_config"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W07",
+     "killed_by": [
+      "t_commit_fork_foreign_md5"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "C1",
+     "killed_by": [
+      "t_c1_post_failure_finishes_pending_halt_first"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W08",
+     "killed_by": [
+      "t_s04_pending_post_resumed_before_next_commit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W09",
+     "killed_by": [
+      "t_s05_png_changed_before_part_write_halts"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W10",
+     "killed_by": [
+      "test_s06_profile_folder_with_brace_refused_before_commit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W12",
+     "killed_by": [
+      "t_s07_runner_loaded_from_hashed_bytes"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W15",
+     "killed_by": [
+      "test_s11_oserror_outside_stage_prints_stop_block"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W16",
+     "killed_by": [
+      "t_gap05_block_ahead_invalidates_cache"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W17",
+     "killed_by": [
+      "t_opx01_restore_work_writes_kept"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W18",
+     "killed_by": [
+      "t_opx02_mistyped_id_refinds_then_commits"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W22",
+     "killed_by": [
+      "t_d3_refusals_bounded_then_slip_limit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W23",
+     "killed_by": [
+      "t_d3_fourth_slip_stops_slip_limit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W25",
+     "killed_by": [
+      "t_opx09_refused_stop_names_the_file"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W28",
+     "killed_by": [
+      "test_maint1_new_run_job_dir_must_be_the_layout_path"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W35",
+     "killed_by": [
+      "test_maint3_clear_with_unchanged_kit_t60"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W40",
+     "killed_by": [
+      "test_maint7_drill_series_own_folder"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W44",
+     "killed_by": [
+      "test_maint10_probe_start_refuses_seconds_below_min_gap"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W46",
+     "killed_by": [
+      "t_d4_parse_raw_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W52",
+     "killed_by": [
+      "test_maint1_genesis_layout_base_relative"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W54",
+     "killed_by": [
+      "test_d3_head_search_ignores_void_lookups"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W59",
+     "killed_by": [
+      "t_d5_refused_clear_kit_keeps_cache"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W61",
+     "killed_by": [
+      "t_d5_stale_hint_never_checks"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W62",
+     "killed_by": [
+      "t_d5_refused_clear_kit_keeps_cache"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W64",
+     "killed_by": [
+      "t_d5_found_answer_while_halted_print_stop"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W66",
+     "killed_by": [
+      "t_d5_clear_check_found_accepted"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W67",
+     "killed_by": [
+      "t_d5_placement_accepts_equal_or_moves_aside"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W68",
+     "killed_by": [
+      "t_d3_refused_count_resets_per_block"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W69",
+     "killed_by": [
+      "t_d4_parse_raw_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W70",
+     "killed_by": [
+      "t_d4_parse_raw_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W71",
+     "killed_by": [
+      "t_maint2_inventory_rehashed_at_attest"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W72",
+     "killed_by": [
+      "t_maint2_tools_file_link_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W74",
+     "killed_by": [
+      "test_d6_entry_approval_must_be_none"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W75",
+     "killed_by": [
+      "test_d5_cleared_local_only_on_restore_and_genesis"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W79",
+     "killed_by": [
+      "t_gap05_block_ahead_invalidates_cache"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W80",
+     "killed_by": [
+      "test_d5_clearing_restore_refuses_release_change"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W81",
+     "killed_by": [
+      "t_gap08_clear_moves_attest_and_inbox"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W82",
+     "killed_by": [
+      "t_gap08_render_removes_stale_download_target"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W85",
+     "killed_by": [
+      "t_gap12_halt_removed_out_of_procedure_restores"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W86",
+     "killed_by": [
+      "t_op02_reprint_has_no_upload_lines"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W87",
+     "killed_by": [
+      "t_op03_raw_file_consumed"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W89",
+     "killed_by": [
+      "test_d6_approval_before_head"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W91",
+     "killed_by": [
+      "t_d5_halted_restore_no_cleared_local"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W97",
+     "killed_by": [
+      "t_d5_halted_kit_never_checks"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W100",
+     "killed_by": [
+      "t_d5_clear_check_found_accepted"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W101",
+     "killed_by": [
+      "t_d5_damaged_halt_stops_unclassified"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W103",
+     "killed_by": [
+      "t_d5_clear_check_bounded"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W108",
+     "killed_by": [
+      "t_d16_stage_refuses_low_space_before_runner"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "BUG1",
+     "killed_by": [
+      "t_commit_entry_then_parts"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W13",
+     "killed_by": [
+      "test_s08_wrong_head_stops_before_setup"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W29a",
+     "killed_by": [
+      "test_maint1_forged_all_frozen_job_dir"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W29b",
+     "killed_by": [
+      "test_maint1_symlink_after_begin_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W30",
+     "killed_by": [
+      "test_maint1_assemble_root_required_empty_dedicated"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W93",
+     "killed_by": [
+      "test_maint1_assemble_base_from_genesis"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W33",
+     "killed_by": [
+      "test_maint2_score_check_requires_tools_attestation_and_states_isolation"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W34",
+     "killed_by": [
+      "test_maint3_audit_refuses_unauthorized_clear"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W36",
+     "killed_by": [
+      "test_maint4_audit_only_kit_change_verdicts"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W37",
+     "killed_by": [
+      "test_maint5_score_check_refuses_unverified_assembly"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W41",
+     "killed_by": [
+      "test_maint8_check_detects_edited_plan"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W42",
+     "killed_by": [
+      "test_maint9_review_window_widened"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W43",
+     "killed_by": [
+      "test_maint10_genesis_jobs_differ_from_kit_unclean"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W55",
+     "killed_by": [
+      "test_maint3_audit_checks_cleared_local"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W56",
+     "killed_by": [
+      "test_maint7_drill_listing_with_folder_rows_clean"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W83",
+     "killed_by": [
+      "test_gap10_generation_record_tied_to_g_entry"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W94",
+     "killed_by": [
+      "test_gap06_audit_lists_approvals_and_same_boot_restores"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W48",
+     "killed_by": [
+      "D_refuse_reset_approval_wrong_none"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W26",
+     "killed_by": [
+      "t_l14_readme_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W99",
+     "killed_by": [
+      "test_opx10_tool_calls_match_budget_golden"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W19",
+     "killed_by": [
+      "t_opx03_size_slip_refinds"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W21",
+     "killed_by": [
+      "t_opx05_final_message_any_characters_verbatim"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W90",
+     "killed_by": [
+      "t_opx05_empty_final_message_accepted"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W98",
+     "killed_by": [
+      "t_opx05_oversize_final_message_stops"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W47",
+     "killed_by": [
+      "t_maint2_s_v_entries_archive_message_and_tools"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W31",
+     "killed_by": [
+      "t_maint2_tools_none_refused_inventory_file_accepted"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W32",
+     "killed_by": [
+      "t_maint2_generation_record_tools_and_o63_note"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W49",
+     "killed_by": [
+      "test_foreground_died_same_boot_stops"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W50",
+     "killed_by": [
+      "t_opx07_stage_death_stop_names_real_head_and_kit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W51",
+     "killed_by": [
+      "test_session_c2_clear_restore_keeps_kit_then_clear_takes_it"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W53",
+     "killed_by": [
+      "t_int_r2_03_interrupt_gets_conversation_id"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W58",
+     "killed_by": [
+      "test_foreground_died_same_boot_stops"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W60",
+     "killed_by": [
+      "t_d5_post_action_halt_cleared_same_boot"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W63",
+     "killed_by": [
+      "t_d5_kit_in_use_never_checks"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W65",
+     "killed_by": [
+      "t_d5_refused_clear_kit_keeps_cache"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W76",
+     "killed_by": [
+      "t_gap02_files_found_before_settle"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W77",
+     "killed_by": [
+      "t_gap04_moved_pending_foreign_copy_forks"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W78",
+     "killed_by": [
+      "test_op05_recheck_after_every_q_restore"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W88",
+     "killed_by": [
+      "t_d4_swapped_elements_assigned_by_title"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W92",
+     "killed_by": [
+      "t_d5_clear_check_found_accepted"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W96",
+     "killed_by": [
+      "test_gap13_c8b_after_second_restore_abandons"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W102",
+     "killed_by": [
+      "t_d5_halted_kit_never_checks"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W109",
+     "killed_by": [
+      "test_d16_disk_bounded_over_runs"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W110",
+     "killed_by": [
+      "test_d16_disk_bounded_over_runs"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W24",
+     "killed_by": [
+      "test_opx08_kit_none_bootstraps_without_hint"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W73",
+     "killed_by": [
+      "test_opx08_kit_none_bootstraps_without_hint"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W84",
+     "killed_by": [
+      "test_gap11_session_start_removes_pycache"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W11",
+     "killed_by": [
+      "t_l13_launcher_ignores_bytecode"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W27",
+     "killed_by": [
+      "t_only_unknown_name_exits_2"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W20",
+     "killed_by": [
+      "t_l14_readme_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W95",
+     "killed_by": [
+      "t_l14_readme_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W104",
+     "killed_by": [
+      "t_l14_readme_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W105",
+     "killed_by": [
+      "t_l14_readme_rules"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W38",
+     "killed_by": [
+      "test_mk1_header_slip_in_one_copy_recovers"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W39",
+     "killed_by": [
+      "test_mk2_duplicate_binary_names_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W14",
+     "killed_by": [
+      "t_s09_download_parent_exists_when_printed"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N04",
+     "killed_by": [
+      "test_t4_ai_start_boot_must_be_the_start_boot_t39"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N05",
+     "killed_by": [
+      "test_t4_continued_v_answer_of_another_boot_t39"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N06",
+     "killed_by": [
+      "test_t1_continued_v_other_outcomes_t48"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N07",
+     "killed_by": [
+      "test_t2_reader_b_waits_while_a_owes_restart"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N18",
+     "killed_by": [
+      "test_t3_recheck_second_writer_at_n2_n3_forks"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N37",
+     "killed_by": [
+      "t_t6_finish_refuses_entry_that_is_not_pending"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N40",
+     "killed_by": [
+      "test_t7_started_after_ended_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N42",
+     "killed_by": [
+      "t_t8_session_download_missing_refinds"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N44",
+     "killed_by": [
+      "t_t9_empty_transcript_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N50",
+     "killed_by": [
+      "test_t10_config_only_change_of_other_key_release_not_accepted"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "N52",
+     "killed_by": [
+      "test_t5_restart_after_in_place_interrupt_t14"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G1",
+     "killed_by": [
+      "t_commit_entry_then_parts"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G3",
+     "killed_by": [
+      "test_head_search_wait_between_absences"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G5",
+     "killed_by": [
+      "test_f1_core_continued_v_is_t46"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G6",
+     "killed_by": [
+      "test_rewalk_reports_a_file_not_in_the_snapshot"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G7",
+     "killed_by": [
+      "t_walk_strict_unsupported_entries"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G8",
+     "killed_by": [
+      "test_stale_at_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G9",
+     "killed_by": [
+      "test_imp07_chain_rows_first_match_none_shadowed"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G10",
+     "killed_by": [
+      "test_f4_outcomes_total_over_frozen_shapes"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G11",
+     "killed_by": [
+      "test_flags2_empty_carriers_distinct_per_reader"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G12",
+     "killed_by": [
+      "test_fold_foreign_release_sha_chain_invalid"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G13",
+     "killed_by": [
+      "test_safe05_trailing_newline_and_bad_id_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G14",
+     "killed_by": [
+      "test_tst01_second_start_same_attempt_chain_invalid"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G15",
+     "killed_by": [
+      "t_cli_inputs_commit_found_and_next_stage"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G16",
+     "killed_by": [
+      "test_marks_survive_every_commit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G17",
+     "killed_by": [
+      "test_int07_output_changed_after_archive_halts_before_consumer"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G18",
+     "killed_by": [
+      "test_classify_c7_before_c8_and_c8b"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G19",
+     "killed_by": [
+      "test_int02_v_not_available_everyday_freezes_visual"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G20",
+     "killed_by": [
+      "test_int05_single_part_absence_is_not_missing"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G21",
+     "killed_by": [
+      "test_int03_score_check_refuses_pending_owner_items"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G22",
+     "killed_by": [
+      "test_g22_non_config_kit_does_not_clear_a_halt"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G23",
+     "killed_by": [
+      "test_session_fresh_q_genesis_and_series_exists"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G24",
+     "killed_by": [
+      "t_l11_no_detached_process"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G25",
+     "killed_by": [
+      "test_helper_busy_second_command_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G26",
+     "killed_by": [
+      "t_commit_md5_hidden_download_back"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G27",
+     "killed_by": [
+      "t_commit_refused_upload_find_before_reupload"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G28",
+     "killed_by": [
+      "t_commit_refused_upload_find_before_reupload"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G30",
+     "killed_by": [
+      "D_ans_G0_no_conv_none"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G31",
+     "killed_by": [
+      "D_kill_finish_same_boot"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G32",
+     "killed_by": [
+      "t_commit_md5_hidden_download_back"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G33",
+     "killed_by": [
+      "t_commit_refused_upload_find_before_reupload"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "G34",
+     "killed_by": [
+      "test_helper_busy_second_command_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-01",
+     "killed_by": [
+      "test_archive_codes"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-02",
+     "killed_by": [
+      "test_archive_codes"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-03",
+     "killed_by": [
+      "test_classify_rows"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-04",
+     "killed_by": [
+      "test_fingerprint_change_stops_the_chain"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-05",
+     "killed_by": [
+      "test_m21_frozen_without_required_flag_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-06",
+     "killed_by": [
+      "test_m06_everyday_retry_once"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-08",
+     "killed_by": [
+      "test_m08_diverged_restart_conflict_stops"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-10",
+     "killed_by": [
+      "test_t10_reader_b_needs_a_frozen"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-11",
+     "killed_by": [
+      "test_m11_ai_entry_of_another_boot_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-13",
+     "killed_by": [
+      "test_int07_output_changed_after_archive_halts_before_consumer"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-15",
+     "killed_by": [
+      "test_place_ledger_sha_checked"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-18",
+     "killed_by": [
+      "test_d11_fold_guard_witnesses"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-19",
+     "killed_by": [
+      "test_tst08_under_stage_direct"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-20",
+     "killed_by": [
+      "test_inputs_changed_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-21",
+     "killed_by": [
+      "test_m21_frozen_without_required_flag_refused"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-23",
+     "killed_by": [
+      "test_t21_t22_review_incomplete_limit"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-24",
+     "killed_by": [
+      "test_f4_outcomes_total_over_frozen_shapes"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-25",
+     "killed_by": [
+      "test_evict_frozen_sha_checked"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-26",
+     "killed_by": [
+      "test_m26_visual_reviewer_replaced_once"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-30",
+     "killed_by": [
+      "test_tst06_prompt_changed_halts"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-31",
+     "killed_by": [
+      "test_tst02_nothing_written_with_file_found_is_written"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-34",
+     "killed_by": [
+      "test_tst03_not_ended_is_written"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-35",
+     "killed_by": [
+      "test_m35_resolved_role_not_resolved_again"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-36",
+     "killed_by": [
+      "test_t43_supersede_once_then_written"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-38",
+     "killed_by": [
+      "test_selftest_failed_stops"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "M2-39",
+     "killed_by": [
+      "test_f7_core_transcript_member_required"
+     ],
+     "result": "KILLED",
+     "uid": 0
+    },
+    {
+     "id": "W106",
+     "killed_by": [
+      "t_d16_settle_moves_readonly_target_aside"
+     ],
+     "result": "KILLED",
+     "uid": 1000
+    },
+    {
+     "id": "W107",
+     "killed_by": [
+      "t_d16_settle_moves_readonly_target_aside"
+     ],
+     "result": "KILLED",
+     "uid": 1000
+    }
+   ]
+  },
+  "reviewer_proof_table": {
+   "N04": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t4_ai_start_boot_must_be_the_start_boot_t39"
+    ],
+    "test": "test_t4_ai_start_boot_must_be_the_start_boot_t39"
+   },
+   "N05": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t4_continued_v_answer_of_another_boot_t39"
+    ],
+    "test": "test_t4_continued_v_answer_of_another_boot_t39"
+   },
+   "N06": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ('NOTHING_WRITTEN', None, 'REPLACE', True, 'T50')",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t1_continued_v_other_outcomes_t48"
+    ],
+    "test": "test_t1_continued_v_other_outcomes_t48"
+   },
+   "N07": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t2_reader_b_waits_while_a_owes_restart"
+    ],
+    "test": "test_t2_reader_b_waits_while_a_owes_restart"
+   },
+   "N18": {
+    "at_2015773": "FAIL KeyError: 'via'",
+    "at_2015773_with_original": "FAIL KeyError: 'via'",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t3_recheck_second_writer_at_n2_n3_forks"
+    ],
+    "test": "test_t3_recheck_second_writer_at_n2_n3_forks"
+   },
+   "N37": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: no Halt INTERNAL_ILLEGAL_TRANSITION",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "t_t6_finish_refuses_entry_that_is_not_pending"
+    ],
+    "test": "t_t6_finish_refuses_entry_that_is_not_pending"
+   },
+   "N40": {
+    "at_2015773": "FAIL AssertionError: None",
+    "at_2015773_with_original": "FAIL AssertionError: None",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t7_started_after_ended_refused"
+    ],
+    "test": "test_t7_started_after_ended_refused"
+   },
+   "N42": {
+    "at_2015773": "FAIL AttributeError: 'FakeDot' object has no attribute 'n_download'",
+    "at_2015773_with_original": "FAIL AttributeError: 'FakeDot' object has no attribute 'n_download'",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "t_t8_session_download_missing_refinds"
+    ],
+    "test": "t_t8_session_download_missing_refinds"
+   },
+   "N44": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "t_t9_empty_transcript_refused"
+    ],
+    "test": "t_t9_empty_transcript_refused"
+   },
+   "N50": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ['series']",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t10_config_only_change_of_other_key_release_not_accepted"
+    ],
+    "test": "test_t10_config_only_change_of_other_key_release_not_accepted"
+   },
+   "N52": {
+    "at_2015773": "PASS",
+    "at_2015773_with_original": "FAIL AssertionError: ",
+    "at_v21_with_port": "KILLED",
+    "killed_by": [
+     "test_t5_restart_after_in_place_interrupt_t14"
+    ],
+    "test": "test_t5_restart_after_in_place_interrupt_t14"
+   }
+  },
+  "selftest": {
+   "W13": "KILLED",
+   "W45a": "HARNESS_ERROR",
+   "W45b": {
+    "bootstrap_failed": [
+     "D_baseline"
+    ],
+    "result": "SURVIVED"
+   },
+   "generator": {
+    "_commit": true,
+    "_s5": true,
+    "_virtual": true,
+    "clear_ok": true,
+    "clear_verdict": true,
+    "g10": true,
+    "g11": true,
+    "g37": true,
+    "g38": true,
+    "g59": true,
+    "resolution_action": true,
+    "t01": true
+   }
+  },
+  "selftest_ok": true
+ },
+ "nonroot_pass": {
+  "cap_eff": 0,
+  "failed": [],
+  "helper_tree_sha256": "4b407723b9e11212aee3d729824c5da4fde053ecc734e6c4afb8c6bd10634cf8",
+  "jobs": 4,
+  "only": [
+   "test_core_table",
+   "test_core_more",
+   "test_core_props",
+   "test_codes",
+   "test_vio",
+   "test_d16_evict_runner_frozen_folder_nonroot",
+   "test_d16_disk_bounded_over_runs",
+   "D_baseline",
+   "E_baseline",
+   "D_clear_same_boot_foreground_died",
+   "D_sameboot_damaged_cache_restores",
+   "test_foreground_died_same_boot_stops"
+  ],
+  "passed": 245,
+  "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+  "seconds": 874.6,
+  "suites": [
+   {
+    "counts": {
+     "abstract_states": 709,
+     "golden_entries": 709,
+     "rows": 44,
+     "rows_hit": 44
+    },
+    "name": "test_core_table",
+    "passed": 80,
+    "seconds": 40.3,
+    "tests": 80
+   },
+   {
+    "counts": {
+     "applies": 120712,
+     "cuts": 12820,
+     "illegal_injected": 18475,
+     "sequences": 2000
+    },
+    "name": "test_core_props",
+    "passed": 3,
+    "seconds": 32.4,
+    "tests": 3
+   },
+   {
+    "counts": {},
+    "name": "test_core_more",
+    "passed": 28,
+    "seconds": 0.0,
+    "tests": 28
+   },
+   {
+    "counts": {
+     "blocks_printed": 110
+    },
+    "name": "test_vio",
+    "passed": 103,
+    "seconds": 492.6,
+    "tests": 103
+   },
+   {
+    "counts": {},
+    "name": "test_codes",
+    "passed": 24,
+    "seconds": 43.1,
+    "tests": 24
+   },
+   {
+    "counts": {
+     "map": {
+      "F1": [
+       "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+       "world+direct",
+       "a CONTINUED V resolves only by T46 (FREEZE_VISUAL_FAILED): no OPEN or CONTINUE for V after the reset"
+      ],
+      "F2": [
+       "test_f2_second_start_only_after_no_conversation",
+       "direct",
+       "a second START of one attempt exists only through T43 (list shows none, once) or T31 (rebase); T32 refuses it otherwise; random cuts in test_core_props"
+      ],
+      "F3": [
+       "test_f3_classify_reads_only_head_at_every_worker_point",
+       "world+direct",
+       "by construction: classify(head, state, ...) reads only the head; the B prepare fetches A FROZEN.json"
+      ],
+      "F4": [
+       "test_f4_outcomes_total_over_frozen_shapes",
+       "delegate:test_core_table",
+       "one pure outcomes() over the fold state"
+      ],
+      "F5": [
+       "test_f5_audit_planted_restore_unknown_to_final",
+       "delegate:test_maint",
+       "the audit re-folds the journal; it copies nothing from ALL_FROZEN.json"
+      ],
+      "F6": [
+       "test_f6_every_block_has_exactly_one_terminal_action",
+       "direct",
+       "by construction: every PrintBlock renders exactly one DO line (the grammar lint runs on every block)"
+      ],
+      "F7": [
+       "test_f7_written_lost_transcript_in_restore_entry",
+       "world+direct",
+       "an exported transcript is a RESTORE member (T48 without it); with export no (O55) nothing is exported"
+      ],
+      "F8": [
+       "test_f8_dead_commit_plus_next_stage",
+       "world",
+       "a head without a part is rebased (T49), the next stage re-runs bound; the audit is clean"
+      ],
+      "FLAGS-1": [
+       "test_flags1_wrong_shared_or_real_carrier_inconsistent",
+       "delegate:test_maint",
+       "score_check"
+      ],
+      "FLAGS-2": [
+       "test_flags2_empty_carriers_distinct_per_reader",
+       "delegate:test_maint",
+       "score_check"
+      ],
+      "FLAGS-3": [
+       "test_flags3_runner_failed_runs_get_empty_carriers",
+       "delegate:test_maint",
+       "score_check"
+      ],
+      "GATE-1": [
+       "test_gate1_gates_checked_on_every_go",
+       "direct",
+       "gates_check runs before every plan step"
+      ],
+      "KIT-1": [
+       "test_kit1_release_swap_after_genesis_stops",
+       "direct",
+       "S5: every entry carries the genesis release; another release needs a KIT_CHANGE with no run in flight and acceptance"
+      ],
+      "KIT-2": [
+       "test_kit2_zip_route_rehashes_the_kit",
+       "world",
+       "the downloaded kit is hashed: KIT_NOT_VERIFIED"
+      ],
+      "MK-1": [
+       "test_mk1_header_slip_in_one_copy_recovers",
+       "direct",
+       "deploy/make_kit.py (MAINT-6): its own tests of the slipped and damaged member path are run here"
+      ],
+      "MK-2": [
+       "test_mk2_duplicate_binary_names_refused",
+       "direct",
+       "deploy/make_kit.py pack (MAINT-6): two binary members with one file name are refused"
+      ],
+      "OP-01": [
+       "test_op01_start_on_drive_before_first_open",
+       "world",
+       "the START is in the STAGE entry; OPEN is printed only after the entry is confirmed (O1)"
+      ],
+      "OP-02": [
+       "test_op02_lost_restore_upload_three_tries_then_stop",
+       "world",
+       "the RESTORE is a commit like any other: at most 3 uploads, then STOP UPLOAD_FAILED"
+      ],
+      "OP-03": [
+       "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+       "world",
+       "FINAL parts are confirmed before HANDBACK B; a part lost to a reset is re-uploaded (C3)"
+      ],
+      "OP-04": [
+       "test_op04_placeholders_refused_state_unchanged",
+       "direct",
+       "placeholders, key names, pattern names and README examples are VALUE_FORBIDDEN/VALUE_PLACEHOLDER"
+      ],
+      "OP-05": [
+       "test_op05_probe_same_session_refused",
+       "delegate:test_probe_p5",
+       "as SAFE-03"
+      ],
+      "OP-06": [
+       "test_op06_helper_never_needs_a_listing",
+       "direct",
+       "by construction: exact-name FIND and DOWNLOAD by id only; v2.1 deleted the LIST head hint"
+      ],
+      "OP-07": [
+       "test_op07_drive_calls_per_run_within_budget",
+       "world",
+       "measured Drive calls per run and per restore within the \u00a7X.5.5 budget"
+      ],
+      "OP-08": [
+       "test_op08_every_file_uploaded_once_when_drive_is_normal",
+       "world",
+       "by construction: one commit primitive; every journal file is uploaded once on a normal Drive"
+      ],
+      "OP-09": [
+       "test_op09_selftest_worker_death_bounded",
+       "direct",
+       "a dead self-test is retried once (SELFTEST_DIED); nothing is asked between OPEN and the end; everyday asks in order (the world half is test_resets test_selftest_died_retried_once_then_stops)"
+      ],
+      "SAFE-01": [
+       "test_safe01_unsupported_entries_halt_nothing_deleted",
+       "direct",
+       "strict tree_list everywhere (snapshot, AI walk, evict): WALK_UNSUPPORTED_ENTRY, nothing deleted"
+      ],
+      "SAFE-02": [
+       "test_safe02_case_id_refused_before_any_write",
+       "direct",
+       "CASE_ID fullmatch and forbidden characters: REFUSED, every cache file byte-identical"
+      ],
+      "SAFE-03": [
+       "test_safe03_probe_p5_same_call_check_refused",
+       "delegate:test_probe_p5",
+       "probe_p5 refuses a same-call check; P5 is answered (FAIL) and gates nothing (\u00a7X.12.5)"
+      ],
+      "SAFE-04": [
+       "test_safe04_enospc_or_short_write_at_every_durable_write",
+       "direct",
+       "durable.write checks every write, fsync and read-back: DISK_FULL/WRITE_FAILED, no UPLOAD printed"
+      ],
+      "SAFE-05": [
+       "test_safe05_trailing_newline_and_bad_id_refused",
+       "direct",
+       "re.fullmatch with re.ASCII on every attested value; ids match drive_id_re"
+      ],
+      "SAFE-06": [
+       "test_safe06_session_start_git_error_prints_stop_block",
+       "direct",
+       "no set -e; every failure prints a full STOP block"
+      ],
+      "SAFE-07": [
+       "test_safe07_setup_runs_foreground_and_gate_uses_hold",
+       "direct",
+       "setup in the foreground of session_start.sh; the release gate uses the foreground hold"
+      ],
+      "TEST-1": [
+       "test_test1_kit_change_with_run_in_flight_stops",
+       "direct",
+       "KIT_CHANGE_WITH_RUN_IN_FLIGHT"
+      ],
+      "TST-01": [
+       "test_tst01_second_start_same_attempt_chain_invalid",
+       "delegate:test_core_table",
+       "T32"
+      ],
+      "TST-02": [
+       "test_tst02_nothing_written_with_file_found_is_written",
+       "direct",
+       "forced FILES_FOUND -> T47"
+      ],
+      "TST-03": [
+       "test_tst03_not_ended_is_written",
+       "direct",
+       "forced NOT_ENDED -> T47"
+      ],
+      "TST-04": [
+       "test_tst04_md5_hidden_download_back_mismatch_is_fork",
+       "direct",
+       "the download-back sha256 compare (\u00a7X.5.5) meets a mismatching download: FORK"
+      ],
+      "TST-05": [
+       "test_tst05_consumer_tree_sha_mismatch_chain_invalid",
+       "direct+world",
+       "consumed tree sha must equal the archive (fold) and is measured (worker: AI_OUTPUT_CHANGED)"
+      ],
+      "TST-06": [
+       "test_tst06_prompt_changed_halts",
+       "world",
+       "a changed generator prompt halts before the record"
+      ],
+      "TST-07": [
+       "test_tst07_b_before_a_frozen_chain_invalid_and_runner_refuses",
+       "direct",
+       "T10 needs A frozen (T14 otherwise); the plan never proposes B first"
+      ],
+      "TST-08": [
+       "test_tst08_under_stage_direct",
+       "direct",
+       "the reused under_stage, tested directly"
+      ],
+      "TST-09": [
+       "test_tst09_no_catch_all_assertions",
+       "delegate:test_lints",
+       "lint L7"
+      ],
+      "TST-10": [
+       "test_tst10_free_space_preflight",
+       "direct",
+       "run_tests.py refuses under 1 GiB free"
+      ]
+     },
+     "v1_ids": 43,
+     "world_scenarios_in_test_resets": [
+      "test_f1_wipe_after_v_r2_written_before_ai_v_r2_confirmed",
+      "test_op01_start_on_drive_before_first_open",
+      "test_f3_classify_reads_only_head_at_every_worker_point",
+      "test_f7_written_lost_transcript_in_restore_entry",
+      "test_f8_dead_commit_plus_next_stage",
+      "test_op02_lost_restore_upload_three_tries_then_stop",
+      "test_op03_truncated_all_frozen_part_reuploaded_before_handback_b",
+      "test_op07_drive_calls_per_run_within_budget",
+      "test_op07_restore_calls_within_budget",
+      "test_op08_every_file_uploaded_once_when_drive_is_normal",
+      "test_d16_disk_bounded_over_runs",
+      "test_opx10_tool_calls_match_budget_golden",
+      "test_tst06_prompt_changed_halts",
+      "test_int07_output_changed_after_archive_halts_before_consumer",
+      "test_kit2_zip_route_rehashes_the_kit",
+      "test_imp04_no_commit_file_stops"
+     ]
+    },
+    "name": "test_v1_regressions",
+    "passed": 1,
+    "seconds": 0.0,
+    "tests": 1
+   },
+   {
+    "counts": {
+     "groups": 3,
+     "max_upload_bytes_seen": 1000000,
+     "per_config": {
+      "D": 2,
+      "DRI": 0,
+      "DV": 0,
+      "E": 1,
+      "Q": 0,
+      "X": 3
+     },
+     "scenarios": 6,
+     "seconds_per_scenario": {
+      "D_baseline": 66.3,
+      "D_clear_same_boot_foreground_died": 93.4,
+      "D_sameboot_damaged_cache_restores": 95.7,
+      "E_baseline": 35.1,
+      "test_d16_disk_bounded_over_runs": 67.3,
+      "test_foreground_died_same_boot_stops": 76.7
+     },
+     "seconds_wall": 266.0,
+     "stage_seconds_max": {
+      "finish": 20.8,
+      "freeze": 1.4,
+      "nonattempt": 1.5,
+      "prepare": 5.7,
+      "visual-record": 1.5
+     }
+    },
+    "name": "test_resets",
+    "passed": 6,
+    "seconds": 266.0,
+    "tests": 6
+   }
+  ],
+  "tests": 245,
+  "uid": 1000
+ },
+ "open_issues": [
+  "GAP-1 partly: cli.py is 1,663 lines against the plan's expected 1,513 (C 7,496 and the total 8,392 meet their caps). Further cuts would change the code texts that 51 hand, reviewer and legacy substitutions and cli's 81 glue guard ids (8 with EQUIVALENT arguments) are pinned to; contingency deletion 4 (merge ensure_standard into ensure_member) was not applied: the two re-make files from different sources (the runner's STANDARD.xlsx in the job folder, re-checked by sha256, versus an entry member) and merging adds a branch without saving lines.",
+  "GAP-2 platform gate: assemble --verify-frozen needs unprivileged user namespaces (or root) and util-linux unshare and mount on the maintainer machine (an Ubuntu host with kernel.apparmor_restrict_unprivileged_userns=1 refuses them; the verify is then EXIT_n, ASSEMBLE unclean and score_check ASSEMBLE_NOT_VERIFIED, fail-closed). It also needs the GENESIS base's first path component to exist on the maintainer machine (for the Dot's /home/agent/cps that is /home). Not yet run on the maintainer's machine.",
+  "GAP-4: N40 and N42 are not shown at 2015773 (their rules moved in v2.1, so the v2.1 tests fail on plain 2015773); they rest on their v2.1 ports.",
+  "GAP-7: the README's no-notes row for about 400 journal entries is an estimate, not measured (FakeDot's D journal has 6 entries).",
+  "Every EQUIVALENT entry (17 core and 18 glue at 746ea98; see the fix-round mutation results) waits for G-1.",
+  "The release gates G-1 to G-11 belong to the Dot, the owner or the reviewers; none was run."
+ ],
+ "operator_budget_D15": {
+  "D_AI1_e": {
+   "restore": {
+    "downloads": 5,
+    "drive_calls": 15,
+    "finds": 9,
+    "helper_commands": 18,
+    "journal_entries_before": 5,
+    "restore_entry": "CPSJ_D1_000006.tgz",
+    "saved_results": 8,
+    "uploads": 1,
+    "waits": 2
+   },
+   "series": {
+    "downloads": 50,
+    "drive_calls": 150,
+    "finds": 57,
+    "helper_commands": 72,
+    "saved_results": 30,
+    "session_start": 2,
+    "uploads": 43,
+    "waits": 3
+   }
+  },
+  "D_baseline": {
+   "per_run": {
+    "A/9990101": {
+     "drive_calls": 54,
+     "helper_commands": 16,
+     "png_parts": 13,
+     "saved_results": 6
+    },
+    "B/9990101": {
+     "drive_calls": 54,
+     "helper_commands": 16,
+     "png_parts": 13,
+     "saved_results": 6
+    },
+    "NA-A/9990102": {
+     "drive_calls": 3,
+     "helper_commands": 2,
+     "png_parts": 0,
+     "saved_results": 1
+    },
+    "NA-B/9990102": {
+     "drive_calls": 3,
+     "helper_commands": 2,
+     "png_parts": 0,
+     "saved_results": 1
+    },
+    "series": {
+     "drive_calls": 14,
+     "helper_commands": 16,
+     "png_parts": 0,
+     "saved_results": 7
+    }
+   },
+   "series": {
+    "downloads": 44,
+    "drive_calls": 132,
+    "finds": 46,
+    "helper_commands": 52,
+    "saved_results": 21,
+    "session_start": 1,
+    "uploads": 42,
+    "waits": 1
+   }
+  },
+  "D_notes_commit_only_gallop": {
+   "restore": {
+    "downloads": 18,
+    "drive_calls": 46,
+    "finds": 27,
+    "helper_commands": 39,
+    "journal_entries_before": 6,
+    "restore_entry": "CPSJ_D1_000007.tgz",
+    "saved_results": 14,
+    "uploads": 1,
+    "waits": 2
+   },
+   "series": {
+    "downloads": 62,
+    "drive_calls": 180,
+    "finds": 75,
+    "helper_commands": 92,
+    "saved_results": 36,
+    "session_start": 2,
+    "uploads": 43,
+    "waits": 3
+   }
+  },
+  "D_notes_none_step0": {
+   "restore": {
+    "downloads": 7,
+    "drive_calls": 23,
+    "finds": 15,
+    "helper_commands": 24,
+    "journal_entries_before": 5,
+    "restore_entry": "CPSJ_D1_000006.tgz",
+    "saved_results": 13,
+    "uploads": 1,
+    "waits": 2
+   },
+   "series": {
+    "downloads": 52,
+    "drive_calls": 158,
+    "finds": 63,
+    "helper_commands": 78,
+    "saved_results": 35,
+    "session_start": 2,
+    "uploads": 43,
+    "waits": 3
+   }
+  },
+  "Q_baseline": {
+   "per_run": {
+    "A/9990101": {
+     "drive_calls": 54,
+     "helper_commands": 16,
+     "png_parts": 13,
+     "saved_results": 6
+    },
+    "A/9990103": {
+     "drive_calls": 15,
+     "helper_commands": 14,
+     "png_parts": 0,
+     "saved_results": 5
+    },
+    "B/9990101": {
+     "drive_calls": 54,
+     "helper_commands": 16,
+     "png_parts": 13,
+     "saved_results": 6
+    },
+    "B/9990103": {
+     "drive_calls": 15,
+     "helper_commands": 14,
+     "png_parts": 0,
+     "saved_results": 5
+    },
+    "NA-A/9990102": {
+     "drive_calls": 3,
+     "helper_commands": 2,
+     "png_parts": 0,
+     "saved_results": 1
+    },
+    "NA-B/9990102": {
+     "drive_calls": 3,
+     "helper_commands": 2,
+     "png_parts": 0,
+     "saved_results": 1
+    },
+    "series": {
+     "drive_calls": 20,
+     "helper_commands": 25,
+     "png_parts": 0,
+     "saved_results": 11
+    }
+   },
+   "series": {
+    "downloads": 56,
+    "drive_calls": 184,
+    "finds": 74,
+    "helper_commands": 89,
+    "saved_results": 35,
+    "session_start": 1,
+    "uploads": 54,
+    "waits": 2
+   }
+  }
+ },
+ "reviewer_proof_table": {
+  "N18": {
+   "N40_N42": "not shown at 2015773: v2.1 moved both rules (T7 into names.check_answers, T8 into cli.go_checks and session_slip), so their v2.1 tests fail on plain 2015773 because the 2015773 code lacks the rule there; they are proven by their v2.1 ports (KILLED) only",
+   "fails_at_2015773_with_original_substitution": "FAIL AssertionError {1, 2} (admission_r2 my_mutants.py N18 applied to 2015773 core/session.py)",
+   "fails_at_v21_with_port": "FAIL AssertionError {1, 2} (mutants.py REVIEWER N18 applied to the fix-round core/session.py); N18's kill list now names both T3 tests",
+   "passes_at_2015773": "PASS",
+   "test": "test_t3_recheck_forks_2015773_form (deploy/vm2/tests/test_core_table.py; run at 2015773 by gapfix/n18_probe.py, which copies the function unchanged into 2015773's test_core_table namespace)"
+  }
+ },
+ "runner_sha256": "7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431",
+ "schema": "cps.vm2-integration.v1",
+ "second_full_run": {
+  "failed": [
+   "test_lints t_l1_codes_registered_and_tested: on_found handback file names and \"CODE detail\" returns recorded as codes (seen.py), fixed"
+  ],
+  "note": "idle machine",
+  "passed": 556,
+  "seconds": 3098.7,
+  "tests": 557
+ },
+ "snapshots": {
+  "full_suite_final": "cc5ef54 (testclone of the working files)",
+  "helper_tree_sha256": "4b407723b9e11212aee3d729824c5da4fde053ecc734e6c4afb8c6bd10634cf8",
+  "mutants_glue": "d202d58",
+  "mutants_hand_reviewer_legacy_core": "c196846",
+  "nonroot_final": "1770cf6",
+  "selftest": "15862d1"
+ },
+ "status": "BUILT (fix round, the M008-M012 amendment and its fix round), NOT REVIEWED, NOT ADMITTED"
+}

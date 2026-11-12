@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cpsvm2.core import fold as F                                    # noqa: E402
-from cpsvm2.core.names import RUNNER_SHA256, cjson, entry_name, part_name, sha  # noqa: E402
+from cpsvm2.core.names import HELPER_VERSION, RUNNER_SHA256, cjson, entry_name, part_name, sha  # noqa: E402
 
 T0 = 1793000000          # 2026-10-26
 REL, REL2 = sha(b'release-1'), sha(b'release-2')
@@ -17,8 +17,8 @@ TREE = sha(b'helper-tree')
 FP = sha(b'fingerprint')
 MEMBERS = [['RELEASE.json', sha(b'r')], ['VM_HELPER_CONFIG.json', sha(b'c1')], ['tables/t.json', sha(b't')]]
 GATES = {'p1_vm_files': 'PASS', 'p1_transcript_export': 'yes', 'p1_conversation_list': 'yes',
-         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_md5_visible': 'yes', 'p2_prefix_search': 'no',
-         'p2_newest_first': 'no', 'p2_lag_seconds': 20, 'p2_max_upload_bytes': 300000000, 'p2_tgz_kept': 'PASS',
+         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_prefix_search': 'no', 'p2_lag_seconds': 20,
+         'p2_max_upload_bytes': 300000000, 'p2_tgz_kept': 'PASS',
          'p2_failed_upload_can_appear': 'no', 'p3_identity_stable': 'yes', 'p5_detached': 'PASS',
          'p5_tool_call_seconds': 600, 'p5_setup_seconds': 300}
 JOBS = [['case01', 1, None], ['case02', 2, None], ['case03', 3, 'NONATTEMPT_SOURCE_UNAVAILABLE']]
@@ -74,7 +74,7 @@ class World:
         e = {'schema': 'cps.vm2-entry.v1', 'series': self.series, 'seq': seq, 'name': entry_name(self.series, seq),
              'prev_sha256': None if seq == 1 else hx('entry', seq - 1), 'kind': kind, 'body': body,
              'utc': self.now(), 'boot_id': boot_id or self.boot, 'uid': 1000, 'home': '/home/agent',
-             'fingerprint_sha256': FP, 'helper': {'version': 'cps-vm-helper.v2', 'tree_sha256': TREE},
+             'fingerprint_sha256': FP, 'helper': {'version': HELPER_VERSION, 'tree_sha256': TREE},
              'runner_sha256': RUNNER_SHA256, 'kit_sha256': kit or (s['kit_sha256'] if s else self.kit),
              'release_sha256': release or (s['release_sha256'] if s else REL), 'confirms': confirms, 'parts': ps,
              'payload': {'members': sorted(members, key=lambda m: m[0]), 'png': None}, 'cleared_local': None}
@@ -98,10 +98,9 @@ def genesis(w):
     q = w.series[0] in 'QD'
     b = {'mode': F.mode_of(w.series), 'operator': {'model': 'gpt-x', 'platform': 'chat'},
          'jobs': w.jobs if q else None, 'ledger': {'identity_line_sha256': hx('id'), 'ledger_id': 'L1'} if q else None,
-         'layout': {'base': BASE, 'qual': BASE + '/qual', 'jobs': BASE + '/jobs', 'ledger': BASE + '/ledger',
-                    'runtime': BASE + '/runtime'},
-         'gates': w.gates, 'pass': {'name': 'FINGERPRINT_PASS_%s.json' % FP, 'md5': md5ish('pass')},
-         'other_series_absent': [] if w.series[0] == 'Q' else None}
+         'layout': F.layout_of(BASE), 'gates': w.gates,
+         'pass': {'name': 'FINGERPRINT_PASS_%s.json' % FP, 'md5': md5ish('pass')},
+         'other_series_absent': [] if w.series[0] == 'Q' else None, 'approval': 'none'}
     return w.entry('GENESIS', b, members=ledger_members(1) if q else [])
 
 
@@ -143,9 +142,7 @@ def frozen_body(run, commands, final_next, flags=(), notify=None, **kw):
 
 
 def job_dir(tag, case):
-    root = {'A': 'A', 'B': 'B', 'A-restart1': 'A_restart1', 'B-restart1': 'B_restart1', 'NA-A': 'nonattempts_A',
-            'NA-B': 'nonattempts_B'}.get(tag)
-    return '%s/qual/%s/%s' % (BASE, root, case) if root else '%s/jobs/%s/%s' % (BASE, tag[1:], case)
+    return F.job_dir_of(BASE, tag, case)
 
 
 def new_run(tag, case, restart_of=None):
@@ -154,7 +151,7 @@ def new_run(tag, case, restart_of=None):
 
 
 def run_in_flight(s):
-    return s['current'] is not None or any(r['status'] in ('STARTED', 'OPENED', 'CONTINUED')
+    return s['current'] is not None or any(r['status'] in ('STARTED', 'CONTINUED')
                                            for R in s['runs'].values() for r in R['roles'].values())
 
 
@@ -164,7 +161,8 @@ def restore_body(w, resolutions=(), start_=None, **kw):
          'fingerprint_sha256': FP, 'pass': {'name': 'FINGERPRINT_PASS_%s.json' % FP, 'md5': md5ish('pass')},
          'head': {'seq': s['seq'], 'md5': md5ish('e%d' % s['seq']), 'copies': []}, 'lookups': [],
          'kit_sha256': w.kit, 'kit_change': None, 'resolutions': list(resolutions), 'start': start_, 'rebase': None,
-         'rerun_expected': None, 'reprepare': None, 'abandon': None, 'delivery_question': None, 'placed': []}
+         'rerun_expected': None, 'reprepare': None, 'abandon': None, 'delivery_question': None, 'placed': [],
+         'approval': 'none'}
     b.update(kw)
     return b
 
@@ -187,7 +185,7 @@ def latest(ro):
 def open_role(s):
     for k in s['order']:
         for rk, ro in sorted(s['runs'][k]['roles'].items()):
-            if ro['status'] in ('STARTED', 'OPENED', 'CONTINUED'):
+            if ro['status'] in ('STARTED', 'CONTINUED'):
                 return k, rk, ro
     return None
 
@@ -198,8 +196,7 @@ def oracle_item(s, run, rk, ans):
     R = s['runs'][run]
     ro = R['roles'][rk]
     cont = ro['status'] == 'CONTINUED'
-    adm = ro['status'] == 'STARTED' and ro['opened'] is None and ro['supersedes'] == 0 \
-        and g['p1_conversation_list'] == 'yes'
+    adm = ro['status'] == 'STARTED' and ro['supersedes'] == 0
     out = ans.get('outcome', 'CONTINUED') if not cont else 'CONTINUED'
     forced = None
     if g['p1_end_after_reset'] == 'no':
@@ -209,9 +206,7 @@ def oracle_item(s, run, rk, ans):
     elif not ans['ended']:
         forced = 'NOT_ENDED'
     elif out == 'NO_CONVERSATION':
-        if g['p1_conversation_list'] == 'no' and ro['status'] == 'STARTED' and ro['opened'] is None:
-            forced = 'NO_LIST'
-        elif not (adm and ans.get('list_shows_none') is True):
+        if not (adm and ans.get('list_shows_none') is True):
             forced = 'NO_CONVERSATION_NOT_ALLOWED'
     oc = False
     if cont:
@@ -235,7 +230,8 @@ def oracle_item(s, run, rk, ans):
     item = {'run': run, 'role': ro['role'], 'attempt': ro['attempt'], 'start_no': latest(ro)['start_no'],
             'ended': ans['ended'], 'files_found': ans['files_found'], 'outcome': out, 'forced': forced,
             'transcript': ans['transcript'], 'list_shows_none': ans.get('list_shows_none'), 'action': act,
-            'owner_check': oc}
+            'owner_check': oc, 'conversation': ans.get('conversation') or (
+                ro['archives'][0]['conversation'] if ro['archives'] else None)}
     st = None
     lt = latest(ro)
     if act == 'SUPERSEDE':
@@ -452,15 +448,9 @@ def _final_ready(s):
 
 
 def _open_moves(w, run, rk, ro):
-    s, out = w.state, []
-    g = s['genesis']['gates']
+    out = []
     lt = latest(ro)
-    if ro['status'] == 'STARTED' and g['p1_conversation_list'] == 'no' and ro['opened'] is None:
-        out.append(('OPENED', lambda: w.entry('OPENED', {'run': run, 'role': ro['role'], 'attempt': ro['attempt'],
-                                                         'start_no': lt['start_no'], 'conversation': 'conv-%s' % rk,
-                                                         'opened_utc': utc(w.t)})))
-    if (ro['status'] == 'OPENED' or (ro['status'] == 'STARTED' and g['p1_conversation_list'] == 'yes')) \
-            and lt['boot_id'] == w.boot:
+    if ro['status'] == 'STARTED' and lt['boot_id'] == w.boot:
         out.append(('AI', lambda: _ai(w, run, ro, 1, lt)))
     if ro['status'] == 'CONTINUED' and ro['continued_boot'] == w.boot:
         out.append(('AI_CONT', lambda: _ai(w, run, ro, len(ro['archives']) + 1, lt)))
@@ -470,12 +460,14 @@ def _open_moves(w, run, rk, ro):
 def _ai(w, run, ro, rev, lt):
     tr = {'status': 'exported', 'sha256': hx('tr'), 'ext': 'json'} if ro['role'] == 'G' else None
     att = {'G': {'platform': 'chat', 'model': 'm', 'effort': 'high', 'started_utc': lt['utc'], 'ended_utc': lt['utc'],
-                 'single_user_message': True, 'features': {}, 'tools': [], 'transcript_status': 'exported'},
+                 'single_user_message': True, 'features': {}, 'transcript_status': 'exported'},
            'S': {'prompt_pasted': True}, 'V': {}}[ro['role']]
+    if rev == 1:
+        att['tools_present'] = {'source': 'inventory', 'sha256': hx('tools')}
     b = {'run': run, 'role': ro['role'], 'attempt': ro['attempt'], 'revision': rev, 'start_no': lt['start_no'],
          'start_boot_id': lt['boot_id'], 'ended': True, 'conversation': 'conv-%s%d' % (ro['role'], ro['attempt']),
          'attested': att, 'tree_sha256': hx('tree', run, ro['role'], ro['attempt'], rev), 'files': [],
-         'transcript': tr, 'final_message_sha256': hx('fm') if ro['role'] == 'G' else None}
+         'transcript': tr, 'final_message_sha256': hx('fm', ro['role'], rev)}
     return w.entry('AI', b, members=[['ai', 'dir', 0o755, None, None]])
 
 
@@ -533,12 +525,12 @@ def _progress_moves(w, R):
             if V['review_incomplete'] < 2:
                 out.append(('REVIEW_INCOMPLETE', lambda: _stage(w, stage_body(
                     run, [rc], 'VISUAL_REVIEW', review_incomplete=True, refused='REVIEW_INCOMPLETE',
-                    continue_problems=3, **extra))))
+                    continue_problems=3, consumed=cons, **extra))))
             else:
-                out.append(('REVIEW_LIMIT', lambda: _frz(w, R, [rc], 'VISUAL_REVIEW', extra)))
+                out.append(('REVIEW_LIMIT', lambda: _frz(w, R, [rc], 'VISUAL_REVIEW', extra, consumed=cons)))
         out.append(('REFUSED_HALT', lambda: _stage(w, stage_body(
             run, [cmd(CONS[role], 'RESPONSE_INVALID', result='REFUSED')], R['next'], refused='RESPONSE_INVALID',
-            **extra))))
+            consumed=cons, **extra))))
         return out
     d = R['delivery'] or {}
     if not q and R['next'] == 'DELIVER' and d.get('prepared_seq') is None:
@@ -586,7 +578,10 @@ def _rebase_rerun_moves(w, R):
         parts = [(p['kind'], p['k']) for p in head['parts']]
         return _stage(w, b, parts=parts)
     out.append(('REBASE_SAME', same))
-    out.append(('REBASE_DIVERGED', lambda: _frz(w, R, [cmd(hb['commands'][0]['sub'], 'STOP_X')], 'STOP_X', extra,
+    sub = hb['commands'][0]['sub']
+    arch = sorted(k for k, r in R['roles'].items() if r['status'] == 'ARCHIVED' and not r['consumed'])
+    cons = _consumed(R, arch[0]) if sub in F.CONSUMER.values() and arch else []
+    out.append(('REBASE_DIVERGED', lambda: _frz(w, R, [cmd(sub, 'STOP_X')], 'STOP_X', extra, consumed=cons,
                                                 diverged=True, rebase=dict(rb, diverged=True))))
     return out
 
@@ -680,9 +675,7 @@ def _restore(w, resolve=None, rebase=False, kit_change_=False, ans=None, **kw):
 
 def answer_variants(s, ro):
     """Every §6.5 restore answer combination for an open role (list_shows_none only where it is asked)."""
-    g = s['genesis']['gates']
-    asked = ro['status'] == 'STARTED' and ro['opened'] is None and ro['supersedes'] == 0 \
-        and g['p1_conversation_list'] == 'yes'
+    asked = ro['status'] == 'STARTED' and ro['supersedes'] == 0
     out = []
     for ended in (True, False):
         for ff in (False, True):
@@ -711,8 +704,7 @@ def _answers(s, ro, rng):
            'transcript': pick(['exported', 'not_available'] if g['p1_transcript_export'] == 'yes'
                               else ['not_available']),
            'outcome': pick(['NOTHING_WRITTEN', 'NOTHING_WRITTEN', 'WRITTEN', 'UNSURE', 'NO_CONVERSATION'])}
-    if ro['status'] == 'STARTED' and ro['opened'] is None and ro['supersedes'] == 0 \
-            and g['p1_conversation_list'] == 'yes':
+    if ro['status'] == 'STARTED' and ro['supersedes'] == 0:
         ans['list_shows_none'] = pick([True, True, False])
     else:
         ans['list_shows_none'] = None
@@ -725,7 +717,7 @@ def check_invariants(s):
     if s is None:
         return
     opens = [(k, rk) for k in s['order'] for rk, ro in s['runs'][k]['roles'].items()
-             if ro['status'] in ('STARTED', 'OPENED', 'CONTINUED')]
+             if ro['status'] in ('STARTED', 'CONTINUED')]
     assert len(opens) <= 1, 'I1 %s' % opens
     assert all(k == s['current'] for k, _ in opens), 'I1 open role outside the current run'
     inflight = [k for k, R in s['runs'].items() if R['status'] in ('ACTIVE', 'INPUTS')]

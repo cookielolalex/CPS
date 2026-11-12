@@ -2,20 +2,21 @@
 builder. Invented data only.
 
 FakeDrive: folders of name -> [copies {id, md5, size, sha256, created}], add-only (nothing is ever edited or deleted by
-the Dot). The helper side has only exact-name FIND (every copy), a newest-first LIST of one folder limited to k (by
-creation order, only when the world's gates say yes) and download by id; there is no full listing (OP-06) and, with
-`hide_md5` (the default, as P2/M004 found), no md5 in any result. Knobs per name: lag (a copy stays invisible for n
-FINDs), drop (the k-th upload never lands), late (a dropped or timed-out upload appears after n FINDs), timeout (the
-k-th upload reports a timeout), refuse (the k-th upload is refused by the platform's approval review and lands after
-approve(), or never), dup (every upload lands twice), foreign copies (plant), and a lost part (remove, the test's
-side). The oracle and the audit read `table()` directly.
+the Dot). The helper side has only exact-name FIND (every copy, as the M004/M007 envelope, raw_find) and download by
+id (an unknown id downloads nothing); there is no full listing (OP-06) and no md5 in any result. Knobs per name: lag
+(a copy stays invisible for n FINDs), drop (the k-th upload never lands), late (a dropped or timed-out upload appears
+after n FINDs), timeout (the k-th upload reports a timeout), refuse (the k-th upload is refused by the platform's
+approval review and lands after approve(), or never), dup (every upload lands twice), foreign copies (plant), and a
+lost part (remove, the test's side). The oracle and the audit read `table()` directly.
 
 FakeDot: runs cli.main in-process, one command at a time to completion (the poll model of P5: a foreground command
 keeps running until it exits, and the Dot starts no other helper command meanwhile). It splits the optional
 `CPSV-RUNNING` line from the block, checks every block against the §6.1 grammar (F6, L5) and the printing rules (L9),
-executes each block literally (UPLOAD, FIND, LIST, DOWNLOAD on FakeDrive; one DO action), reports `--refused` for an
-upload the platform refused, plays the AI roles with the runner's invented stand-ins, answers like the operator (VM
-clock times, conversation list read against `after=`), and keeps its notes (the last CPSV line, the CPSV-REPO line).
+executes each block literally (UPLOAD once, FIND and DOWNLOAD on FakeDrive by the M007 routes: a saved raw result per
+block, a download into its attachment folder then copied; one DO action), reports `--refused` for an upload the
+platform refused and keeps it in its notes until the owner resolves it, plays the AI roles with the runner's invented
+stand-ins, answers like the operator (VM clock times, conversation list read against `after=`, approval= from its
+notes), injects the slips its policy names, counts its tool calls (OPX-10) and records the disk at every block.
 A reset (FakeDot.reset) deletes BASE (BASE/repo included) and the tools marker, gives a new boot id, and runs the
 README bootstrap lines (§6.1) with the clone line replaced by a symbolic link to the checkout under test.
 
@@ -60,8 +61,7 @@ TCJ = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(TCJ)
 
 GATES = {'p1_vm_files': 'PASS', 'p1_transcript_export': 'no', 'p1_conversation_list': 'yes',
-         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_md5_visible': 'no', 'p2_newest_first': 'yes',
-         'p2_lag_seconds': 0, 'p2_max_upload_bytes': 50000000, 'p2_tgz_kept': 'PASS',
+         'p1_end_after_reset': 'yes', 'p2_exact_search': 'PASS', 'p2_lag_seconds': 0, 'p2_max_upload_bytes': 50000000, 'p2_tgz_kept': 'PASS',
          'p2_failed_upload_can_appear': 'yes', 'p3_identity_stable': 'yes', 'p3_clock_tolerance_seconds': 300,
          'p5_foreground_hold_seconds': 1200, 'p5_setup_seconds': 130}
 STAGE_MAX = {'selftest': 1100, 'place': 300, 'prepare': 600, 'nonattempt': 300, 'scope-finish': 600, 'finish': 900,
@@ -71,6 +71,7 @@ NODE_SHA = '2286ce921a47349726b0e8b037ccbb6627043d24d1fc3c8f22c2dc53c4a1f7ff'
 NODE_PATH = os.environ.get('NODE_PATH') or '/usr/local/lib/node_modules_global'
 CONV_RE = r'conv-[0-9a-f]{8}'
 DOC_SAMPLES = []
+TOOLS = b'invented_drive_search\ninvented_drive_download\ninvented_web_search\n'
 
 
 def sha(b):
@@ -92,6 +93,31 @@ def readme_bootstrap():
     t = (VM2 / 'README.md').read_text(encoding='utf-8')
     blk = t.split('<!-- bootstrap:begin -->', 1)[1].split('<!-- bootstrap:end -->', 1)[0]
     return [ln for ln in blk.splitlines() if ln.strip() and not ln.startswith('```')]
+
+
+def bootstrap_script(base, commit, hint):
+    """The README section 1 block as the Dot runs it, and as a maintainer's clear message gives it (README section 6,
+    delta v2.1 §9.8): COMMIT and the hint filled in, /tmp/cps read as this world's base, the clone a link to REPO."""
+    script = []
+    for ln in readme_bootstrap():
+        ln = ln.replace('/tmp/cps', str(base))             # the README's base (A1) is this World's base
+        if ln.startswith('COMMIT='):
+            ln = 'COMMIT=%s' % commit
+        elif 'git clone' in ln:
+            ln = '[ -d {0}/repo/.git ] || {{ mkdir -p {0} && ln -s {1} {0}/repo; }}'.format(
+                shlex.quote(str(base)), shlex.quote(str(REPO)))
+        elif 'session_start.sh' in ln:
+            ln = ln.replace(' [--hint <seq6> --kit <hex12>]', '')
+            if hint:
+                ln += ' --hint %s --kit %s' % hint
+        script.append(ln)
+    return '\n'.join(script)
+
+
+def dot_env(e):
+    """A fresh shell of the Dot (amendment fix round, CC-3): no CPS_VM_BASE or CPS_TOOLS preset, so only the block's
+    own export line sets the base (TOOLS is the default ~/cps-tools)."""
+    return {k: v for k, v in e.items() if k not in ('CPS_VM_BASE', 'CPS_TOOLS')}
 
 
 # ================================================================ the clock
@@ -118,11 +144,10 @@ def real_utc():
 class FakeDrive:
     def __init__(self, gates):
         self.gates = gates
-        self.hide_md5 = gates.get('p2_md5_visible') != 'yes'
         self.folders, self.blobs, self.n, self.calls = {}, {}, 0, []
         self.uploads, self.max_upload = {}, 0
         self.drop, self.lag, self.late, self.dup = {}, {}, {}, set()
-        self.timeout, self.refuse, self.refused_pending, self.ghosts = {}, {}, [], []
+        self.timeout, self.refuse, self.refused_pending = {}, {}, []
 
     def _put(self, folder, name, data, hidden=0):
         self.n += 1
@@ -133,11 +158,16 @@ class FakeDrive:
         return c
 
     def _out(self, c):
-        """What the Dot's tool shows of a copy: id, size, creation (and md5 only when visible)."""
-        r = {'id': c['id'], 'size': c['size'], 'created': c['created']}
-        if not self.hide_md5:
-            r['md5'] = c['md5']
-        return r
+        """What the Dot's manual form uses of a copy: id, size, creation (never an md5, M004)."""
+        return {'id': c['id'], 'size': c['size'], 'created': c['created']}
+
+    def _entry(self, folder, name, c):
+        """One `results` entry of an exact-name search with every key of the M007 result (invented values)."""
+        url = 'https://drive.invalid/file/d/%s/view' % c['id']
+        return {'url': url, 'title': name, 'id': c['id'], 'mime_type': 'application/octet-stream',
+                'size': str(c['size']), 'file_or_folder': 'file', 'created_at': c['ctime'][:-1] + '.000Z',
+                'updated_at': c['ctime'][:-1] + '.000Z', 'viewedByMeTime': None, 'display_title': name,
+                'display_url': url, 'parent_ids': ['fakefolder' + sha(folder.encode())[:20]], 'shared': False}
 
     # ---- the Dot's side
     def upload(self, path, folder, name):
@@ -164,12 +194,13 @@ class FakeDrive:
             self._put(folder, name, data)
         return 'ok'
 
-    def approve(self, land=True):
-        """The owner approves the refused uploads in the platform; they land (or, land=False, never do)."""
-        for folder, name, data in self.refused_pending:
+    def approve(self, land=True, name=None):
+        """The owner approves the refused uploads (of `name`, or all) in the platform; they land (or, land=False, never
+        do). Also after a reset of the World (D6)."""
+        for folder, n, data in [x for x in self.refused_pending if name in (None, x[1])]:
             if land:
-                self._put(folder, name, data)
-        self.refused_pending = []
+                self._put(folder, n, data)
+            self.refused_pending.remove((folder, n, data))
 
     def _visible(self, cs):
         out = []
@@ -184,17 +215,17 @@ class FakeDrive:
         self.calls.append(('FIND', folder, name))
         return [self._out(c) for c in self._visible(self.folders.get(folder, {}).get(name, []))]
 
-    def list_newest(self, folder, k):
-        assert self.gates['p2_newest_first'] == 'yes', 'a LIST without the gate'
-        self.calls.append(('LIST', folder, k))
-        rows = [(c['created'], n, c) for n, cs in self.folders.get(folder, {}).items()
-                for c in cs if c['hidden'] <= 0]
-        got = [(n, self._out(c)) for _, n, c in sorted(rows, key=lambda r: -r[0])[:k]]
-        return [(f_, c) for fo, f_, c in self.ghosts if fo == folder] + got          # listed, never found
+    def raw_find(self, folder, name):
+        """The returned object of an exact-name search: the M004 envelope, newest first."""
+        self.calls.append(('FIND', folder, name))
+        cs = sorted(self._visible(self.folders.get(folder, {}).get(name, [])), key=lambda c: -c['created'])
+        return {'content': [{'type': 'text', 'text': 'Action completed.'}],
+                'structuredContent': {'results': [self._entry(folder, name, c) for c in cs]}, 'isError': False}
 
     def download(self, did):
+        """The bytes of a copy by id; None for an id that is not on Drive (the target then stays missing)."""
         self.calls.append(('DOWNLOAD', None, did))
-        return self.blobs[did]
+        return self.blobs.get(did)
 
     # ---- the test's side (oracle, audit, injected faults)
     def table(self):
@@ -214,16 +245,9 @@ class FakeDrive:
         self.folders.get(folder, {}).pop(name, None)
 
     def listing(self, folder):
-        """The maintainer tool's full listing (audit input; never offered to the helper). With md5 hidden it has no
-        md5Checksum either (§X.10)."""
-        out = []
-        for n, cs in sorted(self.folders.get(folder, {}).items()):
-            for c in cs:
-                r = {'id': c['id'], 'name': n, 'size': str(c['size']), 'createdTime': c['ctime']}
-                if not self.hide_md5:
-                    r['md5Checksum'] = c['md5']
-                out.append(r)
-        return out
+        """The maintainer tool's full listing (audit input; never offered to the helper), without md5 (§X.10)."""
+        return [{'id': c['id'], 'name': n, 'size': str(c['size']), 'createdTime': c['ctime']}
+                for n, cs in sorted(self.folders.get(folder, {}).items()) for c in cs]
 
 
 class Reset(BaseException):
@@ -307,7 +331,9 @@ class Seams:
 
 # ================================================================ FakeDot
 DOT_FIELDS = ('blocks', 'notes', 'policy', 'conv_n', 'convs', 'opened', 'current', 'events', 'o2', 'refused', 'live',
-              'answered', 'running', 'stops_a', 'attests_after', 'killed_tree', 'downloads', 'reset_calls')
+              'answered', 'running', 'stops_a', 'attests_after', 'killed_tree', 'downloads', 'reset_calls', 'uploaded',
+              'n_found', 'n_download', 'n_raw', 'tally', 'disk', 'injected', 'last_raw', 'bootstrap_stop')
+SLIP_CODES = ('DOWNLOAD_MISSING', 'DOWNLOAD_INCOMPLETE', 'COPY_MISMATCH')
 
 
 class FakeDot:
@@ -315,12 +341,19 @@ class FakeDot:
        'v': 'pass' | 'fail' | 'incomplete' (first review) ; 'v_cont': 'pass' | 'incomplete' (after CONTINUE)
        'export': True/False (EXPORT_TRANSCRIPT done) ; 'restore': {...restore answers...} ; 'arrived': 'yes'|'no'
        'list_shows_none': 'yes'|'no' (C5 rebase question) ; 'approve': True/False (the owner approves a refused
-       upload, HANDBACK A, and it lands)."""
+       upload, HANDBACK A, and it lands) ; 'found': 'raw' | 'manual' ; 'approval': 'notes' (answer pending while a
+       refusal is in the notes) | 'none' (always none: the wrong-none slip of D6) ; 'tools': 'inventory' | 'file' ;
+       'final_message': None (an invented text) or the exact text (b'' for a conversation without one) ; 'inputs':
+       'restore' | 'lost' ; 'slips': [[kind, k]] with kind wrong_id, size (the k-th found), wrong_id_save (the first
+       FIND of a commit loop with a copy, from the k-th found on), short_download, missing
+       (the k-th download), stale_raw, swapped_raw (the k-th raw save)."""
     def __init__(self, world):
         self.w = world
-        self.blocks, self.notes = [], {'cpsv': None, 'repo': None}
+        self.blocks, self.notes = [], {'cpsv': None, 'repo': None, 'refused': []}
         self.policy = {'v': 'pass', 'v_cont': 'pass', 'export': False, 'restore': {}, 'arrived': 'yes',
-                       'list_shows_none': 'yes', 'role_writes': True, 'approve': True}
+                       'list_shows_none': 'yes', 'role_writes': True, 'approve': True, 'found': 'raw',
+                       'approval': 'notes', 'tools': 'inventory', 'final_message': None, 'inputs': 'restore',
+                       'slips': []}
         self.conv_n, self.convs, self.opened = 0, {}, {}
         self.current = None
         self.hook = None                        # hook(dot, lines) -> None | 'reset' | 'stop' before a block is done
@@ -329,13 +362,25 @@ class FakeDot:
         self.running, self.stops_a, self.attests_after, self.killed_tree = [], [], [], None
         self.downloads = []                     # (boot, drive id, path) of every DOWNLOAD line done
         self.reset_calls = []                   # len(FakeDrive.calls) at each reset (the restore's call budget)
+        self.uploaded = set()                   # (at, UPLOAD line): each UPLOAD line is done once
+        self.n_found = self.n_download = self.n_raw = 0
+        self.tally, self.disk = [], []          # per command: tool-call counts (OPX-10); per block: the disk (D16)
+        self.injected, self.last_raw, self.bootstrap_stop = None, None, None
+
+    def slip_due(self, kinds, n):
+        for x in self.policy['slips']:
+            if x[0] in kinds and x[1] == n:
+                self.policy['slips'].remove(x)
+                self.injected = x[0]
+                return x[0]
+        return None
 
     # ---- one helper command, run to completion (P5: the Dot polls the same session until the process exits)
     def cmd(self, *argv):
         v2 = self.w.base / 'outbox/v2'
         before = cache_files(v2) if argv[0] in ('found', 'answer', 'go') else None
         out = io.StringIO()
-        t0, n0 = time.time(), len(self.w.seams.subs)
+        t0, n0, d0 = time.time(), len(self.w.seams.subs), len(self.w.drive.calls)
         self.w.seams.cmd_subs = []
         try:
             with contextlib.redirect_stdout(out):
@@ -369,10 +414,16 @@ class FakeDot:
             self.notes['cpsv'] = lines[0]
             self.oracles(lines)
             self.check_uploads(lines)
-        if code == 4 and before is not None and argv[0] in ('found', 'answer'):
-            assert cache_files(v2) == before, 'O7: a refusal changed a cache file'
-            self.refused.append(lines[1] if len(lines) > 1 else '')
+        if code == 4 and before is not None and len(lines) > 1 and lines[1].startswith('REFUSED '):
+            after = cache_files(v2)
+            if argv[0] != 'go' and lines[1].split()[1] not in SLIP_CODES:   # O7 (delta v2.1 §2.2.6): only BLOCK.json
+                assert {k: v for k, v in after.items() if k != 'BLOCK.json'} == \
+                    {k: v for k, v in before.items() if k != 'BLOCK.json'}, 'O7: a refusal changed a cache file'
+            assert not any(ln.startswith('UPLOAD ') for ln in lines), 'SD-60: an UPLOAD line after a REFUSED line'
+            self.refused.append(lines[1])
         self.blocks.append({'argv': list(argv), 'code': code, 'lines': lines, 'boot': self.w.boot})
+        self.tally.append({'argv0': argv[0], 'drive': len(self.w.drive.calls) - d0, 'boot': self.w.boot})
+        self.disk.append(self.w.disk_record())
         return code, lines
 
     def check_uploads(self, lines):
@@ -408,7 +459,7 @@ class FakeDot:
         key = None
         if 'OPEN_CONVERSATION' in do and R:
             for k, ro in sorted(R['roles'].items()):
-                if ro['status'] in ('STARTED', 'OPENED'):
+                if ro['status'] == 'STARTED':
                     lt = [x for x in ro['starts'] if x['superseded_by'] is None][-1]
                     key = ('OPEN', R['key'], k, lt['start_no'], lt['seq'])
         elif 'CONTINUE_CONVERSATION' in do and R:
@@ -436,15 +487,20 @@ class FakeDot:
             if code is None:                    # killed in the same boot: the Dot runs go once (§X.6.1)
                 code, lines = self.cmd('go')
                 continue
-            if code == 3 and lines and lines[-1].endswith(' HANDBACK A'):
-                self.stops_a.append(lines[-1])
+            if code == 3 and lines and ' HANDBACK A' in lines[-1]:
+                self.stops_a.append(lines[-1])                # the owner approves or denies in the platform
                 self.w.drive.approve(self.policy['approve'])
+                self.notes['refused'] = []
                 code, lines = self.cmd('go')
                 continue
-            if code == 4 and len(lines) > 1 and lines[1] == 'REFUSED INPUTS_CHANGED' and self.w.restore_inputs():
-                code, lines = self.cmd('go')            # the Dot puts the user's files back after a reset (§11.4)
+            if code == 4 and len(lines) > 1 and lines[1] == 'REFUSED INPUTS_CHANGED':
+                if self.policy['inputs'] == 'restore':        # README 2.3: the same three files back, unchanged
+                    assert self.w.restore_inputs(), 'INPUTS_CHANGED with nothing to put back'
+                code, lines = self.cmd('go')
                 continue
-            if code not in (0,):
+            if code == 4 and len(lines) > 1 and self.injected:  # a slip of the policy: do the block after REFUSED
+                self.injected = None
+            elif code not in (0,):
                 return code, lines
             nxt = self.execute(lines)
             if nxt is None:
@@ -454,77 +510,51 @@ class FakeDot:
 
     def execute(self, lines):
         d = self.w.drive
-        finds, plist, status = [], None, {}
+        finds, status, at = [], {}, lines[0].split(' at=')[1].split(' ')[0]
+        refused_line = len(lines) > 1 and lines[1].startswith('REFUSED ')
         for ln in lines[1:-1]:
             t = shlex.split(ln)
             if t[0] == 'REFUSED':
                 continue
             if t[0] == 'UPLOAD':                          # once each, never retried by the Dot (§X.5.6 step 1)
-                status[t[5]] = d.upload(t[1], t[3], t[5])
+                assert not refused_line, 'SD-60: an UPLOAD line in a reprinted block'
+                if (at, ln) not in self.uploaded:
+                    self.uploaded.add((at, ln))
+                    status[t[5]] = d.upload(t[1], t[3], t[5])
+                    if status[t[5]] == 'refused':
+                        self.notes['refused'].append(t[5])    # README 3.1 step 3
             elif t[0] == 'FIND':
                 assert t[2] == 'NAME' and len(t) == 4, 'X.5: only exact-name FIND exists: %s' % ln
-                finds.append((t[3], d.find(t[1], t[3])))
-            elif t[0] == 'LIST':
-                assert t[2] == 'NEWEST' and len(t) == 4, ln
-                plist = d.list_newest(t[1], int(t[3]))
+                finds.append((t[1], t[3], d.raw_find(t[1], t[3])))
             elif t[0] == 'DOWNLOAD':
-                Path(t[5]).parent.mkdir(parents=True, exist_ok=True)
-                Path(t[5]).write_bytes(d.download(t[3]))
-                self.downloads.append((self.w.boot, t[3], t[5], self.w.in_session()))
+                self.download(t[3], t[5])
         do = lines[-1][len('DO: '):]
         t = shlex.split(do)
         act = t[0]
-        hidden = 'ID:SIZE ...' in do                    # the block names the form the helper expects (§X.6.2)
-        fmt = (lambda c: '%s:%d' % (c['id'], c['size'])) if hidden else (
-            lambda c: '%s:%s:%d' % (c['id'], c['md5'], c['size']))
         if act == 'STOP':
             return None
-        if act == 'RUN':
-            return self.cmd('go')
-        if act == 'POLL':
+        if act in ('RUN', 'POLL'):
             return self.cmd('go')
         if act == 'WAIT':
             self.w.clock.advance(int(t[1].split('=')[1]))      # (a real wait, shortened: see W_ABS_TEST)
+            self.tally.append({'argv0': 'WAIT', 'drive': 0, 'boot': self.w.boot})
             return self.cmd('go')
         kv = {x.split('=', 1)[0]: x.split('=', 1)[1] for x in t[1:] if '=' in x and not x.startswith('--')}
         if act == 'ATTEST' and 'found' in t:
-            at = t[t.index('--at') + 1]
-            args = ['--at', at]
-            if '--name' not in t:                                # a LIST answer
-                for n, c in plist or []:
-                    args += ['--file', '%s:%s' % (n, fmt(c))]
-                if not plist:
-                    args.append('--none')
-                return self.cmd('found', *args)
-            names = [t[i + 1] for i in range(len(t) - 1) if t[i] == '--name']
-            got = dict(finds)
-            for n in names:
-                args += ['--name', n]
-                if status.get(n) == 'refused':
-                    args.append('--refused')
-                cs = got.get(n, [])
-                if not cs:
-                    args.append('--none')
-                for c in cs:
-                    args += ['--file', fmt(c)]
-            return self.cmd('found', *args)
+            return self.found(t[t.index('--at') + 1], finds, status)
         if 'ATTEST' in t:
             i = t.index('ATTEST')
             after = t[i + 1].split('=', 1)[1] if t[i + 1].startswith('after=') else None
             j = t.index('--at')
-            at = t[j + 1]
             keys = [tuple(x.split('=', 1)) for x in t[j + 2:]]
             pre = (act, kv) if act != 'ATTEST' else None
             if after:
                 self.attests_after.append((after, [k for k, _ in keys]))
             vals = self.answer(keys, pre, lines, after)
-            return self.cmd('answer', '--at', at, *['%s=%s' % (k, vals[k]) for k, _ in keys])
+            return self.cmd('answer', '--at', t[j + 1], *['%s=%s' % (k, vals[k]) for k, _ in keys])
         if act == 'OPEN_CONVERSATION':
             self.events.append(('OPEN', kv['role'], kv['prompt'], self.w.boot))
             self.open_conv(kv['role'], kv['prompt'], kv['folder'])
-            return self.cmd('go')
-        if act == 'AWAIT_CONVERSATION':
-            self.events.append(('AWAIT', kv['role'], kv['conversation'], self.w.boot))
             return self.cmd('go')
         if act == 'CONTINUE_CONVERSATION':
             self.events.append(('CONTINUE', 'V', kv['message'], self.w.boot))
@@ -542,6 +572,62 @@ class FakeDot:
                 Path(kv['to']).write_text(json.dumps({'invented': 'transcript', 'role': kv['role']}))
             return self.cmd('go')
         raise AssertionError('unknown action %r' % do)
+
+    def download(self, did, target):
+        """The M007 route: the raw file lands in the Dot's attachment folder, then `cp` to the target, whose folder
+        the helper made (S-09)."""
+        self.n_download += 1
+        assert os.path.isdir(os.path.dirname(target)), 'S-09: a DOWNLOAD target without its folder'
+        data = self.w.drive.download(did)
+        self.downloads.append((self.w.boot, did, target, self.w.in_session()))
+        how = self.slip_due(('short_download', 'missing'), self.n_download)
+        if data is None or how == 'missing':
+            return
+        att = self.w.root / 'attachments' / ('%06d_%s' % (self.n_download, os.path.basename(target)))
+        att.parent.mkdir(parents=True, exist_ok=True)
+        att.write_bytes(data[:-1] if how == 'short_download' else data)
+        shutil.copyfile(att, target)
+
+    def found(self, at, finds, status):
+        """`found` for a FIND block: the saved raw results (default) or the manual form, plus --refused."""
+        self.n_found += 1
+        how = self.slip_due(('wrong_id', 'size'), self.n_found)
+        hdr = (self.blocks[-1]['lines'] or [''])[0] if self.blocks else ''
+        for x in [x for x in self.policy['slips'] if x[0] == 'wrong_id_save' and x[1] <= self.n_found][:1]:
+            if not how and ' state=SAVE' in hdr and any(o['structuredContent']['results'] for _, _, o in finds):
+                self.policy['slips'].remove(x)          # GAP-5: the first commit-loop FIND with a copy from found k on
+                self.injected = how = 'wrong_id'
+        objs = [copy.deepcopy(o) for _, _, o in finds]
+        if how:
+            for o in objs:
+                for r in o['structuredContent']['results'][:1]:
+                    if how == 'wrong_id':
+                        r['id'] = r['id'][:-1] + ('x' if r['id'][-1] != 'x' else 'y')
+                    else:
+                        r['size'] = str(int(r['size']) + 1)
+        ref = []
+        for n, st in status.items():
+            if st == 'refused':
+                ref += ['--refused', n]
+        if self.policy['found'] == 'manual':
+            args = ['--at', at]
+            for (_, n, _), o in zip(finds, objs):
+                args += ['--name', n]
+                rs = o['structuredContent']['results']
+                args += ['--none'] if not rs else [x for r in rs for x in ('--file', '%s:%s' % (r['id'], r['size']))]
+            return self.cmd('found', *(args + ref))
+        self.n_raw += 1
+        swap = self.slip_due(('swapped_raw',), self.n_raw)
+        stale = self.slip_due(('stale_raw',), self.n_raw)
+        if swap and len(objs) > 1:
+            objs = objs[::-1]
+        path = self.w.base / 'attest' / ('raw_%04d.json' % self.n_raw)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(objs, separators=(',', ':'), ensure_ascii=False))
+        if stale and self.last_raw:
+            path = self.last_raw
+        self.last_raw = path
+        return self.cmd('found', '--at', at, '--raw', str(path), *ref)
 
     # ---- AI roles
     def new_conv(self, role):
@@ -586,12 +672,14 @@ class FakeDot:
                 out[k] = 'gpt-test-operator'
             elif k == 'platform':
                 out[k] = 'test-platform'
+            elif k == 'approval':                             # README 3.1 step 7
+                out[k] = 'pending' if pol['approval'] == 'notes' and self.notes['refused'] else 'none'
             elif k == 'ended':
                 out[k] = rs.get('ended', 'yes') if 'outcome' in kd or ('transcript' in kd and 'model' not in kd) \
                     else 'yes'
             elif k == 'conversation':
                 out[k] = rs.get('conversation') or self.convs.get(self.cur_role(lines), 'conv-0fffffff')
-            elif k in ('started_utc', 'ended_utc', 'opened_utc'):    # VM clock readings (§X.6.1)
+            elif k in ('started_utc', 'ended_utc'):          # VM clock readings (§X.6.1)
                 out[k] = self.opened.get(self.cur_role(lines), {}).get('utc') if k != 'ended_utc' else real_utc()
                 out[k] = out[k] or real_utc()
             elif k == 'model':
@@ -603,7 +691,7 @@ class FakeDot:
             elif k in N.FEATURES:
                 out[k] = 'no'
             elif k == 'tools':
-                out[k] = 'none'
+                out[k] = self.tools_answer()
             elif k == 'transcript':
                 if 'outcome' in kd or 'model' not in kd:
                     out[k] = rs.get('transcript', 'exported' if pol['export'] else 'not_available')
@@ -628,11 +716,19 @@ class FakeDot:
             self.live = {}
         elif 'ended' in kd:
             self.live[self.current] = False
-        if 'model' in kd:                                         # the generator's final message
-            fm = w.base / 'attest/final_message.txt'
+            fm = w.base / 'attest/final_message.txt'                 # every conversation's final message (D3c)
             fm.parent.mkdir(parents=True, exist_ok=True)
-            fm.write_text('Done: the invented response is in the output folder.\n')
+            fm.write_bytes(pol['final_message'] if pol['final_message'] is not None else
+                           'Done: the {invented} response <is> in the output folder.\n'.encode('utf-8'))
         return out
+
+    def tools_answer(self):
+        if self.policy['tools'] == 'inventory':
+            return 'inventory'
+        p = self.w.base / 'attest' / ('tools_%d.txt' % (self.conv_n))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(TOOLS + b'invented_extra_tool\n')
+        return 'file:' + str(p)
 
     def cur_role(self, lines):
         hdr = ' '.join(lines)
@@ -644,7 +740,7 @@ class FakeDot:
     # ---- a VM reset
     def reset(self, notes='hint'):
         """Everything but Drive is lost. notes: 'hint' (the last CPSV and CPSV-REPO lines survive), 'commit' (only
-        the CPSV-REPO line), 'none' (step 0 of the README)."""
+        the CPSV-REPO line), 'none' (step 0 of the README). The refused uploads in the notes survive a reset."""
         w = self.w
         self.reset_calls.append(len(w.drive.calls))
         w.kill_boot()
@@ -667,26 +763,19 @@ class FakeDot:
 
     def bootstrap(self, commit, hint):
         w = self.w
-        script = []
-        for ln in readme_bootstrap():
-            if ln.startswith('COMMIT='):
-                ln = 'COMMIT=%s' % commit
-            elif 'git clone' in ln:
-                ln = '[ -d ~/cps/repo/.git ] || { mkdir -p ~/cps && ln -s %s ~/cps/repo; }' % shlex.quote(str(REPO))
-            elif 'session_start.sh' in ln:
-                ln = ln.replace(' [--hint <seq6> --kit <hex12>]', '')
-                if hint:
-                    ln += ' --hint %s --kit %s' % hint
-            script.append(ln)
-        p = subprocess.run(['bash', '-c', '\n'.join(script)], capture_output=True, text=True, env=w.env(),
-                           timeout=600)
+        assert w.tools == w.home / 'cps-tools', 'the Dot sets no CPS_TOOLS: TOOLS is ~/cps-tools'
+        p = subprocess.run(['bash', '-c', bootstrap_script(w.base, commit, hint)], capture_output=True, text=True,
+                           env=dot_env(w.env()), timeout=600)
         lines = [ln for ln in p.stdout.splitlines() if ln]
         seen.scan(lines)
         self.boot_err = p.stderr
         self.blocks.append({'argv': ['session_start'], 'code': p.returncode, 'lines': lines, 'boot': w.boot})
+        self.tally.append({'argv0': 'session_start', 'drive': 0, 'boot': w.boot})
         for ln in lines:
             if ln.startswith('CPSV-REPO commit='):
                 self.notes['repo'] = ln.split('=', 1)[1]
+            if ln.startswith('DO: STOP SESSION_'):
+                self.bootstrap_stop = ln.split()[2]            # the World's own bootstrap stopped (D11d)
         blk = [ln for ln in lines if not ln.startswith(('CPSV-REPO', 'CPSV-RUNNING'))]
         if blk and blk[0].startswith('CPSV '):
             assert drive.check_grammar(blk) is None, blk
@@ -713,7 +802,7 @@ def cache_files(v2):
 
 # ================================================================ invented AI outputs
 def write_response(folder):
-    """G: the package's invented example response for this job (case id and inventory hash adapted)."""
+    """G: the package's invented example response for this job (case id, inventory hash and reader adapted)."""
     jd = folder.parents[1]
     case = jd.name
     inv = folder / 'input' / 'packet' / 'SOURCE_INVENTORY.json'
@@ -727,6 +816,7 @@ def write_response(folder):
         return case if x == 'EXAMPLE046F' else x
     r = walk(r)
     r['inventory_sha256'] = sha(inv.read_bytes())
+    r['limitations'].append('Invented stand-in response of the reader folder %s.' % jd.parent.name)   # A differs from B
     out = folder / 'output' / 'response.json'
     out.write_text(json.dumps(r, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
 
@@ -747,8 +837,8 @@ class World:
         self.root.mkdir(parents=True, exist_ok=True)
         self.series, self.gates = series, dict(GATES, **(gates or {}))
         self.cases = list(cases)
-        self.home = self.root / 'home'
-        self.base, self.tools = self.home / 'cps', self.home / 'cps-tools'
+        self.home = self.root / 'home'                  # the Dot's layout (amendment A1): BASE /tmp/cps outside HOME
+        self.base, self.tools = self.root / 'tmp/cps', self.home / 'cps-tools'
         self.boot_path = self.root / 'boot_id'
         self.fixed = self.root / 'fixed'
         self.clock = Clock()
@@ -891,7 +981,7 @@ class World:
              'png_part_bytes': 1000000, 'max_entry_bytes': 50000000, 'max_transcript_bytes': 20000000,
              'max_ai_output_bytes': 20000000, 'conversation_re': CONV_RE, 'transcript_ext': 'json',
              'drive_id_re': r'[A-Za-z0-9_-]{20,80}', 'gates': self.gates, 'clear': None,
-             'doc_samples': readme_samples() + ['conv-EXAMPLE']}
+             'doc_samples': readme_samples() + ['conv-EXAMPLE'], 'tool_inventory_sha256': sha(TOOLS)}
         c.update(self.cfg_over)
         c.update(over)
         return c
@@ -946,7 +1036,28 @@ class World:
             time.sleep(1.1)                                    # the admission is frozen before the first prepare
         mem['RELEASE.json'] = (json.dumps(self.release_doc(rel_extra), ensure_ascii=False, indent=1) + '\n').encode()
         mem['VM_HELPER_CONFIG.json'] = (json.dumps(self.config_doc(**(cfg_over or {})), indent=1) + '\n').encode()
+        mem['TOOL_INVENTORY.txt'] = TOOLS
         return zip_kit(mem)
+
+    def clear_kit(self, code, seq, kit=None, **cfg_over):
+        """A config-only kit of `kit` (default the World's kit) whose `clear` names {series, seq, code} (O59), planted in
+        CPS/setup; returns its 12-hex name."""
+        with zipfile.ZipFile(io.BytesIO(kit or self.kit)) as z:
+            mem = {n: z.read(n) for n in z.namelist() if n != 'SHA256SUMS'}
+        cfg = json.loads(mem['VM_HELPER_CONFIG.json'])
+        cfg.update(cfg_over, clear={'series': self.series, 'seq': seq, 'code': code})
+        mem['VM_HELPER_CONFIG.json'] = (json.dumps(cfg, indent=1) + '\n').encode()
+        k = zip_kit(mem)
+        self.drive.plant(N.FOLDERS['setup'], 'SESSION_KIT_%s.zip' % sha(k)[:12], k)
+        return sha(k)[:12]
+
+    def disk_record(self):
+        """The run job folders and the local journal files at this moment (D16, x_d16_disk)."""
+        jobs = [str(p) for root in (self.base / 'qual', self.base / 'jobs') if root.is_dir()
+                for r in sorted(root.iterdir()) if r.is_dir() for p in sorted(r.iterdir()) if p.is_dir()]
+        files = [p.name for d in (self.base / 'outbox/journal', self.base / 'inbox/journal') if d.is_dir()
+                 for p in sorted(d.iterdir()) if p.name.startswith('CPSJ_')]
+        return {'jobs': jobs, 'journal': files}
 
     def job_members(self, case, kind, dest):
         """JOB.json, JOB_TITLE.json and source.xlsx of an invented job whose files will live in `dest`."""
@@ -1012,7 +1123,7 @@ class World:
         u = host.utc14(self.clock.now())
         cur = json.loads((self.base / 'outbox/v2/STATE.json').read_text())['state']['current']
         case = cur.split('/', 1)[1]
-        d = self.home / 'cps-deliveries' / case / 'user01' / u
+        d = self.base / 'deliveries' / case / 'user01' / u
         d.mkdir(parents=True, exist_ok=True)
         (d / 'PERSONAL_COPY.xlsx').write_bytes(st + b'')
         (d / 'PERSONALIZATION_LOG.json').write_text(json.dumps({
@@ -1045,6 +1156,8 @@ class World:
         force_rmtree(dest)
         dest.mkdir(parents=True)
         shutil.copytree(self.home, dest / 'home', symlinks=True)
+        if self.base.exists():
+            shutil.copytree(self.base, dest / 'base', symlinks=True)
         d = self.dot
         return {'dir': dest, 'drive': copy.deepcopy(self.drive), 'offset': self.clock.offset, 'nboot': self.nboot,
                 'boot': self.boot, 'everyday': list(self.everyday), 'kinds': dict(self.kinds),
@@ -1054,7 +1167,10 @@ class World:
     def restore(self, snap):
         self.kill_boot()
         force_rmtree(self.home)
+        force_rmtree(self.base)
         shutil.copytree(snap['dir'] / 'home', self.home, symlinks=True)
+        if (snap['dir'] / 'base').exists():
+            shutil.copytree(snap['dir'] / 'base', self.base, symlinks=True)
         self.drive = copy.deepcopy(snap['drive'])
         self.nboot, self.boot, self.everyday = snap['nboot'], snap['boot'], list(snap['everyday'])
         self.kinds = dict(snap['kinds'])
@@ -1092,17 +1208,45 @@ class World:
         rep = json.loads((d / 'AUDIT.json').read_text()) if (d / 'AUDIT.json').is_file() else None
         return code, rep, out.getvalue()
 
-    def assemble(self, d, verify=True, root='/'):
-        """O5: assemble at the original absolute paths (root '/', after BASE is wiped): the runner keys its ledger by
-        the job folder path (R25), so verify-frozen holds only there."""
+    def assemble(self, d, verify=True):
+        """O5: assemble into an empty dedicated root inside the world (MAINT-1: there is no '/' default)."""
         from cpsvm2.maint import assemble as AS
         d = Path(d)
+        root = self.root / ('assembled_%d' % len(list(self.root.glob('assembled_*'))))
+        root.mkdir()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = AS.main(['--series', self.series, '--dir', str(d / 'dl'), '--root', root,
+            code = AS.main(['--series', self.series, '--dir', str(d / 'dl'), '--root', str(root),
                             '--out', str(d / 'ASSEMBLE.json')] + (['--verify-frozen'] if verify else []))
         rep = json.loads((d / 'ASSEMBLE.json').read_text()) if (d / 'ASSEMBLE.json').is_file() else None
         return code, rep, out.getvalue()
+
+    def score_check(self, d, rep):
+        """O5 (GAP-2): score_check build over the audit and ASSEMBLE.json (every case of the outcomes in the pool, each
+        owner item given its passing verdict), then check with a manifest of the plan's carriers: the verdict."""
+        from cpsvm2.maint import score_check as SC
+        d = Path(d)
+        v = {'OWNER_CHECK': 'NOTHING_WRITTEN_CONFIRMED', 'SUPERSEDED_WINDOW': 'NO_CONVERSATION_IN_WINDOW',
+             'O52_SHEET': 'SHEET_CHECKED'}
+        docs = {'pool.json': {'pool': sorted({p['case'] for p in rep['outcomes']['pairs']})},
+                'oc.json': {'schema': 'cps.vm2-owner-checks.v1', 'series': self.series, 'checked_by': 'owner',
+                            'outcomes_sha256': rep['outcomes_sha256'], 'checked_utc': '2026-11-10T00:00:00Z',
+                            'unlogged': [], 'verdicts': [{'id': i['id'], 'verdict': v[i['kind']], 'note': ''}
+                                                         for i in rep['owner_items']]}}
+        for k, doc in docs.items():
+            (d / k).write_text(json.dumps(doc))
+        ins = ['--audit', str(d / 'AUDIT.json'), '--assembled', str(d / 'ASSEMBLE.json'), '--pool', str(d / 'pool.json'),
+               '--owner-checks', str(d / 'oc.json')]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            if SC.main(['build'] + ins + ['--out', str(d / 'plan')]) != 0:
+                return out.getvalue().strip()[-300:]
+            pl = json.loads((d / 'plan' / 'SCORE_PLAN.json').read_text())
+            (d / 'man.json').write_text(json.dumps({'pool': pl['pool'], 'readers': {rd: {
+                c: {'carrier_sha256': r['carrier_sha256']} for c, r in pl['readers'][rd].items()} for rd in 'AB'}}))
+            SC.main(['check', '--plan', str(d / 'plan' / 'SCORE_PLAN.json'), '--manifest', str(d / 'man.json'),
+                     '--out', str(d / 'check.json')] + ins)
+        return json.loads((d / 'check.json').read_text())['verdict'] if (d / 'check.json').is_file() else out.getvalue()
 
     def all_frozen(self):
         """ALL_FROZEN.json from the FINAL part on FakeDrive, or None."""

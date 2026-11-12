@@ -1,6 +1,5 @@
-"""Durable writes and the local cache self-hashes (spec §2.3, §2.4, SAFE-04). write() never leaves a partial file under
-the final name; any OSError becomes DurableError(errno); the glue maps ENOSPC/EDQUOT to HALT DISK_FULL and everything
-else to HALT WRITE_FAILED before anything of the block is printed."""
+"""Durable writes and the cache self-hashes (spec §2.3, §2.4, SAFE-04): never a partial file under the final
+name; an OSError is DurableError(errno)."""
 import errno
 import hashlib
 import json
@@ -17,7 +16,8 @@ class DurableError(Exception):
 
     @property
     def code(self):
-        return 'DISK_FULL' if self.errno in (errno.ENOSPC, errno.EDQUOT) else 'WRITE_FAILED'
+        e = self.errno
+        return 'DISK_FULL' if e in (errno.ENOSPC, errno.EDQUOT) else 'READ_ONLY_FS' if e == errno.EROFS else 'WRITE_FAILED'
 
 
 def _sha(b):
@@ -68,8 +68,7 @@ def write(path, data, mode=0o644):
 
 
 def seal(path, check=None):
-    """§2.4: fsync the folder of a file written by write_tgz/PartWriter, then re-read it: check(path) re-reads an
-    archive (Archive + check); without one, the file must be non-empty. Returns (bytes, sha256, md5)."""
+    """§2.4: fsync the folder, then re-read the file (check(path), or non-empty): (bytes, sha256, md5)."""
     try:
         fsync_dir(os.path.dirname(str(path)) or '.')
         h, m, n = hashlib.sha256(), hashlib.md5(usedforsecurity=False), 0
@@ -97,11 +96,11 @@ def doc_bytes(x):
 
 
 def write_doc(path, doc, mode=0o644):
-    """A cache file (§2.3): doc_bytes with self_sha256 = sha(cjson(doc without self_sha256))."""
-    d = {k: v for k, v in doc.items() if k != 'self_sha256'}
-    d['self_sha256'] = _sha(cjson(d))
-    write(path, doc_bytes(d), mode)
-    return d
+    """A cache file (§2.3) with its self_sha256, set in `doc` itself, which is returned (OPX-01)."""
+    doc.pop('self_sha256', None)
+    doc['self_sha256'] = _sha(cjson(doc))
+    write(path, doc_bytes(doc), mode)
+    return doc
 
 
 def write_plain(path, doc, mode=0o644):
@@ -110,8 +109,7 @@ def write_plain(path, doc, mode=0o644):
 
 
 def read_doc(path, schema, sjson):
-    """A cache file: (doc, None) when it parses strictly, has `schema` and a correct self_sha256; (None, why)
-    otherwise; (None, None) when the file does not exist."""
+    """A cache file: (doc, None) when valid, (None, why) otherwise, (None, None) when it does not exist."""
     if not os.path.lexists(str(path)):
         return None, None
     try:

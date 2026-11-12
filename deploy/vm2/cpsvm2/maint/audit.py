@@ -1,16 +1,7 @@
-"""vm2.py audit (spec §10.1): the maintainer's re-check of a whole series from a complete Drive listing.
-
-    audit --series Q1 --listing LISTING.json --dir DOWNLOADS --setup-listing SETUP.json --setup-dir SETUP_DOWNLOADS
-          --out AUDIT.json [--tolerance 600]
-
-LISTING.json / SETUP.json: the maintainer tool's Drive listing of the series folder / CPS/setup, a JSON list (or
-{"files": [...]}) of {"id", "name", "md5Checksum", "size", "createdTime"}. DOWNLOADS / SETUP_DOWNLOADS hold every
-listed file at <dir>/<id>/<name> (SPEC DECISION: one folder per Drive id, because two copies can share a name).
-Writes AUDIT.json (cps.vm2-audit.v1); exit 0 iff no anomaly, 1 otherwise, 2 usage. Anomaly codes are the AUD_ codes
-of §10.1 plus AUD_CHAIN_INVALID (core.fold raised ChainInvalid; detail: its code), AUD_DOWNLOAD_MISMATCH (a listed
-file missing from the downloads or with other bytes) and AUD_NO_FINAL (a Q or D series without a FINAL entry).
-AUD_REBASE_OVER_PRESENT_PART is an owner-review item, not an anomaly. Reads nothing but its arguments and the pinned
-runner (for Ledger.chain_problem); writes only --out."""
+"""vm2.py audit (spec §10.1, delta v2.1 §2.5-§2.10): the maintainer's re-check of a series from a Drive listing (a
+JSON list or {"files": [...]} of rows; DOWNLOADS holds each at <dir>/<id>/<name>). Writes only --out. Exit 0 iff no
+anomaly, 1 otherwise, 2 usage. AUD_REBASE_OVER_PRESENT_PART and o63 are owner or score_check items, not anomalies.
+    audit --series Q1 --listing L --dir DOWNLOADS --setup-listing S --setup-dir D --out AUDIT.json [--tolerance 600]"""
 import argparse
 import os
 import re
@@ -19,14 +10,18 @@ import sys
 from ..core import entry as E
 from ..core import fold as F
 from ..core import outcome as O
-from ..core.names import ENTRY, FOLDERS, RUNNER_SHA256, cjson, entry_name, fm, parse_part, sha, utc_epoch
+from ..core import session as S
+from ..core.names import (ENTRY, O63_NOTE, cjson, entry_name, fm, parse_part, series_folder, sha, tool_list,
+                          utc_epoch, utc_minus)
+from ..vio.runner import load_runner
 from ..vio.v1compat import Halt
 from ..vio.v1reuse import Archive, kit_members, sjson
 
 SCHEMA = 'cps.vm2-audit.v1'
-KEEP = ('ledger/LEDGER.jsonl', 'final/ALL_FROZEN.json', 'final/LEDGER_FINAL.jsonl')
+KEEP = ('ledger/LEDGER.jsonl', 'final/ALL_FROZEN.json', 'final/LEDGER_FINAL.jsonl', 'attest/tools.txt',
+        'job/run/GENERATION_RECORD.json')
 ROOTS = ('MANIFEST.json', 'job', 'ledger', 'ai', 'transcript', 'attest', 'delivery', 'final')
-RUNNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'run', 'cps_job.py')
+FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 
 def doc_bytes(x):
@@ -40,12 +35,13 @@ def read_bytes(p):
 
 
 def load_listing(path):
-    """[{'id', 'name', 'md5', 'size', 'created'}] from a Drive listing file; raises ValueError when malformed. A
-    listing without md5Checksum (md5 hidden, §X.10) gives md5 None: the md5 of the downloaded bytes is used instead
-    (download()), so copies are grouped by content and checked by size and the sha256 of the full download."""
+    """([{'id', 'name', 'md5', 'size', 'created'}], folder rows skipped); ValueError when malformed."""
     d = sjson(read_bytes(path))
-    out = []
+    out, folders = [], 0
     for r in d['files'] if isinstance(d, dict) else d:
+        if r.get('mimeType') == FOLDER_MIME:
+            folders += 1
+            continue
         size, ct = r['size'], r['createdTime']
         size = int(size) if isinstance(size, str) and size.isdigit() else size
         m5 = r.get('md5Checksum')
@@ -54,12 +50,11 @@ def load_listing(path):
                 and isinstance(size, int) and isinstance(ct, str) and utc_epoch(ct[:19] + 'Z') is not None):
             raise ValueError('listing row')
         out.append({'id': r['id'], 'name': r['name'], 'md5': m5, 'size': size, 'created': utc_epoch(ct[:19] + 'Z')})
-    return out
+    return out, folders
 
 
 def download(ddir, r):
-    """sha256 of listing row r's file <ddir>/<id>/<name>, or None when absent, a link, or not the listed md5 and size
-    (read in chunks: parts can be large)."""
+    """sha256 of row r's file <ddir>/<id>/<name>, or None when absent, a link, or not the listed md5 and size."""
     import hashlib
     p = os.path.join(ddir, r['id'], r['name'])
     if '/' in r['name'] or r['name'] in ('', '.', '..') or not os.path.isfile(p) or os.path.islink(p):
@@ -80,10 +75,7 @@ def open_entry(path):
     a = Archive(path, ROOTS)
     try:
         doc = a.manifest
-        exp = {}
-        for m in doc['payload']['members']:
-            exp[m[0]] = ('dir', m[2]) if m[1] == 'dir' else ('file', m[2], m[3], m[4])
-        a.check(exp)
+        a.check({m[0]: ('dir', m[2]) if m[1] == 'dir' else ('file', *m[2:5]) for m in doc['payload']['members']})
         return doc, a
     except (KeyError, TypeError, IndexError, AttributeError):
         a.close()
@@ -93,24 +85,15 @@ def open_entry(path):
         raise
 
 
-def kit_info(path):
-    """{'members': [[path, sha256]] sorted, 'files': {path: bytes}} of a kit zip via the reused kit_members."""
+def kit_info(path, kit_sha):
+    """The session's kit dict (sha256, members, config, release_sha256) plus files {path: bytes} of a kit zip."""
     files = kit_members(path)
-    return {'members': sorted([k, sha(v)] for k, v in files.items()), 'files': files}
-
-
-def load_runner():
-    """The pinned runner's namespace, executed from the bytes whose sha256 was checked (no import, no bytecode)."""
-    raw = read_bytes(RUNNER)
-    if sha(raw) != RUNNER_SHA256:
-        raise Halt('STOP', 'LAYOUT_RUNNER_NOT_PINNED')
-    ns = {'__name__': 'cps_job_readonly', '__file__': os.path.abspath(RUNNER)}
-    exec(compile(raw, os.path.abspath(RUNNER), 'exec'), ns)
-    return ns
+    return {'sha256': kit_sha, 'members': sorted([k, sha(v)] for k, v in files.items()), 'files': files,
+            'config': sjson(files['VM_HELPER_CONFIG.json']), 'release_sha256': sha(files['RELEASE.json'])}
 
 
 def ledger_problem(cj, raw):
-    led = cj['Ledger']('/nonexistent/LEDGER.jsonl', create=False, readonly=True)
+    led = cj.Ledger('/nonexistent/LEDGER.jsonl', create=False, readonly=True)
     led.raw = raw
     return led.chain_problem()
 
@@ -130,10 +113,10 @@ def all_frozen_doc(state, ledger_final):
 
 
 class Audit:
-    def __init__(self, series, rows, ddir, srows, sdir, tol):
+    def __init__(self, series, rows, ddir, srows, sdir, tol, folders=0):
         self.series, self.rows, self.ddir, self.srows, self.sdir, self.tol = series, rows, ddir, srows, sdir, tol
         self.anomalies, self.owner_review, self.extra_items, self.kits, self.cj = [], [], [], {}, None
-        self.ent, self.prt, self.docs = {}, {}, {}
+        self.ent, self.prt, self.docs, self.folders, self.o63 = {}, {}, {}, folders, {'checked': 0, 'missing': []}
 
     def add(self, code, name, detail=None):
         a = {'code': code, 'name': name, 'detail': detail}
@@ -189,42 +172,67 @@ class Audit:
 
     def kit(self, kit_sha):
         if kit_sha not in self.kits:
-            self.kits[kit_sha] = None
-            name = 'SESSION_KIT_%s.zip' % kit_sha[:12]
-            for r in self.srows:
-                if r['name'] == name and download(self.sdir, r) == kit_sha:
-                    try:
-                        self.kits[kit_sha] = kit_info(os.path.join(self.sdir, r['id'], r['name']))
-                    except Halt:
-                        pass
-                    break
+            rs = [r for r in self.srows if r['name'] == 'SESSION_KIT_%s.zip' % kit_sha[:12]
+                  and download(self.sdir, r) == kit_sha]
+            try:
+                self.kits[kit_sha] = kit_info(os.path.join(self.sdir, rs[0]['id'], rs[0]['name']), kit_sha)
+            except (IndexError, Halt, KeyError, ValueError, UnicodeDecodeError):
+                self.kits[kit_sha] = None
         return self.kits[kit_sha]
 
     def kit_change(self, doc, before):
-        kc, name = doc['body']['kit_change'], doc['name']
-        a, b = self.kit(kc['from_kit_sha256']), self.kit(kc['to_kit_sha256'])
-        if a is None or b is None:
+        """§2.7: the session's kit_change on the two zips; a CLEAR's kit also names its halt (O59)."""
+        b, name = doc['body'], doc['name']
+        a, k = self.kit(b['kit_change']['from_kit_sha256']), self.kit(b['kit_change']['to_kit_sha256'])
+        if a is None or k is None:
             return self.add('AUD_KIT', name, 'kit_change')
+        code, kc = S.kit_change(before, k, a)
+        if kc != b['kit_change']:
+            self.add('AUD_KIT_CHANGE', name, 'recompute')
+        if code:
+            self.add('AUD_KIT_CHANGE', name, code)
+        if doc['kind'] == 'CLEAR' and not S.clear_ok(k['config'].get('clear'), self.series, b['halt_seq'], b['code']):
+            self.add('AUD_KIT_CHANGE', name, 'clear')
+
+    def cleared_local(self, doc):
+        """SD-53: the entry's kit names the local clear, is not the halted kit, and is a config-only change of it."""
+        cl, k, kc = doc['cleared_local'], self.kit(doc['kit_sha256']), doc['body'].get('kit_change')
+        old = self.kit(cl['kit_sha256']) if cl['kit_sha256'] is not None else None
+        if not (k is not None and S.clear_ok(k['config'].get('clear'), self.series, cl['head_seq'], cl['code'])
+                and cl['kit_sha256'] != doc['kit_sha256'] and (kc is None or kc['config_only'] is True)
+                and (cl['kit_sha256'] is None or (old is not None and S.config_only_ok(old, k) is None))):
+            self.add('AUD_KIT_CHANGE', doc['name'], 'cleared_local')
+
+    def kit_jobs(self, doc, ki):
+        """MAINT-10: jobs_of the kit's release qualification.jobs_file (a kit member under the layout's runtime)."""
         try:
-            c1, c2 = sjson(a['files']['VM_HELPER_CONFIG.json']), sjson(b['files']['VM_HELPER_CONFIG.json'])
-        except (KeyError, ValueError, UnicodeDecodeError):
-            return self.add('AUD_KIT_CHANGE', name, 'config')
-        keys = sorted(k for k in set(c1) | set(c2) if c1.get(k) != c2.get(k))
-        co = F.config_only(a['members'], b['members'])
-        bad = sorted(kc['from_members']) != a['members'] or sorted(kc['to_members']) != b['members'] \
-            or kc['config_only'] is not co or sorted(kc['config_keys_changed']) != keys \
-            or kc['to_accepts_release_sha256'] != list(c2.get('accepts_release_sha256') or [])
-        if co:
-            bad = bad or not set(keys) <= F.CHANGEABLE_KEYS \
-                or not set(c1.get('doc_samples') or []) <= set(c2.get('doc_samples') or [])
-        else:
-            bad = bad or doc['kind'] == 'CLEAR' or F.run_in_flight(before)
-        if bad:
-            self.add('AUD_KIT_CHANGE', name)
+            jf, rt = sjson(ki['files']['RELEASE.json'])['qualification']['jobs_file'], doc['body']['layout']['runtime']
+            return F.jobs_of(sjson(ki['files'][jf[len(rt) + 1:]])) if jf.startswith(rt + '/') else None
+        except (KeyError, TypeError, AttributeError, ValueError, UnicodeDecodeError):
+            return None
+
+    def o63_check(self, doc, ok):
+        self.o63['checked'] += 1
+        if not ok:
+            self.o63['missing'].append(doc['name'])
+
+    def o63_frozen(self, doc, files, R, ai):
+        """GAP-10: a FROZEN GENERATION_RECORD.json holds its consumed G entry's tools, O63 note and final message."""
+        gs = [ro for ro in R['roles'].values() if ro['role'] == 'G' and ro['consumed']]
+        if gs:
+            try:
+                g, gf = ai[max(gs, key=lambda r: r['consumed']['seq'])['archives'][-1]['seq']]
+                gr, gb = sjson(files['job/run/GENERATION_RECORD.json']), g['body']
+                ok = gr['tools_enabled'] == tool_list(gf['attest/tools.txt']) \
+                    and gr['notes'] == O63_NOTE % gb['attested']['tools_present']['sha256'] \
+                    and sha(gr['final_message'].encode('utf-8')) == gb['final_message_sha256']
+            except (KeyError, TypeError, AttributeError, ValueError, UnicodeDecodeError):
+                ok = False
+            self.o63_check(doc, ok)
 
     def refold(self):
         """Steps 2, 3, 5, 6, 7 along the chain from GENESIS; returns [(doc, files, created, state_before)]."""
-        state, chain, prev, ledgers = None, [], None, {}
+        state, chain, prev, ledgers, ai = None, [], None, {}, {}
         for k in range(1, self.top + 1):
             md = self.pick(k) if k in self.ent else None
             if md is None:
@@ -262,10 +270,21 @@ class Audit:
             ki = self.kit(doc['kit_sha256'])
             if ki is None:
                 self.add('AUD_KIT', name)
-            elif sha(ki['files'].get('RELEASE.json', b'')) != doc['release_sha256']:
+            elif ki['release_sha256'] != doc['release_sha256']:
                 self.add('AUD_KIT', name, 'release')
+            elif doc['kind'] == 'GENESIS' and doc['body']['jobs'] not in (None, self.kit_jobs(doc, ki)):
+                self.add('AUD_KIT', name, 'jobs')
             if doc['kind'] in ('RESTORE', 'CLEAR') and doc['body']['kit_change'] is not None:
                 self.kit_change(doc, state)
+            if doc['cleared_local'] is not None:
+                self.cleared_local(doc)
+            if doc['kind'] == 'AI' and doc['body']['revision'] == 1:        # O63 (§2.8): tools and final message
+                ai[k], tp = (doc, files), doc['body']['attested'].get('tools_present')
+                mem = {m[0]: m[4] for m in doc['payload']['members']}
+                self.o63_check(doc, isinstance(tp, dict) and tp.get('source') in ('inventory', 'file') and
+                               mem.get('attest/tools.txt') == tp.get('sha256') and 'attest/final_message.txt' in mem)
+            if doc['kind'] == 'FROZEN':
+                self.o63_frozen(doc, files, s2['runs'][doc['body']['run']], ai)
             if doc['kind'] in ('GENESIS', 'RESTORE'):
                 ps = doc['body']['pass']
                 if not any(r['name'] == ps.get('name') and r['md5'] == ps.get('md5') for r in self.srows):
@@ -282,7 +301,7 @@ class Audit:
 
     def parts(self):
         """Step 1 (unreachable, after FINAL) and step 2 (parts, declared rebase)."""
-        sfold, named = FOLDERS[self.series[0]], set()
+        sfold, named = series_folder(self.series), set()
         final = self.state['seq'] if self.state and self.state['phase'] == 'FINAL' else None
         for i, (doc, _, _, _) in enumerate(self.chain):
             nxt = self.chain[i + 1][0] if i + 1 < len(self.chain) else None
@@ -311,12 +330,13 @@ class Audit:
 
     def review(self, head, restore, part):
         """AUD_REBASE_OVER_PRESENT_PART: an owner-review item plus a SUPERSEDED_WINDOW owner item (§10.1)."""
-        b = head['body']
+        b, tol = head['body'], self.state['genesis']['gates'].get('p3_clock_tolerance_seconds') or 0
         st = b.get('start') if head['kind'] in ('STAGE', 'FROZEN') else None
-        R = self.state['runs'].get(b.get('run')) if self.state else None
+        R = self.state['runs'].get(b.get('run'))
         it = {'kind': 'SUPERSEDED_WINDOW', 'case': R and R['case'], 'reader': R and R['reader'],
               'run': b.get('run'), 'role': st and st['role'], 'attempt': st and st['attempt'],
-              'start_no': st and st['start_no'], 'window': [head['utc'], restore['utc']]}
+              'start_no': st and st['start_no'],
+              'window': [utc_minus(head['utc'], tol), utc_minus(restore['utc'], -tol)]}
         it['id'] = sha(cjson(it))[:12]
         if it not in self.extra_items:
             self.extra_items.append(it)
@@ -359,12 +379,17 @@ class Audit:
         self.parts()
         af = self.final()
         outs = O.outcomes(self.state) if self.state else None
+        ch = [d for d, _, _, _ in self.chain]
         clears = [{'seq': d['seq'], 'halt_seq': d['body']['halt_seq'], 'code': d['body']['code']}
-                  for d, _, _, _ in self.chain if d['kind'] == 'CLEAR']
+                  for d in ch if d['kind'] == 'CLEAR']
         return {'schema': SCHEMA, 'series': self.series, 'clean': not self.anomalies,
                 'counts': {'listed': len(self.rows), 'entries': len(self.ent), 'parts': len(self.prt),
-                           'folded': len(self.chain), 'anomalies': len(self.anomalies),
+                           'folded': len(self.chain), 'anomalies': len(self.anomalies), 'folders': self.folders,
                            'owner_review': len(self.owner_review), 'setup_listed': len(self.srows)},
+                'o63': self.o63, 'approvals': [{'seq': d['seq'], 'kind': d['kind'], 'value': d['body'].get('approval')}
+                                               for d in ch if d['kind'] in ('GENESIS', 'RESTORE')],
+                'same_boot_restores': [d['seq'] for i, d in enumerate(ch)
+                                       if d['kind'] == 'RESTORE' and i and ch[i - 1]['boot_id'] == d['boot_id']],
                 'anomalies': self.anomalies, 'owner_review': self.owner_review,
                 'final_seq': self.state['final']['seq'] if self.state and self.state['final'] else None,
                 'outcomes': outs, 'outcomes_sha256': sha(cjson(outs)) if outs else None,
@@ -372,7 +397,7 @@ class Audit:
                 'o52_sheet': outs['o52_sheet'] if outs else [],
                 'owner_items': (outs['owner_items'] if outs else []) + self.extra_items,
                 'clears': clears, 'cleared_local': [{'seq': d['seq'], 'cleared_local': d['cleared_local']}
-                                                    for d, _, _, _ in self.chain if d['cleared_local'] is not None]}
+                                                    for d in ch if d['cleared_local'] is not None]}
 
 
 def main(argv):
@@ -385,7 +410,7 @@ def main(argv):
         print('REFUSED VALUE_PATTERN series')
         return 2
     try:
-        rows, srows = load_listing(a.listing), load_listing(a.setup_listing)
+        (rows, folders), (srows, _) = load_listing(a.listing), load_listing(a.setup_listing)
         for r in srows:
             if r['md5'] is None:
                 download(a.setup_dir, r)
@@ -393,7 +418,7 @@ def main(argv):
         print('REFUSED VALUE_PATTERN listing')
         return 2
     try:
-        rep = Audit(a.series, rows, a.dir, srows, a.setup_dir, a.tolerance).run()
+        rep = Audit(a.series, rows, a.dir, srows, a.setup_dir, a.tolerance, folders).run()
     except Halt as h:
         print('STOP %s' % h.code)
         return 2

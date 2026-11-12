@@ -1,11 +1,6 @@
 """Probe P5 (spec §12.5): does a detached process survive the end of the tool call that started it?
-
     python3 -I -B probe_p5.py start --dir D [--seconds 900] | hold --dir D --seconds S | check --dir D [--min-gap 480]
-
-Standard library only; writes only under D (default $HOME/cps_probe_p5). check refuses (exit 4, writes nothing):
-SAME_CALL (same parent process or same session as start: no tool-call boundary is proven), TOO_EARLY, OTHER_BOOT,
-NOT_STARTED; start refuses WORKER_ALIVE while a worker of this boot runs. CPS_VM_BOOT_ID_PATH overrides the boot id
-file (tests), as in the helper."""
+check refuses (exit 4): SAME_CALL, TOO_EARLY, OTHER_BOOT, NOT_STARTED; start refuses WORKER_ALIVE."""
 import argparse, json, os, secrets, subprocess, sys, time
 
 SCHEMA = 'cps.vm2-probe-p5.v1'
@@ -62,7 +57,7 @@ def refuse(code):
 def main(argv):
     ap = argparse.ArgumentParser(prog='probe_p5.py')
     ap.add_argument('cmd', choices=('start', 'hold', 'check', '_worker'))
-    ap.add_argument('--dir', default=os.path.join(os.environ.get('HOME', '/nonexistent'), 'cps_probe_p5'))
+    ap.add_argument('--dir', required=True)                     # G8: never a default under HOME (read-only on the Dot)
     ap.add_argument('--seconds', type=int, default=900)
     ap.add_argument('--min-gap', type=int, default=480)
     ap.add_argument('--token', default='')
@@ -79,6 +74,8 @@ def main(argv):
     if a.cmd in ('start', 'hold'):
         os.makedirs(d, exist_ok=True)
     if a.cmd == 'start':
+        if a.seconds < a.min_gap:                       # MAINT-10: a worker that ends before the check proves nothing
+            return refuse('SECONDS_BELOW_MIN_GAP')
         if st and st.get('boot_id') == boot_id() and alive(st.get('worker_pid')) \
                 and (read(os.path.join(d, 'DONE.json')) or {}).get('token') != st.get('token'):
             return refuse('WORKER_ALIVE')

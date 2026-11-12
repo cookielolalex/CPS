@@ -1,0 +1,48 @@
+{
+ "D_baseline": {
+  "A/9990101": {
+   "drive_calls": 54,
+   "helper_commands": 16,
+   "png_parts": 13,
+   "saved_results": 6
+  },
+  "B/9990101": {
+   "drive_calls": 54,
+   "helper_commands": 16,
+   "png_parts": 13,
+   "saved_results": 6
+  },
+  "NA-A/9990102": {
+   "drive_calls": 3,
+   "helper_commands": 2,
+   "png_parts": 0,
+   "saved_results": 1
+  },
+  "NA-B/9990102": {
+   "drive_calls": 3,
+   "helper_commands": 2,
+   "png_parts": 0,
+   "saved_results": 1
+  }
+ },
+ "restore": {
+  "commit": {
+   "drive_calls": 46,
+   "helper_commands": 39,
+   "saved_results": 14,
+   "waits": 2
+  },
+  "hint": {
+   "drive_calls": 15,
+   "helper_commands": 18,
+   "saved_results": 8,
+   "waits": 2
+  },
+  "none": {
+   "drive_calls": 23,
+   "helper_commands": 24,
+   "saved_results": 13,
+   "waits": 2
+  }
+ }
+}

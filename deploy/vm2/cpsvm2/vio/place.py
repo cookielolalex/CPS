@@ -1,11 +1,11 @@
-"""Strict walk, job-folder snapshot (§3.8), placement from journal entries (§8.5.1), evict after FROZEN (§7.6) and the
-placed-FROZEN.json removal (§7.7, §5.4 UNPLACE_FROZEN). Every walk is the strict v1mod.tree_list; JobLock is held only
-for a walk, never while a runner command runs (IMP-12)."""
+"""Strict walk, snapshot (§3.8), placement settled against what is there (§8.5.1, delta v2.1 §2.4.6), evict
+(§7.6) and UNPLACE_FROZEN (§7.7). JobLock is held only for a walk or a settle (IMP-12)."""
 import hashlib
 import json
 import os
 from pathlib import Path
 
+from .host import now, utc14
 from .v1compat import Halt, stop
 from .v1mod import tree_list
 from .v1reuse import (Archive, JobLock, Staging, check_ledger_identity, png_manifest_problem, png_set, remove_tree,
@@ -32,8 +32,7 @@ def tree_sha(rows):
 
 
 def snapshot(lay, job_dir):
-    """§3.8 under JobLock: (job members as archive members, payload rows under job/, png files [[job/rel, mode, bytes,
-    sha256]], png rels, snapshot tree sha256). Raises Halt PNG_MANIFEST_UNSAFE / WALK_UNSUPPORTED_ENTRY."""
+    """§3.8 under JobLock: (job members, payload rows, png files, png rels, snapshot tree sha256)."""
     with JobLock(lay, job_dir):
         rows = walk(job_dir)
         rels = set(png_set(job_dir))
@@ -51,8 +50,7 @@ def snapshot(lay, job_dir):
 
 
 def ai_members(output_dir, max_bytes):
-    """§7.5 step 1: the role's output folder walked strictly as ai/ members; (members, files [[rel, bytes, sha]],
-    tree sha256). AI_OUTPUT_TOO_LARGE over max_bytes. The helper hashes the files and never opens their content."""
+    """§7.5 step 1: the output folder walked strictly as ai/ members: (members, files, tree sha256)."""
     rows = walk_output(output_dir)
     if sum(r[3] or 0 for r in rows) > max_bytes:
         raise Halt('STOP', 'AI_OUTPUT_TOO_LARGE', 'the AI output folder is too large')
@@ -62,16 +60,36 @@ def ai_members(output_dir, max_bytes):
     return members, [[r[0], r[3], r[4]] for r in rows if r[1] == 'file'], tree_sha(rows)
 
 
-# ---------------------------------------------------------------- placement (§8.5.1)
+def settle(lay, target, want, root_mode, stage, finish):
+    """Put a staged tree in place (SD-41): an equal target is kept, any other moves aside (SD-70). The aside or None."""
+    aside = None
+    with JobLock(lay, target):
+        if os.path.lexists(target):
+            try:
+                same = os.path.isdir(target) and not os.path.islink(target) and \
+                    (os.lstat(target).st_mode & 0o777) == root_mode and {r[0]: r[1:] for r in walk(target)} == want
+            except Halt:
+                same = False
+            if same:
+                remove_tree(stage)
+                return None
+            d = lay.outbox / 'v2' / ('aside_' + utc14(now()))
+            d.mkdir(parents=True, exist_ok=True)
+            aside = str(d / str(len(os.listdir(d)) + 1))
+            if os.path.isdir(target) and not os.path.islink(target):
+                os.chmod(target, (os.lstat(target).st_mode & 0o777) | 0o200)
+            os.rename(target, aside)
+        finish()
+    return aside
+
+
 def _entry_reader(path):
     from .savepoint import read_entry
     return read_entry(path)
 
 
 def place_ledger(lay, entry_path, want_sha256):
-    """Step 1: BASE/ledger from the entry's ledger/LEDGER.jsonl member (sha checked), via a staging folder."""
-    if os.path.lexists(lay.ledger_dir):
-        stop('PLACE_TARGET_NOT_EMPTY', 'BASE/ledger exists')
+    """Step 1: BASE/ledger from the entry's ledger member (sha checked), settled: (sha256, aside)."""
     _entry_reader(entry_path)
     a = Archive(entry_path, ('MANIFEST.json', 'job', 'ledger', 'ai', 'transcript', 'attest', 'delivery', 'final'))
     try:
@@ -89,21 +107,16 @@ def place_ledger(lay, entry_path, want_sha256):
         f.flush()
         os.fsync(f.fileno())
     os.chmod(sd / 'LEDGER.jsonl', 0o644)
-    os.rename(sd, lay.ledger_dir)
+    os.chmod(sd, 0o755)
+    aside = settle(lay, lay.ledger_dir, {'LEDGER.jsonl': ['file', 0o644, len(raw), sha_bytes(raw)]}, 0o755, sd,
+                   lambda: os.rename(sd, lay.ledger_dir))
     check_ledger_identity(type('C', (), {'lay': lay})())
-    return sha_bytes(raw)
+    return sha_bytes(raw), aside
 
 
 def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
-    """Steps 2-5: the job snapshot of `snap_entry` (a local tgz path), the PNG stream from its parts (concatenated in
-    order; sha256 == png['whole_sha256']), and the ai/ members of AI entries [(entry path, output dir, replace)] into
-    their output folders. The folder must be empty in the snapshot, except for a V revision >= 2 (replace): the
-    REVIEW_INCOMPLETE snapshot holds revision 1 there, and the AI entry's tree is the whole folder after the
-    continuation, so it takes the folder's place (§7.8, §8.5.1 step 4). A strict walk afterwards must equal snapshot +
-    PNGs + AI outputs exactly. Returns the tree sha."""
+    """Steps 2-5 (§8.5.1, §7.8): snapshot, PNG stream and AI outputs, settled; then the walk must equal them all."""
     jd = Path(job_dir)
-    if os.path.lexists(jd):
-        stop('PLACE_TARGET_NOT_EMPTY', 'the job folder exists')
     man = _entry_reader(snap_entry)
     rows = [m for m in man['payload']['members'] if m[0] == 'job' or m[0].startswith('job/')]
     if not rows or rows[0][0] != 'job':
@@ -169,11 +182,11 @@ def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
                 expect[rel] = [r[1], r[2], r[3], r[4]]
         finally:
             aa.close()
-    stg.finish()
+    aside = settle(lay, jd, expect, rows[0][2], stg.stage, stg.finish)
     got = {r[0]: r[1:] for r in walk(jd)}
     if got != expect:
         stop('PLACE_SHA_MISMATCH', 'the placed folder differs from the entries')
-    return tree_sha([[k] + v for k, v in sorted(got.items())])
+    return tree_sha([[k] + v for k, v in sorted(got.items())]), aside
 
 
 def _add_parents(stg, expect, rel):
@@ -198,11 +211,8 @@ def place_member(entry_path, member, dest, mode=0o644):
     return b
 
 
-# ---------------------------------------------------------------- evict (§7.6) and placed FROZEN.json (§7.7)
 def evict(lay, job_dir, entry_path, frozen_sha256, keep_name):
-    """Post action EVICT: the strict walk must equal the FROZEN entry's job/ members plus its PNG files (EVICT_MISMATCH,
-    nothing deleted); FROZEN.json is kept in outbox/frozen_json/ (its sha checked), then the folder is removed
-    (EVICT_FAILED when that fails midway)."""
+    """Post action EVICT (§7.6): the walk must equal the FROZEN entry's members; FROZEN.json kept, folder removed."""
     man = _entry_reader(entry_path)
     want = {m[0][4:]: m[1:] for m in man['payload']['members'] if m[0].startswith('job/')}
     for f in (man['payload']['png'] or {}).get('files') or []:
@@ -230,8 +240,7 @@ def evict(lay, job_dir, entry_path, frozen_sha256, keep_name):
 
 
 def unplace_frozen(path, frozen_sha256):
-    """Post action UNPLACE_FROZEN: a placed folder holding only that FROZEN.json is removed; anything else is
-    PLACED_FROZEN_CHANGED."""
+    """Post action UNPLACE_FROZEN: a folder holding only that FROZEN.json is removed, else PLACED_FROZEN_CHANGED."""
     jd = Path(path)
     if not os.path.lexists(jd):
         return

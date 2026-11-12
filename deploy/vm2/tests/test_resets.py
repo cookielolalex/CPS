@@ -19,7 +19,8 @@ appearance after a timeout; at the head search: a lagging head, a duplicate head
 row FIND never shows), the Dot's notes (hint, commit only, none), and the Dot's answers for an open role. Every
 scenario runs to the end of the series (or its expected STOP) and checks the oracles: O1, O2, O7, L5, L9, L12 on every
 block (fakes.FakeDot), O3 (dispositions re-derived here from O44-O46, O55-O58), O4 (audit over FakeDrive's table:
-clean) and O5 (assemble --verify-frozen at the original absolute paths after BASE is wiped) at FINAL.
+clean) and O5 (after BASE is wiped: assemble --verify-frozen into a dedicated root, every verify DONE through the
+namespace view of the original paths, and score_check build and check CONSISTENT; GAP-2) at FINAL.
 
 Entry point: run(only=None, work=None, jobs=4)."""
 import json
@@ -36,9 +37,7 @@ sys.path.insert(0, HERE)
 
 CONFIGS = {
     'D': {'series': 'D1'},
-    'DV': {'series': 'D1', 'gates': {'p2_md5_visible': 'yes', 'p2_newest_first': 'no', 'p1_transcript_export': 'yes'},
-           'policy': {'export': True}},
-    'DL': {'series': 'D1', 'gates': {'p1_conversation_list': 'no'}},
+    'DV': {'series': 'D1', 'gates': {'p1_transcript_export': 'yes'}, 'policy': {'export': True}},
     'DRI': {'series': 'D1', 'policy': {'v': 'incomplete', 'v_cont': 'pass'}},
     'Q': {'series': 'Q1', 'cases': (('9990101', 'small'), ('9990103', 'large'), ('9990102', 'nonattempt'))},
     'E': {'series': 'E1', 'cases': (), 'jobs': 1},
@@ -123,31 +122,28 @@ def scenarios():
     add('D_vis_refuse_three_times', 'D', ('AI', 1), None, vis='refuse3', stop='UPLOAD_FAILED')
     add('E_vis_refuse_deliv_parts', 'E', ('DELIVERY', 1), 'c', vis='refuse')
     add('E_vis_foreign_same_entry', 'E', ('AI', 1), None, vis='foreign_same', stop='FORK')
-    add('DV_vis_foreign_md5_entry', 'DV', ('AI', 1), None, vis='foreign_same', stop='FORK')
-    add('DV_vis_lag2_parts', 'DV', ('STAGE', 2), 'c', vis='lag2')
     # Drive visibility at the head search, the notes the Dot kept, and the rebase on a missing part
     add('D_head_lag1', 'D', ('AI', 1), 'e', vis='head_lag1')
     add('D_head_dup', 'D', ('AI', 1), 'e', vis='head_dup')
     add('D_head_foreign_next', 'D', ('AI', 1), 'e', vis='foreign_next', stop='FORK')
     add('D_head_foreign_prev_link', 'D', ('AI', 1), 'e', vis='foreign_prev', stop='LINK_MISMATCH')
-    add('D_head_listing_ghost', 'D', ('AI', 1), 'e', vis='ghost', notes='commit')
-    add('D_notes_commit_only_listing', 'D', ('STAGE', 2), 'e', notes='commit')
-    add('D_notes_none_step0', 'D', ('AI', 1), 'e', notes='none')
-    add('DV_notes_commit_only_gallop', 'DV', ('STAGE', 2), 'e', notes='commit')
+    add('D_notes_commit_only_gallop', 'D', ('STAGE', 2), 'e', notes='commit', extra='x_opx10_restore')
+    add('D_notes_none_step0', 'D', ('AI', 1), 'e', notes='none', extra='x_opx10_restore')
     add('D_rebase_missing_part', 'D', ('STAGE', 2), 'd', vis='lose_part')
     add('D_two_resets', 'D', ('STAGE', 2), 'e', again=True)
-    # OPENED (no conversation list), REVIEW_INCOMPLETE (O61, F1), qualification with a scope stage
-    for k, pt in ((('OPENED', 1), 'a'), (('OPENED', 1), 'e'), (('AI', 1), 'a'), (('STAGE', 1), 'e')):
-        add('DL_%s%d_%s' % (k[0], k[1], pt), 'DL', k, pt)
+    # REVIEW_INCOMPLETE (O61, F1), qualification with a scope stage (v2.1 deleted OPENED and the DL config, §5.2)
     for k, pt in ((('STAGE', 3), 'e'), (('STAGE', 3), 'a'), (('AI', 3), 'a'), (('AI', 3), 'e')):
         add('DRI_%s%d_%s' % (k[0], k[1], pt), 'DRI', k, pt)
     add('Q_ans_S_nw_not_available', 'Q', ('STAGE', 3), 'e', answer='nw_not_available')
     add('Q_ans_G_after_scope_nw', 'Q', ('STAGE', 4), 'e', answer='nw_not_available')
     add('Q_FP2_scope_finish', 'Q', ('AI', 3), 'a', seam=('runner_after', 'scope-finish', 'reset'))
-    for c in ('D', 'DV', 'DL', 'DRI', 'Q', 'E'):
+    for c in ('D', 'DV', 'DRI', 'Q', 'E'):
         add('%s_baseline' % c, c, None, None)
     for fn in ('test_helper_busy_second_command_refused', 'test_selftest_died_retried_once_then_stops'):
         add(fn, 'X', None, None, special=fn)
+    import rs_v21                                  # delta v2.1 §2.15.5: worlds of their own
+    for fn, (series, cases) in sorted(rs_v21.SPEC.items()):
+        add(fn, 'X', None, None, special=fn, module='rs_v21', series=series, cases=cases)
     import test_codes
     import test_v1_regressions                     # the v1 regressions that need the real runner (§14.4)
     for x in test_v1_regressions.WORLD + test_codes.WORLD:
@@ -230,10 +226,11 @@ class Runner:
             results.append({'name': 'baseline_' + self.cfg_name, 'ok': False,
                             'error': '%s: %s' % (type(e).__name__, e), 'trace': traceback.format_exc()[-2500:],
                             'seconds': round(time.time() - t0, 1),
-                            'trail': trail(w)})
+                            'trail': trail(w), 'bootstrap_stop': w.dot.bootstrap_stop})
             for s in scs:
                 if s['name'] not in done and not any(r['name'] == s['name'] for r in results):
-                    results.append({'name': s['name'], 'ok': False, 'error': 'baseline failed', 'seconds': 0})
+                    results.append({'name': s['name'], 'ok': False, 'error': 'baseline failed', 'seconds': 0,
+                                    'bootstrap_stop': w.dot.bootstrap_stop})
         finally:
             w.destroy()
             self.F.force_rmtree(snaps)
@@ -300,7 +297,7 @@ class Runner:
         except Exception as e:                         # noqa: BLE001 - recorded per scenario
             return {'name': s['name'], 'ok': False, 'error': '%s: %s' % (type(e).__name__, str(e)[:600]),
                     'trace': traceback.format_exc()[-2500:], 'seconds': round(time.time() - t0, 1),
-                    'trail': trail(w)}
+                    'trail': trail(w), 'bootstrap_stop': w.dot.bootstrap_stop}
         finally:
             w.seams.disarm()
 
@@ -396,7 +393,7 @@ class Runner:
     # ---- oracles at the end
     def check(self, w, s, code, lines, t0):
         res = {'name': s['name'], 'ok': True, 'seconds': None, 'blocks': len(w.dot.blocks),
-               'last': lines[-1][:120] if lines else None}
+               'last': lines[-1][:120] if lines else None, 'bootstrap_stop': w.dot.bootstrap_stop}
         try:
             if s.get('seam'):
                 assert w.seams.hits, 'the armed seam %s never fired: the scenario tested nothing' % (s['seam'],)
@@ -478,10 +475,14 @@ class Runner:
         assert code == 0 and rep['clean'], 'O4: audit not clean: %s %s' % (out.strip()[:300], json.dumps(
             (rep or {}).get('anomalies'))[:500])
         assert rep['outcomes_sha256'] == af['outcomes_sha256'], 'O4: audit outcomes differ from ALL_FROZEN'
-        F.force_rmtree(w.base)                         # O5 at the original absolute paths (R25)
+        F.force_rmtree(w.base)                         # O5: the original paths are gone (GAP-2)
         code, arep, out = w.assemble(d)
-        assert code == 0 and all(r['verify'] == 'DONE' for r in arep['runs']), \
-            'O5: assemble --verify-frozen: %s' % out.strip()[:300]
+        assert code == 0 and arep and arep['clean'] and not arep['problems'] and arep['runs'] and all(
+            r['verify'] == 'DONE' and r['path'].startswith(os.path.realpath(arep['root']) + '/') for r in arep['runs']) \
+            and arep['view']['binds'][0] == [str(w.base), os.path.realpath(arep['root']) + str(w.base)], \
+            'O5: assemble --verify-frozen: %s %s' % (out.strip()[:300], [r['verify'] for r in (arep or {}).get('runs', [])])
+        verdict = w.score_check(d, rep)
+        assert verdict == 'CONSISTENT', 'O5: score_check: %s' % verdict
         F.force_rmtree(d)
 
     def everyday_checks(self, w, s):
@@ -504,8 +505,9 @@ class Runner:
         root = self.work / ('x_' + s['name'][-20:])
         w = None
         try:
-            w = self.F.World(root, series='E1', cases=(), plant_pass=not s.get('no_pass') and s['special'] != (
-                'test_selftest_died_retried_once_then_stops'))
+            kw = {} if s.get('series') == 'D1' and s.get('cases') is None else {'cases': s.get('cases') or ()}
+            w = self.F.World(root, series=s.get('series') or 'E1', plant_pass=not s.get('no_pass') and s['special'] != (
+                'test_selftest_died_retried_once_then_stops'), **kw)
             fn = getattr(self, s['special'], None) or getattr(__import__(s.get('module', 'test_v1_regressions')),
                                                               s['special'])
             fn(w)
@@ -513,7 +515,7 @@ class Runner:
         except Exception as e:                                     # noqa: BLE001 - recorded
             return {'name': s['name'], 'ok': False, 'error': '%s: %s' % (type(e).__name__, str(e)[:600]),
                     'trace': traceback.format_exc()[-2500:], 'seconds': round(time.time() - t0, 1),
-                    'trail': trail(w) if w else []}
+                    'trail': trail(w) if w else [], 'bootstrap_stop': w.dot.bootstrap_stop if w else None}
         finally:
             if w is not None:
                 w.destroy()

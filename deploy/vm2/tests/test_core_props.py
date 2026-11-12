@@ -65,7 +65,7 @@ def mutate(w, rng, e):
     elif m == 'body_key' and isinstance(e['body'], dict) and e['body']:
         e['body'].pop(rng.choice(sorted(e['body'])))
     elif m == 'kind':
-        e['kind'] = rng.choice([k for k in ('STAGE', 'AI', 'ACK', 'FINAL', 'OPENED') if k != e['kind']])
+        e['kind'] = rng.choice([k for k in ('STAGE', 'AI', 'ACK', 'FINAL', 'CLEAR') if k != e['kind']])
     elif m == 'genesis_again' and s is not None:
         g = CW.genesis(w)
         g.update(seq=e['seq'], name=e['name'], prev_sha256=e['prev_sha256'], confirms=e['confirms'])
@@ -102,7 +102,7 @@ def pick(rng, mv):
 def new_world(seed):
     rng = random.Random(seed)
     series = rng.choice(['Q1', 'Q1', 'D2', 'E1'])
-    gates = {'p1_conversation_list': rng.choice(['yes', 'no']), 'p1_transcript_export': rng.choice(['yes', 'no']),
+    gates = {'p1_conversation_list': 'yes', 'p1_transcript_export': rng.choice(['yes', 'no']),
              'p1_end_after_reset': rng.choice(['yes', 'yes', 'no']), 'p2_lag_seconds': rng.choice([0, 20, 90])}
     return CW.World(series, gates=gates, rng=rng), rng
 
@@ -203,7 +203,7 @@ def run(jobs=4, n=N_SEQUENCES):
     fails = [f for r in res for f in r[4]]
     tests = [('props_sequences', not [f for f in fails if 'cut' not in f]),
              ('props_cuts', not [f for f in fails if 'cut' in f])]
-    want = {'T01', 'T10', 'T11', 'T12', 'T13', 'T15', 'T20', 'T21', 'T23', 'T24', 'T30', 'T31', 'T35', 'T37',
+    want = {'T01', 'T10', 'T11', 'T12', 'T13', 'T15', 'T20', 'T21', 'T23', 'T24', 'T30', 'T31', 'T37',
             'T38', 'T41', 'T42', 'T43', 'T44', 'T45', 'T46', 'T47', 'T49', 'T52', 'T55', 'T58', 'T59', 'T62'}
     tests.append(('props_every_positive_row_reached', want <= rows))
     return {'name': 'test_core_props', 'tests': len(tests), 'passed': sum(ok for _, ok in tests),

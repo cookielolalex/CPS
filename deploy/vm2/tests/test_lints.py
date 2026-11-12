@@ -276,7 +276,10 @@ def t_l8_pinned_shas():
     adm = json.load(open(os.path.join(REPO, 'deploy/vm/ADMISSION_VM_HELPER_V1.json')))
     files = adm['files_sha256']
     assert files, 'L8: no v1 shas'
+    v21 = {'deploy/make_kit.py', 'deploy/test_make_kit.py'}        # changed on purpose by v2.1 (MAINT-6, MK-1, MK-2)
     for p, want in files.items():
+        if p in v21:
+            continue
         q = p if os.path.isabs(p) else os.path.join(REPO, p)
         if os.path.exists(q):
             assert sha_file(q) == want, 'L8: %s differs from the v1 record' % p
@@ -351,10 +354,146 @@ def t_l10_unused_reused():
     assert names
 
 
+def t_l13_launcher_ignores_bytecode():
+    """L13 (S-07, W11, W84): the launcher session_start.sh writes runs python3 -I -B -X pycache_prefix=/dev/null, and
+    session_start.sh removes every __pycache__ folder under the checkout before it writes the launcher."""
+    t = open(os.path.join(VM2, 'session_start.sh')).read()
+    assert 'exec python3 -I -B -X pycache_prefix=/dev/null' in t
+    rm = t.find('-name __pycache__')
+    assert rm >= 0 and 'rm -rf' in t[rm:rm + 120], 'session_start.sh removes __pycache__ folders'
+    assert rm < t.find('exec python3 -I -B -X pycache_prefix=/dev/null'), 'before the launcher is written'
+
+
+README_RULES = (                                # D10, OPX-04, OPX-09, D3, D4, D16 (§2.15.5 L14): exact README text
+    'When in doubt, answer `UNSURE`.',
+    'If you are not sure whether the platform refused an upload or failed, treat it as refused.',
+    'Never work around a refused upload',
+    'never repeat an upload',
+    'NO_BLOCK',
+    'RAW_INVALID',
+    '`REFUSED INPUTS_CHANGED`',
+    'date -u +%Y-%m-%dT%H:%M:%SZ',
+    '`include_base64` false',
+    'not_available',
+    "any characters, up to the kit's max_ai_output_bytes, larger: `STOP AI_OUTPUT_TOO_LARGE HANDBACK C`",   # GAP-9
+    'for everyday jobs into the everyday records folder `Dots Folder/CPS_JOB_RECORDS` and the profile\'s `deliveries` folder',
+    'both must be inside the owner\'s standing pre-approval of uploads (section 7)',
+    'With `tools=inventory` the record holds the kit\'s list (by its sha256), the platform\'s usual set, not a list read',
+    # amendment A1-A3 (W130, W131): the base under /tmp, the two routes, the operating rules and their codes
+    'export CPS_VM_BASE=/tmp/cps',
+    'Run `bash /tmp/cps/vm.sh go`, then do the block it prints, exactly.',
+    'through the elevated route (`sandbox_permissions` set to `require_escalated`)',
+    'Run everything else for the helper through the standard route (`use_default`)',
+    'Never move a helper command to the elevated route because it failed',
+    'leave `prefix_rule` empty',
+    'run no helper command',
+    'never end your turn and never set a wait or a wake-up',
+    '`CPS paused while a helper command or a CPS conversation ran: reply continue to resume.`',
+    'Never use `ps`, `kill` or a process id to judge whether a helper command runs',
+    'never start that command again yourself. Run `go` once and do the block it prints.',
+    'Retry it once through the same route. If the review stops it again, stop and tell the owner `REVIEW_STOPPED`',
+    'Never run it again through the elevated route or in another folder (the bootstrap is the exception, section 1). '
+    'Stop and tell the owner `READ_ONLY_FS`',
+    '`go` stops with `STOP SETUP_MISSING HANDBACK C` before the stage',
+    # the amendment's fix round (delta v2.1 §9.8; W139-W143): the clear bootstrap, waits, the 6-hour claim, the exceptions
+    'run exactly that, as one command through the elevated route, then run `go`. Never run `session_start.sh` alone',
+    'The maintainer\'s message gives you the bootstrap of section 1 with its values filled in',
+    'It holds nothing of the series, so it is the one command you start again yourself',
+    'This is the one HANDBACK C stop you clear yourself: tell the owner, run the bootstrap once (with your notes)',
+    'Between two checks of such a conversation run `sleep 300` in the foreground through the standard route',
+    'Check it once every 5 minutes, with `sleep 300` in the foreground between checks',
+    'A worker or a scheduled check (for example a mailbox check run by a worker) never runs the bootstrap or a helper '
+    'command',
+    'Uploads are never retried: an upload the review refused follows section 3.1.',
+    'One inside the runner\'s tools shows as another stop of the helper',
+    'the claim is younger than 6 hours',
+    'If it does not say, tell the owner `MAILBOX_UNSETTLED` (case C) and do not run `go`.',
+    'the polls and checks are estimates until the stage times and conversation lengths are measured on this VM',
+    'A runner stage needs 2 GB free there',
+)
+README_ABSENT = ('STOP IDLE', 'then=', 'AWAIT_CONVERSATION', 'OPENED', 'LIST ', '/home/agent/cps', '~/cps/',
+                 '~/cps-deliveries', 'Run that line exactly', 'bootstrap line', 'come from the stage times')
+
+
+def t_l14_readme_rules():
+    """L14 (W20, W95, W104, W105, W130, W131, W139-W143): the README keeps its rules verbatim (the outcome rule with
+    UNSURE as the default, the refused-upload notes, the never-work-around and never-repeat sentences, NO_BLOCK, the RAW_INVALID
+    table, the INPUTS_CHANGED step, the attested times, the DOWNLOAD route; amendment A1-A3: the /tmp/cps base, the two
+    routes, the operating rules with REVIEW_STOPPED, READ_ONLY_FS and SETUP_MISSING, the disk need) and none of the
+    removed tokens (also no old ~/cps or /home/agent/cps path). Fix round (CC-3, W139): the bootstrap block itself
+    exports the base before it runs session_start.sh."""
+    readme = open(os.path.join(VM2, 'README.md'), encoding='utf-8').read()
+    flat = ' '.join(readme.split())
+    blk = readme.split('<!-- bootstrap:begin -->', 1)[1].split('<!-- bootstrap:end -->', 1)[0].splitlines()
+    ex = [i for i, ln in enumerate(blk) if ln == 'export CPS_VM_BASE=/tmp/cps']
+    ss = [i for i, ln in enumerate(blk) if 'session_start.sh' in ln]
+    assert len(ex) == 1 and len(ss) == 1 and ex[0] < ss[0], 'L14: the bootstrap block exports CPS_VM_BASE first'
+    missing = [r for r in README_RULES if ' '.join(r.split()) not in flat]
+    assert not missing, 'L14: README lacks %s' % missing
+    for o in ('NOTHING_WRITTEN', 'WRITTEN', 'UNSURE', 'NO_CONVERSATION'):
+        assert '`%s`' % o in readme, 'L14: the outcome rule names %s' % o
+    present = [t for t in README_ABSENT if t in readme]
+    assert not present, 'L14: README still has %s' % present
+    with open(os.path.join(HERE, 'budget_golden.json')) as f:                    # OPX-10 (W26): section 7 = golden
+        g = json.load(f)['D_baseline']
+    run = [v for k, v in g.items() if k.startswith('A/')][0]
+    na = [v for k, v in g.items() if k.startswith('NA-A/')][0]
+    rows = {ln.split('|')[1].strip().split(' (')[0]: [c.strip() for c in ln.split('|')[2:5]]
+            for ln in readme.split('\n') if ln.startswith('| a normal run') or ln.startswith('| a nonattempt')}
+    assert run['drive_calls'] == 15 + 3 * run.get('png_parts', 0), run
+    assert rows.get('a normal run') == [str(run['helper_commands']), '15 + 3p', str(run['saved_results'])] and \
+        rows.get('a nonattempt') == [str(na['helper_commands']), str(na['drive_calls']), str(na['saved_results'])], \
+        ('L14: README section 7 differs from tests/budget_golden.json', rows, run, na)
+    rest = json.load(open(os.path.join(HERE, 'budget_golden.json')))['restore']           # GAP-7: the restore rows
+    lead = {'hint': '| a restore after a reset, with your notes', 'commit': '| a restore with only the commit line',
+            'none': '| a restore without your notes (step 0), measured'}
+    for k, pre in lead.items():
+        row = [ln for ln in readme.split('\n') if ln.startswith(pre)]
+        want = [str(rest[k][c]) for c in ('helper_commands', 'drive_calls', 'saved_results')]
+        assert len(row) == 1 and [c.strip() for c in row[0].split('|')[2:5]] == want, ('L14 restore', k, row, want)
+
+
+def t_l15_every_guard_has_a_direct_test():
+    """L15 (D11a): every fold TABLE row, every core/session.py function with a guard site and every glue function of
+    the generated guard set has a GUARD_TESTS key with at least one test, and every listed test exists."""
+    import mutants
+    import test_core_table as TC
+    from cpsvm2.core import fold as F
+    keys = {r.id for r in F.TABLE} | {m['fn'] for m in mutants.guard_mutants({'cpsvm2/core/session.py': None})} | {
+        fn for fns in mutants.GLUE_TARGETS.values() for fn in fns}
+    missing = sorted(keys - set(TC.GUARD_TESTS))
+    assert not missing, 'L15: no direct test for %s' % missing
+    names = set()
+    for n in ('test_core_table', 'test_core_more', 'test_vio', 'test_codes', 'test_v1_regressions', 'test_maint'):
+        mod = __import__(n)
+        names |= {getattr(f, '__name__', '') for f in getattr(mod, 'TESTS', [])} | {
+            f.__name__ for f in getattr(mod, 'DIRECT', [])}
+    bad = sorted({t for v in TC.GUARD_TESTS.values() for t in v} - names)
+    assert not bad and all(TC.GUARD_TESTS[k] for k in keys), 'L15: unknown tests %s' % bad
+
+
+def t_only_unknown_name_exits_2():
+    """T11 (W27): run_tests.py --only with a name that is no suite, test, scenario, special, CONFIGS key or group exits
+    2 and lists it; a known name of each kind is accepted."""
+    import subprocess
+    import tempfile
+    d = tempfile.mkdtemp(prefix='only_')
+    p = subprocess.run([sys.executable, '-I', '-B', os.path.join(HERE, 'run_tests.py'), '--work', d, '--only',
+                        'test_core_props,no_such_test_name'], capture_output=True, text=True, timeout=600)
+    assert p.returncode == 2 and 'no_such_test_name' in p.stdout and 'test_core_props' not in p.stdout.split(
+        'names:')[-1], (p.returncode, p.stdout[-300:])
+    import run_tests
+    known = run_tests.known_names()
+    for n in ('test_core_props', 'test_t1_continued_v_other_outcomes_t48', 'D_baseline', 'D', 'nonroot',
+              'test_foreground_died_same_boot_stops', 't_d4_parse_raw_rules'):
+        assert n in known, n
+
+
 TESTS = [t_l1_codes_registered_and_tested, t_l2_import_rule_and_core_without_io, t_l2_only_cli_and_worker_import_both,
          t_l3_reuse_manifest, t_l4_core_line_coverage, t_l5_grammar_rejects, t_l6_readme_examples_refused,
          t_l7_no_or_in_exit_code_assertions, t_l8_pinned_shas, t_l9_print_rules, t_l10_unused_reused,
-         t_l11_no_detached_process]
+         t_l11_no_detached_process, t_l13_launcher_ignores_bytecode, t_l14_readme_rules,
+         t_l15_every_guard_has_a_direct_test, t_only_unknown_name_exits_2]
 
 
 def run(only=None, work=None):

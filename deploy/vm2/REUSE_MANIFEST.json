@@ -130,24 +130,6 @@
   },
   {
    "kind": "function",
-   "name": "h8",
-   "segment_sha256": "2f2a60192818874f9c337a3429e97e1bed2f2568642f47d18173ab63fbf01c16",
-   "v1_lines": [
-    217,
-    218
-   ]
-  },
-  {
-   "kind": "function",
-   "name": "canon",
-   "segment_sha256": "df2675b85c78d0a40b2a053b35bc783b5b41bd469a5791d8e562234876570d38",
-   "v1_lines": [
-    221,
-    222
-   ]
-  },
-  {
-   "kind": "function",
    "name": "sjson",
    "segment_sha256": "64e3a806a74d27c25cf71122a20bcaeac0378ca6b7006b99ae2561fdc5a2de54",
    "v1_lines": [
@@ -318,24 +300,6 @@
    ]
   },
   {
-   "kind": "function",
-   "name": "pkg_manifest_problem",
-   "segment_sha256": "fa8559396901336f4a6a2f50a6a62e2fa482d99ae1ae71a420d0f1951da8e395",
-   "v1_lines": [
-    993,
-    1001
-   ]
-  },
-  {
-   "kind": "function",
-   "name": "check_pkg_manifest",
-   "segment_sha256": "5134127d98280fdd81f01c4740324d5de5eb9f3dcf059f86e91b1869174fe5c7",
-   "v1_lines": [
-    1004,
-    1007
-   ]
-  },
-  {
    "kind": "class",
    "name": "Archive",
    "segment_sha256": "cbc7f5a3391845c3d3b924c6b8a5f8e260477ad2370836246b676b398b5e912c",
@@ -417,15 +381,6 @@
    ]
   },
   {
-   "kind": "function",
-   "name": "join_slices",
-   "segment_sha256": "987c55cc611858f8ed9f81026ac14323ab12faaab7a87fb1a155ef02cdf14b6e",
-   "v1_lines": [
-    1482,
-    1493
-   ]
-  },
-  {
    "kind": "class",
    "name": "FP",
    "segment_sha256": "3451c0618e741f3585750d16061b6d8ff374b31d6e2a8c1d13b23082f48d5b74",
@@ -504,15 +459,6 @@
    "v1_lines": [
     5048,
     5061
-   ]
-  },
-  {
-   "kind": "function",
-   "name": "scrub",
-   "segment_sha256": "39658ee629497ad5fa306f7da09d48bb9e1d352e5bc53cc39d30a100eb7fc34e",
-   "v1_lines": [
-    5064,
-    5069
    ]
   },
   {

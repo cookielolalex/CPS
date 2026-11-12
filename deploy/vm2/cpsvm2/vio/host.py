@@ -1,12 +1,10 @@
-"""Host glue (spec §2.1, §2.2, §8.2, §8.3, §12.1): v2 paths, the one clock, the kit config and its gates, the helper
-tree sha, the Ctx2 the reused segments take, and the FINGERPRINT_PASS document. Decides nothing about the journal."""
+"""Host glue (spec §2.1, §2.2, §8.2, §8.3, §12.1): paths, the clock, the kit config and gates, the PASS."""
 import datetime
 import hashlib
 import json
 import os
 import re
 import subprocess
-from pathlib import Path
 
 from .v1compat import HELPER_REPO, stop
 from .v1reuse import current_boot_id, sha_bytes, sha_file, sjson
@@ -16,11 +14,11 @@ CONFIG_KEYS = {'schema': str, 'series': str, 'accepted_helper_tree_sha256': list
                'selftest_expected_tests': int, 'clock_wait_max_seconds': int, 'foreground_hold_seconds': int,
                'stage_max_seconds': dict, 'max_upload_bytes': int, 'png_part_bytes': int, 'max_entry_bytes': int,
                'max_transcript_bytes': int, 'max_ai_output_bytes': int, 'conversation_re': str, 'transcript_ext': str,
-               'drive_id_re': str, 'gates': dict, 'clear': (dict, type(None)), 'doc_samples': list}
+               'drive_id_re': str, 'gates': dict, 'clear': (dict, type(None)), 'doc_samples': list,
+               'tool_inventory_sha256': str}
 GATE_VALUES = {'p1_vm_files': ('PASS', 'FAIL', 'OPEN'), 'p1_transcript_export': ('yes', 'no', 'OPEN'),
                'p1_conversation_list': ('yes', 'no', 'OPEN'), 'p1_end_after_reset': ('yes', 'no', 'OPEN'),
-               'p2_exact_search': ('PASS', 'FAIL', 'OPEN'), 'p2_md5_visible': ('yes', 'no', 'OPEN'),
-               'p2_newest_first': ('yes', 'no', 'OPEN'), 'p2_lag_seconds': int, 'p2_max_upload_bytes': int,
+               'p2_exact_search': ('PASS', 'FAIL', 'OPEN'), 'p2_lag_seconds': int, 'p2_max_upload_bytes': int,
                'p2_tgz_kept': ('PASS', 'FAIL', 'OPEN'), 'p2_failed_upload_can_appear': ('yes', 'no', 'OPEN'),
                'p3_identity_stable': ('yes', 'no', 'OPEN'), 'p3_clock_tolerance_seconds': int,
                'p5_foreground_hold_seconds': int, 'p5_setup_seconds': int}
@@ -48,7 +46,6 @@ class Paths:
         self.state, self.pending, self.block, self.halt, self.work = (self.v2 / n for n in (
             'STATE.json', 'PENDING.json', 'BLOCK.json', 'HALT.json', 'RESTORE_WORK.json'))
         self.hint, self.foreground = self.v2 / 'HINT.json', self.v2 / 'FOREGROUND.json'
-        self.deliveries = Path(lay.home or '/nonexistent') / 'cps-deliveries'
 
 
 class Ctx2:
@@ -85,9 +82,7 @@ def repo_commit(lay):
 
 
 def load_config(raw, release, check_patterns, cap, stage_keys):
-    """§2.2 exact keys and types, gate value sets (§12.1), mode/status agreement and the release series pin (INT-09),
-    and the delta's size and stage-budget rules (§X.2). check_patterns(conversation_re, doc_samples) -> None |
-    'CONFIG_INVALID'; cap and stage_keys are core.names UPLOAD_CAP_BYTES and STAGE_KEYS. Returns the config dict."""
+    """§2.2 and §X.2: the kit config with exact keys and types, gate values and the series pin, or CONFIG_INVALID."""
     try:
         c = sjson(raw)
     except (ValueError, UnicodeDecodeError):
@@ -113,8 +108,9 @@ def load_config(raw, release, check_patterns, cap, stage_keys):
         if not ok:
             stop('CONFIG_INVALID', 'gates')
     if not re.fullmatch(r'[a-z0-9]{1,10}', c['transcript_ext']) or any(
-            not re.fullmatch(r'[0-9a-f]{64}', x or '') for x in c['accepted_helper_tree_sha256'] +
-            c['accepts_release_sha256']) or not all(isinstance(x, str) for x in c['doc_samples']):
+            not re.fullmatch(r'[0-9a-f]{64}', x or '') for x in c['accepted_helper_tree_sha256']
+            + c['accepts_release_sha256'] + [c['tool_inventory_sha256']]) \
+            or not all(isinstance(x, str) for x in c['doc_samples']):
         stop('CONFIG_INVALID', 'values')
     for rx in (c['conversation_re'], c['drive_id_re']):
         try:
@@ -136,14 +132,13 @@ def load_config(raw, release, check_patterns, cap, stage_keys):
 
 
 def gates_problem(cfg, mode, cap):
-    """§12.1 release gates as the delta restates them (§X.12.1), on every command: None or the sorted names of the open
-    gates and failed budget keys."""
+    """§12.1 (§X.12.1) on every command: None or the sorted open gates and failed budget keys."""
     if mode == 'setup':
         return None
     g, bad = cfg['gates'], []
     bad += [k for k, v in g.items() if v in ('OPEN', None)]
-    bad += [k for k, want in (('p1_vm_files', 'PASS'), ('p2_exact_search', 'PASS'), ('p2_tgz_kept', 'PASS'))
-            if g.get(k) != want]
+    bad += [k for k, want in (('p1_vm_files', 'PASS'), ('p2_exact_search', 'PASS'), ('p2_tgz_kept', 'PASS'),
+                              ('p1_conversation_list', 'yes')) if g.get(k) != want]
     hold, fh = g.get('p5_foreground_hold_seconds') or 0, cfg['foreground_hold_seconds']
     if fh > hold:
         bad.append('p5_foreground_hold_seconds')
@@ -158,18 +153,9 @@ def gates_problem(cfg, mode, cap):
     return sorted(set(bad)) or None
 
 
-def read_release(lay):
-    p = lay.release_path
-    raw = p.read_bytes() if p.is_file() else None
-    try:
-        return raw, (sjson(raw) if raw else None)
-    except (ValueError, UnicodeDecodeError):
-        return raw, None
-
-
 def pass_doc(fp_sha, full, commit, results_name, res_raw, s, run):
     """The FINGERPRINT_PASS content (v1 cmd_fingerprint_pass, lines 5951-6012)."""
-    return {'schema': 'cps.vm-fingerprint-pass.v1', 'helper': {'version': 'cps-vm-helper.v2'},
+    return {'schema': 'cps.vm-fingerprint-pass.v1', 'helper': {'version': 'cps-vm-helper.v2.1'},
             'boot_id': current_boot_id(), 'created_utc': now(), 'fingerprint_sha256': fp_sha, 'fingerprint': full,
             'commit': commit, 'selftest': {'results_name': results_name, 'sha256': sha_bytes(res_raw),
                                            'tests': s.get('tests'), 'passed_count': s.get('passed_count'),

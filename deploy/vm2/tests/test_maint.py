@@ -1,5 +1,5 @@
 """Tests of the maintainer side (§10, §9.5; §14.4 rows F5, FLAGS-1..3, INT-03, INT-04, INT-05, INT-08, INT-09,
-IMP-16): audit, assemble and score_check on invented journals. A Journal drives core_world.World (the core tests'
+IMP-16; delta v2.1 MAINT-1 to MAINT-10, GAP-06, GAP-10): audit, assemble and score_check on invented journals. A Journal drives core_world.World (the core tests'
 entry builders and legal-move generator) and materializes every entry for real: tgz archives with the reused
 write_tgz, job snapshots, PNG part streams, a runner-format ledger, kit zips, a Drive listing and the downloads, so the
 maintainer tools read bytes exactly as they would from Drive. No runner command runs except verify-frozen in
@@ -19,15 +19,27 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 import core_world as CW                                                  # noqa: E402
-from cpsvm2.core import fold as F                                        # noqa: E402
-from cpsvm2.core.names import FOLDERS, cjson, entry_name, sha, utc_epoch  # noqa: E402
+from cpsvm2.core import fold as F, session as S                          # noqa: E402
+from cpsvm2.core.names import cjson, entry_name, series_folder, sha, utc_epoch, utc_minus  # noqa: E402
 from cpsvm2.maint import assemble as AS, audit as AU, score_check as SC  # noqa: E402
-from cpsvm2.vio.v1reuse import remove_tree, write_tar_stream, write_tgz  # noqa: E402
+from cpsvm2.vio.runner import load_runner                                 # noqa: E402
+from cpsvm2.vio.v1reuse import kit_members, remove_tree, write_tar_stream, write_tgz  # noqa: E402
 
-RN = AU.load_runner()
+RN = vars(load_runner())
 JOBS2 = [['case01', 1, None], ['case02', 2, 'NONATTEMPT_SOURCE_UNAVAILABLE']]
 FULL = ['PREPARE_GENERATE', 'AI', 'FINISH', 'AI', 'VISUAL_PASS']
 WORK = None
+# The O63 texts as the delta pins them (§2.8); the tests hold their own copy, so a changed sentence is caught.
+O63_NOTE = ('O63: generator isolation by instruction only, not enforced or audited; tools present: %s; any tools-used '
+            'statement is in final_message.')
+O63_REPORT = ('Isolation of the generator, scope-reader and visual-reviewer conversations was by instruction only (owner '
+              'decision O63): neither enforced nor audited. The tools of each conversation are recorded in its AI entry '
+              '(for generators also in GENERATION_RECORD.json) as the operator attested them: the kit inventory '
+              "TOOL_INVENTORY.txt by sha256 (the platform's usual set, not that conversation's own list) or a list the "
+              'operator saved.')
+TOOLS = b'invented_tool_a\ninvented_tool_b\n'
+FMSG = 'an invented final message {with} <any> characters'.encode()
+FOLDER_ROW = 'application/vnd.google-apps.folder'
 
 
 def md5(b):
@@ -42,8 +54,18 @@ def ctime(t):
     return time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(t))
 
 
-def kit_zip(release, config, extra=b't1'):
-    files = {'RELEASE.json': release, 'VM_HELPER_CONFIG.json': jbytes(config), 'tables/t.json': extra}
+def jobs_doc(jobs):
+    return jbytes({'cases': [{'case_id': c, 'order': o, 'nonattempt': bool(r), 'reason': r or None}
+                             for c, o, r in jobs]})
+
+
+def release_for(base, tag=b'invented-1'):
+    return jbytes({'release': tag.decode(), 'qualification': {'jobs_file': base + '/runtime/qualification/JOBS.json'}})
+
+
+def kit_zip(release, config, extra=b't1', jobs=JOBS2):
+    files = {'RELEASE.json': release, 'VM_HELPER_CONFIG.json': jbytes(config), 'tables/t.json': extra,
+             'qualification/JOBS.json': jobs_doc(jobs)}
     sums = ''.join('%s  %s\n' % (sha(v), k) for k, v in sorted(files.items())).encode()
     bio = io.BytesIO()
     with zipfile.ZipFile(bio, 'w') as z:
@@ -52,13 +74,13 @@ def kit_zip(release, config, extra=b't1'):
     return bio.getvalue()
 
 
-def config(series, **kw):
+def config(series, gates=None, **kw):
     c = {'schema': 'cps.vm2-config.v1', 'series': series, 'accepted_helper_tree_sha256': [CW.TREE],
          'accepts_release_sha256': [], 'selftest_expected_tests': 1, 'clock_wait_max_seconds': 60,
          'foreground_hold_seconds': 1200, 'stage_max_seconds': {}, 'max_upload_bytes': 50000000,
          'png_part_bytes': 1000000, 'max_entry_bytes': 1000000,
          'max_transcript_bytes': 1000, 'max_ai_output_bytes': 1000, 'conversation_re': 'conv-[A-Z0-9]+',
-         'transcript_ext': 'json', 'drive_id_re': '[A-Za-z0-9_-]{20,80}', 'gates': CW.GATES, 'clear': None,
+         'transcript_ext': 'json', 'drive_id_re': '[A-Za-z0-9_-]{20,80}', 'gates': gates or CW.GATES, 'clear': None,
          'doc_samples': []}
     c.update(kw)
     return c
@@ -67,12 +89,12 @@ def config(series, **kw):
 class Journal:
     """One invented series, materialized under `root`: dl/<id>/<name> (the series folder), setup/<id>/<name>."""
 
-    def __init__(self, root, series='D1', jobs=JOBS2):
-        self.root, self.series = root, series
-        self.w = CW.World(series, jobs=copy.deepcopy(jobs))
+    def __init__(self, root, series='D1', jobs=JOBS2, gates=None, kit_jobs=None, **cfg):
+        self.root, self.series, self.slip = root, series, None
+        self.w = CW.World(series, gates=gates, jobs=copy.deepcopy(jobs))
         self.rows, self.srows, self.data, self.ledger, self.trees, self.pngs = [], [], {}, {}, {}, {}
-        self.release = b'{"release": "invented-1"}\n'
-        self.kit = self.add_kit(self.release, config(series))
+        self.release, self.jobs = release_for(CW.BASE), kit_jobs or jobs
+        self.kit = self.add_kit(self.release, config(series, self.w.gates, **cfg))
         self.w.kit = self.kit
         pb = b'{"pass": "invented"}\n'
         self.passref = {'name': 'FINGERPRINT_PASS_%s.json' % CW.FP, 'md5': md5(pb)}
@@ -90,9 +112,17 @@ class Journal:
         return rows[-1]
 
     def add_kit(self, release, cfg, extra=b't1'):
-        z = kit_zip(release, cfg, extra)
-        self.upload(self.srows, 'setup', 'SESSION_KIT_%s.zip' % sha(z)[:12], z, CW.T0)
+        z = kit_zip(release, cfg, extra, self.jobs)
+        if 'SESSION_KIT_%s.zip' % sha(z)[:12] not in [r['name'] for r in self.srows]:
+            self.upload(self.srows, 'setup', 'SESSION_KIT_%s.zip' % sha(z)[:12], z, CW.T0)
         return sha(z)
+
+    def kit_dict(self, k):
+        """The session's kit dict of an uploaded kit zip (as cli builds it)."""
+        r = [r for r in self.srows if r['name'] == 'SESSION_KIT_%s.zip' % k[:12]][0]
+        m = kit_members(os.path.join(self.root, 'setup', r['id'], r['name']))
+        return {'sha256': k, 'members': sorted([p, sha(v)] for p, v in m.items()),
+                'config': json.loads(m['VM_HELPER_CONFIG.json']), 'release_sha256': sha(m['RELEASE.json'])}
 
     def row(self, name):
         return [r for r in self.rows if r['name'] == name][0]
@@ -117,6 +147,13 @@ class Journal:
         if b['carrier_sha256'] is not None:
             t['carrier/convert/carrier.json'] = jbytes({'items': [{'row': 1, 'run': run}]})
             b['carrier_sha256'] = sha(t['carrier/convert/carrier.json'])
+        if any(c['role'] == 'G' for c in b['consumed']):         # the finish stage writes the generation record
+            sl = self.slip
+            t['run/GENERATION_RECORD.json'] = jbytes({
+                'schema': 'cps.generation-record.v1', 'case_id': nr['case'],
+                'tools_enabled': TOOLS.decode().splitlines() + (['other_tool'] if sl == 'tools' else []),
+                'notes': O63_NOTE % ('0' * 64 if sl == 'notes' else sha(TOOLS)),
+                'final_message': 'another message' if sl == 'final' else FMSG.decode()})
         if b['png'] is not None and b['png']['parts_seq'] == seq:
             t['qa/visual_deliverable/VISUAL_QA_MANIFEST.json'] = jbytes({'images': [{'file': 'p1.png'}]})
             self.pngs[run] = {'qa/visual_deliverable/p1.png': b'\x89PNG invented ' + run.encode() * 50}
@@ -182,6 +219,13 @@ class Journal:
         for m in e['payload']['members']:
             members[m[0]] = ('dir', m[2], None) if m[1] == 'dir' else \
                 ('file', m[2], ('invented %s %d\n' % (m[0], seq)).encode())
+        if e['kind'] == 'AI':                   # O63 (§2.8): the tools present and the final message, archived
+            members.update({'attest': ('dir', 0o755, None), 'attest/final_message.txt': ('file', 0o644, FMSG)})
+            if self.slip != 'no_tools' or e['body']['role'] != 'G':
+                members['attest/tools.txt'] = ('file', 0o644, TOOLS)
+            if e['body']['revision'] == 1:
+                e['body']['attested']['tools_present'] = {'source': 'inventory', 'sha256': sha(TOOLS)}
+            e['body']['final_message_sha256'] = sha(FMSG)
         parts = []
         if 'ledger/LEDGER.jsonl' in members:
             base = b'' if self.fork_ledger_at == seq else self.ledger.get((s['ledger'] or {}).get('seq'), b'') \
@@ -210,7 +254,7 @@ class Journal:
                                  outcomes_sha256=af['outcomes_sha256'])
         e['payload']['members'] = sorted([k, v[0], v[1], len(v[2]) if v[2] is not None else None,
                                           sha(v[2]) if v[2] is not None else None] for k, v in members.items())
-        folder = FOLDERS[ser[0]]
+        folder = series_folder(ser)
         e['parts'] = [{'name': CW.part_name(ser, seq, k, i), 'kind': k, 'k': i, 'folder': folder, 'sha256': sha(d),
                        'md5': md5(d), 'bytes': len(d)} for k, i, d in parts]
         return members, parts
@@ -272,9 +316,10 @@ class Journal:
         rep['_rc'], rep['_path'] = rc, out
         return rep
 
-    def assemble(self, verify=False):
+    def assemble(self, verify=True):
         d = tempfile.mkdtemp(dir=self.root, prefix='asm_')
         out = os.path.join(d, 'ASSEMBLE.json')
+        os.mkdir(os.path.join(d, 'root'))
         rc, _ = capture(AS.main, ['--series', self.series, '--dir', os.path.join(self.root, 'dl'), '--out', out,
                       '--root', os.path.join(d, 'root')] + (['--verify-frozen'] if verify else []))
         with open(out) as f:
@@ -324,8 +369,10 @@ def build_plan(j, rep, asm, oc_path, pool=('case01', 'case02')):
     with open(pp, 'w') as f:
         json.dump({'pool': list(pool)}, f)
     out = tempfile.mktemp(dir=j.root, prefix='plan_')
-    rc = SC.main(['build', '--audit', rep['_path'], '--assembled', asm['_path'], '--pool', pp, '--owner-checks',
-                  oc_path, '--out', out])
+    ins = ['--audit', rep['_path'], '--assembled', asm['_path'], '--pool', pp, '--owner-checks', oc_path]
+    rc = SC.main(['build'] + ins + ['--out', out])
+    j.plan_inputs = getattr(j, 'plan_inputs', {})
+    j.plan_inputs[out] = ins
     pl = None
     if os.path.exists(os.path.join(out, 'SCORE_PLAN.json')):
         with open(os.path.join(out, 'SCORE_PLAN.json')) as f:
@@ -500,9 +547,7 @@ def kit_change_series(j, lie=False):
     c1 = config(j.series)
     c2 = config(j.series, accepts_release_sha256=[sha(rel2)], clock_wait_max_seconds=90)
     k2 = j.add_kit(rel2, c2, extra=b't2')
-    kz = {r['name']: os.path.join(j.root, 'setup', r['id'], r['name']) for r in j.srows}
-    m1 = AU.kit_info(kz['SESSION_KIT_%s.zip' % j.kit[:12]])['members']
-    m2 = AU.kit_info(kz['SESSION_KIT_%s.zip' % k2[:12]])['members']
+    m1, m2 = j.kit_dict(j.kit)['members'], j.kit_dict(k2)['members']
     kc = {'from_kit_sha256': j.kit, 'to_kit_sha256': k2, 'from_members': m1, 'to_members': m2, 'config_only': False,
           'config_keys_changed': sorted(k for k in c1 if c1[k] != c2[k]), 'run_in_flight': False,
           'to_accepts_release_sha256': [sha(rel2)]}
@@ -553,14 +598,6 @@ def test_assemble_verify_frozen_every_run():
 
 def test_assemble_refusals():
     j = series('asm_bad', full_series)
-    root = tempfile.mkdtemp(dir=j.root, prefix='asm_')
-    os.makedirs(os.path.join(root, 'root', 'home/agent/cps/qual/A/case01'))
-    out = os.path.join(root, 'A.json')
-    rc, _ = capture(AS.main, ['--series', j.series, '--dir', os.path.join(j.root, 'dl'), '--out', out,
-                              '--root', os.path.join(root, 'root')])
-    with open(out) as f:
-        rep = json.load(f)
-    assert rc == 1 and rep['problems'] == [{'code': 'PLACE_TARGET_NOT_EMPTY', 'name': '/home/agent/cps/qual/A/case01'}]
     part = [p['name'] for p in j.w.entries[3]['parts']][0]
     r = j.row(part)
     with open(os.path.join(j.root, 'dl', r['id'], part), 'ab') as f:
@@ -663,12 +700,14 @@ def manifest(pl, swap=None):
     return m
 
 
-def check(j, plan_dir, m):
+def check(j, plan_dir, m, ins=None):
     mp, out = tempfile.mktemp(dir=j.root), tempfile.mktemp(dir=j.root)
     with open(mp, 'w') as f:
         json.dump(m, f)
-    rc, _ = capture(SC.main, ['check', '--plan', os.path.join(plan_dir, 'SCORE_PLAN.json'), '--manifest', mp,
-                              '--out', out])
+    rc, txt = capture(SC.main, ['check', '--plan', os.path.join(plan_dir, 'SCORE_PLAN.json'), '--manifest', mp,
+                                '--out', out] + (ins or j.plan_inputs[plan_dir]))
+    if not os.path.exists(out):
+        return rc, txt
     with open(out) as f:
         return rc, json.load(f)
 
@@ -747,6 +786,449 @@ def test_score_check_refuses_unclean_inputs():
     assert rc == 4 and 'REFUSED' in out, out
 
 
+# ====================================================================== delta v2.1 (track M)
+def members_of(members):
+    return sorted([k, v[0], v[1], len(v[2]) if v[2] is not None else None, sha(v[2]) if v[2] is not None else None]
+                  for k, v in members.items())
+
+
+def commit_outside(j, e):
+    """Upload entry e as the Dot would, built outside core_world.commit (whose fold would refuse it); its state is the
+    fold's when the fold accepts it (2015773), else the state before it."""
+    members, parts = j.materialize(e)
+    try:
+        st = F.apply(j.w.state, e)
+    except F.ChainInvalid:
+        st = j.w.state
+    e['state'], e['state_sha256'] = st, sha(cjson(st))
+    t = utc_epoch(e['utc'])
+    j.upload(j.rows, 'dl', e['name'], j.write(e, members), t + 2)
+    for k, i, d in parts:
+        j.upload(j.rows, 'dl', CW.part_name(j.series, e['seq'], k, i), d, t + 3)
+    return e['name']
+
+
+def move(j, label, run=None):
+    for lab, th in CW.moves(j.w):
+        if lab == label:
+            e = th()
+            if run is None or e['body']['run'] == run:
+                return e
+    raise AssertionError('no move %s %s' % (label, run))
+
+
+def forge_final(j, edit):
+    """MAINT-1: only the FINAL entry is rebuilt, with an edited final/ALL_FROZEN.json and a matching body."""
+    def m(doc, members):
+        af = json.loads(members['final/ALL_FROZEN.json'][2])
+        edit(af)
+        raw = jbytes(af)
+        members['final/ALL_FROZEN.json'] = ('file', 0o644, raw)
+        doc['body']['all_frozen_sha256'] = sha(raw)
+        doc['payload']['members'] = members_of(members)
+    old = j.row(entry_name(j.series, len(j.data)))['id']
+    _repack(j, len(j.data), m)
+    shutil.rmtree(os.path.join(j.root, 'dl', old))            # assemble reads the downloads folder, not the listing
+
+
+def assemble_into(j, root, dl=None):
+    out = tempfile.mktemp(dir=j.root, prefix='asm_')
+    rc, txt = capture(AS.main, ['--series', j.series, '--dir', dl or os.path.join(j.root, 'dl'), '--out', out] +
+                      (['--root', root] if root is not None else []))
+    if not os.path.exists(out):
+        return rc, None, txt
+    with open(out) as f:
+        return rc, json.load(f), txt
+
+
+def empty_root(j):
+    return tempfile.mkdtemp(dir=j.root, prefix='root_')
+
+
+def test_maint1_audit_refuses_hostile_new_run():
+    """D7: an entry that starts a run (rows T10-T13) at a job_dir other than the layout path is T14 in the audit."""
+    b, stop = CW.BASE, ('PREPARE_GENERATE', 'AI', 'FINISH_STOP', 'ACK')
+    cases = [('E1', ('INPUTS',), 'PREPARE_E', None, '/root/.config/git'),                      # T13, everyday
+             ('D1', stop, 'PREPARE_GENERATE', 'A-restart1/case01', b + '/qual/A/case01'),     # T11, restart
+             ((), 'PREPARE_GENERATE', 'A/case01', '/root/.config/git'),
+             ((), 'PREPARE_GENERATE', 'A/case01', b + '/qual/A/../../x'),
+             ((), 'PREPARE_GENERATE', 'A/case01', b + '/qual/B/case01'),
+             ((), 'PREPARE_GENERATE', 'A/case01', b + '/ledger'),
+             ((), 'NA', 'NA-A/case02', '/root/.config/git'),
+             (tuple(FULL), 'PREPARE_GENERATE', 'B/case01', b + '/qual/A/case01')]
+    for c in cases:
+        ser, pre, label, run, jd = c if len(c) == 5 else ('D1',) + c
+        j = Journal(tempfile.mkdtemp(dir=WORK, prefix='hostile_'), series=ser)
+        j.play('GENESIS', *pre)
+        e = move(j, label, run)
+        old = e['body']['new_run']['job_dir']
+        e['body']['new_run']['job_dir'] = jd
+        for k in ('prompt', 'folder', 'output'):
+            if e['body']['start']:
+                e['body']['start'][k] = jd + e['body']['start'][k][len(old):]
+        name = commit_outside(j, e)
+        rep = j.audit()
+        assert {'code': 'AUD_CHAIN_INVALID', 'name': name, 'detail': 'T14'} in rep['anomalies'], (jd, rep['anomalies'])
+
+
+def test_maint1_forged_all_frozen_job_dir():
+    j = series('forged', full_series)
+
+    def edit(af):
+        af['runs'][0]['job_dir'] = '/root/.config/git'
+    forge_final(j, edit)
+    rep = j.audit()
+    assert 'AUD_OUTCOMES_DIFF' in codes(rep), rep['anomalies']
+    root = empty_root(j)
+    rc, asm, _ = assemble_into(j, root)
+    assert rc == 1 and asm['problems'] == [{'code': 'LAYOUT_PATH', 'name': '/root/.config/git'}], asm['problems']
+    assert os.listdir(root) == []
+
+
+def test_maint1_assemble_base_from_genesis():
+    """W93: an ALL_FROZEN whose genesis base (and every path) is another base than the GENESIS entry's."""
+    j = series('base', full_series)
+    other = '/home/agent/other'
+
+    def edit(af):
+        af['genesis']['base'] = other
+        for r in af['runs']:
+            r['job_dir'] = other + r['job_dir'][len(CW.BASE):]
+    forge_final(j, edit)
+    root = empty_root(j)
+    rc, asm, _ = assemble_into(j, root)
+    assert rc == 1 and asm['problems'] == [{'code': 'LAYOUT_PATH', 'name': 'genesis'}], asm['problems']
+    assert os.listdir(root) == []
+
+
+def test_maint1_wrong_mapping_refused():
+    j = series('mapping', full_series)
+    for bad in (CW.BASE + '/qual/B/case01', CW.BASE + '/ledger', CW.BASE + '/qual/nonattempts_A/case02'):
+        def edit(af, bad=bad):
+            [r for r in af['runs'] if r['run'] == 'A/case01'][0]['job_dir'] = bad
+        forge_final(j, edit)
+        root = empty_root(j)
+        rc, asm, _ = assemble_into(j, root)
+        assert rc == 1 and asm['problems'] == [{'code': 'LAYOUT_PATH', 'name': bad}], (bad, asm['problems'])
+        assert os.listdir(root) == []
+
+
+def test_maint1_self_consistent_hostile_base_confined():
+    """A series whose base is /root/.config, every path consistent with it: the fold and the audit accept it, and
+    assemble writes only under realpath(root); nothing outside changes."""
+    old, CW.BASE = CW.BASE, '/root/.config'
+    try:
+        j = series('selfbase', full_series)
+    finally:
+        CW.BASE = old
+    sent = os.path.join(j.root, 'sentinel')
+    os.makedirs(os.path.join(sent, 'qual'))
+    with open(os.path.join(sent, 'qual', 'keep.txt'), 'wb') as f:
+        f.write(b'invented sentinel\n')
+    before, outside = AS.walk(sent), os.path.lexists('/root/.config/qual')
+    rep = j.audit()
+    assert rep['_rc'] == 0 and rep['clean'], rep['anomalies']
+    root = empty_root(j)
+    rc, asm, _ = assemble_into(j, root)
+    real = os.path.realpath(root) + '/'
+    assert rc == 0 and asm['clean'] and asm['root'] == root, asm['problems']
+    assert all(x['path'].startswith(real + 'root/.config/') for x in asm['runs']) and asm['ledger']['path'].startswith(real)
+    assert AS.walk(sent) == before and os.path.lexists('/root/.config/qual') == outside
+
+
+def test_maint1_symlink_after_begin_refused():
+    """A link planted between Staging.begin and the first write (the stage folder now points outside)."""
+    j = series('link', full_series)
+    sent = os.path.join(j.root, 'sentinel')
+    os.mkdir(sent)
+    with open(os.path.join(sent, 'keep.txt'), 'wb') as f:
+        f.write(b'invented sentinel\n')
+    before = AS.walk(sent)
+
+    class Hook(AS.Staging):
+        def begin(self, mode):
+            r = super().begin(mode)
+            os.rmdir(self.stage)
+            os.symlink(sent, self.stage)
+            return r
+    keep, AS.Staging = AS.Staging, Hook
+    try:
+        rc, asm, _ = assemble_into(j, empty_root(j))
+    finally:
+        AS.Staging = keep
+    assert rc == 1 and [p['code'] for p in asm['problems']] == ['LAYOUT_PATH'], asm['problems']
+    assert AS.walk(sent) == before
+
+
+def test_maint1_assemble_root_required_empty_dedicated():
+    """No --root, '/', a relative or missing path, a non-empty root (also one holding only a link): ROOT_INVALID and
+    nothing written. The downloads folder is empty, so no variant could write anything."""
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='root_'))
+    dl = tempfile.mkdtemp(dir=j.root, prefix='dl_')
+    full, link = empty_root(j), empty_root(j)
+    with open(os.path.join(full, 'x'), 'wb') as f:
+        f.write(b'x')
+    os.symlink(full, os.path.join(link, 'l'))
+    for root in (None, '/', 'relative/root', os.path.join(j.root, 'missing'), full, link):
+        rc, asm, txt = assemble_into(j, root, dl)
+        assert rc == 2 and asm is None and 'REFUSED ROOT_INVALID' in txt, (root, rc, txt)
+    rc, asm, _ = assemble_into(j, empty_root(j), dl)
+    assert rc == 1 and asm['problems'] == [{'code': 'CHAIN_INVALID', 'name': j.series}]          # the control
+
+
+def slipped(name, slip, build=full_series):
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix=name + '_'))
+    j.slip = slip
+    build(j)
+    return j
+
+
+def frozen_with_g(j):
+    return [e['name'] for e in j.w.entries if e['kind'] == 'FROZEN' and e['body']['run'] in ('A/case01', 'B/case01')]
+
+
+def test_gap10_generation_record_tied_to_g_entry():
+    j = series('o63', full_series)
+    rep = j.audit()
+    n_ai = len([e for e in j.w.entries if e['kind'] == 'AI' and e['body']['revision'] == 1])
+    assert rep['clean'] and rep['o63'] == {'checked': n_ai + 2, 'missing': []}, rep['o63']
+    for slip in ('tools', 'notes', 'final', 'no_tools'):
+        j = slipped('o63_' + slip, slip)
+        rep = j.audit()
+        want = frozen_with_g(j)
+        if slip == 'no_tools':
+            want = sorted(want + [e['name'] for e in j.w.entries if e['kind'] == 'AI' and e['body']['role'] == 'G'])
+        assert rep['_rc'] == 0 and sorted(rep['o63']['missing']) == sorted(want), (slip, rep['o63'], want)
+
+
+def test_maint2_score_check_requires_tools_attestation_and_states_isolation():
+    j = series('o63sc', full_series)
+    rep, asm = j.audit(), j.assemble()
+    (rc, pl, _), out = capture(build_plan, j, rep, asm, owner_checks(j, rep, all_verdicts(rep)))
+    assert rc == 0 and pl['isolation_statement'] == O63_REPORT and O63_REPORT in out, out
+    old = dict(rep)
+    del old['o63']
+    p = tempfile.mktemp(dir=j.root, prefix='audit_old_')
+    with open(p, 'wb') as f:
+        f.write(jbytes({k: v for k, v in old.items() if not k.startswith('_')}))
+    (rc, pl, _), out = capture(build_plan, j, dict(old, _path=p), asm, owner_checks(j, rep, all_verdicts(rep)))
+    assert rc == 4 and pl is None and 'REFUSED O63_ATTESTATION_MISSING' in out, out
+    j2 = slipped('o63sc_notes', 'notes')
+    rep2, asm2 = j2.audit(), j2.assemble()
+    (rc, pl, _), out = capture(build_plan, j2, rep2, asm2, owner_checks(j2, rep2, all_verdicts(rep2)))
+    assert rc == 4 and pl is None and 'REFUSED O63_ATTESTATION_MISSING' in out, out
+    assert all(n in out for n in frozen_with_g(j2)), out
+
+
+def restore_kit(j, rel, cfg, extra=b't1', cleared=None):
+    """A RESTORE that takes another real kit zip, its kit_change as the session derives it."""
+    s = j.w.state
+    k2 = j.add_kit(rel, cfg, extra)
+    kc = S.kit_change(s, j.kit_dict(k2), j.kit_dict(s['kit_sha256']))[1]
+    j.w.reset()
+    j.w.kit = k2
+    e = j.w.entry('RESTORE', CW.restore_body(j.w, kit_change=kc, kit_sha256=k2), kit=k2, release=sha(rel))
+    e['cleared_local'] = cleared
+    return j.commit(e)
+
+
+def halt_clear_series(j, clear=None, same=False, **cfg):
+    """A HALT, then a CLEAR with a real config-only kit whose clear is `clear` (same: the halted kit itself)."""
+    j.play('GENESIS', *FULL, 'HALT')
+    h = j.w.state['halt']
+    clear = {'series': j.series, 'seq': h['seq'], 'code': h['code']} if clear == 'right' else clear
+    k2 = j.kit if same else j.add_kit(j.release, config(j.series, j.w.gates, clear=clear, **cfg))
+    kc = S.kit_change(j.w.state, j.kit_dict(k2), j.kit_dict(j.w.state['kit_sha256']))[1]
+    j.w.kit = k2
+    e = j.w.entry('CLEAR', {'halt_seq': h['seq'], 'code': h['code'], 'kit_sha256': k2, 'kit_change': kc}, kit=k2)
+    if same:
+        return commit_outside(j, e)
+    j.commit(e)
+    j.play(*FULL, 'NA', 'NA', 'FINAL')
+    return e['name']
+
+
+def test_gap8_isolation_statement_matches_inventory_attestation():
+    """GAP-8: with tools=inventory every AI entry records the kit inventory (by sha256), not the conversation's own tool
+    list; the isolation statement says so instead of claiming a list per conversation."""
+    j = series('o63inv', full_series)
+    ais = [e for e in j.w.entries if e['kind'] == 'AI' and e['body']['revision'] == 1]
+    assert ais and all(e['body']['attested']['tools_present']['source'] == 'inventory' for e in ais)
+    rep, asm = j.audit(), j.assemble()
+    (rc, pl, _), out = capture(build_plan, j, rep, asm, owner_checks(j, rep, all_verdicts(rep)))
+    st = pl['isolation_statement']
+    assert rc == 0 and 'TOOL_INVENTORY.txt by sha256' in st and "not that conversation's own list" in st, st
+    assert 'The tools present in each conversation are recorded' not in st and 'a list the operator saved' in st, st
+
+
+def test_maint3_audit_refuses_unauthorized_clear():
+    """O59 with real kit zips: only a kit whose clear names {series, halt seq, code} authorizes the CLEAR."""
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='clear_'))
+    halt_clear_series(j, 'right')
+    rep = j.audit()
+    assert rep['_rc'] == 0 and rep['clean'] and len(rep['clears']) == 1, rep['anomalies']
+    for clear, cfg in (({'series': 'D1', 'seq': 999, 'code': 'OTHER'}, {}), (None, {'clock_wait_max_seconds': 90})):
+        j = Journal(tempfile.mkdtemp(dir=WORK, prefix='clear_'))
+        name = halt_clear_series(j, clear, **cfg)
+        rep = j.audit()
+        assert rep['anomalies'] == [{'code': 'AUD_KIT_CHANGE', 'name': name, 'detail': 'clear'}], rep['anomalies']
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='clear_'))
+    name = halt_clear_series(j, same=True)
+    rep = j.audit()
+    assert {'code': 'AUD_CHAIN_INVALID', 'name': name, 'detail': 'T60'} in rep['anomalies'], rep['anomalies']
+
+
+def local_clear_series(j, seq_off=0, release=False):
+    """A same-kit-lineage local clear (SD-53): a RESTORE with cleared_local, its kit's clear naming the stop."""
+    j.play('GENESIS', *FULL)
+    s = j.w.state
+    clear = {'series': j.series, 'seq': s['seq'] + seq_off, 'code': 'SETUP_FAILED'}
+    rel = release_for(CW.BASE, b'invented-2') if release else j.release
+    cfg = config(j.series, j.w.gates, clear=clear, **({'accepts_release_sha256': [sha(rel)]} if release else {}))
+    e = restore_kit(j, rel, cfg, cleared={'code': 'SETUP_FAILED', 'head_seq': s['seq'], 'kit_sha256': j.kit})
+    j.play(*FULL, 'NA', 'NA', 'FINAL')
+    return e['name']
+
+
+def test_maint3_audit_checks_cleared_local():
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='local_'))
+    local_clear_series(j)
+    rep = j.audit()
+    assert rep['_rc'] == 0 and rep['clean'] and len(rep['cleared_local']) == 1, rep['anomalies']
+    for kw in ({'seq_off': 1}, {'release': True}):
+        j = Journal(tempfile.mkdtemp(dir=WORK, prefix='local_'))
+        name = local_clear_series(j, **kw)
+        rep = j.audit()
+        assert rep['anomalies'] == [{'code': 'AUD_KIT_CHANGE', 'name': name, 'detail': 'cleared_local'}], \
+            (kw, rep['anomalies'])
+
+
+def test_maint4_audit_only_kit_change_verdicts():
+    """The three kit_change verdicts only the audit can see (§2.7), each with real kit zips."""
+    rel2 = release_for(CW.BASE, b'invented-2')
+    for case, want in (('gates', 'GATES_CHANGED'), ('series', 'CONFIG_CHANGE_NOT_ALLOWED'),
+                       ('doc_samples', 'CONFIG_CHANGE_NOT_ALLOWED')):
+        j = Journal(tempfile.mkdtemp(dir=WORK, prefix='kc_'), doc_samples=['invented-sample'])
+        j.play('GENESIS', *FULL)
+        g, acc = j.w.gates, {'accepts_release_sha256': [sha(rel2)], 'doc_samples': ['invented-sample']}
+        cfg = {'gates': config(j.series, dict(g, p2_lag_seconds=99), **acc), 'series': config('D2', g, **acc),
+               'doc_samples': config(j.series, g, doc_samples=[], clock_wait_max_seconds=90)}[case]
+        name = restore_kit(j, j.release if case == 'doc_samples' else rel2, cfg)['name']
+        j.play(*FULL, 'NA', 'NA', 'FINAL')
+        rep = j.audit()
+        assert rep['anomalies'] == [{'code': 'AUD_KIT_CHANGE', 'name': name, 'detail': want}], (case, rep['anomalies'])
+
+
+def test_maint5_score_check_refuses_unverified_assembly():
+    j = series('verify', full_series)
+    rep = j.audit()
+    oc = owner_checks(j, rep, all_verdicts(rep))
+    asm = j.assemble(verify=False)
+    assert asm['_rc'] == 0 and asm['verify_frozen'] is False, asm
+    (rc, pl, _), out = capture(build_plan, j, rep, asm, oc)
+    assert rc == 4 and pl is None and 'REFUSED ASSEMBLE_NOT_VERIFIED' in out, out
+    asm = j.assemble()
+    assert asm['verify_frozen'] is True and asm['clean']
+    bad = {k: v for k, v in asm.items() if not k.startswith('_')}
+    bad['runs'][0]['verify'] = 'EXIT_1'
+    p = tempfile.mktemp(dir=j.root, prefix='asm_bad_')
+    with open(p, 'wb') as f:
+        f.write(jbytes(bad))
+    (rc, pl, _), out = capture(build_plan, j, rep, dict(bad, _path=p), oc)
+    assert rc == 4 and 'REFUSED ASSEMBLE_NOT_VERIFIED' in out, out
+    (rc, pl, _), out = capture(build_plan, j, rep, asm, oc)
+    assert rc == 0 and pl is not None, out
+
+
+def test_maint7_drill_listing_with_folder_rows_clean():
+    """A complete listing of the drill's own folder may hold folder rows (no size): skipped and counted."""
+    j = series('folders', full_series)
+    rows = [{'id': 'idfolder%d' % i, 'name': 'sub%d' % i, 'mimeType': FOLDER_ROW, 'createdTime': ctime(CW.T0)}
+            for i in (1, 2)]
+    rep = j.audit(extra_rows=rows)
+    assert rep['_rc'] == 0 and rep['clean'] and rep['counts']['folders'] == 2, rep['anomalies']
+
+
+def test_maint8_check_detects_edited_plan():
+    j = series('plan8', full_series)
+    rep, asm = j.audit(), j.assemble()
+    (rc, pl, d), _ = capture(build_plan, j, rep, asm, owner_checks(j, rep, all_verdicts(rep)))
+    rc, chk = check(j, d, manifest(pl))
+    assert rc == 0 and chk['verdict'] == 'CONSISTENT', chk
+    pp = os.path.join(d, 'SCORE_PLAN.json')
+    with open(pp, 'rb') as f:
+        raw = f.read()
+    ed = json.loads(raw)
+    ed['readers']['A']['case01']['carrier_sha256'] = sha(b'an edited carrier')
+    with open(pp, 'wb') as f:
+        f.write(jbytes(ed))
+    rc, txt = check(j, d, manifest(ed))
+    assert rc == 4 and 'REFUSED PLAN_MISMATCH' in txt, txt
+    with open(pp, 'wb') as f:
+        f.write(raw)
+    ins = list(j.plan_inputs[d])
+    i = ins.index('--pool') + 1
+    p2 = tempfile.mktemp(dir=j.root, prefix='pool2_')
+    with open(p2, 'w') as f:
+        json.dump({'pool': ['case01', 'case02']}, f, indent=2)
+    ins[i] = p2
+    rc, txt = check(j, d, manifest(pl), ins)
+    assert rc == 4 and 'REFUSED PLAN_MISMATCH' in txt, txt
+
+
+def test_maint9_review_window_widened():
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='tol_'), gates={'p3_clock_tolerance_seconds': 120})
+    rebase_series(j)
+    rep = j.audit()
+    it = [i for i in rep['owner_items'] if i['id'] == rep['owner_review'][0]['item']][0]
+    head, restore = j.w.entries[3], j.w.entries[4]
+    assert restore['kind'] == 'RESTORE' and it['window'] == [utc_minus(head['utc'], 120),
+                                                            utc_minus(restore['utc'], -120)], it
+
+
+def test_maint10_genesis_jobs_differ_from_kit_unclean():
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='jobs_'), kit_jobs=JOBS2 + [['case03', 3, None]])
+    full_series(j)
+    rep = j.audit()
+    assert rep['anomalies'] == [{'code': 'AUD_KIT', 'name': entry_name(j.series, 1), 'detail': 'jobs'}], rep['anomalies']
+
+
+def test_gap06_audit_lists_approvals_and_same_boot_restores():
+    j = Journal(tempfile.mkdtemp(dir=WORK, prefix='appr_'))
+    j.play('GENESIS', *FULL, 'RESTORE')
+    e = CW._restore(j.w)                         # a same-boot RESTORE (a same-boot clear or a damaged cache)
+    j.w.boot = e['boot_id'] = j.w.entries[-1]['boot_id']
+    j.commit(e)
+    j.play(*FULL, 'NA', 'NA', 'FINAL')
+    rep = j.audit()
+    want = [(x['seq'], x['kind'], x['body'].get('approval')) for x in j.w.entries if x['kind'] in ('GENESIS', 'RESTORE')]
+    assert rep['clean'] and [(a['seq'], a['kind'], a['value']) for a in rep['approvals']] == want, rep
+    assert len(want) == 3 and rep['same_boot_restores'] == [e['seq']], rep['same_boot_restores']
+
+
+def test_a1_verify_view_root_under_tmpfs_ancestor():
+    """Amendment A1 (W119): the GAP-2 namespace view works for a /tmp/cps-shaped GENESIS base when the tmpfs covers the
+    ancestor that holds the assembly root itself (the maintainer's scratch is under /tmp): `cd` into that ancestor comes
+    before the tmpfs mount, so the relative bind sources still name the real tree. Two shapes: a base whose deepest
+    existing ancestor also holds the root and a stand-in runner file, and the literal /tmp/cps with the root under the
+    work folder; in both, <root><base> is seen at <base> and the bound runner file at its own path."""
+    import subprocess
+    top = tempfile.mkdtemp(dir=WORK, prefix='a1view_')
+    for base in (top + '/cps', '/tmp/cps'):
+        root = tempfile.mkdtemp(dir=top, prefix='root_')
+        os.makedirs(root + base + '/qual/A/c1')
+        with open(root + base + '/qual/A/c1/FROZEN.json', 'w') as f:
+            f.write('invented frozen\n')
+        run = os.path.join(top, 'runner.py')
+        with open(run, 'w') as f:
+            f.write('invented runner\n')
+        argv, ns = AS.view(base, os.path.realpath(root), run)
+        assert base == '/tmp/cps' or ns['tmpfs'] == top, ns          # the root lies inside the tmpfs's ancestor
+        p = subprocess.run(argv + ['sh', '-c', 'cat %s/qual/A/c1/FROZEN.json %s' % (base, run)], capture_output=True,
+                           text=True, timeout=60)
+        assert (p.returncode, p.stdout) == (0, 'invented frozen\ninvented runner\n'), (base, ns, p.stdout, p.stderr)
+
+
 TESTS = [test_audit_clean_series, test_f5_audit_planted_restore_unknown_to_final,
          test_audit_planted_foreign_release_entry, test_audit_state_ledger_outcomes_tamper,
          test_audit_names_gap_foreign_second_series_time_pass, test_int04_drill_rebase_audit_clean,
@@ -756,7 +1238,19 @@ TESTS = [test_audit_clean_series, test_f5_audit_planted_restore_unknown_to_final
          test_int03_write_found_and_window_conversation_make_pairs_empty,
          test_int03_unlogged_conversation_empty_and_flagged, test_audit_owner_review_needs_verdict_in_score_check,
          test_flags2_empty_carriers_distinct_per_reader, test_flags1_wrong_shared_or_real_carrier_inconsistent,
-         test_flags3_runner_failed_runs_get_empty_carriers, test_score_check_refuses_unclean_inputs]
+         test_flags3_runner_failed_runs_get_empty_carriers, test_score_check_refuses_unclean_inputs,
+         test_maint1_audit_refuses_hostile_new_run, test_maint1_forged_all_frozen_job_dir,
+         test_maint1_assemble_base_from_genesis, test_maint1_wrong_mapping_refused,
+         test_maint1_self_consistent_hostile_base_confined, test_maint1_symlink_after_begin_refused,
+         test_a1_verify_view_root_under_tmpfs_ancestor,
+         test_maint1_assemble_root_required_empty_dedicated, test_gap10_generation_record_tied_to_g_entry,
+         test_maint2_score_check_requires_tools_attestation_and_states_isolation,
+         test_gap8_isolation_statement_matches_inventory_attestation,
+         test_maint3_audit_refuses_unauthorized_clear, test_maint3_audit_checks_cleared_local,
+         test_maint4_audit_only_kit_change_verdicts, test_maint5_score_check_refuses_unverified_assembly,
+         test_maint7_drill_listing_with_folder_rows_clean, test_maint8_check_detects_edited_plan,
+         test_maint9_review_window_widened, test_maint10_genesis_jobs_differ_from_kit_unclean,
+         test_gap06_audit_lists_approvals_and_same_boot_restores]
 
 
 def run(only=None, work=None):
@@ -766,6 +1260,8 @@ def run(only=None, work=None):
     for fn in TESTS:
         if only and fn.__name__ not in only:
             continue
+        if failed and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
+            break
         WORK = tempfile.mkdtemp(dir=base, prefix='t_')
         try:
             fn()

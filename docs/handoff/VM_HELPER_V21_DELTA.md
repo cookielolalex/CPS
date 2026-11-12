@@ -1,25 +1,31 @@
-<!-- Status: PLAN (spec delta r4) for cps-vm-helper.v2.1; not built, not reviewed, not admitted. Written 2026-11-11 from deploy/vm2/ADMISSION_VM_HELPER_V2.json (admission review 2 of 1d31801: DO_NOT_ADMIT, 47 findings), the reviewers' findings and probes, and the maintainer decisions D1-D15 for v2.1. Revised the same day (r4) after three critic lenses (integrity, operator, tests); section 7 answers each of their 35 gaps. Applies on top of docs/handoff/VM_HELPER_V2_SPEC.md r2 and docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md. -->
+<!-- Status (2026-11-12): BUILT and AMENDED candidate cps-vm-helper.v2.1; not reviewed, not admitted. Sections 0-7 are the plan (spec delta r5); section 8 records the build (746ea98, a2298cb) and section 9 the post-build amendment from probes M008-M012 (2cfaac5) and its fix round (1802e06). Independent admission review 3 (gate G-1) has not run. Plan history: Written 2026-11-11 from deploy/vm2/ADMISSION_VM_HELPER_V2.json (admission review 2 of 1d31801: DO_NOT_ADMIT, 47 findings), the reviewers' findings and probes, and the maintainer decisions D1-D16 for v2.1. Revised the same day (r4) after three critic lenses (integrity, operator, tests); section 7 answers each of their 35 gaps. Amended the same day (r5) by maintainer decision D16, which carries the operator's answers to probe M007 (facts F1-F8, invented data) into the plan; section 7.4 says what r5 changed and where. Applies on top of docs/handoff/VM_HELPER_V2_SPEC.md r2 and docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md. Section 9 (2026-11-12) records the post-build amendment from probes M008-M012 and its fix round (§9.8); not reviewed, not admitted. -->
 
-# cps-vm-helper.v2.1: delta r4 to SPEC_V2 r2 and the probe delta
+# cps-vm-helper.v2.1: delta r5 to SPEC_V2 r2 and the probe delta
 
-Status: this is a plan for the builders. It is not built, reviewed or admitted. It starts from HEAD `2015773`, which is the v2
+Status: sections 0-7 were written as the plan for the builders. The candidate is now built (§8) and amended (§9), and it
+is not reviewed or admitted: independent admission review 3 (gate G-1) has not run. The plan starts from HEAD `2015773`, which is the v2
 candidate `1d31801` plus its admission record. Each statement here changes `docs/handoff/VM_HELPER_V2_SPEC.md` r2
 (cited as "r2 §n") or `docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md` (cited as "§X.n"). Text this delta does not
 mention stays as r2 and the probe delta have it. **Supersedes** marks the places where this delta replaces earlier text.
-r4 replaces r3 of this file in full; §7 says, gap by gap, what changed.
+r4 replaced r3 of this file in full; §7.1-§7.3 say, gap by gap, what changed. r5 keeps every r4 decision and adds
+only what D16 needs (§2.16, §5.4 and the rows, gates, tests and risks they touch); §7.4 lists each change.
 
 Authority, in this order:
 1. The owner's decisions O43-O63 in `docs/handoff/DEPLOYMENT_MODEL.md`.
-2. The maintainer decisions D1-D15 for v2.1. They are fixed: this plan details them and does not reopen them.
+2. The maintainer decisions D1-D16 for v2.1. They are fixed: this plan details them and does not reopen them. D16
+   (2026-11-11, the M007 amendment) carries the facts F1-F8 that the operator reported for probe M007 on its own VM,
+   with invented data, and that the maintainer verified against the operator's uploaded files (§2.16).
 3. The admission record `deploy/vm2/ADMISSION_VM_HELPER_V2.json`.
 4. r2 and the probe delta.
 
-Decisions this plan makes beyond D1-D15 are numbered **SD-35** to **SD-67** and listed again in §6.1.
+Decisions this plan makes beyond D1-D16 are numbered **SD-35** to **SD-71** and listed again in §6.1. The amendment's
+are SD-72 to SD-76 (§9.2) and its fix round's SD-77 to SD-82 (§9.8.2).
 
 Notation:
 - `C`, `M` and `T` are the build tracks (§1.1).
 - "Fails on 2015773" is shown by the paired mutant (§1.1, §2.15.1).
-- `BASE` is `/home/agent/cps` on the Dot's VM.
+- `BASE` is `/tmp/cps` on the Dot's VM since the amendment of §9 (A1). Text written before §9 that names
+  `/home/agent/cps` means BASE; TOOLS stays `/home/agent/cps-tools` (`~/cps-tools`).
 - Every example value is invented.
 
 ---
@@ -36,6 +42,11 @@ Notation:
   (§2.2) and one clear mechanism for every stop, decided before anything moves (§2.4). It deletes the three variants
   that are dead on this platform: md5-visible mode, the listing head hint and the OPENED entry (§2.13). The non-test
   helper total goes down (§5.1).
+- **The operator's platform (D16).** Probe M007 measured the Dot's VM and its tools (§2.16): DOWNLOADs go through a
+  raw-file download and a `cp`, saved search results are the M004 envelope, an upload outside the owner's standing
+  approval is refused, the Dot runs as uid 1000 without root, a long finish stage may not fit the proven 1,200 s hold,
+  the disk has about 2.5 GB free, and resets are frequent. v2.1 adds two small rules for this (SD-69, SD-70), a
+  non-root test pass (SD-71), README text, tests and gates; it designs nothing in the runner.
 - **What stays unchanged.** Runner v4 `deploy/run/cps_job.py` stays byte-identical, at sha256
   `7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431`. Helper v1 `deploy/vm/` stays rejected and
   unchanged.
@@ -75,13 +86,16 @@ Notation:
   reviewers' mutant applied". §2.15.6 gives the three-column proof table the build report must fill.
 - T also runs the new tests that use no interface new in v2.1 once in a 2015773 clone, and records each failure in the
   build report. §2.15.6 lists them by name.
+- A test or mutant marked **(non-root)** decides only in the non-root pass (SD-71, §2.16.4): root ignores permission
+  bits, so there its mutant survives by construction. The D16 rows whose behaviour is correct at 2015773 (the non-root
+  evict test, the disk-retention test) are proven like T1-T10, by their mutants.
 
-### 1.2 One row per finding (all 47) and per blocking item
+### 1.2 One row per finding (all 47), per blocking item and per D16 item
 
 | id | sev | change (files: functions) | regression test | mutant | track |
 |---|---|---|---|---|---|
 | INT-R2-01 | major | D6 (§2.5). `core/session.py`: phase APPROVAL right after FINGERPRINT, on both paths, before any FIND (SD-58); the step-6 RECHECK runs on every qualification and drill restore (SD-59). `cli.py` `apply_answer` action APPROVAL: `none` is recorded; `pending` prints `STOP WAIT_APPROVAL HANDBACK A` and changes nothing. `core/entry.py`: BODY GENESIS and RESTORE get `approval`, which must be `"none"`. M: AUDIT.json lists every approval and every same-boot RESTORE. README §3, §3.1, §4 | rs `D_refuse_reset_approval_pending`, `D_refuse_reset_approval_wrong_none`, `D_hint_restore_late_copy_at_n1_forks_at_recheck`; cm `test_d6_approval_asked_before_restore_and_genesis`, `test_d6_approval_before_head`, `test_op05_recheck_after_every_q_restore`; ct `test_d6_entry_approval_must_be_none`; mt `test_gap06_audit_lists_approvals_and_same_boot_restores`; lint `t_l14_readme_rules` | W01, W48, W74, W78, W89, W94, W95 | C (session, cli, entry, README, FakeDot approval policy); M (audit); T |
-| INT-R2-02 = S-02 = OPX-03 (LOCAL-CLEAR) | major | D5 (§2.4). `cli.py`: `clear_check` replaces `sticky_halt` and decides the clear before anything moves (SD-56); `stop_block` (HALT.json for every HANDBACK C STOP including `HALTED_<code>`, the journal's head and kit, `tried`, `halt_local`; an older HALT.json is kept); `invalidate` (`cleared_` also moves HALT.json, BASE/attest and BASE/inbox); `load_cache` (a BLOCK.json behind STATE moves alone, one ahead invalidates; `halt_local` without HALT.json invalidates); the post resume after `clear_check`; `foreground_check` (`dead_<utc14>.json`). `core/session.py`: `clear_ok`, `config_only_ok`, `clear_verdict`; KIT_ACCEPT refuses a non-config-only change in a clearing restore; the moved-PENDING rule; the RECHECK condition; a RESTORE while HALTED keeps the halted kit and carries no `cleared_local` (SD-51, SD-57). `worker.py`: `files_found` before `settle`. `vio/place.py`: `settle`. `vio/v1mod.py`: `place_frozen` | rs `D_clear_same_boot_setup_failed`, `D_clear_same_boot_foreground_died`, `D_clear_same_boot_fork`, `D_clear_same_boot_fork_foreign_only`, `D_clear_same_boot_open_generator`, `D_clear_committed_halt_same_boot`, `D_sameboot_damaged_cache_restores`, special `test_foreground_died_same_boot_stops`; cm `test_d5_clear_verdict_exact_clear_and_config_only`, `test_d5_clearing_restore_refuses_release_change`; ct `test_session_c2_clear_restore_keeps_kit_then_clear_takes_it`, `test_d5_cleared_local_only_on_restore_and_genesis`; vio the `t_d5_*` tests of §2.15.5, `t_gap02_files_found_before_settle`, `t_gap04_moved_pending_foreign_copy_forks`, `t_gap08_clear_moves_attest_and_inbox`, `t_gap08_render_removes_stale_download_target`, `t_gap12_halt_removed_out_of_procedure_restores` | W02, W03, W51, W58-W67, W75-W77, W80-W82, W85, W91, W92 | C; T |
+| INT-R2-02 = S-02 = OPX-03 (LOCAL-CLEAR) | major | D5 (§2.4). `cli.py`: `clear_check` replaces `sticky_halt` and decides the clear before anything moves (SD-56); `stop_block` (HALT.json for every HANDBACK C STOP including `HALTED_<code>`, the journal's head and kit, which the STOP header shows, `tried`, `halt_local`; an older HALT.json is kept; a damaged one becomes UNCLASSIFIED); `invalidate` (SD-68: both prefixes move the cache files, BASE/attest and BASE/inbox except `.boot`; `cleared_` also moves HALT.json); `load_cache` (a BLOCK.json behind STATE moves alone, one ahead invalidates; `halt_local` without HALT.json invalidates); the post resume after `clear_check`; `foreground_check` (`dead_<utc14>.json`). `core/session.py`: `clear_ok`, `config_only_ok`, `clear_verdict`; KIT_ACCEPT refuses a non-config-only change in a clearing restore; the moved-PENDING rule; the RECHECK condition; a RESTORE while HALTED keeps the halted kit and carries no `cleared_local` (SD-51, SD-57). `worker.py`: `files_found` before `settle`. `vio/place.py`: `settle`. `vio/v1mod.py`: `place_frozen` | rs `D_clear_same_boot_setup_failed`, `D_clear_same_boot_foreground_died`, `D_clear_same_boot_fork`, `D_clear_same_boot_fork_foreign_only`, `D_clear_same_boot_open_generator`, `D_clear_committed_halt_same_boot`, `D_sameboot_damaged_cache_restores`, special `test_foreground_died_same_boot_stops`; cm `test_d5_clear_verdict_exact_clear_and_config_only`, `test_d5_clearing_restore_refuses_release_change`; ct `test_session_c2_clear_restore_keeps_kit_then_clear_takes_it`, `test_d5_cleared_local_only_on_restore_and_genesis`; vio the `t_d5_*` tests of §2.15.5, `t_gap02_files_found_before_settle`, `t_gap04_moved_pending_foreign_copy_forks`, `t_gap08_clear_moves_attest_and_inbox`, `t_gap08_render_removes_stale_download_target`, `t_gap12_halt_removed_out_of_procedure_restores` | W02, W03, W51, W58-W67, W75-W77, W80-W82, W85, W91, W92, W97, W100-W103 | C; T |
 | INT-R2-03 | minor | `core/entry.py`: RESOLUTION_KEYS gets `conversation`. `core/session.py`: `build_item` fills it from the answer, else the archived conversation, else null. `core/fold.py`: `e42` copies it into ROLE.resolution. `core/outcome.py`: the OWNER_CHECK item and the O52 sheet row show it. `worker.py`: `Chain.argv` passes it as interrupt `--conversation-id` | cm `test_int_r2_03_restore_conversation_recorded`; vio `t_int_r2_03_interrupt_gets_conversation_id` | W04, W53 | C; T |
 | INT-R2-04 | minor | `core/fold.py` `_consumed_ok(R, b, sub)`: when the chain's first command is a consumer (`CONSUMER`), `body.consumed` must name exactly the ARCHIVED, unconsumed role of that letter (g20, g21, g23, g24). Other chains keep today's per-item check. `CONSUMER` moves from plan.py to fold.py | ct `test_int_r2_04_consumer_stage_without_consumed_is_t25` | W05 | C; T |
 | S-01 | major | `vio/savepoint.py`: `_Env1`, `setup_block`, `setup_found` and `setup_verify` are deleted. `block`, `on_found` and `on_verify` take the loop dict and an explicit `cap`, `lag` and `folder`. `cli.py` passes `env.upload_cfg['max_upload_bytes']` | vio `t_s01_setup_failed_log_uploaded_without_kit_config` (World with an empty BASE/runtime) | W06 | C; T |
@@ -92,20 +106,20 @@ Notation:
 | S-06 | minor | `cli.delivery_commit`: the profile folder must print (`drive.prints(pf + '/deliveries')`, which is `drive.q` plus the `check_grammar` character set), else `REFUSED COPY_LOG_MISMATCH` before anything is committed | cod `test_s06_profile_folder_with_brace_refused_before_commit` | W10 | C; T |
 | S-07 | minor | The `session_start.sh` launcher becomes `exec python3 -I -B -X pycache_prefix=/dev/null ...`. `vio/runner.py` `load_runner` compiles the hashed bytes into a fresh module. `session_start.sh` removes every `__pycache__` folder under the checkout before it writes the launcher (SD-63). M: `maint/audit.py` deletes its own loader and calls `vio.runner.load_runner` (one loader) | lint `t_l13_launcher_ignores_bytecode`; vio `t_s07_runner_loaded_from_hashed_bytes` (planted valid-header .pyc files, §2.10.3); v1r `test_gap11_session_start_removes_pycache` | W11, W12, W84 | C (launcher, runner, session_start.sh); M (audit call); T |
 | S-08 | minor | `session_start.sh`: the HEAD == `--commit` check (step 6) moves before steps 5 and 4. The `CPSV-REPO` line and the final block stay last | v1r `test_s08_wrong_head_stops_before_setup` | W13 | C; T |
-| S-09 | plausible | `cli.render` creates the parent folder of every DOWNLOAD target and removes any file already at that path, before BLOCK.json is written. The `mkdir` calls in `fetch`, `pass_phase` and `ensure_local` are deleted. FakeDot no longer creates parents and asserts that they exist | vio `t_s09_download_parent_exists_when_printed`, `t_gap08_render_removes_stale_download_target` | W14, W82 | C (cli, fakes.py); T |
+| S-09 | plausible | `cli.render` creates the parent folder of every DOWNLOAD target and removes any file already at that path, before BLOCK.json is written. The `mkdir` calls in `fetch`, `pass_phase` and `ensure_local` are deleted. FakeDot no longer creates parents and asserts that they exist. D16 (F3, §2.16.1): README §2 describes the DOWNLOAD route (raw-file download, then `cp` of the downloaded file to the target); FakeDot downloads into its own attachment folder and copies | vio `t_s09_download_parent_exists_when_printed`, `t_gap08_render_removes_stale_download_target`; lint `t_l14_readme_rules` (the DOWNLOAD sentence) | W14, W82, W104 | C (cli, README, fakes.py); T |
 | S-10 | minor | = OPX-02 (the slip rule, §2.2.1) | vio `t_opx02_mistyped_id_refinds_then_commits` | W18 | C; T |
 | S-11 | minor | `cli.run_command` catches `OSError` after `durable.DurableError` and prints `safe_stop(env, durable.DurableError(e.errno).code)` | cod `test_s11_oserror_outside_stage_prints_stop_block` | W15 | C; T |
 | S-12 | minor | no new code (the OPX-07 fix) | rs special `test_foreground_died_same_boot_stops` as §2.15.5 specifies it: a real subprocess in its own process group, SIGKILL after the RUNNING line, returncode -9, the leftovers removed, then the clear | W16, W49, W58 | T |
 | OPX-01 | minor | `vio/durable.py` `write_doc` sets `self_sha256` in place and returns the same dict. `save_cache` and `save_work` never rebind, so no alias goes stale | vio `t_opx01_restore_work_writes_kept` (after a reset during G, END is printed once; classify forced to C10 commits exactly one HALT entry); rs oracle "one END_CONVERSATION per open role per boot" | W17 | C; T |
-| OPX-02 | major | D3 slip rule (§2.2.1) and D4 (§2.3): `savepoint.on_verify`, the merged download check, `cli.go_checks`, `cli.session_slip`, the `void` lookups in the session. Reprints never carry UPLOAD lines (SD-60). A raw file is consumed when it is accepted, and copies are taken by exact title (SD-61) | vio `t_opx02_mistyped_id_refinds_then_commits`, `t_d3_fourth_slip_stops_slip_limit`, `t_op02_reprint_has_no_upload_lines`, `t_op03_raw_file_consumed`, `t_d4_parse_raw_rules`, `t_d4_found_raw_search_and_listing_objects`, `t_d4_swapped_elements_assigned_by_title`; cm `test_d3_head_search_ignores_void_lookups`; rs `D_slip_wrong_id_refinds`, `D_slip_limit_then_clear`, `D_slip_stale_raw_head_search` | W18, W23, W46, W54, W69, W70, W86, W87, W88 | C; T |
+| OPX-02 | major | D3 slip rule (§2.2.1) and D4 (§2.3): `savepoint.on_verify`, the merged download check, `cli.go_checks`, `cli.session_slip`, the `void` lookups in the session. Reprints never carry UPLOAD lines (SD-60). A raw file is consumed when it is accepted, and copies are taken by exact title (SD-61) | vio `t_opx02_mistyped_id_refinds_then_commits`, `t_d3_fourth_slip_stops_slip_limit`, `t_op02_reprint_has_no_upload_lines`, `t_op03_raw_file_consumed`, `t_d4_parse_raw_rules`, `t_d4_found_raw_search_and_listing_objects`, `t_d4_swapped_elements_assigned_by_title`; cm `test_d3_head_search_ignores_void_lookups`; rs `D_slip_wrong_id_refinds`, `D_slip_limit_then_clear`, `D_slip_stale_raw_head_search`. D16 (F4, §2.16.2): the first fixture of `t_d4_parse_raw_rules` and `t_d4_found_raw_search_and_listing_objects` is the envelope the Dot saved in M007 (every key, compact `JSON.stringify` text) plus an empty search envelope; lint `t_l14_readme_rules` (the raw-save sentence) | W18, W23, W46, W54, W69, W70, W86, W87, W88 | C; T |
 | OPX-03 | major | D3: the download decides a size (§2.2.2, SD-38). Also D5 | vio `t_opx03_size_slip_refinds`; rs `D_slip_size_refinds` | W19 | C; T |
 | OPX-04 | major | README §4 outcome rule (D10, §3); the spec side is §2.9 (SD-62) | lint `t_l14_readme_rules` | W20 | C (README); T |
-| OPX-05 | major | D3c (§2.2.4): `cli.ai_commit` stores the final message of S, G and V as data. An empty file is accepted; an over-size one is `STOP AI_OUTPUT_TOO_LARGE` (SD-65) | vio `t_opx05_final_message_any_characters_verbatim`, `t_opx05_empty_final_message_accepted`, `t_opx05_oversize_final_message_stops` | W21, W90 | C; T |
+| OPX-05 | major | D3c (§2.2.4): `cli.ai_commit` stores the final message of S, G and V as data. An empty file is accepted; an over-size one is `STOP AI_OUTPUT_TOO_LARGE` (SD-65) | vio `t_opx05_final_message_any_characters_verbatim`, `t_opx05_empty_final_message_accepted`, `t_opx05_oversize_final_message_stops` | W21, W90, W98 | C; T |
 | OPX-06 | major | D3d (§2.2.5): `cli.start_chain` uses the counted refusal; a clear after its SLIP_LIMIT abandons the job (C8b); README §2.3 | cod `test_opx06_inputs_changed_bounded_then_slip_limit`; vio `t_d3_refusals_bounded_then_slip_limit`, `t_d3_refused_count_resets_per_block`, `t_d4_raw_invalid_reasked`; rs `E_inputs_lost_after_reset_bounded` (it also asserts the abandon after the clear); cm `test_gap13_c8b_after_second_restore_abandons` | W22, W68, W96 | C; T |
 | OPX-07 | minor | In `cli.load_cache`, a BLOCK.json behind the valid STATE's head moves alone to `invalid_<utc14>/` and the cache stays valid; a BLOCK.json ahead of it invalidates the cache. HALT.json takes the head and the kit from the journal (§2.4.1) | vio `t_opx07_stage_death_stop_names_real_head_and_kit`, `t_gap05_block_ahead_invalidates_cache` | W16, W50, W79 | C; T |
 | OPX-08 | minor | `session_start.sh`: `--kit none` (with any `--hint`) means no hint, and a no-hint bootstrap removes an older HINT.json. `cli.render`: a session block's header shows the head this session verified. README §1 | v1r `test_opx08_kit_none_bootstraps_without_hint` | W24, W73 | C; T |
-| OPX-09 | minor | (a) README run order (all nonattempts for A, then for B; all A runs; all B runs). (b) `STOP IDLE` leaves the README. (c) `drive.do_text` prints `STOP UPLOAD_REFUSED HANDBACK A name=<N>`. (d) The tools answer is redefined (D9). (e) Attested times are `date -u` readings, answered as printed. (f) NO_BLOCK also applies when there is no CPSV line. (g) A refused upload leaves the Dot's notes only when the owner says it was approved or denied | vio `t_opx09_refused_stop_names_the_file`; lint `t_l14_readme_rules` | W25, W95 | C; T |
-| OPX-10 | plausible | README §7 budget (D15, SD-67): helper commands, Drive calls and saved results from `tests/budget_golden.json`, polls and conversation checks from G-3, restores without notes, the RECHECK, refused uploads (zero under G-10). FakeDot counts helper commands, Drive calls, saved results and waits (fakes.py) | v1r `test_opx10_tool_calls_match_budget_golden` (World extras `x_opx10` on the D baseline and on Q_baseline, `x_op07_restore`); lint `t_l14_readme_rules` (the README table equals the golden) | W26 | C (README, fakes.py); T; gates G-3, G-10 |
+| OPX-09 | minor | (a) README run order (all nonattempts for A, then for B; all A runs; all B runs). (b) `STOP IDLE` leaves the README. (c) `drive.do_text` prints `STOP UPLOAD_REFUSED HANDBACK A name=<N>`. (d) The tools answer is redefined (D9). (e) Attested times are `date -u` readings, answered as printed. (f) NO_BLOCK also applies when there is no CPSV line. (g) A refused upload leaves the Dot's notes only when the owner says it was approved or denied. (h) D16 (F5, §2.16.3): README §3.1 says that the Dot never works around a refused upload and waits for the owner; every UPLOAD the helper prints must be inside the owner's standing approval (G-10) | vio `t_opx09_refused_stop_names_the_file`; lint `t_l14_readme_rules` (with the never-work-around sentence) | W25, W95, W105 | C; T; gate G-10 |
+| OPX-10 | plausible | README §7 budget (D15, SD-67): helper commands, Drive calls and saved results from `tests/budget_golden.json`, polls and conversation checks from G-3, restores without notes, the RECHECK, refused uploads (zero under G-10). FakeDot counts helper commands, Drive calls, saved results and waits (fakes.py) | v1r `test_opx10_tool_calls_match_budget_golden` (World extras `x_opx10` on the D baseline and on Q_baseline, `x_op07_restore`); lint `t_l14_readme_rules` (the README table equals the golden) | W26, W99 | C (README, fakes.py); T; gates G-3 (with M009 and §9 A8, D16), G-10 |
 | T1 | major | tests only; the vacuous `test_f1_core_continued_v_is_t46` loop is replaced by fold-level items (§2.15.6) | ct `test_t1_continued_v_other_outcomes_t48` | N06 | T |
 | T2 | major | tests only | ct `test_t2_reader_b_waits_while_a_owes_restart`, with RESET_DIVERGED and A-restart1 controls | N07 | T |
 | T3 | major | tests only; `test_session_rebase_and_recheck_fork` is rebuilt so that it FORKs through the sha branch | ct `test_t3_recheck_second_writer_at_n2_n3_forks` | N18 | T |
@@ -117,7 +131,7 @@ Notation:
 | T9 | minor | tests only | vio `t_t9_empty_transcript_refused` | N44 | T |
 | T10 | minor | tests only | ct `test_t10_config_only_change_of_other_key_release_not_accepted` | N50 | T |
 | T11 | minor | `run_tests.py`: an `--only` name that matches no suite, test, scenario, special or `CONFIGS` key exits 2 and lists the names | lint `t_only_unknown_name_exits_2` | W27 | T |
-| MAINT-1 | critical | D7 (§2.6). C: `core/fold.py` `job_dir_of` and `layout_of`. `_virtual` (T10-T13) requires `new_run.job_dir == job_dir_of(genesis.base, tag, case)`, else T14. `t01` requires `layout == layout_of(base)`, else SCHEMA_INVALID. M: `maint/assemble.py` requires `--root`, an existing empty directory that is not `/`; it takes the base from the GENESIS entry and refuses an ALL_FROZEN that names another; every job and ledger target comes from `job_dir_of` and that base; every write is confined under `realpath(root)`. The audit refuses through its fold (T14) and its ALL_FROZEN compare (AUD_OUTCOMES_DIFF) | ct `test_maint1_new_run_job_dir_must_be_the_layout_path` (one case per row T10-T13 and the everyday branch), `test_maint1_genesis_layout_base_relative`; mt `test_maint1_forged_all_frozen_job_dir`, `test_maint1_assemble_base_from_genesis`, `test_maint1_wrong_mapping_refused`, `test_maint1_self_consistent_hostile_base_confined`, `test_maint1_symlink_after_begin_refused`, `test_maint1_assemble_root_required_empty_dedicated` | W28, W52 (C); W29a, W29b, W30, W93 (M) | C (fold); M (assemble, audit tests); T |
+| MAINT-1 | critical | D7 (§2.6). C: `core/fold.py` `job_dir_of` and `layout_of`. `_virtual` (T10-T13) requires `new_run.job_dir == job_dir_of(genesis.base, tag, case)`, else T14. `t01` requires `layout == layout_of(base)`, else SCHEMA_INVALID. M: `maint/assemble.py` requires `--root`, an existing empty directory that is not `/`; it takes the base from the GENESIS entry and refuses an ALL_FROZEN that names another; every job and ledger target comes from `job_dir_of` and that base; every write is confined under `realpath(root)`. The audit refuses through its fold (T14) and its ALL_FROZEN compare (AUD_OUTCOMES_DIFF) | ct `test_maint1_new_run_job_dir_must_be_the_layout_path` (one case per row T10-T13 and the everyday branch), `test_maint1_genesis_layout_base_relative`; mt `test_maint1_audit_refuses_hostile_new_run`, `test_maint1_forged_all_frozen_job_dir`, `test_maint1_assemble_base_from_genesis`, `test_maint1_wrong_mapping_refused`, `test_maint1_self_consistent_hostile_base_confined`, `test_maint1_symlink_after_begin_refused`, `test_maint1_assemble_root_required_empty_dedicated` | W28, W52 (C); W29a, W29b, W30, W93 (M) | C (fold); M (assemble, audit tests); T |
 | MAINT-2 | major | D9 (§2.8). C: in `names`, TOOLS, O63_NOTE, O63_NOTE_RE, O63_REPORT and `tool_list`. `host` gets config key `tool_inventory_sha256` and kit member TOOL_INVENTORY.txt. Also `plan.end_keys`; `cli.ai_commit` (tools_present, `attest/tools.txt`, the final message of S and V); `entry` (S1 shape of `tools_present`); `worker.generation_record` (tools_enabled, notes); the O52 sheet row; README §4. M: `audit` writes the report `o63` and ties each GENERATION_RECORD.json to its consumed G entry. `score_check build` refuses `O63_ATTESTATION_MISSING` and writes `isolation_statement` | vio `t_maint2_tools_none_refused_inventory_file_accepted`, `t_maint2_generation_record_tools_and_o63_note`, `t_maint2_s_v_entries_archive_message_and_tools`, `t_maint2_inventory_sha_checked`, `t_maint2_tools_file_link_refused`; mt `test_maint2_score_check_requires_tools_attestation_and_states_isolation`, `test_gap10_generation_record_tied_to_g_entry` | W31, W32, W47, W71, W72 (C); W33, W83 (M) | C; M; T; gates G-2, G-6 |
 | MAINT-3 | major | D8 (§2.7). M: `Audit.kit_change` re-derives with `session.kit_change`. For a CLEAR it also requires `session.clear_ok(to config clear, series, body.halt_seq, body.code)`. Every entry with `cleared_local` meets the four rules of SD-53. C: `fold.g59` requires `from_kit_sha256 != to_kit_sha256`; S1 allows `cleared_local` only on RESTORE and GENESIS; a RESTORE while HALTED keeps the halted kit, so the CLEAR carries the change (SD-51) | mt `test_maint3_audit_refuses_unauthorized_clear` (real kit zips: another halt, a null clear; from = to is AUD_CHAIN_INVALID T60); mt `test_maint3_audit_checks_cleared_local` (real kit zips, including a release change: AUD_KIT_CHANGE detail cleared_local); ct `test_maint3_clear_with_unchanged_kit_t60`, `test_d5_cleared_local_only_on_restore_and_genesis` | W34, W55 (M); W35, W75 (C) | M; C; T |
 | MAINT-4 | minor | D8: `Audit.kit_change` reports `session.kit_change`'s code as `AUD_KIT_CHANGE` for every RESTORE and CLEAR. The audit-only verdicts are GATES_CHANGED, a series change in a non-config-only change, and doc_samples removed in a config-only change; the other codes reach the audit only as AUD_CHAIN_INVALID (§2.7) | mt `test_maint4_audit_only_kit_change_verdicts` (three real-zip cases) | W36 | M |
@@ -127,7 +141,10 @@ Notation:
 | MAINT-8 | minor | `score_check check` takes the four build inputs, checks their sha256 against the plan and re-runs `plan()`. Any difference is `PLAN_MISMATCH` | mt `test_maint8_check_detects_edited_plan` | W41 | M |
 | MAINT-9 | minor | `Audit.review` widens its window by the genesis gate `p3_clock_tolerance_seconds`, as `core/outcome.outcomes` does | mt `test_maint9_review_window_widened` | W42 | M |
 | MAINT-10 | minor | (a) C: `fold.jobs_of(jobs_doc)`, used by `cli.genesis`. M: the audit compares GENESIS `body.jobs` with `jobs_of` of the genesis kit's jobs file (`AUD_KIT` detail `jobs`). (b) C: `probe_p5.py start` refuses `--seconds` below `--min-gap` | mt `test_maint10_genesis_jobs_differ_from_kit_unclean`; p5 `test_maint10_probe_start_refuses_seconds_below_min_gap` | W43 (M), W44 (C) | C; M; T |
-| TST-MUT (blocking item) | major | `tests/mutants.py`: for each mutant, a local clone, the substitutions, a commit, the clean-HEAD check, then the run (§2.15.4). The copytree is deleted. The guard mutants are generated for fold, session and the commit and restore glue (§2.15.2) | `run_tests.py --mutants --selftest`: W45a gives HARNESS_ERROR; W45b's reset failures carry `bootstrap_stop` and are not KILLED; W13 is KILLED; the generated set holds the reviewer and v2.1 sites | W45a, W45b | T |
+| TST-MUT (blocking item) | major | `tests/mutants.py`: for each mutant, a local clone, the substitutions, a commit, the clean-HEAD check, then the run (§2.15.4). The copytree is deleted. The guard mutants are generated for fold, session and the commit and restore glue (§2.15.2) | `run_tests.py --mutants --selftest`: W45a gives HARNESS_ERROR; W45b's reset failures carry `bootstrap_stop` and are not KILLED; W13 is KILLED; the generated set holds the reviewer and v2.1 sites. D16: a mutant marked `nonroot` runs its killing set only in the non-root pass (§2.15.4, SD-71) | W45a, W45b | T |
+| D16-F2 (stage time) | D16 | no helper code. The release gate's hold check stays (`host.gates_problem`: every `stage_max_seconds` value + 60 <= `foreground_hold_seconds` <= `gates.p5_foreground_hold_seconds`, else RELEASE_GATE_OPEN). G-3 sets the values only from its own measurements through the helper (probe M009 measured the render outside it, §9 A8), by the rule of §5.4; OQ-25 holds the owner's choice if a stage does not fit. README's hold value is the release kit's (§3 notes) | none new: the existing gate tests stay; the values are kit data | none | gates G-3, G-9; OQ-25 |
+| D16-F6 (non-root) | D16 | SD-70: `place.settle` sets the owner write bit on a target directory before it moves the target aside to another parent. SD-71: T builds the non-root pass (`run_tests.py --require-nonroot`, the `nonroot` group, `nonroot` mutants); the integrator runs it and records its counts in TEST_RESULTS.json and INTEGRATION.json (§2.16.4) | vio `t_d16_settle_moves_readonly_target_aside` (non-root); v1r `test_d16_evict_runner_frozen_folder_nonroot` (non-root); the non-root pass of the `nonroot` group | W106 (non-root), W107 (non-root) | C (place); T; integrator |
+| D16-F7 (disk) | D16 | SD-69: `cli.run_stage` calls `require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')` for every chain, before FOREGROUND.json is written; `names.STAGE_FREE_BYTES = 1000000000` (1,500,000,000 since §9 A7; 2,000,000,000 since §9.8, CC-2). FakeDot records the job folders and journal files present at every block (§2.16.5, §5.4) | vio `t_d16_stage_refuses_low_space_before_runner`; v1r `test_d16_disk_bounded_over_runs` (World extra `x_d16_disk` on D_baseline) | W108, W109, W110 (W128, W137 for the §9 values) | C (cli, names, fakes.py); T |
 
 ### 1.3 Conditions before release and gates
 
@@ -141,7 +158,7 @@ Notation:
 | CBR-6 | direct tests for T1-T4; test_f1 replaced; the mutation harness fixed (committed clones, the clean-HEAD check); T11; the real SIGKILL test; an independent reviewer reproduces the full suite and the full mutant run at the release commit | rows T1-T4, T11, S-12, TST-MUT; gate G-1 | T, GATE |
 | CBR-7 | operator path fixes OPX-02, OPX-05, OPX-06, S-01, OPX-04 | those rows | C, T |
 | CBR-8 | the O63 helper layer is implemented; the owner records a dated prompt-clause decision before any qualification run | row MAINT-2; gate G-2 | C, M, T, GATE |
-| CBR-9 | stage times measured on the operator VM (the 1,200 s hold against the longest stage); a reset drill on invented data on the operator VM, with a refused upload then a reset, and a same-boot local clear; the operator budget restated (OPX-10) | the budget: row OPX-10 and §5.3 (C, T); the measurements and the drill: gates G-3, G-4, G-10 | C, T, GATE |
+| CBR-9 | stage times measured on the operator VM (the 1,200 s hold against the longest stage); a reset drill on invented data on the operator VM, with a refused upload then a reset, and a same-boot local clear; the operator budget restated (OPX-10) | the budget: row OPX-10 and §5.3 (C, T); the measurements and the drill: gates G-3 (with probe M009, §9 A8, and the rule of §5.4, D16), G-4, G-10; the disk and non-root rows D16-F6 and D16-F7 | C, T, GATE |
 | CBR-10 | score_check's own admission; MAINT-5 and MAINT-8 fixed | rows MAINT-5, MAINT-8; gate G-8 | M, GATE |
 | CBR-11 | owner approval of the release kit and of the README; runner v4 byte-identical unless the owner chooses runner re-admission under O63 | gates G-9, G-2; lint L8 keeps the runner pin | GATE, T |
 
@@ -149,16 +166,16 @@ Gates need the Dot, the owner or a reviewer. They are not built.
 
 | gate | what | who |
 |---|---|---|
-| G-1 | Independent admission review 3 at the v2.1 commit. It reproduces the full suite and the full mutant runs (hand, reviewer, builder and guard mutants), and reviews every `EQUIVALENT` entry (§2.15.2). | reviewers |
+| G-1 | Independent admission review 3 at the v2.1 commit. It reproduces the full suite, the non-root pass (D16, SD-71) and the full mutant runs (hand, reviewer, builder, guard and `nonroot` mutants), and reviews every `EQUIVALENT` entry (§2.15.2). | reviewers |
 | G-2 | The owner's dated decision on the O63 prompt layer, one of two options. (a) An owner-approved O63 suffix in the three templates. That needs an O42 ruling on the harness change, and runner re-admission v5 for the visual template's pin. (b) An O63 amendment that accepts the frozen prompts' restrictions plus the helper's attested tools-present lists and the fixed isolation statement. **Inconsistency for the owner:** the record's CBR-11 ties runner re-admission to option (b), but its `o63_implementation` text ties it to option (a). | owner |
-| G-3 | On the operator VM: the longest run of every `stage_max_seconds` key; the interval at which the command tool returns while a long command runs (OQ-24); the duration of the generator, scope-reader and visual-reviewer conversations of a dev-trial run. The kit's `stage_max_seconds` is set to 1.5 times the stage values, each with +60 <= 1,200, and README §7's poll and check counts and its totals are written from these values before G-9. | Dot, maintainer |
-| G-4 | A drill on the operator VM: series D1 in `CPS/drills/D1`, invented jobs. It covers a reset at a commit boundary, a reset during an open generator (the Dot answers by the README rule: UNSURE unless the conversation never ran), a reset during a V continuation, one that forces a rebase, a refused upload followed by a reset (approval=pending), and a same-boot local clear. It also measures, on an invented file: whether an exact-name search returns a copy after it was moved to the Drive trash, and whether it returns a copy of the same name in another folder (OQ-23). It ends with `assemble --verify-frozen` into a dedicated root, a clean audit and score_check CONSISTENT. | Dot, maintainer |
-| G-5 | On invented data on the operator VM: an upload is refused by the approval review, the VM is reset while the approval is pending, then the owner approves. The Dot records whether the approved upload lands after the VM is gone. | Dot, owner |
+| G-3 | On the operator VM. **Done by probe M009 (§9 A8):** the large render itself, outside the helper: `visual_qa.py` rendered 403 A3 pages at 150 dpi of an invented workbook in 619 s (550 MB); `pdftoppm` run alone on the same PDF took 706 s, longer than the whole render step and 78% of the 900 s per-call timeout that `visual_qa.render` applies to the same call. Projection, not a measurement: the largest real finish stage takes about 350 to 550 s on the Dot, so 1.5 x 550 + 60 = 885 <= 1,200 and the 1,200 s hold is expected to fit. **Remains**, every item through the standard route with BASE `/tmp/cps`: (a) the finish stage of a real-size invented job (visual QA of about 336 to 403 A3 pages at 150 dpi) run through the helper's `go`; (b) the longest run of every other `stage_max_seconds` key, the self-test included; (c) the interval at which the command tool returns while a long command runs (OQ-24); (d) the duration of the generator, scope-reader and visual-reviewer conversations of a dev-trial run. No `stage_max_seconds` value is set from a projection: the kit's values are 1.5 times the measured stage values, each with +60 <= `foreground_hold_seconds`. If any value does not fit 1,200 s, the rule of §5.4 applies (M008's 1,800 s hold completed once; step 3's hold runs as `probe_p5.py hold --dir /tmp/cps_probe_p5 --seconds 1800` through the standard route, §9.8 G8), and OQ-25 goes to the owner if that does not settle it. README §7's poll and check counts and its totals, and README §2's hold value, are written from these values before G-9; until then README §7 calls its polls and checks estimates (§9.8 PF-11). | Dot, maintainer |
+| G-4 | A drill on the operator VM: series D1 in `CPS/drills/D1`, invented jobs. It covers a reset at a commit boundary, a reset during an open generator (the Dot answers by the README rule: UNSURE unless the conversation never ran), a reset during a V continuation, one that forces a rebase, a refused upload followed by a reset (approval=pending), and a same-boot local clear. It also measures, on an invented file: whether an exact-name search returns a copy after it was moved to the Drive trash, and whether it returns a copy of the same name in another folder (OQ-23). It ends with `assemble --verify-frozen` into a dedicated root, a clean audit and score_check CONSISTENT. Because G-10 comes first, the drill's refused upload is provoked on purpose and named in the drill plan: the owner's pre-approval leaves out one named invented drill file, or the owner denies it at the platform's prompt (D16, F5). **Added by §9 (A9):** every helper command and every file the Dot writes for the helper goes through the standard route (`use_default`) with BASE `/tmp/cps`; the bootstrap's network commands go through the elevated route (`require_escalated`), and, as a recorded side test only, the Dot tries `git fetch` once through the standard route; one invented job of real size whose visual QA renders about 336 to 403 A3 pages at 150 dpi goes through the helper's finish stage; the free space of `/tmp` and of `/home/agent` is recorded at every stage start and its lowest value kept; the drill records whether `/tmp/cps` survives a turn end and a wake-up; every request that the automatic review stopped is recorded with its time and message. **Added by §9.8 (fix round):** the same-boot local clear is cleared with the maintainer's message as README §6 now gives it (the section-1 block with its values filled in, through `require_escalated`); the drill records what a scheduled mailbox check does while a helper command runs or a CPS conversation is open (in the coordinating conversation and in a worker), and once the drill's claim is 6 hours old, unless the owner paused the check for the drill (README §2.4 rule 8, OQ-28); whether an AI-role conversation's work survives the coordinator's checks with `sleep 300` between them (README §2.4 rule 3); whether `/tmp/cps` and the boot id survive a reset that empties `/home/agent`; that a Create Thread conversation reads and writes under `/tmp/cps` (G and S read their folder, V writes `F/visual_review/VISUAL_REVIEW.json`); that the Drive upload tool uploads a file straight from `/tmp/cps/outbox`; that a second helper command prints `CPSV-BUSY` while a standard-route helper command holds the lock; and `MemAvailable` from `/proc/meminfo` at every stage start, with its lowest value. | Dot, maintainer |
+| G-5 | On invented data on the operator VM: an upload is refused by the approval review, the VM is reset while the approval is pending, then the owner approves. The Dot records whether the approved upload lands after the VM is gone. The refused upload is one that the standing approval of G-10 does not cover, named in advance (D16, F5). | Dot, owner |
 | G-6 | TOOL_INVENTORY.txt is the union of the tool names that two probe conversations report. Both are created the documented way with invented content. The Dot saves the list, one name per line; the maintainer puts it in the kit, pinned by `tool_inventory_sha256`. M006 saw 386 to 419 tools, so a single conversation is not enough. | Dot, maintainer |
 | G-7 | The Drive folder `CPS/drills/D<n>` exists before a drill series starts. | maintainer |
 | G-8 | score_check gets its own admission (MAINT-5, MAINT-8, the O63 checks) before any scoring. | reviewers |
 | G-9 | The owner approves the release kit (including `clear: null`, `doc_samples` from README §8 and TOOL_INVENTORY.txt) and README v2.1, with the §7 numbers measured (G-3, `tests/budget_golden.json`). | owner |
-| G-10 | **Required before G-4 and before qualification** (OQ-18, SD-67). The owner pre-approves the upload class into `CPS/qualification/` and `CPS/drills/` (M006: possible), or lifts the 20-documents-a-day rule for it. A qualification uploads about 330 files. | owner |
+| G-10 | **Required before G-4 and before qualification** (OQ-18, SD-67, D16). **Precondition: the owner's standing pre-approval covers every UPLOAD the helper can print** (§2.16.3). M007 showed that the platform's review refuses an upload that the owner's authorization does not name, even when the message's steps ask for it, and that it succeeds after the owner approves. The helper uploads only new files: into `CPS/qualification/` (Q journal and parts), `CPS/drills/D<n>` (D journal and parts, MAINT-7), `CPS/reports/` (a setup log after SETUP_FAILED) and `CPS/setup/` (the SELFTEST and FINGERPRINT_PASS files of a new fingerprint); everyday adds its records folder and the profile's deliveries folder. The owner's pending decision (new files only, into `CPS/qualification/` and `CPS/reports/` and their subfolders; the Synology document limits do not apply to these Drive uploads) covers the first and third of these; `CPS/drills/` and `CPS/setup/` must be named too (OQ-26). A qualification uploads about 330 files. | owner |
 | G-11 | Only if G-4 shows that an exact-name search returns copies from another folder: the parent filter of §2.3 is built, with its test and mutant, and reviewed within G-1 before release. If G-4 shows it does not, README §6's removal text stands and nothing is built. | maintainer, reviewers |
 
 ---
@@ -170,7 +187,7 @@ Gates need the Dot, the owner or a reviewer. They are not built.
 **Supersedes** r2 §5.1 step 6 (the md5 branch), r2 §5.5, §X.5.5 steps 1, 5 and 7, the "share one size" rule of §X.8.2,
 and the "two sizes: FORK" step of §X.8.4 step 1.
 
-> **Rule V (r3).** A copy of name X that a FIND reported is *ours* if and only if:
+> **Rule V (v2.1).** A copy of name X that a FIND reported is *ours* if and only if:
 > - (a) its Drive id is already recorded for X (PENDING copies, `STATE.head`, `state.files`, or RESTORE_WORK
 >   `verified` for X); or
 > - (b) its download-back has exactly the size the FIND reported for that id, and the sha256 of the expected bytes.
@@ -302,8 +319,8 @@ applied to this file (SD-54).
 **Where it is stored.** It is always the member `attest/final_message.txt` of the AI entry, whatever its size (this
 plan's reading of D3c's "file member"). The body records `final_message_sha256` for every role. It is never inline in
 an entry body and never printed. The G generation record's `final_message` is the decoded text, because runner R13
-needs a str. DROP_ATTEST removes the file after the commit, as today, and a clear moves it away (§2.4.3), so a message
-is never taken from an earlier conversation.
+needs a str. DROP_ATTEST removes the file after the commit, as today, and a clear or a damaged cache moves it away
+(§2.4.3, SD-68), so a message is never taken from an earlier conversation.
 
 #### 2.2.5 Everyday INPUTS_CHANGED is bounded (D3d)
 
@@ -385,6 +402,13 @@ found --at <at> (--name <name> (--file <id>:<size> [--file <id>:<size> ...] | --
 - **One internal answer.** Both forms produce the same answer, `{name: [[id, size], ...]}`. An attested copy is
   `[id, size]`; a confirmed copy stays `[id, local md5, size]`. Every later rule is shared.
 
+**M007 confirms the envelope (D16, F4).** The Dot saved a real search result by serializing the returned object with
+`JSON.stringify` in its orchestration code and writing the text to the VM file with a Python heredoc. The file holds
+exactly the M004 envelope, and each result has the keys `url`, `title`, `id`, `mime_type`, `size` (a decimal string),
+`file_or_folder`, `created_at`, `updated_at`, `viewedByMeTime`, `display_title`, `display_url`, `parent_ids` and
+`shared`. An empty search is `{"results": []}`. The rules above already take both; §2.16.2 changes the test fixtures
+only.
+
 Example raw file for a block with two FIND lines (the entries are shortened; the platform adds more keys, which are
 ignored):
 ```
@@ -421,16 +445,19 @@ The schema `cps.vm2-halt.v1` is
     cache, else the head this session verified (`RESTORE_WORK.head.entry.seq`), else 0.
   - `kit_sha256` is the journal's kit (SD-57): `STATE.state.kit_sha256`, else the verified head's `state.kit_sha256`,
     else the kit this session read (`RESTORE_WORK.kit.sha256`; a fresh series has no journal kit), else null. It is
-    null only when no kit was read and no head exists.
+    null only when the stop came before the session read a kit or verified a head (SETUP_FAILED, for example).
   - `series` is the series in use, or null before a kit was read.
   - `tried` lists the 12-hex kits that never start a clear check. At creation it holds the first 12 hex of
     `kit_sha256`, of the kit in use (`STATE.kit_sha256`, else `RESTORE_WORK.kit.sha256`) and of the HINT.json kit at
     that moment. So neither the halted kit nor a HINT.json written before the stop ever starts a check. Each refused
     candidate is added.
   - `check` is null, or the clear check in progress: `{kit12, copies, slips}`.
-- **The cache stays valid.** A stop never invalidates a valid cache. The STOP block's header shows the same head and
-  kit (OPX-07). `stop_block` also writes `halt_local: {code, head_seq}` into STATE.json and RESTORE_WORK when they
-  exist (SD-64).
+- **The cache stays valid.** A stop never invalidates a valid cache. The STOP block's header shows HALT.json's
+  `head_seq` and the first 12 hex of its `kit_sha256` (`none` when null): the values a clear names (§2.4.2, OPX-07,
+  SD-68). `stop_block` also writes `halt_local: {code, head_seq}` into STATE.json and RESTORE_WORK when they exist
+  (SD-64).
+- **A damaged HALT.json** (present, not valid) is never ignored: `clear_check` replaces it through
+  `stop_block('UNCLASSIFIED')`, which moves the old file as below. So a clear check always reads a valid HALT.json.
 - **An earlier stop.** When a new stop comes while HALT.json exists, the old file first moves to
   `outbox/v2/halt_<utc14>.json`.
 - **A dead stage** (`foreground_check`). A FOREGROUND.json of this boot is moved to `outbox/v2/dead_<utc14>.json` (a
@@ -454,8 +481,16 @@ The maintainer publishes `CPS/setup/SESSION_KIT_<k12'>.zip`. It is the kit that 
 `clear` is `{"series": S, "seq": <HALT.json head_seq>, "code": <HALT.json code without HALTED_>}`. For a committed
 HALT, `seq` and `code` are the HALT entry's, as r2 §13.5 says.
 
+The maintainer never sees HALT.json. The Dot reports the STOP line and its last CPSV line, whose `head` and `kit` are
+HALT.json's (§2.4.1). With `kit=none` no kit was read before the stop: the maintainer builds the clear kit from the kit
+of the journal's head on Drive, or from the release kit on a fresh series, and the clearing restore's KIT_ACCEPT checks
+it (§2.4.4).
+
 The message to the Dot gives one exact line,
 `bash ~/cps/repo/deploy/vm2/session_start.sh --commit <C> --hint <seq6> --kit <k12'>`, and then `go`.
+**Superseded by §9.8 (PF-2):** since §9 A1 that line stops `SESSION_LAYOUT` (no `CPS_VM_BASE`). The message gives the
+README §1 bootstrap block with `COMMIT=<C>` and `--hint <seq6> --kit <k12'>` filled in, which the Dot runs exactly, as
+one command through `require_escalated`, and then `go`.
 
 #### 2.4.3 The clear check (`cli.clear_check`, which replaces `sticky_halt`)
 
@@ -464,22 +499,24 @@ intake in progress, as today. Then `clear_check`. Then, only when no HALT.json e
 the command. A stop raised by a post action can therefore be cleared in the same boot.
 
 ```
-H = HALT.json (valid), else return
+H = HALT.json; absent: return; present but not valid: stop_block('UNCLASSIFIED') (§2.4.1)
 k = the HINT.json kit (12 hex), or None
-if command == 'found' and BLOCK.expect.kind == 'clear':
-    record the copies in H.check (the found rules of §2.3), then take the next step below
+if command == 'found' and BLOCK is the check's FIND block:
+    record the copies in H.check.copies (the found rules of §2.3), then take the next step below
 elif command != 'go' or k is None or k in H.tried:
     print H's STOP block                                                                            (exit 3)
-the next step for k (H.check holds its observations):
-    no observation for k:    H.check = {kit12: k, copies: null, slips: 0}
-                             print FIND CPS/setup NAME SESSION_KIT_<k>.zip, state KIT                (exit 0)
-    the FIND showed none:    H.check = null; print H's STOP; k is not added to tried                (exit 3)
-    copy 1 not downloaded:   print DOWNLOAD of copy 1 TO BASE/outbox/v2/clear/SESSION_KIT_<k>.zip    (exit 0)
-    downloaded:              the slip rule (§2.2.1) with H.check as its loop, then
-                             why = session.clear_verdict(H, candidate, kits)
-        why is not None:     H.tried += [k]; H.check = null; print H's STOP                         (exit 3)
-        why is None:         the clear (below); the session then runs in this same command
+the next step for k:
+    H.check null, or for another kit:  H.check = {kit12: k, copies: null, slips: 0}
+                                       print FIND CPS/setup NAME SESSION_KIT_<k>.zip, state KIT      (exit 0)
+    H.check.copies null:               print that FIND block again (a go before found)              (exit 0)
+    H.check.copies empty:              H.check = null; print H's STOP; k is not added to tried      (exit 3)
+    no DOWNLOAD block printed yet:     print DOWNLOAD of copy 1 TO BASE/outbox/v2/clear/SESSION_KIT_<k>.zip (exit 0)
+    a go after that DOWNLOAD block:    the slip rule (§2.2.1) with H.check as its loop; with no slip,
+                                       why = session.clear_verdict(H, candidate, kits)
+        why is not None:               H.tried += [k]; H.check = null; print H's STOP               (exit 3)
+        why is None:                   the clear (below); the session then runs in this same command
 ```
+H.check is reset only when it is null or names another kit, so a re-FIND after a slip keeps its `slips`.
 
 - `kits` are the kit dicts the helper holds: `STATE.kit`, `RESTORE_WORK.kit` and `RESTORE_WORK.head_kit`.
 - **Bounds.** The check's slips and counted refusals follow §2.2, but the fourth one ends the check: k goes into
@@ -495,19 +532,25 @@ the next step for k (H.check holds its observations):
     `config_only_ok(from_kit, to_kit)` is the config-only branch of `kit_change`, extracted: the member lists differ
     only at VM_HELPER_CONFIG.json, the changed keys are within CHANGEABLE_KEYS, and doc_samples are only added.
     Otherwise it returns `CONFIG_CHANGE_NOT_ALLOWED`. When no kit in `kits` is the halted one, this test is left to
-    the clearing restore's KIT_ACCEPT (§2.4.4), which compares against the head's kit.
+    the clearing restore's KIT_ACCEPT (§2.4.4), which compares against the head's kit. That happens only when the stop
+    came before the session held the halted kit: before any kit was read, or in a restore that took a kit change and
+    had not reached KIT_ACCEPT. No STATE.json exists then, so a kit that KIT_ACCEPT refuses after the move (a new
+    `STOP CONFIG_CHANGE_NOT_ALLOWED`) costs no valid cache.
 - **The clear**, when the verdict is None:
   1. `cli.invalidate(env, 'cleared_')` moves HALT.json, STATE.json, PENDING.json, BLOCK.json, RESTORE_WORK.json, every
-     file under `BASE/attest/` and every entry of `BASE/inbox/` into `outbox/v2/cleared_<utc14>/`. Stale final
-     messages, tool lists, raw files and downloads of the stopped attempt thus never reach the restore. The same helper
-     with the prefix `invalid_` serves `load_cache` and another boot's FOREGROUND.json; it then moves only the cache
-     files.
+     file under `BASE/attest/` and every entry of `BASE/inbox/` except the boot mark `inbox/.boot` into
+     `outbox/v2/cleared_<utc14>/`. Stale final messages, tool lists, raw files and downloads of the stopped attempt
+     thus never reach the restore. The boot mark stays: without it `cleanup_leftovers` would empty the whole inbox at
+     the next command, the kit of step 2 included. `load_cache` uses the same helper with the prefix `invalid_`, which
+     moves the same files except HALT.json, so a stop outlives a damaged cache and a same-boot restore never sees the
+     files of the attempt before it (SD-68). `foreground_check` still moves another boot's FOREGROUND.json alone, as
+     today.
   2. The candidate moves to `BASE/inbox/kit/SESSION_KIT_<k>.zip`, so the session's KIT phase takes it without a second
      download.
-  3. A new RESTORE_WORK gets the hint from HINT.json, the `operator` of the old work, `cleared_local` = H's
-     `{code, head_seq, kit_sha256}` when H is a local stop (a code without `HALTED_`), else null, and `moved_pending` =
-     `{seq, name, sha256, uploaded}` of the moved PENDING (`uploaded` lists the names uploaded at least once), else
-     null.
+  3. A new RESTORE_WORK gets the hint from HINT.json, the `operator` of the old STATE or RESTORE_WORK (null when
+     neither has one; OPERATOR then asks), `cleared_local` = H's `{code, head_seq, kit_sha256}` when H is a local stop
+     (a code without `HALTED_`), else null, and `moved_pending` = `{seq, name, sha256, uploaded}` of the moved PENDING
+     (`uploaded` lists the names uploaded at least once), else null.
   4. The session runs from the top, in the same `go`, as after a reset. No phase is blocked, because HALT.json is
      gone. A stop in this restore is an ordinary new stop.
 - `answer`, and `found` for any other block, print H's STOP. A refused candidate leaves STATE.json, PENDING.json and
@@ -519,10 +562,12 @@ the next step for k (H.check holds its observations):
 The session has no CLEAR phase. A clearing restore is an ordinary restore with four rules that matter here. The first
 two apply only when RESTORE_WORK carries `cleared_local` or `moved_pending`; the last two apply to every restore and
 matter most in the same boot:
-- **KIT_ACCEPT (O59).** With `cleared_local` set, a kit change must be config-only and `kit_change` must return no
-  code, else `STOP CONFIG_CHANGE_NOT_ALLOWED`. This compares the new kit with the head's kit, which is HALT.json's kit
-  unless the journal moved; when it moved to another kit, the clear kit is not config-only against it and is refused.
-  A committed HALT's C2 path already requires `kit_config_only`.
+- **KIT_ACCEPT (O59).** With `cleared_local` set, a kit change must be config-only, else
+  `STOP CONFIG_CHANGE_NOT_ALLOWED`; a code that `kit_change` returns stops as today. The comparison is with the head's
+  kit, which is HALT.json's kit unless the journal moved after the stop (a landed copy of the moved PENDING that took a
+  kit change, or another writer). Then the clear kit must also be config-only against the kit the journal moved to,
+  and the audit's rule 3 (§2.7) still checks the change from the halted kit. A committed HALT's C2 path already
+  requires `kit_config_only`.
 - **The head (GAP-04).** With `moved_pending` set, when the head N that the search found is `moved_pending.seq`, every
   downloaded copy of N must have `moved_pending.sha256`, else `FORK` (the copies go to `fork_<utc14>/`). This holds
   whether or not our own copy landed. The moved PENDING's parts need no rule: savepoint uploads the parts only after
@@ -592,8 +637,9 @@ REBASE_PART_APPEARED, INTERNAL_PENDING_EXISTS.
 - What happens: the unconfirmed entry was never shown. The head search finds the last confirmed entry, or our entry
   if a copy landed; then it is verified by download and its state binds. After a same-boot clear the moved PENDING's
   bytes are known (§2.4.4): any copy at that seq with other bytes is FORK again, whether or not our copy landed too,
-  and RECHECK runs. After a reset they are not known: a foreign copy at N+1 that is a valid entry then becomes the
-  head, and the RECHECK and the audit's duplicate check report a second writer (r2 §12.2).
+  and RECHECK runs. After a reset they are not known: a lone foreign copy at N+1 that is a valid entry then becomes the
+  head, as our own copy would. A second writer that keeps writing is found by the RECHECK, and two copies of one seq by
+  the head search (FORK) or the audit's duplicate check (r2 §12.2).
 - Why it is safe: under O54, nothing shown depends on an unconfirmed entry, the evidence of a fork is on Drive and in
   `fork_<utc14>/`, and FORK recurs until the owner removes the foreign copy (README §6).
 
@@ -606,6 +652,7 @@ RELEASE_NOT_ACCEPTED, SCHEMA_INVALID, STATE_SHA_MISMATCH, UNCLASSIFIED.
 - What happens: the session or the plan derives the same verdict from the same Drive, journal and kit evidence. It
   stops again until the evidence or the kit changes.
 - Why it is safe: the session commits nothing before its verdict, and the plan's stops are functions of the journal.
+  UNCLASSIFIED also marks a damaged HALT.json (§2.4.1); that cause is local, so a reset or a clear simply restores.
 
 **VM environment.** Codes: CLOCK_BEHIND, CONFIG_INVALID, DISK_FULL, INTERNAL_EMPTY_OUTPUT, LAYOUT_BASE,
 LAYOUT_HELPER_NOT_IN_BASE_REPO, LAYOUT_HELPER_NOT_PINNED, LAYOUT_HOME, LAYOUT_PATH, LAYOUT_RELEASE_MISMATCH,
@@ -722,12 +769,28 @@ there.
   `Bad LAYOUT_PATH`. The writes are the reused `Staging.begin`, the PNG temporary file, and the ledger folder and file.
   This confinement is the defence against a base that is hostile but self-consistent, which the string checks accept.
 - ASSEMBLE.json records `root`.
+- **verify-frozen through a namespace view (fix round, GAP-2).** Runner v4 (byte-identical) verifies a qualification
+  or drill run only at its original absolute job_dir: it looks up the ledger freeze entry by the resolved job_dir in the
+  ledger at the release's absolute `qualification.ledger`. So `--verify-frozen` runs each verify inside
+  `unshare --user --map-root-user --mount`: a private tmpfs is mounted over the deepest existing proper ancestor A of the
+  GENESIS base, the base is recreated there and `<realpath(root)><base>` is bind-mounted onto it (the runner file too,
+  when it lies under A). The shell's working directory is the old A, so the bind sources under A are read through it
+  (`mount -c`, relative paths); nothing outside the namespace changes and no path outside the root is written. The
+  runner then sees the original job_dir and ledger paths. ASSEMBLE.json records the mapping as `view` (`tmpfs` and
+  `binds`). A machine without user namespaces gives a verify `EXIT_n`: unclean, and score_check refuses
+  ASSEMBLE_NOT_VERIFIED (fail-closed). D_baseline's O5 now wipes BASE, requires ASSEMBLE clean with every verify DONE,
+  then runs score_check build and check and requires CONSISTENT. W111 (746ea98's verify at the assembled path) and
+  W112 (no bind mount) are killed by D_baseline.
 
 **Tests (TG-06).** None of them builds a hostile series through `core_world.commit`, which folds every entry:
 - ct `test_maint1_new_run_job_dir_must_be_the_layout_path`: one fold case per row T10, T11, T12 and T13 and one for the
   everyday branch of `_virtual`, each with an absolute job_dir elsewhere (`/root/.config/git`), a `..` path
   (`<base>/qual/A/../../x`), and the wrong mappings: A/case01 at `<base>/qual/B/case01`, `<base>/ledger`, and another
   run's job_dir. Each gives T14.
+- mt `test_maint1_audit_refuses_hostile_new_run`: a normal series prefix, then an entry that starts a new run (rows
+  T10-T13), built outside `core_world.commit`, with each hostile job_dir above. The audit is unclean with
+  `AUD_CHAIN_INVALID` detail T14 at that entry. With the ct test and the assemble tests below, the fold, the audit and
+  assemble each refuse a hostile job_dir (D7, CBR-2).
 - mt `test_maint1_forged_all_frozen_job_dir`: a normal series, then only the FINAL entry is rebuilt with a forged
   `final/ALL_FROZEN.json` job_dir and a matching FINAL body (the fold ignores members). The audit is unclean with
   AUD_OUTCOMES_DIFF, and assemble refuses with `Bad LAYOUT_PATH` from its own check.
@@ -745,7 +808,7 @@ there.
 
 The mutants are split so that one surviving check cannot hide the removal of the other: W29a removes assemble's layout
 check (killed by the forged, base and wrong-mapping tests), W29b removes the realpath confinement (killed by the
-self-consistent base and the symlink tests), W30 restores the `/` default, W93 makes assemble trust `af.genesis.base`.
+symlink test; the self-consistent base test cannot kill it, GAP-3), W30 restores the `/` default, W93 makes assemble trust `af.genesis.base`.
 
 ### 2.7 D8: the audit re-derives kit changes, CLEAR and local clears
 
@@ -903,8 +966,9 @@ The helper keeps the key so that the gate's other value stays expressible (SD-47
      everywhere, none is written afterwards. The remaining exposure is stated in §6.3.
    - **Tests.** vio `t_s07_runner_loaded_from_hashed_bytes` plants, after the bootstrap, a valid-header `.pyc` (the
      source's mtime and size in its header, other code) for `cps_job.py` and for one helper module whose code would
-     change an observable result, then runs the launcher and `load_runner`, and asserts that the hashed source ran
-     (W11, W12). v1r `test_gap11_session_start_removes_pycache` plants `__pycache__` folders under `deploy/vm2/` and
+     change an observable result. It runs the launcher (the helper module's `.pyc`, W11) and calls `load_runner` in
+     the test process, which has no pycache prefix (the `cps_job` `.pyc`, W12), and asserts each time that the hashed
+     source ran. v1r `test_gap11_session_start_removes_pycache` plants `__pycache__` folders under `deploy/vm2/` and
      under the writer route before `session_start.sh`, and asserts that none remains (W84).
 4. **S-08.** The `session_start.sh` order becomes steps 1, 2, 3 and 6 (HEAD == `--commit`, else
    `STOP SESSION_COMMIT_MISMATCH`), then 5 and 4, then the CPSV-REPO line and the final block.
@@ -997,7 +1061,8 @@ The helper keeps the key so that the gate's other value stays expressible (SD-47
 
 **Constants.**
 - Added: `O63_NOTE`, `O63_NOTE_RE`, `O63_REPORT`, `RAW_MAX_BYTES = 1048576`, `MAX_TOOL_LINES = 2000`,
-  `SLIP_ASKS = 3`, `BASE_RE`, and the pattern `APPROVAL`.
+  `SLIP_ASKS = 3`, `BASE_RE`, the pattern `APPROVAL`, and `STAGE_FREE_BYTES = 1000000000` (SD-69). No entry of CODES
+  is added: a stage refused for space is the existing `STOP DISK_FULL`, with `step` `stage` in its detail.
 - Changed: TOOLS is redefined, and `approval` joins KEY_NAMES.
 - Removed: `LIST_NEWEST_K`, `PATTERNS['MD5']`, and `cli.DEFAULT_GATES`.
 
@@ -1054,6 +1119,7 @@ disappear, and generated entries change shape where §2.12 says.
   `file_or_folder: "file"`, `parent_ids` and `mime_type`.
 - `download(id)` of an unknown id returns nothing, so the target stays missing.
 - `approve(name)` lands a refused upload, also after a reset of the World (D6 scenarios).
+- `raw_find` entries carry every key of the M007 result (§2.3), with invented values (D16).
 
 **FakeDot.**
 - **Found.** It answers `found --raw` by default, saving one JSON list per block under a new
@@ -1070,6 +1136,11 @@ disappear, and generated entries change shape where §2.12 says.
   `final_message.txt` for S, G, V and V continuations, empty when the policy says the conversation gave none.
 - **Inputs.** Policy `inputs` is `restore` or `lost`, for INPUTS_CHANGED; with `lost` it runs `go` until SLIP_LIMIT.
 - **Checks.** It never creates a DOWNLOAD parent, and it asserts that the parent exists. Its O7 check follows §2.2.6.
+- **The M007 routes (D16).** A DOWNLOAD writes the bytes into FakeDot's own attachment folder outside BASE, then copies
+  that file to the target, as the Dot does (§2.16.1). A raw file is written as
+  `json.dumps(obj, separators=(',', ':'), ensure_ascii=False)`, the compact text that `JSON.stringify` gives.
+- **Disk records (D16).** At every block it records the run job folders under BASE/qual and BASE/jobs and the files
+  in `outbox/journal` and `inbox/journal`, for the World extra `x_d16_disk` (§2.16.5).
 - **Counts.** It counts helper commands (by argv[0]), Drive calls, raw files, waits and conversation events per block.
   `x_opx10` and `x_op07_restore` write them into `tests/budget_golden.json` format (§5.3).
 - **`bootstrap_stop`.** When the World's own bootstrap (`session_start.sh`) stops with a SESSION_* code, the
@@ -1088,7 +1159,7 @@ while HALTED keeps the kit and carries no `cleared_local`. Hostile entries for t
 
 ### 2.15 Tests and mutants (D11)
 
-#### 2.15.1 Hand mutants W01-W96
+#### 2.15.1 Hand mutants W01-W110
 
 T writes each mutant as exact substitutions against the v2.1 code once C lands it. Each one puts back the 2015773
 behaviour, or removes one v2.1 rule, and names its killing tests.
@@ -1105,14 +1176,14 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W08 | STATE.post is not resumed | vio `t_s04_pending_post_resumed_before_next_commit` |
 | W09 | the PNG whole and per-file compare is removed | vio `t_s05_png_changed_before_part_write_halts` |
 | W10 | the profile-folder print check is removed | cod `test_s06_profile_folder_with_brace_refused_before_commit` |
-| W11 | the launcher has no `-X pycache_prefix=/dev/null` | lint `t_l13_launcher_ignores_bytecode`, vio `t_s07_runner_loaded_from_hashed_bytes` (the planted helper-module .pyc) |
+| W11 | the launcher has no `-X pycache_prefix=/dev/null` | lint `t_l13_launcher_ignores_bytecode` (fix round, GAP-5: `t_s07_runner_loaded_from_hashed_bytes` does not fail on W11 and left the list) |
 | W12 | `load_runner` goes through `spec_from_file_location` | vio `t_s07_runner_loaded_from_hashed_bytes` (the planted cps_job .pyc) |
 | W13 | the HEAD check comes after the setup step | v1r `test_s08_wrong_head_stops_before_setup` |
 | W14 | `render` does not create DOWNLOAD parents | vio `t_s09_download_parent_exists_when_printed` |
 | W15 | `run_command` does not catch OSError | cod `test_s11_oserror_outside_stage_prints_stop_block` |
-| W16 | a BLOCK.json behind STATE invalidates the whole cache | vio `t_opx07_stage_death_stop_names_real_head_and_kit`, rs special `test_foreground_died_same_boot_stops` |
+| W16 | a BLOCK.json behind STATE invalidates the whole cache | vio `t_gap05_block_ahead_invalidates_cache` (fix round, GAP-5: `t_opx07_stage_death_stop_names_real_head_and_kit` does not fail on W16 and left the list) |
 | W17 | `write_doc` returns a new dict | vio `t_opx01_restore_work_writes_kept`, rs oracle "one END_CONVERSATION per open role per boot" |
-| W18 | DOWNLOAD_MISSING reprints the DOWNLOAD block | vio `t_opx02_mistyped_id_refinds_then_commits`, rs `D_slip_wrong_id_refinds` |
+| W18 | DOWNLOAD_MISSING reprints the DOWNLOAD block | vio `t_opx02_mistyped_id_refinds_then_commits`, rs `D_slip_wrong_id_refinds` (fix round, GAP-5: its second slip is in a commit loop and the block after REFUSED must be a FIND) |
 | W19 | a size other than ours at `found` is STOP FORK | vio `t_opx03_size_slip_refinds`, rs `D_slip_size_refinds` |
 | W20 | the README outcome rule is removed | lint `t_l14_readme_rules` |
 | W21 | the brace and angle-bracket rule is back | vio `t_opx05_final_message_any_characters_verbatim` |
@@ -1120,11 +1191,11 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W23 | the slip counter is not incremented | vio `t_d3_fourth_slip_stops_slip_limit`, rs `D_slip_limit_then_clear` |
 | W24 | `--kit none` is a usage error | v1r `test_opx08_kit_none_bootstraps_without_hint` |
 | W25 | the UPLOAD_REFUSED STOP has no `name=` | vio `t_opx09_refused_stop_names_the_file` |
-| W26 | one count of README §7 is off by one | v1r `test_opx10_tool_calls_match_budget_golden`, lint `t_l14_readme_rules` |
+| W26 | one count of README §7 is off by one | lint `t_l14_readme_rules` (the README table against `tests/budget_golden.json`) |
 | W27 | unknown `--only` names are ignored | lint `t_only_unknown_name_exits_2` |
-| W28 | the fold's `_virtual` job_dir check is removed | ct `test_maint1_new_run_job_dir_must_be_the_layout_path` |
+| W28 | the fold's `_virtual` job_dir check is removed | ct `test_maint1_new_run_job_dir_must_be_the_layout_path`, mt `test_maint1_audit_refuses_hostile_new_run` |
 | W29a | assemble's layout check is removed (realpath confinement kept) | mt `test_maint1_forged_all_frozen_job_dir`, `test_maint1_wrong_mapping_refused` |
-| W29b | assemble's realpath confinement is removed (layout check kept) | mt `test_maint1_self_consistent_hostile_base_confined`, `test_maint1_symlink_after_begin_refused` |
+| W29b | assemble's realpath confinement is removed (layout check kept) | mt `test_maint1_symlink_after_begin_refused` (GAP-3: the self-consistent base test cannot kill it) |
 | W30 | `--root` defaults to `/` | mt `test_maint1_assemble_root_required_empty_dedicated` |
 | W31 | `tools=none` is accepted | vio `t_maint2_tools_none_refused_inventory_file_accepted` |
 | W32 | the generation record has no `notes` | vio `t_maint2_generation_record_tools_and_o63_note` |
@@ -1162,12 +1233,12 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W63 | `tried` does not take the kit in use | vio `t_d5_kit_in_use_never_checks` |
 | W64 | `found` or `answer` start the check | vio `t_d5_found_answer_while_halted_print_stop` |
 | W65 | a refused candidate removes HALT.json | vio `t_d5_refused_clear_kit_keeps_cache` (HALT.json present, its code unchanged) |
-| W66 | the clear leaves HALT.json in place and `cleared_local` null | rs `D_clear_same_boot_setup_failed` (the RESTORE entry's `cleared_local` equals HALT's `{code, head_seq, kit_sha256}`; HALT.json is under `cleared_<utc14>/`) |
+| W66 | the clear leaves HALT.json in place and `cleared_local` null | rs `D_clear_same_boot_setup_failed` (the RESTORE entry's `cleared_local` equals HALT's `{code, head_seq, kit_sha256}`; HALT.json is under `cleared_<utc14>/`), vio `t_d5_wait_approval_in_clearing_restore` |
 | W67 | `settle` compares paths, types and sizes only | vio `t_d5_placement_accepts_equal_or_moves_aside` (the same-size changed file, the mode change) |
 | W68 | the refused count never resets | vio `t_d3_refused_count_resets_per_block` |
 | W69 | a `files` element without the name counts as absence | vio `t_d4_parse_raw_rules` |
 | W70 | the next-page token is ignored | vio `t_d4_parse_raw_rules` |
-| W71 | TOOL_INVENTORY.txt is not checked against `tool_inventory_sha256` | vio `t_maint2_inventory_sha_checked` |
+| W71 | TOOL_INVENTORY.txt is not checked against `tool_inventory_sha256` | vio `t_maint2_inventory_rehashed_at_attest` (fix round, GAP-5: `t_maint2_inventory_sha_checked` does not fail on W71 and left the list) |
 | W72 | `tools=file` accepts a link | vio `t_maint2_tools_file_link_refused` |
 | W73 | a no-hint bootstrap keeps an older HINT.json | v1r `test_opx08_kit_none_bootstraps_without_hint` |
 | W74 | S1 accepts an approval other than `"none"` | ct `test_d6_entry_approval_must_be_none` |
@@ -1193,6 +1264,20 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W94 | AUDIT.json lists no approvals and no same-boot RESTOREs | mt `test_gap06_audit_lists_approvals_and_same_boot_restores` |
 | W95 | the README's UPLOAD_REFUSED row says "or tells you to continue" again | lint `t_l14_readme_rules` |
 | W96 | C8b re-prepares whatever `reprepares` says | cm `test_gap13_c8b_after_second_restore_abandons`, rs `E_inputs_lost_after_reset_bounded` |
+| W97 | `tried` does not take HALT.json's `kit_sha256` (the halted kit: r3's `k != stopped_kit12`) | vio `t_d5_halted_kit_never_checks` |
+| W98 | a final message over `max_ai_output_bytes` is the counted refusal `FINAL_MESSAGE_INVALID`, as an over-8-KiB one was at 2015773 | vio `t_opx05_oversize_final_message_stops` |
+| W99 | FakeDot counts Drive calls only, the basis of the 2015773 budget (repo-relative path `deploy/vm2/tests/fakes.py`) | v1r `test_opx10_tool_calls_match_budget_golden` (the measured counts against `tests/budget_golden.json`) |
+| W100 | `invalidate` also moves the boot mark `inbox/.boot` | vio `t_d5_wait_approval_in_clearing_restore` (the command after the clear finds the clear kit deleted by `cleanup_leftovers`), rs `D_clear_same_boot_setup_failed` |
+| W101 | `clear_check` returns when HALT.json is not valid | vio `t_d5_damaged_halt_stops_unclassified` |
+| W102 | a STOP header shows the kit in use instead of HALT.json's | vio `t_d5_halted_kit_never_checks` (its STOP header names the journal's kit) |
+| W103 | a re-FIND of the clear check resets `H.check.slips`, so the fourth slip never ends the check | vio `t_d5_clear_check_bounded` |
+| W104 | (D16) README §2's DOWNLOAD sentence is r4's "saves the file from Drive at exactly the path given ... never copy a local file there instead" | lint `t_l14_readme_rules` |
+| W105 | (D16) README §3.1's never-work-around sentence is removed | lint `t_l14_readme_rules` |
+| W106 | (D16, non-root) `remove_tree` does not call `make_writable_tree` (repo-relative path `deploy/vm2/cpsvm2/vio/v1reuse.py`; the killing set leaves out `test_reuse` and the lints, which check the reused segments' hashes) | v1r `test_d16_evict_runner_frozen_folder_nonroot`, vio `t_d16_settle_moves_readonly_target_aside`, in the non-root pass |
+| W107 | (D16, non-root) `settle` moves a target aside without first setting its owner write bit | vio `t_d16_settle_moves_readonly_target_aside`, in the non-root pass |
+| W108 | (D16) `run_stage` has no `require_space` before a chain | vio `t_d16_stage_refuses_low_space_before_runner` |
+| W109 | (D16) the DROP_LOCAL post action removes nothing | v1r `test_d16_disk_bounded_over_runs` |
+| W110 | (D16) the EVICT post action leaves the job folder | v1r `test_d16_disk_bounded_over_runs` |
 
 **Reviewer mutants (D11c).** T ports each to the v2.1 text of the same rule:
 - N04: the START-boot half of g37.
@@ -1242,7 +1327,7 @@ reviewed again.
 
 **Counts.** At 2015773 this rule gives 543 sites in fold.py (405 remove, 134 negate, 4 link) and 200 in session.py
 (74 remove, 126 negate), counted by the planner's read-only script
-the planner's site-counting script (maintainer side, not in the repository) (r3's narrower rule gave 466 and 186). v2.1 is expected
+`scratchpad/vm_helper/v21/planner_r2/keep/count_sites_r2.py` (r3's narrower rule gave 466 and 186). v2.1 is expected
 to have about 735 core sites. The 2015773 forms of the glue functions hold about 225 sites; v2.1 is expected to have
 about 200.
 
@@ -1313,7 +1398,12 @@ v1r session_start tests, W13's and W24's tests) kills its mutant like any other.
 - W38 and W39 are in mutants.py with the repo-relative path `deploy/make_kit.py`. Their killing names are the v1r hooks
   `test_mk1_header_slip_in_one_copy_recovers` and `test_mk2_duplicate_binary_names_refused`, which run the mk tests.
 - `run_tests.py --only` with any unknown name exits 2 and lists it (T11). The known names are every suite, test,
-  scenario and special, and every `CONFIGS` key of test_resets (`plan_groups` accepts `--only D`).
+  scenario and special, every `CONFIGS` key of test_resets (`plan_groups` accepts `--only D`), and the group `nonroot`
+  (§2.16.4).
+- **Non-root mutants (D16, SD-71).** A mutant marked `nonroot` (W106, W107) builds its clone in a folder that uid 1000
+  can reach, gives the clone and the work folder to that uid after the clean-HEAD check of step 5, and runs step 6
+  under the `setpriv` line of §2.16.4 with `--require-nonroot`. It never runs as root, where it would survive by
+  construction. MUTANTS_RESULTS.json records the uid and the effective capabilities of the run.
 
 #### 2.15.5 New and changed tests, by suite (names as in §1.2 and §2.15.1)
 
@@ -1350,9 +1440,23 @@ v1r session_start tests, W13's and W24's tests) kills its mutant like any other.
   another seq, a null clear, and the original kit after SETUP_FAILED: each gives the original STOP with STATE.json,
   PENDING.json and RESTORE_WORK byte-identical, HALT.json present with its code, and the next `go` prints the same STOP
   with zero Drive calls); `t_d5_post_action_halt_cleared_same_boot` (POST_ACTION_FAILED and EVICT_MISMATCH);
-  `t_d5_stale_hint_never_checks`; `t_d5_kit_in_use_never_checks` (a kit taken by the manifest route, then a bootstrap
-  with that kit); `t_d5_found_answer_while_halted_print_stop`; `t_d5_clear_check_found_accepted`;
-  `t_d5_halted_restore_no_cleared_local`.
+  `t_d5_stale_hint_never_checks`; `t_d5_kit_in_use_never_checks` (a restore whose hinted kit is not on Drive takes a
+  release kit other than the journal's by the manifest route and stops after its head is verified; a bootstrap with that
+  release kit then prints the STOP with no FIND); `t_d5_halted_kit_never_checks` (a restore that takes a kit change
+  stops in its RESTORE's commit loop, and its STOP header names the journal's kit; a bootstrap with the journal's kit
+  then prints the STOP with no FIND); `t_d5_damaged_halt_stops_unclassified` (a HALT.json with a wrong `self_sha256`:
+  `STOP UNCLASSIFIED`, HALT.json rewritten with that code and the old file under `halt_<utc14>.json`);
+  `t_d5_found_answer_while_halted_print_stop`; `t_d5_clear_check_found_accepted`; `t_d5_clear_check_bounded` (four
+  DOWNLOAD_MISSING slips in one check: the fourth adds the kit to `tried` and prints H's STOP with its code unchanged,
+  STATE.json byte-identical); `t_d5_halted_restore_no_cleared_local`; `t_d5_wait_approval_in_clearing_restore` (after
+  the clear, `approval=pending` gives `STOP WAIT_APPROVAL HANDBACK A` with no HALT.json written, and the next `go` asks
+  `approval=` again, then prints the head search's first FIND).
+- D16: `t_d16_settle_moves_readonly_target_aside` (a target with 0555 directories and 0444 files whose walk differs
+  from the staged tree is moved aside and the staged tree is placed; `remove_tree` of a 0555 tree leaves nothing;
+  decides in the non-root pass); `t_d16_stage_refuses_low_space_before_runner` (with `shutil.disk_usage` patched to
+  one byte below `STAGE_FREE_BYTES` plus the margin: `STOP DISK_FULL` with step `stage`, no FOREGROUND.json, and the
+  runner is never called; at exactly that value the stage runs). The fixtures of `t_d4_parse_raw_rules` and
+  `t_d4_found_raw_search_and_listing_objects` start with the M007 envelope (§2.16.2).
 - Gaps: `t_gap02_files_found_before_settle`, `t_gap04_moved_pending_foreign_copy_forks`,
   `t_gap05_block_ahead_invalidates_cache` (a STATE rolled back one head behind BLOCK: `invalid_<utc14>/`, then a
   restore), `t_gap08_clear_moves_attest_and_inbox` (a final_message.txt left from before the clear is not accepted:
@@ -1373,6 +1477,11 @@ v1r session_start tests, W13's and W24's tests) kills its mutant like any other.
 - The MK-1 and MK-2 hooks run the new make_kit tests.
 - `x_op07` and `x_op08` are kept.
 - `test_gap11_session_start_removes_pycache`.
+- D16: `test_d16_evict_runner_frozen_folder_nonroot` (a World runs one invented run to FROZEN with the real runner; the
+  test asserts that the frozen folder holds a directory without the owner write bit, and if the runner left none it
+  sets the folder's directories to 0555 itself and records that; the EVICT post action then removes the folder, and the
+  test asserts it is gone; it decides in the non-root pass). `test_d16_disk_bounded_over_runs` (World extra
+  `x_d16_disk` on D_baseline, which runs several runs in a row; §2.16.5).
 
 **lint**
 - L13 (launcher).
@@ -1380,8 +1489,10 @@ v1r session_start tests, W13's and W24's tests) kills its mutant like any other.
   run-order sentence of 2.2, the NO_BLOCK sentence of section 2, the "never repeat an upload" sentence, the transient
   tool error sentence, the notes sentences of the UPLOAD_REFUSED and WAIT_APPROVAL rows and of 3.1, the sentence "If
   you are not sure whether the platform refused an upload or failed, treat it as refused.", the RAW_INVALID table of
-  3.2, the empty-final-message sentence, and the INPUTS_CHANGED step of 2.3. It checks that `STOP IDLE`, `then=` and
-  `AWAIT_CONVERSATION` are absent, and that the section 7 table equals `tests/budget_golden.json`.
+  3.2, the empty-final-message sentence, the attested-times sentence of section 4 (OPX-09 e), the INPUTS_CHANGED
+  step of 2.3, and (D16) the DOWNLOAD sentence and the raw-save sentence of section 2 and the never-work-around
+  sentence of 3.1. It checks that `STOP IDLE`, `then=` and `AWAIT_CONVERSATION` are absent, and that the section 7 columns
+  for helper commands, Drive calls and saved search results equal `tests/budget_golden.json`.
 - L15 (guards).
 - `t_only_unknown_name_exits_2`.
 - L1 updated for the new codes, and L6 for the new README tokens.
@@ -1391,8 +1502,9 @@ v1r session_start tests, W13's and W24's tests) kills its mutant like any other.
   `D_hint_restore_late_copy_at_n1_forks_at_recheck` (§2.5).
 - D5: `D_clear_same_boot_setup_failed`, `D_clear_same_boot_foreground_died`, `D_clear_same_boot_fork`,
   `D_clear_same_boot_fork_foreign_only` (only a foreign copy at the moved PENDING's seq: FORK again),
-  `D_clear_same_boot_open_generator` (a G answer refused four times, SLIP_LIMIT, the clear, FakeDot answers
-  NOTHING_WRITTEN: files_found is true and the run freezes T47 FREEZE_LOST), `D_clear_committed_halt_same_boot`,
+  `D_clear_same_boot_open_generator` (a G answer refused four times, SLIP_LIMIT, the clear; FakeDot's outcome policy
+  is NOTHING_WRITTEN, but files_found is true, so `outcome` is never asked, `forced` is FILES_FOUND and the run freezes
+  T47 FREEZE_LOST; under W76 the outcome would be asked and give T44 INTERRUPT), `D_clear_committed_halt_same_boot`,
   `D_sameboot_damaged_cache_restores`. Every `D_clear_same_boot_*` scenario drives the check's FIND and DOWNLOAD and
   then at least one `found` and one `answer` of the restore after the clear.
 - Slips: `D_slip_wrong_id_refinds`, `D_slip_size_refinds`, `D_slip_short_download_refinds`,
@@ -1428,9 +1540,13 @@ columns:
 A row with any column not as stated means the port is not the same rule, and the build report says why.
 
 **2. Tests run directly at 2015773,** each with its expected failure there:
-- mt: `test_maint1_forged_all_frozen_job_dir`, `test_maint1_assemble_base_from_genesis`,
-  `test_maint1_wrong_mapping_refused`, `test_maint1_self_consistent_hostile_base_confined` and
-  `test_maint1_symlink_after_begin_refused` (assemble writes the hostile paths; the root is `/` by default);
+- mt: `test_maint1_audit_refuses_hostile_new_run` (the audit is clean); `test_maint1_forged_all_frozen_job_dir`,
+  `test_maint1_assemble_base_from_genesis`, `test_maint1_wrong_mapping_refused` and
+  `test_maint1_symlink_after_begin_refused` (assemble writes the hostile paths; the root is `/` by default). Fix round
+  (GAP-3): `test_maint1_self_consistent_hostile_base_confined` passes at 2015773 and is not in this list or in W29b's
+  kill list: a base that is consistent with its own paths is normalized and pattern-checked by `target`, so without a
+  link it cannot leave the root even with the realpath confinement removed; only the planted link of
+  `test_maint1_symlink_after_begin_refused` can, and that test is W29b's killer;
   `test_maint1_assemble_root_required_empty_dedicated` (no `--root` is accepted); `test_maint3_*` (the audit is clean);
   `test_maint4_audit_only_kit_change_verdicts` (clean); `test_maint5_*` (build accepts); `test_maint7_*` (folder rows
   refused); `test_maint8_*` (check trusts the plan); `test_maint9_*` (the window has no tolerance); `test_maint10_*`
@@ -1443,9 +1559,141 @@ A row with any column not as stated means the port is not the same rule, and the
 - lint: `t_only_unknown_name_exits_2` (exit 0 with 0 tests);
 - ct and cm: `test_t1_*` to `test_t10_*` where the 2015773 fixtures allow; these pass at 2015773 and appear in table 1.
 
+**D16 rows correct at 2015773.** `test_d16_evict_runner_frozen_folder_nonroot` and `test_d16_disk_bounded_over_runs`
+pass at 2015773, which evicts with `make_writable_tree` and drops its local files. Like T1-T10 they are proven by
+their mutants (W106; W109, W110), in two columns: the test passes at 2015773 (as root, since 2015773 has no non-root
+pass); it fails at v2.1 with its mutant applied (W106 in the non-root pass).
+
 **3. T1's cases.** `test_t1_continued_v_other_outcomes_t48` feeds the fold (not `build_item`) a RESTORE whose item is
 a CONTINUED V with outcome NOTHING_WRITTEN, WRITTEN, UNSURE and NO_CONVERSATION, each once with a START and once
 without one. All eight are T48 (CHAIN_INVALID). The control, outcome CONTINUED, is T46.
+
+### 2.16 D16: platform facts from probe M007
+
+The operator answered probe M007 on its own VM on 2026-11-11, with invented data only. The maintainer verified the
+facts F1-F8 against the files the operator uploaded. D16 carries them into this plan. Nothing in §2.1-§2.15 changes
+except where this section, §3 and §5.4 say so. The runner's finish stage is not split or changed: the runner is
+admitted and byte-identical.
+
+#### 2.16.1 Downloads (F3)
+
+The route the Dot used is byte-exact (sha256 equal). The Drive fetch tool, with `download_raw_file` true and
+`include_base64` false, returns a file reference, not base64. The platform's download tool then saves the original
+bytes as a local attachment file and returns its path and size. The Dot copies that file with `cp` to the target path.
+Nothing is retyped or decoded.
+- README §2 describes every DOWNLOAD this way, in plain words (§3). r4's sentence "never copy a local file there
+  instead" is replaced, because copying the downloaded file is the route; the new sentence forbids any other file at
+  that path.
+- The check stays the helper's: at the `go` after a DOWNLOAD block it computes the size and sha256 of the file at the
+  target (rule V, §2.1; slips, §2.2.1). `render` still removes any file at a target before it prints (§2.10.5), so a
+  file there is the Dot's copy of this block's download.
+- FakeDot follows the route (§2.14). Lint L14 checks the sentence (W104).
+
+#### 2.16.2 Saved tool results (F4)
+
+The Dot serializes a tool's returned object with `JSON.stringify` inside its orchestration code and writes the text to
+the VM file with a Python heredoc. It reports that the same works for search, upload and folder-listing results. The
+saved search object is exactly the M004 envelope (§2.3). D4's parse rules need no change; D16 changes the tests:
+- the first fixture of `t_d4_parse_raw_rules` and of `t_d4_found_raw_search_and_listing_objects` is an envelope with
+  the exact key set the Dot saved (§2.3), invented values, `size` a decimal string, `viewedByMeTime` null, serialized
+  compactly as `JSON.stringify` writes it; next to it, an empty search envelope for an absent name
+  (`"structuredContent": {"results": []}`), and the same empty search saved as the structuredContent alone;
+- FakeDrive's `raw_find` entries carry every key, and FakeDot writes the compact form (§2.14);
+- README §2 says how to save (serialize each returned object unchanged and write that text), checked by L14.
+
+OQ-21 is narrowed: the route is known. Whether a save costs a tool call of its own depends on whether the Dot's
+orchestration code runs the search and the save in one call; README §7 keeps one call per save until G-3 measures it.
+
+#### 2.16.3 Uploads stay inside the owner's standing approval (F5)
+
+M007: the platform's automatic review refused an upload that the message's step list asked for, because the message's
+final list of files to upload did not name it ("outside the authorized payload"). After the owner approved it, it
+succeeded. So every UPLOAD line the helper prints must be inside the owner's standing approval. The helper's uploads
+(the code at 2015773 plus MAINT-7):
+
+| what | folder | when |
+|---|---|---|
+| journal entries and PNG parts of a qualification series | `CPS/qualification` | every commit |
+| journal entries and PNG parts of a drill series | `CPS/drills/D<n>` (MAINT-7, SD-45) | every drill commit |
+| the setup log after SETUP_FAILED | `CPS/reports` | rare |
+| `SELFTEST_<fp>.json` and `FINGERPRINT_PASS_<fp>.json` | `CPS/setup` | once per new fingerprint |
+| everyday journal entries and parts; the personal copy's log | the everyday records folder (`FOLDERS['E']`); the profile's `deliveries` folder | everyday only |
+
+Every one is a new file: a name is uploaded only at a new seq, or after its loop's FIND showed it absent (§X.5.6), and
+never from a reprint (SD-60). The owner's pending decision (new files only, into `CPS/qualification/` and
+`CPS/reports/` and their subfolders; the Synology document limits do not apply to these Drive uploads) covers the first
+and third rows. It does not cover `CPS/drills/`, `CPS/setup/` or the everyday folders. G-10 names the full list as its
+precondition, and OQ-26 asks the owner. This plan keeps SD-45 and moves no folder: the PASS files must stay in
+`CPS/setup/`, where the session FINDs them, so the approval has to name a folder outside the pending pair anyway.
+
+A refused upload takes the existing path, which D16 does not change: `--refused`, `STOP UPLOAD_REFUSED HANDBACK A
+name=<name>`, the owner approves or denies, `go`, a FIND before any re-upload, at most three uploads, then
+UPLOAD_FAILED (README §3.1). README §3.1 adds one sentence: the Dot never works around a refusal and waits for the
+owner (L14, W105). G-4 and G-5 need a refusal although G-10 comes first, so each provokes one on purpose (§1.3).
+
+#### 2.16.4 Read-only trees and the non-root pass (F6)
+
+M007: the Dot runs as uid 1000, not root. A plain `rm -rf` of the runner suite's work folder failed with "Permission
+denied" on read-only fixture directories (frozen job folders) and worked only after `chmod u+w` on the directories.
+The helper removes trees only through `remove_tree`, which calls `make_writable_tree` first (EVICT, the staging
+removal, every other removal), but every helper test so far ran as root, which ignores permission bits. A probe on the
+maintainer machine as uid 1000 without capabilities, on invented files, shows two failures for a tree with 0555
+directories: `shutil.rmtree` fails with EACCES, and so does `os.rename` of a 0555 directory to **another** parent
+(Linux needs write permission on a moved directory to update its `..` entry); a rename within the same parent works.
+
+- **SD-70.** `place.settle` moves a target aside by renaming it to another parent (`outbox/v2/aside_<utc14>/<n>/`), and
+  the target can be a tree the runner froze. Before that rename, `settle` sets the owner write bit on the target's top
+  directory (one `os.chmod`; the aside copy is evidence, and only its top directory's write bit changes). The staged
+  tree's rename into place stays within one parent and needs nothing. Every other helper move (`invalidate`, the clear,
+  `foreground_check`) moves files and folders the helper made itself, which are writable.
+- **SD-71, the non-root pass.** T builds it; the integrator runs it.
+  - `run_tests.py --require-nonroot` exits 2 unless `os.getuid() != 0` and the effective capability set in
+    `/proc/self/status` (`CapEff`) is zero. TEST_RESULTS.json records `uid` and `cap_eff` for every run.
+  - The group `nonroot` names: `test_core_table`, `test_core_more`, `test_core_props`, `test_codes`, `test_vio`; the
+    v1r tests `test_d16_evict_runner_frozen_folder_nonroot` and `test_d16_disk_bounded_over_runs`; and the reset
+    scenarios that freeze, evict, place or settle a job folder with the real runner: `D_baseline`, `E_baseline`,
+    `D_clear_same_boot_foreground_died`, `D_sameboot_damaged_cache_restores` and the special
+    `test_foreground_died_same_boot_stops`.
+  - The integrator makes a folder that uid 1000 can reach (its parents must not be root-only), runs
+    `bin/testclone.sh <folder>/tc` in it, gives the folder to the uid (`chown -R 1000:1000 <folder>`), and runs
+    `setpriv --reuid=1000 --regid=1000 --clear-groups --inh-caps=-all --bounding-set=-all python3 -I -B
+    <folder>/tc/deploy/vm2/tests/run_tests.py --work <folder>/work --jobs 4 --only nonroot --require-nonroot`.
+    The clone belongs to the uid, so git in the clone accepts it. The folder is deleted afterwards.
+  - The integrator records the pass's counts (passed, failed, names, uid, `cap_eff`) in INTEGRATION.json next to the
+    root suite's, and keeps its TEST_RESULTS.json. The pass runs in wave 3 after the full suite; its time is outside the
+    full suite's D14 budget (§5.2).
+  - Tests and mutants: vio `t_d16_settle_moves_readonly_target_aside`, v1r
+    `test_d16_evict_runner_frozen_folder_nonroot` (§2.15.5); W106 removes the `make_writable_tree` call from
+    `remove_tree`, W107 the chmod of SD-70. Both are `nonroot` mutants (§2.15.4), killed in the non-root pass.
+
+#### 2.16.5 Disk (F7)
+
+§5.4 states the budget against the Dot's 2.5 GB free (restated by §9 A7 for BASE on `/tmp`). Two changes follow from it:
+- **SD-69.** At 2015773 three space checks run: before the snapshot (1.1 times the job tree), before the commit (1.1
+  times the members plus the PNG files) and before the download-back (1.1 times the copies). Together they cover a
+  finish stage's commit, the tree plus its PNG parts. Nothing checks before the runner writes the stage's PNG pages and
+  PDF, so a full disk there would fail inside the runner and could be recorded as a failed stage. `cli.run_stage` now
+  calls `require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')` for every chain before it writes FOREGROUND.json, with
+  `STAGE_FREE_BYTES = 1000000000`: with r5's sizes, one large run's tree (about 270 MB), its PNG parts in
+  `outbox/journal` (about 230 MB) and their download-back in `inbox/verify` (about 230 MB), with room to spare.
+  §9 A7 raised it to 1,500,000,000 and §9.8 (CC-2) to 2,000,000,000 for BASE on `/tmp` with M009's sizes (§5.4). The
+  download-back check of 2015773 (`require_space(..., 'verify')`) left with the pure `on_found` at 746ea98, so the
+  stage check is what covers the download-back now. A refusal is the existing local
+  sticky `STOP DISK_FULL` (§2.4.7, VM environment) before the runner starts. Test vio
+  `t_d16_stage_refuses_low_space_before_runner`; mutant W108.
+- **The retention test.** No existing test asserts that earlier runs leave nothing behind: test_resets' final and
+  common checks cover the dispositions, the audit and assemble, and vio `t_evict_frozen_folder` evicts one folder.
+  v1r `test_d16_disk_bounded_over_runs` therefore runs the World extra `x_d16_disk` on D_baseline, which runs several
+  runs in a row. From FakeDot's per-block records (§2.14) it asserts that at no block more than two run job folders
+  exist; that a run's job folder is gone once its FROZEN entry is confirmed and its EVICT post action has run; that no
+  entry or part file of a confirmed seq remains in `outbox/journal` or `inbox/journal` after its DROP_LOCAL; and that at
+  FINAL, before BASE is wiped, none of these remains. Mutants W109 (DROP_LOCAL removes nothing) and W110 (EVICT leaves
+  the folder).
+
+#### 2.16.6 Stage time (F1, F2) and resets (F8)
+
+No helper code changes. §5.4 gives the measurements, the projection and the rule that G-3 follows before
+`stage_max_seconds` is set; §6.2 (OQ-25, OQ-27) and §6.3 give the open questions and risks.
 
 ---
 
@@ -1524,8 +1772,9 @@ search in that folder; when a search says it has more pages, fetch them all.
 
 **Save what the search tool returns, never retype it.** For each block, write what its FIND lines returned into a
 **new** file, for example `/home/agent/cps/attest/raw_0001.json`, then run the block's
-`found --at <at> --raw <the path of that file>`. The helper moves the file away once it has read it, so a path is
-used only once. The file holds:
+`found --at <at> --raw <the path of that file>`. Serialize each returned object unchanged (for example with
+`JSON.stringify` in your orchestration code) and write that text to the file (for example with a Python heredoc).
+The helper moves the file away once it has read it, so a path is used only once. The file holds:
 - for a block with one FIND line: the object that search returned, `<the object>`, or a list of it, `[<the object>]`;
 - for a block with two FIND lines: a list of the two objects, in the order of the FIND lines,
   `[<the object of the first FIND>, <the object of the second FIND>]`;
@@ -1535,9 +1784,12 @@ used only once. The file holds:
 When the platform refused an upload of the block, add `--refused <name>` for that file (section 3.1). Only if you
 cannot save a returned object, use the manual form: `found --at <at>` followed by, for every FIND line in order,
 `--name <name>` and either one `--file <id>:<size>` per copy the search showed (the size in bytes exactly as shown) or
-`--none`. A DOWNLOAD saves the file from Drive at exactly the path given (its folder exists); never copy a local file
-there instead. If the platform refuses a DOWNLOAD, do not run `go`: ask the owner to approve it, download again, then
-run `go`. Never edit, rename or delete a file on Drive.
+`--none`. For each DOWNLOAD line, download the raw file with that id (the Drive fetch tool with `download_raw_file`
+true and `include_base64` false, then the platform's download tool, which saves the original file and tells you its
+path and size), then copy that downloaded file with `cp` to exactly the path the line names (its folder exists). Never
+retype a file, never decode base64 by hand, and never put any other file at that path; the helper checks the size and
+sha256 of what you copied. If the platform refuses a DOWNLOAD, do not run `go`: ask the owner to approve it, download
+again, then run `go`. Never edit, rename or delete a file on Drive.
 
 ### 2.1 Two lines that are not blocks
 
@@ -1621,8 +1873,9 @@ The platform's automatic approval review sometimes refuses an upload, and a time
    owner tells you it was approved or denied.** Your notes survive a reset; the helper's files do not.
 4. If the refused file is not found, the helper prints `DO: STOP UPLOAD_REFUSED HANDBACK A name=<name>`. Tell the
    owner the code, the file name and your last `CPSV` line, and ask the owner to approve or deny it in the platform.
-   Do not upload it again yourself. Run `go` when the owner says so; take the name out of your notes only when the
-   owner tells you the upload was approved or denied.
+   Do not upload it again yourself. Never work around a refused upload: do not upload the file under another name,
+   into another folder, in pieces, with another tool or from another conversation; wait for the owner. Run `go` when
+   the owner says so; take the name out of your notes only when the owner tells you the upload was approved or denied.
 5. The next block FINDs the file first, never uploads at once (an approved upload may have landed). The helper
    uploads one file at most three times; after the third, it stops with `UPLOAD_FAILED HANDBACK C`.
 6. A copy that appears late is a second copy; the helper downloads and checks it, and nothing else changes when it
@@ -1654,7 +1907,8 @@ The platform's automatic approval review sometimes refuses an upload, and a time
   | `listing` | use the exact-name search of the FIND line, never a folder listing |
   | `entry` or `duplicate` | use the manual form of section 2 for this block |
 
-- This happens at most 3 times for one save, one restore or one block. The fourth time is `STOP SLIP_LIMIT HANDBACK C`.
+- This happens at most 3 times for one save, one restore or one block. The fourth time is `STOP SLIP_LIMIT HANDBACK C`;
+  while the helper checks a maintainer's kit (section 6), the fourth time prints your earlier STOP again instead.
 - A copy with the size the search showed and other bytes than the helper's is a real second copy on Drive:
   `STOP FORK HANDBACK C`. The helper keeps the downloaded bytes for the maintainer.
 
@@ -1731,12 +1985,12 @@ instead. Follow the blocks; never re-open a conversation on your own.
 
 A `STOP <CODE> HANDBACK C` stays until the maintainer clears it. The maintainer's message gives you a bootstrap line
 with a new `--kit` value. Run that line exactly, then `go`. The helper first finds and downloads the new kit (one FIND
-block, one DOWNLOAD block) and checks that it names exactly your stop. If it does not, it prints the same STOP again:
-tell the owner, and wait for the next message. If it does, it continues from the journal as after a reset: answer its
-questions, `approval=` first. Do nothing else on the VM in between, and never delete the helper's files. If the
-message asks the owner to remove a copy of a file from Drive, pass that on: the owner deletes it for good in Drive
-(moves it to the trash, then deletes it from the trash) after the maintainer has saved it; you never delete files on
-Drive.
+block, one DOWNLOAD block) and checks that it names exactly your stop. If it does not, or if the kit cannot be found
+or downloaded, it prints the same STOP again: tell the owner, and wait for the next message. If it does, it continues
+from the journal as after a reset: answer its questions, `approval=` first. Do nothing else on the VM in between, and
+never delete the helper's files. If the message asks the owner to remove a copy of a file from Drive, pass that on:
+the owner deletes it for good in Drive (moves it to the trash, then deletes it from the trash) after the maintainer
+has saved it; you never delete files on Drive.
 
 ## 7. How much work a run is
 
@@ -1758,8 +2012,9 @@ once every 5 minutes.
 
 A qualification (38 runs, 34 nonattempts, about 10 scope readers and continuations, about 10 restores, the start and
 the end of the series) is about 3,600 tool calls: about 20 hours at 20 seconds per call, plus the conversations' own
-time, the stages' running time and the owner's approval waits. This assumes that the owner has approved uploads into
-`CPS/qualification` and `CPS/drills` in advance; otherwise expect refused uploads on most days.
+time, the stages' running time and the owner's approval waits. This assumes that the owner has approved in advance
+every upload the helper prints (new files into `CPS/qualification`, `CPS/drills`, `CPS/reports` and `CPS/setup`);
+otherwise expect refused uploads on most days.
 
 ## 8. Example values (refused as answers)
 
@@ -1781,7 +2036,6 @@ helper refuses each of them as an answer.
 <name>
 <id>
 <size>
-<k>
 <UTC>
 <kind>
 <s>
@@ -1804,6 +2058,8 @@ helper refuses each of them as an answer.
   paths may be used as written.
 - **Absent text.** The page has no `then=`, no `AWAIT_CONVERSATION`, no `STOP IDLE`, no LIST line and no
   `opened_utc`.
+- **The hold value (D16).** The two "1,200 s" in sections 2 and 2.2 are the release kit's `foreground_hold_seconds`.
+  They stay 1,200 unless G-3 proves a longer hold (§5.4); C writes the kit's value before G-9.
 - **Verbatim checks.** L14 checks the sentences that §2.15.5 lists.
 
 ---
@@ -1843,7 +2099,8 @@ helper refuses each of them as an answer.
    - After wave 1, T measures D_baseline and one E scenario under v2.1 and restates the test_resets estimate (§5.2)
      before the new scenarios are added.
    - Wave 2: T's world scenarios and mutants on C's code.
-   - Wave 3: the full suite and the mutation runs.
+   - Wave 3: the full suite, then the non-root pass (D16, SD-71: T builds `--require-nonroot`, the `nonroot` group and
+     the `nonroot` mutants; the integrator runs the pass as §2.16.4 says and records it), then the mutation runs.
 
    Every run uses a snapshot clone (`bin/testclone.sh`) and its own work folder, and each track deletes its clones
    afterwards.
@@ -1867,7 +2124,7 @@ non-growth is not possible.
 3. M's modules together must not exceed 896 (baseline 830).
 4. Every deletion of §2.13 is made.
 
-The target total is at most 8,387. A module may exceed its expected value as long as its track total holds. The
+The target total is at most 8,390. A module may exceed its expected value as long as its track total holds. The
 builders report the after value of every module. r4 changes r3's expectations in a few modules: the clear check, the
 moved-PENDING rule, `halt_local`, the BLOCK rule and the stale-download rule add to cli; the CLEAR phase, its 'fetch'
 branch, the restart rule and the approval clearing, all planned in r3, are not built; `via` goes; assemble reads
@@ -1876,7 +2133,7 @@ GENESIS; the audit ties the generation record and lists approvals.
 | module | track | baseline | expected v2.1 | main changes |
 |---|---|---|---|---|
 | cpsvm2/__init__.py | C | 6 | 6 | version |
-| cpsvm2/cli.py | C | 1526 | 1510 | removes md5, LIST and OPENED answers, `sticky_halt`, the duplicate loops, the special renders and one of `ensure_text`/`ensure_copy`; adds `clear_check`, `invalidate`, slips, counted refusals, raw read and consumption, approval, tools, post resume, `halt_local`, the BLOCK rule, the moved-PENDING rule |
+| cpsvm2/cli.py | C | 1526 | 1513 | removes md5, LIST and OPENED answers, `sticky_halt`, the duplicate loops, the special renders and one of `ensure_text`/`ensure_copy`; adds `clear_check`, `invalidate` (with the boot-mark exception), slips, counted refusals, raw read and consumption, approval, tools, post resume, `halt_local`, the BLOCK rule, the moved-PENDING rule, the UNCLASSIFIED rewrite of a damaged HALT.json, HALT.json's head and kit in a STOP header |
 | cpsvm2/core/entry.py | C | 248 | 251 | removes OPENED; adds approval, conversation, tools_present, the `cleared_local` kinds |
 | cpsvm2/core/fold.py | C | 1073 | 1075 | removes OPENED (T35/T36, the no-list branches); adds job_dir_of, layout_of, jobs_of, the consumer rule, g59, e42, t01 |
 | cpsvm2/core/names.py | C | 252 | 262 | adds codes, TOOLS, APPROVAL, the O63 texts, tool_list, BASE_RE; shortens utc_minus; removes LIST_NEWEST_K and MD5 |
@@ -1900,9 +2157,13 @@ GENESIS; the audit ties the generation record and lists approvals.
 | cpsvm2/maint/assemble.py | M | 243 | 264 | root, the GENESIS base, layout, confinement, verify_frozen |
 | cpsvm2/maint/audit.py | M | 409 | 432 | removes its own loader and kit rules; adds clear, cleared_local, jobs, folders, tolerance, o63 and its ties, approvals |
 | cpsvm2/maint/score_check.py | M | 178 | 196 | MAINT-5, MAINT-8, O63 |
-| **C total** | | **7,566** | **7,495** | |
+| **C total** | | **7,566** | **7,498** | |
 | **M total** | | **830** | **892** | |
-| **total** | | **8,396** | **8,387** | |
+| **total** | | **8,396** | **8,390** | |
+
+**D16 (r5).** SD-69 and SD-70 add about three C lines: one in `cli.run_stage`, one constant in `names` and one chmod
+in `place.settle`. They are paid from contingency deletion 2 below, so C's expected total stays 7,498 and its cap of
+7,500 holds. The table above is r4's and is not restated.
 
 **Contingency deletions**, pre-approved in this order if a track overruns:
 1. any reused segment that L10 reports unused after the deletions;
@@ -1918,12 +2179,14 @@ No behaviour may be removed to meet a budget.
 | run | budget (wall, `--jobs 4`, the review machine) | notes |
 |---|---|---|
 | non-reset suites (ct, cm, props, reuse, vio, maint, p5, cod, v1r) | <= 5 min | about 2.5 min at 2015773 |
-| test_resets | <= 43 min | 197 scenarios took 47 min at 2015773 with `--jobs 3`; v2.1 removes 9 and adds 17 and a special (below); measured again after wave 1 (§4.8) |
+| test_resets | <= 43 min | 197 scenarios took 47 min at 2015773 with `--jobs 3`; v2.1 removes 9 scenarios and adds 16 and a special (below); measured again after wave 1 (§4.8) |
 | lints | <= 2 min | L4 coverage dominates |
 | **full suite** | **<= 50 min, with a hard ceiling of 60 (D14)** | |
 | hand, reviewer and builder mutants | <= 3 h | mutants that a reset scenario kills run only their named scenarios |
 | guard mutants, core set (two stages) | <= 3.5 h | 743 sites at 2015773 under the r4 rule, about 735 expected; stage 1 took 22 s and stage 2 101 s per mutant at `--jobs 1` on the review machine; 4 workers |
 | guard mutants, glue set (stage 2 only) | <= 1.5 h | about 200 sites expected (about 225 in the 2015773 forms of these functions) |
+| the non-root pass (D16, SD-71) | <= 10 min | a second invocation after the full suite, outside its 50/60 min; the core suites, vio, two v1r tests and five reset runs (§2.16.4) |
+| `nonroot` mutants W106, W107 | <= 15 min | each runs its killing set in the non-root pass |
 
 **Per-mutant controls (TG-11).** Each mutant's timeout is 3 times the baseline time of its killing set; a timeout is
 recorded with its test (§2.15.4). The specials already took 4,067 of 14,418 scenario-seconds at 2015773, so the
@@ -1955,7 +2218,7 @@ The DV config stays for the transcript-export variant: gates `{'p1_transcript_ex
 - `D_slip_wrong_id_refinds`, `D_slip_size_refinds`, `D_slip_short_download_refinds`, `D_slip_limit_then_clear`,
   `D_slip_stale_raw_head_search`;
 - `E_inputs_lost_after_reset_bounded`;
-- the special `test_foreground_died_same_boot_stops`, now continued through the clear.
+- the special `test_foreground_died_same_boot_stops` (new in v2.1), continued through the clear.
 
 The net change is about +800 CPU-s before the per-scenario costs.
 
@@ -1986,13 +2249,131 @@ The README §7 table is the operator budget, in total tool calls.
 - **Refused uploads.** A qualification uploads about 330 files. Under the owner's 20-documents-a-day rule (M004) that
   is about 17 days of refusals, each an owner handback. G-10 is therefore required before G-4 and before qualification;
   with it, the expected refused uploads are zero.
+- **Resets are frequent (D16, F8).** Two real VM resets came within two days (M005, M007). A qualification that
+  takes days will run the restore path about once a day, so "about 10 restores" is a floor, not an estimate. Each
+  reset also costs the light setup (130 s and 161 s observed) and, unless the owner pre-approves re-running it
+  (OQ-27), the owner's approval wait (about two hours in M007). G-3 and G-4 restate the count.
 - **What the counts assume.**
-  - If saving a returned object costs no extra call on the platform (OQ-21), each run saves about 6 calls.
+  - If saving a returned object costs no extra call on the platform (OQ-21, narrowed by M007, §2.16.2), each run
+    saves about 6 calls.
   - The re-FIND after a slip costs one FIND, one raw save, one `found` and one DOWNLOAD, at most 3 times per save.
+
+### 5.4 Platform time and disk (D16)
+
+**Measured on the Dot (F1).** At the setup commit the runner suite passed 249/249 in 585.9 s on the Dot against
+250.1 s on the maintainer machine, about 2.3 times. The stage maxima over the suite's invented jobs, Dot against
+maintainer: finish 72.5 s against 16.2 s (about 4.5 times), prepare 5.0 s against 3.2 s, scope-finish 1.9 s against
+1.1 s. The Dot has 9 CPUs, about 9.9 GB of RAM and `/home/agent` on a 4.9 GB tmpfs with 2.5 GB free after the light
+setup; the toolchain takes about 2.3 GB, of which 541 MB are re-downloadable caches.
+
+**The finish stage against the hold (F2, restated by §9 A8 from probe M009).**
+- The longest real finish stage measured on the maintainer machine (046g dev trial) took 190 s. One step dominates it:
+  the internal visual QA, whose single `pdftoppm` call renders 336 A3 pages at 150 dpi (about 193 s when measured
+  alone); the LibreOffice PDF export takes about 7 s.
+- r5 projected that stage at about 850 s on the Dot (4.5 times, the ratio of the suite's small jobs). M009 measured the
+  large render itself on the Dot, outside the helper: `visual_qa.py` rendered 403 pages of an invented 3,100-row
+  workbook in 619 s and wrote about 550 MB (the maintainer machine gives 335 pages in 332 s), about 1.55 times slower
+  per page; `pdftoppm` run alone on the same PDF took 706 s for the 403 pages (530 MB), about 2 times slower per page
+  and longer than the whole render step.
+- Projection, not a measurement: the largest real finish stage takes about 350 to 480 s on the Dot (190 to 193 s
+  times 1.55 to 2, times 1.2 for the 20% more pages the Dot's LibreOffice makes), or up to about 550 s with the 14%
+  spread between M009's two timings of the same call.
+- G-3's rule with that projection: 1.5 x 550 + 60 = 885 s <= 1,200 s, so the 1,200 s hold is expected to fit. The kit's
+  `stage_max_seconds` values are still set only from measured values (G-3, through the helper).
+- The self-test: the Dot's light trial measured 777 s (`docs/handoff/CURRENT_STATUS.md`), outside the helper, and
+  1.5 x 777 + 60 = 1,226 s > 1,200 s. Unless G-3 measures less through the helper, rule step 3 applies; M008's 1,800 s
+  hold completed once (31 beats, exit 0).
+- **The `pdftoppm` margin (risk).** `visual_qa.render`, in the admitted writer package outside the helper, allows each
+  LibreOffice and `pdftoppm` call 900 s. `pdftoppm` run alone on M009's PDF took 706 s, 78% of that, on denser
+  invented pages. A
+  real job about 1.6 to 1.9 times the largest seen so far, or an unusually slow run, could reach the timeout. That
+  would fail inside the writer whatever the hold (rule step 5).
+
+**What the helper does (built at 2015773, unchanged).**
+- The release gate refuses a kit with any `stage_max_seconds` value + 60 > `foreground_hold_seconds`, or with
+  `foreground_hold_seconds` > `gates.p5_foreground_hold_seconds`: `STOP RELEASE_GATE_OPEN` on every command. A stage
+  budget that the proven hold does not cover therefore cannot be released.
+- `stage_max_seconds` is a budget, not a timer. A stage that the platform kills at the hold ends as
+  `FOREGROUND_DIED` (local sticky, HANDBACK C; `dead_<utc14>.json` keeps `started_utc` and `max_seconds`), never as a
+  retry. A maintainer clear re-runs the stage unbound and logged (C8), and a deterministic over-long stage then stops
+  the same way again. A stage that outlives its budget and completes is accepted, because the hold is not proven to be
+  a hard limit (§X.7.2 step 5).
+
+**The rule G-3 follows before `stage_max_seconds` is set.**
+1. Probe M009 (in place of M008, whose render was killed by an interruption) measured the render of 403 invented A3
+   pages and its `pdftoppm` call alone outside the helper. G-3 measures through the helper, through the standard route
+   with BASE `/tmp/cps`: the finish stage of a real-size invented job, the self-test and the other keys.
+2. If 1.5 x each measured value + 60 <= 1,200 s, the values are set as G-3 says.
+3. Otherwise G-3 also runs `probe_p5.py hold --dir /tmp/cps_probe_p5 --seconds 1800` on the Dot, through the
+   standard route (`--dir` is required since §9.8, G8). If that hold completes, the release kit sets
+   `gates.p5_foreground_hold_seconds` to it and `foreground_hold_seconds` to 1,800 (neither is changeable; the owner
+   approves the kit at G-9), the values must satisfy + 60 <= 1,800, and README sections 2 and 2.2 show 1,800.
+4. If the 1,800 s hold does not complete, or a value still does not fit, there is no release until the owner decides
+   (OQ-25).
+5. If a `pdftoppm` call alone comes near or over 900 s (M009: 706 s, 78%), visual QA would fail inside the admitted
+   writer on large cases whatever the hold. That goes to the owner with the measurement; it is outside the helper and outside this
+   plan.
+
+**Disk (F7, restated by §9 A7 for BASE `/tmp/cps`).** `/tmp` and `/home/agent` are separate tmpfs of 4.9 GB each (P3),
+held in the VM's memory (about 9.9 GB). `/home/agent` now keeps only `~/cps-tools` (about 2.3 GB; about 2.5 GB free
+after the light setup). `/tmp` holds the repository clone, all of BASE and every stage's temporary files, which the
+runner's tools write under TMPDIR, now BASE/tmp (§9 A6). r5's sizes are the maintainer machine's largest real job;
+the M009 sizes are an invented render on the Dot with denser pages, used here as the upper bound.
+
+| item on `/tmp` | size | how long it stays |
+|---|---|---|
+| the repository clone `/tmp/cps/repo` | about 30 MB (the maintainer's checkout: `.git` 17 MB, files 12 MB; an estimate) | the boot |
+| BASE/runtime (the kit) | the release kit's size (not measured here) | the boot |
+| one run's job folder | up to about 270 MB (230 MB PNG pages, r5); with M009's render about 590 MB | until EVICT after its FROZEN entry is confirmed |
+| a commit's PNG parts in `outbox/journal` | up to about 230 MB (r5), about 550 MB (M009) | until DROP_LOCAL after the commit is confirmed |
+| the commit's entry archive in `outbox/journal` (the job folder's other files, the PDF included) | at most `max_entry_bytes`; about 40 MB with M009's job | until DROP_LOCAL after the commit is confirmed |
+| their download-back in `inbox/verify` (parts and entry; the Dot's `cp`, after the stage) | the same, about 590 MB (M009) | deleted after the comparison |
+| a place stage's joined PNG stream `inbox/journal/.png_stream_<pid>` | about 550 MB (M009) | deleted after the placement's check |
+| the self-test's work folder `outbox/selftest_<utc14>/work` | the export suite's work folder (not measured here) | the boot |
+| BASE/tmp during a render | the PDF and every page PNG (about 550 MB, M009) and the LibreOffice profile (about 16 MB, M008) | emptied before the next stage (§9 A6) |
+| `aside_<utc14>/`, `fork_<utc14>/`, `cleared_<utc14>/`, `invalid_<utc14>/`, `outbox/v2/raw/` | an aside job folder up to the job folder's size; the rest small | never deleted by the helper; a reset frees them |
+
+- **Peak per stage (projection, from the sizes above).**
+  - prepare, scope-finish, visual-record, interrupt, freeze, nonattempt: small. M012's whole runner suite, the
+    repository copy included, used 145 MB of `/tmp`.
+  - finish: `visual_qa.render` writes the PDF and every PNG into its temporary folder under TMPDIR and then copies each
+    into the job folder, so both exist before the temporary folder is removed: about 2 x 550 + 16 = 1,116 MB written by
+    the stage. Before §9 the two halves were on different file systems (TMPDIR on `/tmp`, the job folder on
+    `/home/agent`); now both are on `/tmp`.
+  - the finish stage's commit runs **inside** the stage (`Chain.run` ends in `commit_end`, which runs the snapshot check
+    and `savepoint.write_commit`): the job folder (about 590 MB) and the entry and PNG parts in `outbox/journal`
+    (about 590 MB; the commit's own check asks for 1.1 times the members and PNG files), 1,180 MB. After the stage
+    the Dot downloads the parts and the entry back into `inbox/verify` (about 590 MB). No check runs before that
+    download-back since 746ea98 (the pure `on_found` of S-01 has no `require_space`), so the stage check must cover
+    it: about 1,770 MB from the start of the finish stage to the end of its save (§9.8, CC-2).
+  - place (a restore): the staged job tree (up to about 590 MB) and the joined PNG stream in `inbox/journal` (about
+    550 MB, deleted after the check), with the downloaded parts already on disk (about 550 MB): about 1,690 MB. No
+    STAGE_FREE_BYTES check runs for a place stage; a full disk there is an ENOSPC inside the stage and ends
+    `STOP DISK_FULL`. A place stage runs after a reset or a clear, when `/tmp` holds little else.
+  - the self-test: its work folder stays for the boot (not measured here; M012's whole runner suite used 145 MB).
+- **Peak on disk.** EVICT and DROP_LOCAL are post actions, and the post resume runs before the next command (S-04). So at
+  most two run job folders are on disk, plus one commit's parts and entry and their download-back: about 2 x 590 + 590
+  + 590 = 2.4 GB with M009's sizes (1.0 GB with r5's), plus the repository and the kit, inside the 4.9 GB of `/tmp`.
+- **The stage check.** `STAGE_FREE_BYTES` is checked on BASE's file system (`/tmp`) before every chain stage, with the
+  existing 64 MiB margin. r5's 1,000,000,000 bytes (1.067 GB with the margin) does not cover the finish stage's
+  1,116 MB now that TMPDIR and the job folder share `/tmp`. §9 set 1,500,000,000 bytes (1.567 GB with the margin) for
+  that render peak alone. The fix round (§9.8, CC-2, SD-77) also counts the commit inside the stage and the
+  download-back after it, about 1,770 MB, and sets 2,000,000,000 bytes (2.067 GB with the margin, 1.17 times that
+  peak). Inside the stage the snapshot and commit checks then run with the real sizes; nothing checks again before
+  the download-back.
+- **Memory.** At that peak `/tmp` holds about 2.4 GB and `/home/agent` about 2.4 GB, about 4.8 GB of the VM's memory,
+  which leaves about 5 GB for LibreOffice, `pdftoppm` and Chromium. Not measured; G-4 records the free space and
+  `MemAvailable` at every stage start (§9.8), and an out-of-memory kill would show as FOREGROUND_DIED.
+- **Within one boot** every same-boot clear that moves a job folder aside keeps it (up to about 590 MB). After about
+  three or four such clears in one boot (2.067 GB of about 4.8 GB free must stay), SD-69 or a later check stops
+  `DISK_FULL` (local sticky, HANDBACK C); the owner decides what to free (the existing DISK_FULL text). A reset frees
+  all of it.
+- The test that runs several runs in a row and asserts the retention is v1r `test_d16_disk_bounded_over_runs`
+  (§2.16.5); no earlier test asserts it.
 
 ---
 
-## 6. Decisions beyond D1-D15, open questions, risks
+## 6. Decisions beyond D1-D16, open questions, risks
 
 ### 6.1 Decisions this plan makes (for review 3)
 
@@ -2031,6 +2412,10 @@ The README §7 table is the operator budget, in total tool calls.
 | SD-65 | a final message may be empty; an over-size one is `STOP AI_OUTPUT_TOO_LARGE` | §2.2.4 |
 | SD-66 | guard sites are every and/or operand, every whole predicate and every chain link, over fold, session and the commit and restore glue; a fold.py equivalence may cite only checks on `fold.apply`'s own path | §2.15.2 |
 | SD-67 | the operator budget comes from a measured golden (`tests/budget_golden.json`) and G-3's stage and conversation times; G-10 is required | §5.3 |
+| SD-68 | `invalidate` moves the cache files, BASE/attest and BASE/inbox (the boot mark `.boot` excepted) for both prefixes, and only `cleared_` moves HALT.json; a damaged HALT.json is rewritten as UNCLASSIFIED; a STOP header shows HALT.json's head and kit, which the maintainer's clear names | §2.4.1, §2.4.2, §2.4.3 |
+| SD-69 | (D16, F7) every chain stage first requires `STAGE_FREE_BYTES` (1,000,000,000; 1,500,000,000 since §9 A7) free, else the existing `STOP DISK_FULL` before the runner starts | §2.16.5, §5.4 |
+| SD-70 | (D16, F6) `place.settle` sets the owner write bit on a target directory before it moves the target aside to another parent | §2.16.4 |
+| SD-71 | (D16, F6) a non-root pass without capabilities (`--require-nonroot`, the `nonroot` group, `nonroot` mutants) is part of every integration and of G-1's reproduction; its counts are recorded in TEST_RESULTS.json and INTEGRATION.json | §2.16.4, §2.15.4 |
 
 ### 6.2 Open questions (none blocks the build)
 
@@ -2039,13 +2424,45 @@ The README §7 table is the operator budget, in total tool calls.
 - **OQ-20** (Dot, G-5): does an upload the owner approves land after the VM that made it is gone? If it never does,
   D6's question is a second safeguard; if it always does, the question is required.
 - **OQ-21** (Dot): can the platform write a Drive tool's returned object to a file in the same tool call? If it can,
-  section 7's saved search results cost no extra call.
+  section 7's saved search results cost no extra call. Narrowed by M007 (D16, F4): the Dot serializes the object with
+  `JSON.stringify` in its orchestration code and writes it with a Python heredoc; G-3 counts the calls this costs.
 - **OQ-22** (owner): after `STOP SLIP_LIMIT` for INPUTS_CHANGED, a maintainer clear or a reset abandons the everyday
   job (§2.2.5). Is that the wanted behaviour, or should a later version let the owner order something else?
 - **OQ-23** (Dot, G-4): does an exact-name search return a copy that was moved to the trash, or a copy of the same name
   in another folder? The second answer decides G-11.
 - **OQ-24** (Dot, G-3): how often does the command tool return while a long command runs? It sets the poll count of
-  README §7.
+  README §7. Still open after M008-M012 (§9): M008 and M009 polled about every 300 s, but that was the Dot's own
+  choice of poll interval, not the tool's return interval.
+- **OQ-25** (owner, G-3; D16, F2): if a measured stage or the self-test is over the proven hold and a 1,800 s
+  hold probe does not settle it (§5.4, rule steps 3-4), which of these applies? (a) No release until a longer hold is
+  proven on the platform. (b) The kit value is capped at the hold minus 60 s, and the owner accepts that a stage longer
+  than the hold ends as a recorded `FOREGROUND_DIED` stop (HANDBACK C, `dead_<utc14>.json`), never a silent retry. (c)
+  A change outside this plan (for example in the admitted writer's render). The helper behaves the same under (a) and
+  (b) and needs no code for either; the gate and the stop exist. After M008-M012 (§9 A8): the projected finish stage
+  fits 1,200 s; the self-test (777 s, outside the helper) does not; M008's 1,800 s hold completed once. Not settled
+  until G-3's measurements through the helper.
+- **Settled by M011 and M012 (§9).** Which paths a command can write: the standard route (`use_default`) writes `/tmp`,
+  `/dev/shm`, `/var/tmp` and its working folder, not `/home/agent` or `~/cps-tools`; the elevated route
+  (`require_escalated`) writes everywhere tested, after an automatic review that can time out (a stopped request has
+  not run). Both routes see the same files and honour the same `flock`. The runner's suite passes through the standard
+  route alone with everything under `/tmp` (249/249, 636 s). So BASE moved to `/tmp/cps` (§9 A1).
+- **OQ-26** (owner, G-10; D16, F5): the pending standing approval names `CPS/qualification/` and `CPS/reports/`. Will
+  it also name `CPS/drills/` (a drill series' journal, MAINT-7) and `CPS/setup/` (the SELFTEST and FINGERPRINT_PASS
+  files of a new fingerprint), and, before everyday use, the everyday records folder and the profile's `deliveries`
+  folder? Without them those uploads are refused every time (§2.16.3).
+- **OQ-27** (owner; D16, F8): will the owner pre-approve re-running the light setup after a VM reset? In M007 the Dot
+  waited about two hours for that approval. This plan does not decide it; §5.3 and §6.3 state the cost either way.
+- **OQ-28** (owner; §9.8 PF-1): how does a helper series that runs far longer than 6 hours coexist with the 30-minute
+  mailbox check of `DOT_MAILBOX_PROTOCOL.md`? Under that protocol a claim 6 hours old or older is marked abandoned
+  (`REPLY_ABANDONED_`, "Mnnn needs you: abandoned"), and later runs take the next open message, which could then be
+  carried out while the series runs. Options: the owner pauses the check for the series; the series is not run under a
+  mailbox claim (the owner starts it in the coordinating conversation); or a change to the fixed mailbox prompt.
+  README §2.4 rule 8 makes the Dot start a series only when the message that starts it says how the check is handled,
+  else it tells the owner `MAILBOX_UNSETTLED`. G-4 records what a check does while a helper command runs.
+- **OQ-29** (owner; §9.8 PF-9): the personal copy moved to `/tmp/cps/deliveries/<case>/<user>/<utc14>/` (SD-75) because
+  the standard route cannot write HOME, but `DEPLOYMENT_MODEL.md` (authority 1) and the private operating documents
+  still name `~/cps-deliveries/<case id>/<user>/<time>/`. The owner updates them before everyday use; until then the
+  two places differ, and README §3 (the DELIVER row) is the one the helper checks.
 
 ### 6.3 Risks
 
@@ -2066,6 +2483,12 @@ The README §7 table is the operator budget, in total tool calls.
   the manual form. The parser never guesses. Swapped results no longer matter (copies by title), and a stale file is
   refused (consumed files). One slip remains: the same empty result saved twice in place of two different results
   hides a copy. The double absence, the RECHECK and the audit's full listing bound it.
+- **Cache files replaced out of procedure.** The helper detects a removed HALT.json (`halt_local`, SD-64) and a
+  STATE.json rolled back behind a printed block (a BLOCK.json ahead of STATE, §2.4.1). A STATE.json replaced by an
+  older valid copy with no block printed after it is not detected on the VM. The next commit then uploads at a seq
+  that is already on Drive, its FIND shows two copies with other bytes (FORK), and the audit is unclean
+  (`AUD_DUPLICATE_SEQ`): fail-closed, but the series cannot be scored. It needs an actor with VM access outside the
+  procedure, as removing HALT.json does (§7, GAP-05).
 - **Bytecode planted after the bootstrap.** The helper process never reads bytecode, and `session_start.sh` removes
   every `__pycache__` before it starts. A valid `.pyc` written into the checkout after that by a process with VM
   access (the Dot, or a conversation's tools, whose isolation is by instruction under O63) would still be read by the
@@ -2078,9 +2501,35 @@ The README §7 table is the operator budget, in total tool calls.
   reads core/ in full.
 - **Guard-mutant survivors are unknown work.** About 935 sites (core and glue) will leave survivors that each need a
   test or an equivalence argument. This is the largest uncertain cost in T.
-- **The line budget is tight.** The expected result is -9. Four new mechanisms (approval, clear, raw, O63) and the
+- **The line budget is tight.** The expected result is -6. Four new mechanisms (approval, clear, raw, O63) and the
   critical MAINT-1 fix are added. The deletions pay for them only if all of §2.13 is done, and the §5.1 contingency is
   pre-approved.
+- **The restore path will run often (D16, F8).** Two real resets came within two days (M005, M007); the light setup
+  took 130 s and 161 s, and in M007 the Dot waited about two hours for the owner's approval before it re-ran the setup.
+  A qualification that spans several days will go through the restore path many times, each with the approval
+  question, the head search, the RECHECK and possibly an open-role resolution, and each open generator at a reset
+  costs that run under O46. The restore path is the most-used recovery path, so its tests (test_resets) and the drill
+  (G-4) carry most of the operational risk. An owner pre-approval to re-run the light setup after a reset is an owner
+  decision (OQ-27); without it every reset adds the owner's response time.
+- **A long finish stage may not fit the hold (D16, F2; restated by §9 A8).** M009 measured the large render on the
+  Dot; the projection for the largest real finish stage is now about 350 to 550 s, which fits 1.5 x value + 60 <=
+  1,200 s. The self-test (777 s measured outside the helper) does not fit 1,200 s. The release gate keeps such a kit
+  from running (§5.4), so the risk is a release delayed until G-3 and OQ-25 settle it, not a silent failure. The
+  writer's own 900 s per-call timeout is the tighter limit: `pdftoppm` run alone on M009's PDF took 706 s (78%); it is
+  outside the helper.
+- **Memory-backed disk (D16, F1; restated by §9 A7).** `/home/agent` and `/tmp` are tmpfs of 4.9 GB each on a VM with
+  about 9.9 GB of RAM, so files on them use the same memory as the runner, LibreOffice and `pdftoppm`. Since §9 `/tmp`
+  holds BASE, the repository and the runner's temporary files; `require_space` sees only the free bytes of `/tmp`. The
+  projected peak is about 2.4 GB on `/tmp` (§5.4); deleting aside folders with a reset bounds the rest; G-4 records the
+  free space at every stage start and watches for an out-of-memory kill, which would show as FOREGROUND_DIED.
+- **The routes (§9 A2, A3).** Every helper command depends on the standard route writing `/tmp`. The elevated route's
+  automatic review stops some requests (M011: one timeout, then a retry ran); only the bootstrap uses it. A helper
+  command that meets a read-only file system stops `READ_ONLY_FS`; the Dot never moves it to the elevated route. Not
+  yet run through the standard route: the helper's own commands, a real-size render through the helper, and any
+  network command (G-4).
+- **The non-root pass is new (D16, F6).** The suite has only run as root so far. The first non-root pass may find other
+  permission failures in the harness or the helper; each helper failure gets a fix, a test and a mutant under D16's
+  rule, and a harness-only failure is fixed in the harness.
 - **Test time.** The D group dominates, and every qualification restore now runs the RECHECK. If `--jobs 4` packing is
   poor, T may split the D group further; each split repeats the D baseline, about 5 min of CPU.
 
@@ -2089,7 +2538,7 @@ The README §7 table is the operator budget, in total tool calls.
 ## 7. Critic gaps and responses
 
 Three critic lenses read r3: integrity (13 gaps), operator (11) and tests (11). Each entry says what r4 does and where.
-A part that r4 does not take as asked is marked **Rejected** with the reason.
+A part that r4 does not take as asked is marked **Rejected** with the reason. §7.4 records the r5 amendment (D16).
 
 ### 7.1 Integrity
 
@@ -2098,30 +2547,37 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   phase CLEAR is gone (§2.4.3, §2.4.4).
   - (a) No exception to the sticky STOP is needed. While HALT.json exists only the check's own `found` and `go` pass,
     and the restore starts after HALT.json has moved, so its found, answer and WAIT_APPROVAL are never blocked.
-  - (b) Freshness: HALT.json `tried` starts with the HINT.json kit of the moment of the stop (and the halted and in-use
-    kits), so a HINT.json written before the stop never starts a check. This gives the required effect without a clock
-    comparison. A committed HALT's STOP also writes HALT.json, so the same rule covers it.
+  - (b) Freshness. **Rejected as asked** (the clock comparison), with the same effect: HALT.json `tried` starts with the
+    HINT.json kit of the moment of the stop (and the halted and in-use kits), so a HINT.json written before the stop
+    never starts a check, and no clock reading is compared. A committed HALT's STOP also writes HALT.json, so the same
+    rule covers it.
   - (c) The post resume runs after `clear_check` and only when no HALT.json exists; the clear moves STATE with its post.
   - (d) Moot: there is no CLEAR phase, and APPROVAL comes before HEAD on both paths.
   - Tests: rs `D_clear_same_boot_*` drive the check, then a found and an answer of the restore; vio
+    `t_d5_wait_approval_in_clearing_restore` (a WAIT_APPROVAL in the clearing restore, then `go`, proceeds),
     `t_d5_post_action_halt_cleared_same_boot` (POST_ACTION_FAILED, EVICT_MISMATCH), `t_d5_stale_hint_never_checks`,
     `t_d5_clear_check_found_accepted`. Mutants: W92 (the check's own found printed as the STOP: the exception removed),
-    W60 (order swapped), W61 (freshness dropped).
+    W60 (order swapped), W61 (freshness dropped), W66 (HALT.json left in place, which blocks the restore again).
 - **GAP-02** (major). Accepted. `files_found` comes from the existing target before `settle`, and from the placed tree
-  after it; the `placed` item records `aside` (§2.4.4, §2.4.6). Test rs `D_clear_same_boot_open_generator` exactly as
-  required, plus vio `t_gap02_files_found_before_settle`; mutant W76 (the rewalk only after settle). §2.4.7 ("An open
-  role costs its output") and §6.3 now say that any stop while a role is open, SLIP_LIMIT from answer refusals
-  included, costs that output.
-- **GAP-03** (major). Accepted, with one change.
-  - HALT.json `kit_sha256` is the journal's kit (`STATE.state.kit_sha256`, else the verified head's, else the
-    session's kit on a fresh series, else null only when no kit was read). The gap asked for `STATE.kit_sha256` first;
-    but during a restore that takes a kit change, `STATE.kit_sha256` already names the incoming kit, while O59's
-    "settings only" is relative to the kit the journal ran with, and the clearing restore compares with the head's kit.
+  after it; the `placed` item records `aside` (§2.4.4, §2.4.6). Test rs `D_clear_same_boot_open_generator` as required
+  (FakeDot's outcome policy is NOTHING_WRITTEN, but with files_found true the outcome is never asked, §2.15.5), plus vio
+  `t_gap02_files_found_before_settle`; mutant W76 (the rewalk only after settle). §2.4.7 ("An open role costs its
+  output") and §6.3 now say that any stop while a role is open, SLIP_LIMIT from answer refusals included, costs that
+  output.
+- **GAP-03** (major). Accepted, with two parts rejected as asked.
+  - HALT.json `kit_sha256` is the journal's kit (`STATE.state.kit_sha256`, else the verified head's, else the session's
+    kit on a fresh series, else null only when the stop came before a kit was read or a head verified; §2.4.1). The gap
+    asked for `STATE.kit_sha256` first: **rejected as asked**, because during a restore that takes a kit change,
+    `STATE.kit_sha256` already names the incoming kit, while O59's "settings only" is relative to the kit the journal
+    ran with, and the clearing restore compares with the head's kit.
   - A clearing restore's KIT_ACCEPT refuses any non-config-only change with CONFIG_CHANGE_NOT_ALLOWED (§2.4.4, W80,
     cm `test_d5_clearing_restore_refuses_release_change`).
-  - `work.halted_kit` and the 'fetch' branch are gone with the CLEAR phase. The requested "STOP with clearing.code when
-    HALT.json's kit differs from the head kit" is replaced by the same KIT_ACCEPT rule: when the journal moved to
-    another kit, the clear kit is not config-only against the head kit and is refused, so one rule serves both cases.
+  - `work.halted_kit` and the 'fetch' branch are gone with the CLEAR phase. **Rejected:** the separate "STOP with
+    clearing.code when HALT.json's kit differs from the head kit". The clear check already tests the clear kit against
+    the halted kit whenever the helper holds it, KIT_ACCEPT tests it against the head's kit, and the audit's rule 3
+    tests the change from the halted kit. When the journal moved to another kit, the clear kit must therefore be
+    config-only against both kits, or the restore stops; a third rule would add a branch and no protection
+    (§2.4.3 `config`, §2.4.4).
   - S1 allows `cleared_local` only on RESTORE and GENESIS (W75); a RESTORE while HALTED carries none (W91). The audit's
     SD-53 has the four required rules (§2.7), with mt `test_maint3_audit_checks_cleared_local` covering a release
     change (W55).
@@ -2137,8 +2593,9 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   RESTORE_WORK, so it changes at every durable write after a print (a mark, a post action, a crash between a write and
   the next render), and `go_checks` already treats a basis mismatch as "not the same block" and prints a fresh one.
   Invalidating there would turn routine writes into full restores. The rolled-back STATE that the gap names shows as a
-  BLOCK ahead of STATE whenever a block was printed after the commit; a rollback with no later print needs an outside
-  actor replacing STATE.json, the class that GAP-12 handles.
+  BLOCK ahead of STATE whenever a block was printed after the commit. A rollback with no later print needs an actor
+  outside the procedure replacing STATE.json; it stays fail-closed at the next commit (FORK) and in the audit
+  (`AUD_DUPLICATE_SEQ`), and §6.3 states it as a residual risk.
 - **GAP-06** (major). Accepted.
   - README: the UPLOAD_REFUSED and WAIT_APPROVAL rows and §3.1 steps 3 and 4 say that a note is removed only when the
     owner says the upload was approved or denied, and that "continue" keeps it. L14 checks these sentences verbatim;
@@ -2153,25 +2610,30 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   it began to run; a turn that ran, then failed or was stopped, is UNSURE. L14 checks the sentences; §2.9 cites O45
   (provably) next to O55. Mutant W20.
 - **GAP-08** (major). Accepted. The clear moves every file under BASE/attest and every entry of BASE/inbox into
-  `cleared_<utc14>/` (§2.4.3); the verified candidate kit then returns to `inbox/kit/`. `render` removes any file at a
-  DOWNLOAD target before BLOCK.json is written (§2.10.5). The README asks for tool files under BASE/attest, so they move
-  too. Tests vio `t_gap08_clear_moves_attest_and_inbox` (REFUSED FINAL_MESSAGE_INVALID missing) and
-  `t_gap08_render_removes_stale_download_target`; mutants W81, W82.
+  `cleared_<utc14>/` (§2.4.3), except the boot mark `inbox/.boot`, whose absence would make `cleanup_leftovers` empty
+  the inbox at the next command; the verified candidate kit then moves from `outbox/v2/clear/` to `inbox/kit/`.
+  `load_cache`'s `invalid_` path moves the same files (HALT.json excepted), so a same-boot restore after a damaged cache
+  cannot take an old final message either. `render` removes any file at a DOWNLOAD target before BLOCK.json is written
+  (§2.10.5). The README asks for tool files under BASE/attest, so they move too. Tests vio
+  `t_gap08_clear_moves_attest_and_inbox` (REFUSED FINAL_MESSAGE_INVALID missing) and
+  `t_gap08_render_removes_stale_download_target`; mutants W81, W82, and W100 (the boot mark moved too).
 - **GAP-09** (major). Accepted. Hand mutants for each new integrity guard, mapped to the r4 design, each with a named
-  non-reset test (§2.15.1): W62 (the check ignores `tried`, the old `k not in tried`), W63 (the in-use kit missing from
-  `tried`, the old `k != stopped_kit12`), W64 (the check starts on found or answer), W65 (a refused candidate removes
-  HALT.json), W67 (settle compares paths, types and sizes only), W74 (approval value not checked), W75 (`cleared_local`
-  on any kind). The text filter on SESSION_COMMIT_MISMATCH is replaced by the clean-HEAD check and the structured
-  `bootstrap_stop` field (TG-02, §2.15.4): a dirty clone is HARNESS_ERROR, and W13 is KILLED.
+  non-reset test (§2.15.1): W62 (the check ignores `tried`, the old `k not in tried`), W97 (the halted kit missing from
+  `tried`, the old `k != stopped_kit12`) and W63 (the kit in use missing from `tried`), W64 (the check starts on found
+  or answer), W65 (a refused candidate removes HALT.json), W67 (settle compares paths, types and sizes only), W74
+  (approval value not checked), W75 (`cleared_local` on any kind). The text filter on SESSION_COMMIT_MISMATCH is
+  replaced by the clean-HEAD check and the structured `bootstrap_stop` field (TG-02, §2.15.4): a dirty clone is
+  HARNESS_ERROR, and W13 is KILLED.
 - **GAP-10** (minor). Accepted. For each FROZEN entry with GENERATION_RECORD.json, the audit requires `tools_enabled`,
   `notes` and the final message's sha256 to match the consumed G entry; a miss goes into `o63.missing`, so score_check
   refuses O63_ATTESTATION_MISSING (§2.8). Test mt `test_gap10_generation_record_tied_to_g_entry`; mutant W83.
-- **GAP-11** (minor). Accepted in a different form. `session_start.sh` **removes** every `__pycache__` under the
-  checkout instead of refusing with SESSION_LAYOUT (§2.10.3, SD-63). A refusal would recur on every bootstrap until the
-  Dot deleted the checkout, an action the README would have to add; removal reaches the same state (no bytecode when
-  the helper starts, `-B` everywhere afterwards) in one line. The remaining exposure, a `.pyc` planted after the
-  bootstrap, is stated in §6.3. Test v1r `test_gap11_session_start_removes_pycache`; mutant W84. The plan's earlier
-  claim that the children compile what they import from source is withdrawn.
+- **GAP-11** (minor). Accepted in a different form; the SESSION_LAYOUT refusal is **rejected as asked**.
+  `session_start.sh` **removes** every `__pycache__` under the checkout instead of refusing with SESSION_LAYOUT
+  (§2.10.3, SD-63). A refusal would recur on every bootstrap until the Dot deleted the checkout, an action the README
+  would have to add; removal reaches the same state (no bytecode when the helper starts, `-B` everywhere afterwards) in
+  one line. The remaining exposure, a `.pyc` planted after the bootstrap, is stated in §6.3. Test v1r
+  `test_gap11_session_start_removes_pycache`; mutant W84. The plan's earlier claim that the children compile what they
+  import from source is withdrawn.
 - **GAP-12** (minor). Accepted. `stop_block` writes `halt_local` into STATE.json and RESTORE_WORK; `load_cache`
   treats either one with `halt_local` and no HALT.json as invalid (§2.4.1, SD-64). The resulting same-boot RESTORE is
   listed by the audit (GAP-06). Test vio `t_gap12_halt_removed_out_of_procedure_restores`; mutant W85.
@@ -2191,7 +2653,10 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   moves. Tests: the rs `D_clear_same_boot_{setup_failed,foreground_died,fork}` scenarios drive a found and an answer
   after the clear; vio `t_d5_refused_clear_kit_keeps_cache` (another seq, a null clear, the original kit after
   SETUP_FAILED: the original STOP, STATE.json byte-identical). Mutant W59 (the verdict moved back after the
-  invalidation).
+  invalidation). Three details make the check usable and bounded: the STOP header shows HALT.json's head and kit,
+  which the maintainer's clear must name (SD-68, W102); a damaged HALT.json is rewritten as UNCLASSIFIED, so it is
+  cleared like any stop (W101); and a re-FIND keeps the check's slip count, so the fourth slip ends the check (W103,
+  vio `t_d5_clear_check_bounded`).
 - **OP-02** (major). Accepted (§2.2.3, SD-60). Every reprint drops its UPLOAD lines: the counted refusal's, the `go`
   reprint in `go_checks` and the slip's re-FIND; `--refused` stays allowed for `BLOCK.expect.uploaded`. README §2 has
   the required sentence, checked by L14; FakeDot asserts it in every scenario. Test vio
@@ -2225,7 +2690,7 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
 - **OP-08** (minor). Accepted (§2.2.4, SD-65). A present file of 0 bytes is accepted, the non-empty check is dropped,
   and an over-size message is `STOP AI_OUTPUT_TOO_LARGE`. README §4 has both required sentences. Test vio
   `t_opx05_empty_final_message_accepted` (the G record's `final_message` is `''`), plus
-  `t_opx05_oversize_final_message_stops`; mutant W90.
+  `t_opx05_oversize_final_message_stops`; mutants W90 and W98 (an over-size message refused again).
 - **OP-09** (minor). Accepted. README §3.2 has one action per RAW_INVALID detail (with `json` and `missing` added for
   the file checks of §2.3), and README §2 has the transient tool error sentence. L14 checks both.
 - **OP-10** (minor). Accepted as a measurement with a pre-set rule. G-4 measures, on an invented file, whether a
@@ -2235,11 +2700,11 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   therefore tells the owner to delete a foreign copy for good (trash, then delete from the trash) after the maintainer
   has saved it. Nothing is built before the measurement, because the rule would be dead code if search is
   folder-scoped.
-- **OP-11** (minor). Accepted, with one change of wording. README §2.3 step 1 has the notes sentence. The requested
-  text "otherwise tell the owner the code and your last CPSV line" alone would leave the series with no helper STOP,
-  which no maintainer clear can reach. So step 5 says: tell the owner, then run `go` until the helper prints `STOP
-  SLIP_LIMIT HANDBACK C` (at most 3 refusals). The end state is a helper STOP, and a clear of it abandons the job
-  (GAP-13).
+- **OP-11** (minor). Accepted, with one change of wording (**rejected as asked** for the second sentence). README §2.3
+  step 1 has the notes sentence. The requested text "otherwise tell the owner the code and your last CPSV line" alone
+  would leave the series with no helper STOP, which no maintainer clear can reach. So step 5 says: tell the owner, then
+  run `go` until the helper prints `STOP SLIP_LIMIT HANDBACK C` (at most 3 refusals). The end state is a helper STOP,
+  and a clear of it abandons the job (GAP-13).
 
 ### 7.3 Tests
 
@@ -2264,11 +2729,12 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   and the RESTORE records `cleared_local`. W58 (`cleanup_leftovers` is a no-op) survives every in-process Kill scenario,
   recorded in MUTANTS_RESULTS.json, and is killed by the special.
 - **TG-06** (major). Accepted (§2.6). (a) mt forges only the FINAL entry's ALL_FROZEN.json, outside `core_world.commit`,
-  and expects AUD_OUTCOMES_DIFF and assemble's own `Bad LAYOUT_PATH`. (b) Assemble takes the base from the GENESIS
-  entry and refuses an ALL_FROZEN that differs (W93). (c) The wrong mappings, the self-consistent hostile base with an
-  outside sentinel, and one fold case per row T10-T13 and the everyday branch. (d) W29a and W29b, each with its own
-  killing tests. (e) §2.6 states that the fold and audit checks are pure string checks; the symlink defence is tested
-  through a monkeypatch hook between `Staging.begin` and the first write.
+  and expects AUD_OUTCOMES_DIFF and assemble's own `Bad LAYOUT_PATH`; `test_maint1_audit_refuses_hostile_new_run` also
+  gives the audit a hostile new-run entry built the same way, so the fold, the audit and assemble each refuse (D7).
+  (b) Assemble takes the base from the GENESIS entry and refuses an ALL_FROZEN that differs (W93). (c) The wrong mappings,
+  the self-consistent hostile base with an outside sentinel, and one fold case per row T10-T13 and the everyday branch.
+  (d) W29a and W29b, each with its own killing tests. (e) §2.6 states that the fold and audit checks are pure string
+  checks; the symlink defence is tested through a monkeypatch hook between `Staging.begin` and the first write.
 - **TG-07** (minor). Accepted (§2.7, §2.11). `from_equals_to` is deleted; the real-zip from = to case expects
   AUD_CHAIN_INVALID T60. `test_maint4_audit_only_kit_change_verdicts` has exactly the three audit-only cases, each
   killing W36, and §2.7 states that the other codes reach the audit only as AUD_CHAIN_INVALID.
@@ -2278,11 +2744,610 @@ A part that r4 does not take as asked is marked **Rejected** with the reason.
   tests run directly at 2015773 with their expected failures, and T1's eight cases fed to the fold.
 - **TG-10** (minor). Accepted. (a) `t_s07` plants valid-header `.pyc` files for `cps_job.py` and for one helper module
   after the bootstrap and asserts that the hashed source ran (§2.10.3). (b) W26 is now "one README §7 count off by
-  one", killed by `test_opx10_tool_calls_match_budget_golden` and L14; the per-qualification count is built from
-  per-item counts measured over Q_baseline (§5.3), not from the D baseline multiplied. (c) W38 and W39 are in
-  mutants.py with the path `deploy/make_kit.py` and killed through the v1r hooks.
+  one", killed by L14, which compares the README table with `tests/budget_golden.json`;
+  `test_opx10_tool_calls_match_budget_golden` compares the measured counts with the same golden and kills W99 (FakeDot
+  counting Drive calls only, the 2015773 basis). The per-qualification count is built from per-item counts measured
+  over Q_baseline (§5.3), not from the D baseline multiplied. (c) W38 and W39 are in mutants.py with the path
+  `deploy/make_kit.py` and killed through the v1r hooks.
 - **TG-11** (minor). Accepted (§2.15.4, §5.2). The per-mutant timeout is 3 times the baseline of the killing set, with
   its own verdict; guard runs use `--jobs` workers; the guard baseline runs on the unparsed modules; GM ids are
   `module-function-ordinal`; the T11 known names include the `CONFIGS` keys; after wave 1, T measures D_baseline and an
   E scenario and restates the test_resets estimate before the new scenarios are added. The measured 22 s and 101 s per
   mutant set the guard budgets.
+
+### 7.4 D16 (M007)
+
+r5 adds maintainer decision D16, which carries the operator's M007 answers (F1-F8, invented data, verified by the
+maintainer against the operator's uploaded files) into the plan. Every r4 decision stays. What changed, and where:
+- **Header, status line and authority.** The status line and the title say r5; the authority list names D1-D16 and
+  states D16; the plan's own decisions run to SD-71; §0 has one bullet on the operator's platform.
+- **§1.1.** A test or mutant marked (non-root) decides only in the non-root pass; the D16 rows that are correct at
+  2015773 are proven by their mutants.
+- **§1.2.** Cells added to S-09 (F3: the DOWNLOAD route in the README, FakeDot's route, L14, W104), OPX-02 (F4: the
+  M007 envelope as first fixture, the raw-save sentence), OPX-09 (F5: the never-work-around sentence, W105, gate G-10),
+  OPX-10 (gate G-3 with M008) and TST-MUT (`nonroot` mutants). New rows D16-F2 (stage time: no code, gate G-3,
+  OQ-25), D16-F6 (non-root: SD-70, SD-71, W106, W107) and D16-F7 (disk: SD-69, the retention test, W108-W110).
+- **§1.3.** CBR-9 names M008, §5.4 and the D16 rows. G-1 reproduces the non-root pass and the `nonroot` mutants. G-3
+  requires probe M008 (an invented 336-page A3 150 dpi render on the Dot, with the `pdftoppm` call timed alone against
+  the writer's 900 s timeout) before any `stage_max_seconds` value is set, measures the self-test, follows §5.4's rule
+  (a 1,800 s hold probe, then OQ-25) and writes README's hold value. G-4 and G-5 provoke their refused upload on
+  purpose, because G-10 comes first. G-10 names as its precondition the owner's standing approval of every upload the
+  helper can print, lists the folders, and states the pending owner decision and its gap (OQ-26).
+- **§2.3.** M007 confirms the envelope and the empty search; the parse rules are unchanged.
+- **§2.11.** The constant `STAGE_FREE_BYTES`; no new code in CODES.
+- **§2.14.** FakeDrive's `raw_find` entries carry every M007 key; FakeDot downloads through an attachment file and
+  `cp`, writes raw files in the compact `JSON.stringify` form, and records job folders and journal files per block.
+- **§2.15.** Hand mutants W104-W110; the non-root mutant rule and the `nonroot` group name in §2.15.4; new tests
+  `t_d16_settle_moves_readonly_target_aside`, `t_d16_stage_refuses_low_space_before_runner`,
+  `test_d16_evict_runner_frozen_folder_nonroot` and `test_d16_disk_bounded_over_runs`; the M007 fixtures of the D4
+  tests; three more L14 sentences; the proof note for the D16 rows that are correct at 2015773.
+- **§2.16 (new).** The facts and what follows from each: downloads (F3), saved tool results (F4, OQ-21 narrowed),
+  uploads inside the standing approval with the helper's upload inventory (F5), read-only trees with SD-70 and the
+  non-root pass SD-71 (F6, with the maintainer's own probe of `rmtree` and cross-parent `rename` as uid 1000), disk
+  with SD-69 and the retention test (F7), and pointers for stage time and resets (F1, F2, F8). No runner change.
+- **§3 (README).** Section 2: the DOWNLOAD sentence describes the raw-file download and the `cp` of the downloaded file
+  (r4's "never copy a local file there instead" is gone), and the raw-save sentence says how to serialize and write.
+  Section 3.1 step 4: never work around a refused upload; wait for the owner. Section 7: the advance approval names
+  the four folders. Notes for C: the hold value comes from the release kit.
+- **§4.** Wave 3 runs the non-root pass after the full suite; T builds it, the integrator runs and records it.
+- **§5.** §5.1 pays SD-69 and SD-70's three lines from contingency 2, so C's cap holds; §5.2 adds the non-root pass
+  (<= 10 min, outside D14's 50/60 min) and the `nonroot` mutants; §5.3 says that restores are frequent; the new §5.4
+  gives the Dot's measurements, the finish-stage and self-test projections against the hold, what the helper does,
+  G-3's rule, and the disk budget against the 2.5 GB free.
+- **§6.** SD-69 to SD-71; OQ-21 narrowed; OQ-25 (a stage over the hold), OQ-26 (the approval's folders) and OQ-27
+  (re-running the light setup after a reset, left to the owner); risks for the frequent restore path, a finish stage
+  over the hold, the memory-backed disk and the first non-root pass.
+
+---
+
+## 8. Build results (integration, 2026-11-12)
+
+The three tracks (M, C, T) were integrated, the suites and the mutation set were run, and the result was committed on
+branch `v21-build` as "cps-vm-helper.v2.1 candidate (not reviewed, not admitted)". **Nothing here is an admission.**
+Review 3 (G-1) decides. The runner `deploy/run/cps_job.py` is byte-identical (sha256 `7505e98a…`). The numbers below
+are in `scratchpad/vm_helper/v21/keep/INTEGRATION.json`.
+
+### 8.0 Completeness fix round (2026-11-12, after 746ea98)
+
+A completeness critic found ten gaps (GAP-1 to GAP-10) in the 746ea98 candidate. This round fixes them; the numbers
+in §8.1 to §8.6 below are 746ea98's and are superseded where this subsection says so. **Nothing here is an admission.**
+
+**Numbers after §9 (2026-11-12).** This subsection's numbers are those of `a2298cb`. The amendment (§9) and its fix
+round (§9.8) supersede them: the full suite has 572 tests (559 here) and passed at the fix round's tree in 2,630.0 s;
+the non-root pass has 253 tests (246 here), 505.5 s; the hand set has 144 mutants (116 here), all killed; the
+reviewer and legacy sets are unchanged (68, all killed); the guard sets have the same 915 ids and the same 17 core and
+18 glue survivors, each with its EQUIVALENT entry; the lines are C 7,506, M 896, total 8,402 under the D2a caps of
+§9.2 (C 7,496, M 896, total 8,392 here). §9.8.6 has the runs, with their trees and snapshots.
+
+| gap | what changed | proof (fails before the fix) |
+|---|---|---|
+| GAP-1 (D2) | Deletions 2 and 3 of §5.1 applied: module and function docstrings that restated r2, the probe delta or the data shapes cut to one line with their § reference (the reused segments' docstrings untouched), the section banner comments removed, a comment naming the old limits shortened. Deletion 1 found nothing (L10 reports no unused segment). Deletion 4 not applied (see open items). No behaviour changed: every hand, reviewer and legacy substitution still applies unchanged, and the guard ids are unchanged (docstrings and comments are no guard sites). | `count` of §8.4b; the suites and mutant sets below |
+| GAP-2 (MAINT-1 with MAINT-5) | `assemble --verify-frozen` runs each verify in a user and mount namespace that shows `<root><base>` at `<base>` (§2.6). D_baseline's O5 wipes BASE, requires ASSEMBLE clean with every verify DONE, then runs score_check build and check and requires CONSISTENT (FakeDot's invented G response now differs between readers, so the two carriers of a case are not SHARED). | D_baseline fails at 746ea98 (every Q/D verify STOP_FROZEN_FOLDER_CHANGED); W111 (746ea98's call) and W112 (no bind mount) |
+| GAP-3 | `test_maint1_self_consistent_hostile_base_confined` is out of W29b's kill list and table 2 (§2.15.6): a self-consistent base cannot leave the root without a link, so only the symlink test can kill W29b. This section states the 2015773 proof of the blocking rows (below). | – |
+| GAP-4 (N18) | ct `test_t3_recheck_forks_2015773_form` runs unchanged at 2015773 and at v2.1 (copies as [id, md5, size] when `rule_v` takes md5, a `via` key, re-check FINDs W_abs after the commit). | 2015773 plain PASS, 2015773 + my_mutants.py N18 FAIL, v2.1 + T's N18 port FAIL |
+| GAP-5 (W18) | D_slip_wrong_id_refinds requires that the block after `REFUSED DOWNLOAD_MISSING <name>` FINDs that name and prints no DOWNLOAD line, and that the file reaches Drive. The hand, reviewer and legacy mutants now run without `--failfast`, and MUTANTS_RESULTS records `listed_not_failing` for each mutant. | W18 kills D_slip_wrong_id_refinds |
+| GAP-6 | MUTANTS_RESULTS.json carries `helper_tree_sha256` and `commit`; every set was re-run at the fix-round tree (§8.3b). | – |
+| GAP-7 (OPX-10) | `tests/budget_golden.json` holds the restore counts (`restore.hint`, `restore.commit`, `restore.none`), checked by `x_opx10_restore` on test_op07_restore_calls_within_budget, D_notes_commit_only_gallop and D_notes_none_step0; README §7 has one row per measured restore and labels the 400-entry row an estimate; L14 compares the rows with the golden. | W114 |
+| GAP-8 (O63) | O63_REPORT (score_check's isolation statement) and README §4 say that `tools=inventory` records the kit inventory by sha256, the platform's usual set and not the conversation's own list; the AI entry already records the source (`tools_present.source`). | mt `test_gap8_isolation_statement_matches_inventory_attestation`; W113 |
+| GAP-9 (OPX-09, OPX-05) | README §4: any characters up to max_ai_output_bytes, larger STOP AI_OUTPUT_TOO_LARGE HANDBACK C; §7 and §2.3: the everyday records folder and the profile's deliveries folder must be in the owner's pre-approval. L14 checks all three. | W115 (and L14 fails on the 746ea98 README) |
+| GAP-10 (D14) | test_vio and test_codes run their tests in a process pool of `--jobs` workers (the pycache test and the grammar test over every printed block run last in the parent); the slowest test_vio test stops its D1 world once the first run's S, G and V entries are on Drive. | timings below |
+
+**The 2015773 proof of the blocking rows (GAP-3).** The v2.1 tests of the blocking rows fail at 2015773, but mostly
+before they reach the fixed behaviour: a shared fixture calls `fold.layout_of`, `session.clear_verdict`,
+`place.settle` and `drive.parse_raw` do not exist there, and the v2.1 FakeDot does not get past state=KIT on
+2015773. Only `t_l14_readme_rules`, `test_maint1_assemble_root_required_empty_dedicated`,
+`test_d6_approval_before_head` and a few D_refuse and D_slip scenarios fail on 2015773 behaviour. For the other
+blocking rows the regression proof is the W mutant of the row: each puts the 2015773 behaviour (or the removal of the
+v2.1 rule) into v2.1 and is killed by the row's tests (§8.3b).
+
+**Test runs (fix round).** From `bin/testclone.sh` snapshots of the fix-round working files, helper tree sha256
+`ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e`, `--jobs 4`:
+
+| run | tests | passed | wall | uid / CapEff |
+|---|---|---|---|---|
+| root, full suite (snapshot a36fc99) | 559 | 559 | 2,790.7 s (46.5 min) | 0 / full root |
+| non-root pass `--only nonroot --require-nonroot` (snapshot 06cf0d4) | 246 | 246 | 508.1 s (8.5 min) | 1000 / 0 |
+| root, full suite again after the test-only GAP-5 edits (snapshot 5206736, the committed files) | 559 | 559 | 2,970.0 s (49.5 min) | 0 / full root |
+
+In the first run the non-reset suites took 261.1 s (test_vio 118.6 s, was 482.8 s; test_codes 34.8 s), test_resets
+2,479.2 s for 208 scenarios, the lints 50.4 s; in the second 275.8 s, 2,640.0 s and 54.3 s. D14 is met in both: full
+suite <= 50 min (the second with 30 s to spare), non-reset <= 5 min, lints <= 2 min, non-root pass <= 10 min.
+
+**Lines (D2, fix round).** C 7,496 (cap 7,500; 7,566 at 2015773, 7,737 at 746ea98), M 896 (cap 896; 830, 896), all
+8,392 (baseline 8,396, target 8,390). D2's binding rules hold. Per module (2015773 / 746ea98 / fix round): cli.py 1,526
+/ 1,705 / 1,663; fold.py 1,073 / 1,085 / 1,062; session.py 565 / 571 / 539; plan.py 316 / 298 / 281; step.py 86 / 72 /
+58; savepoint.py 379 / 340 / 317; place.py 242 / 269 / 251; drive.py 197 / 224 / 215; names.py 252 / 266 / 259;
+entry.py 248 / 259 / 253; worker.py 488 / 495 / 485; v1mod.py 266 / 270 / 256; assemble.py 243 / 268 / 279; audit.py
+409 / 439 / 434; score_check.py 178 / 189 / 183; the rest in INTEGRATION.json `lines_D2`. cli.py stays above the
+plan's expected 1,513: the remaining difference is code that §2.13 adds (clear check, slips, counted refusals, raw
+results, approval, tools), and cutting it further would change the texts that 51 hand, reviewer and legacy
+substitutions are pinned to and the ids of cli's 81 glue guard sites (8 with EQUIVALENT arguments), for no behaviour
+gain.
+
+**Operator budget (D15, fix round).** Restores, from `tests/budget_golden.json` `restore` (helper commands, Drive
+calls, saved results, waits): with the hint 18, 15, 8, 2; with only the commit line 39, 46, 14, 2; without notes on
+the D baseline's 6-entry journal 24, 23, 13, 2. README §7 states these rows (L14) and keeps the 400-entry row as an
+estimate that was not measured.
+
+**Mutation runs (fix round).** Every set ran at helper tree sha256 `ddcdd9f1…` (the full suite's), each from its own
+`bin/testclone.sh` snapshot, `--jobs 4`; MUTANTS_RESULTS.json of each run records `helper_tree_sha256` and `commit`.
+The hand, reviewer and legacy sets ran without `--failfast`, so every listed killer ran.
+
+| set | mutants or sites | killed | survivors | survivors with an EQUIVALENT argument | wall |
+|---|---|---|---|---|---|
+| hand W (with W111-W115; W106 and W107 as uid 1000, CapEff 0) | 116 | 116 | 0 | – | 1,150 s |
+| reviewer N and legacy (G, M, B, C) | 68 | 68 | 0 | – | 391 s |
+| guard, core set: fold | 545 | 531 | 14 | 14 | 3,388 s |
+| guard, core set: session | 202 | 199 | 3 | 3 | 1,484 s |
+| guard, glue set (two halves by id) | 168 | 150 | 18 | 18 | 5,815 s |
+
+The survivors are the same 17 core and 18 glue sites as at 746ea98, each with its EQUIVALENT entry. Listed killers
+that did not fail on their mutant: W16's `t_opx07_stage_death_stop_names_real_head_and_kit`, W71's
+`t_maint2_inventory_sha_checked` and W11's `t_s07_runner_loaded_from_hashed_bytes` (each mutant is killed by its
+other test; the three names left the kill lists and §2.15.1), W18's `D_slip_wrong_id_refinds` (GAP-5: its first
+slip was a session FIND, outside W18's commit loop; the scenario now also slips in a SAVE loop, and a re-run of W18
+after that change is KILLED by both tests), and three legacy lists kept as written (G9, M2-18, M2-36: each killed by
+its first test). After these test-only edits the full suite ran again (Test runs above).
+
+**Open after the fix round.**
+- cli.py is 1,663 lines against the plan's expected 1,513 (the C and total caps hold; see Lines above). Contingency
+  deletion 4 was not applied: `ensure_standard` re-makes STANDARD.xlsx from the runner's copy in the job folder and
+  re-checks its sha256, `ensure_member` re-makes a notice or copy from an entry member; one function for both would
+  add a branch and save no lines.
+- GAP-2 needs, on the maintainer's machine, user namespaces (or root) and util-linux `unshare` and `mount`, and the
+  first component of the GENESIS base (`/home` for the Dot's `/home/agent/cps`; since §9 A1 the base is `/tmp/cps`, so
+  the private tmpfs covers the maintainer's `/tmp`, the deepest existing ancestor, with the assembly root and the
+  runner bound from under it: mt `test_a1_verify_view_root_under_tmpfs_ancestor`, W119). Without them a verify is `EXIT_n`,
+  ASSEMBLE is unclean and score_check refuses ASSEMBLE_NOT_VERIFIED (fail-closed). It has not run on that machine; G-4
+  ends with this step.
+- N40 and N42 are not shown at 2015773: v2.1 moved both rules (T7 into `names.check_answers`, T8 into the session
+  download check), so their v2.1 tests fail on plain 2015773; their proof is the v2.1 port.
+- README §7's no-notes row for about 400 journal entries is an estimate; FakeDot's D journal has 6 entries.
+- Every EQUIVALENT entry waits for G-1; the release gates G-1 to G-11 were not run.
+
+### 8.1 What the integrator changed
+
+- `cli.stop_block` lost its dead `name` parameter: no caller passed it, and its guard site could not be killed. This
+  changes no behaviour.
+- `vm2.py`'s docstring now names v2.1. Every printed or recorded version was already `cps-vm-helper.v2.1`.
+- `tests/seen.py`, the runtime half of L1, now records:
+  - a refusal line with a detail word, such as `REFUSED RAW_INVALID missing` or `REFUSED <slip> <name>`;
+  - a STOP line with `name=`;
+  - the slip refusal `emit` prints;
+  - only the code word of a returned `CODE detail`;
+  - from `on_found`, its stop codes only (not the file name of a handback).
+
+  Before this change the first full run failed L1 on RAW_INVALID, FINAL_MESSAGE_INVALID and PLACE_TARGET_NOT_EMPTY,
+  and the second on file names that were recorded as codes.
+- New glue tests in `test_vio.py` close the 37 glue guard survivors that T left open. Each has a GUARD_TESTS entry:
+  - `t_d11_stop_block_sticky_only_for_handback_c`
+  - `t_d11_clear_check_routes_found_only_to_its_find`
+  - `t_d11_session_slip_voids_only_its_name`
+  - `t_d11_head_download_slips_and_no_block`
+  - `t_d11_link_copy_download_keeps_the_head`
+  - `t_d11_session_download_names_kept`
+  - `t_d11_local_download_checked_at_go`
+  - `t_d5_settle_root_mode_link_and_file_targets`
+  - `t_d11_drill_genesis_refuses_existing_ledger`
+  - the extended `t_op02_reprint_has_no_upload_lines`
+
+  `t_maint2_inventory_rehashed_at_attest` now makes the read-only installed TOOL_INVENTORY.txt writable before it
+  changes the file. Only the non-root pass found this fixture bug. `test_v1_regressions.py` map texts no longer name
+  deleted features.
+- `tests/mutants.py`:
+  - The glue set now runs its direct tests, and its survivors run stage 2 (§2.15.2).
+  - Ten EQUIVALENT entries were added: go_checks-3, -4, -5, -6, -7, -9 and -10, session_downloads-3, and settle-1
+    and -2.
+
+### 8.2 Test runs
+
+Each run started from a `bin/testclone.sh` snapshot, with `--jobs 4`.
+
+| run | tests | passed | wall | uid / CapEff |
+|---|---|---|---|---|
+| root, full suite (final, `full3`) | 557 | 557 | 3,135 s (52.2 min) | 0 / full root |
+| root, full suite (first, `full1`, under load from two mutation runs) | 548 | 547 (L1) | 3,573 s | 0 |
+| root, full suite (second, `full2`, idle machine) | 557 | 556 (L1: file names recorded as codes) | 3,099 s | 0 |
+| non-root pass `--only nonroot` (final, `nr4`) | 245 | 245 | 875 s | 1000 / 0 |
+| non-root pass (`nr2`, first valid run) | 245 | 244 (fixture bug, fixed) | 921 s | 1000 / 0 |
+
+- Non-reset suites took 628 s in the final run. test_vio alone took 483 s, so the non-reset budget of §5.2
+  (<= 5 min) is not met.
+- test_resets took 2,457 s for 208 scenarios.
+- The non-root pass ran `setpriv --reuid=1000 … --inh-caps=-all --bounding-set=-all` in a folder owned by uid 1000,
+  with `--only nonroot --require-nonroot`. Its first valid run found the fixture bug above. Its time, 875 s, is over the
+  10 min budget of §5.2.
+
+### 8.3 Mutation runs
+
+| set | mutants or sites | killed | survivors | survivors with an EQUIVALENT argument |
+|---|---|---|---|---|
+| hand W, reviewer N, legacy (G, M, B, C) | 179 | 179 | 0 | – |
+| of which non-root W106, W107 (uid 1000, CapEff 0) | 2 | 2 | 0 | – |
+| guard, core set (fold 545, session 202) | 747 | 730 | 17 | 17 |
+| guard, glue set | 168 | 150 | 18 | 18 |
+| selftest (W45a HARNESS_ERROR, W45b not KILLED, W13 KILLED, generator sites) | – | ok | – | – |
+
+**Snapshots.** The mutation runs used earlier snapshots of the same helper code: hand, reviewer, legacy and core at
+c196846, glue at d202d58. The test-only changes made after them are the seen.py recording, the faster stop of
+`t_d11_head_download_slips_and_no_block`, and the TOOL_INVENTORY chmod. Only the second one touches a killing test,
+and it makes that test fail sooner, not later. The final suites ran at full3 and nr4, which have the same helper tree
+sha256.
+
+**What G-1 has to rule on.** G-1 reviews every EQUIVALENT entry. Two kinds need particular attention:
+- Five fold entries rest on state invariants that every fold effect keeps: g10-12, g10-15, g24-2, g42-9 and
+  _items_check-5.
+- `GM-cli-go_checks-4-r` rests on a crash window: a stale BLOCK.json whose files are all present.
+
+**Reviewer proof table (TG-09 table 1).**
+- All 11 N mutants are KILLED at v2.1 with T's ports.
+- At 2015773, the "passes" and "fails with the original substitution" columns hold for N04, N05, N06, N07, N37, N44,
+  N50 and N52 (T's `proof_n2.json`).
+- N40 and N42 change code at their rows (T7, T8), so their test already fails on plain 2015773.
+- N18's v2.1 fixture does not fit the 2015773 head_search, which has no `via` key.
+
+### 8.4 Lines (D2)
+
+C total 7,737 (baseline 7,566, cap 7,500), M total 896 (baseline 830, cap 896), all 8,633 (baseline 8,396).
+**D2 is not met.** C is 237 over its cap and the total grew by 237 lines, almost all of it in `cli.py` (+179). The
+§5.1 contingency deletions were not made at integration. No behaviour may be removed for a budget, and the docstrings
+are already short. The per-module table is in INTEGRATION.json `lines_D2`.
+
+### 8.5 Operator budget (D15)
+
+The harness counts were measured on invented jobs with FakeDot.
+- **Per run.** These counts equal `tests/budget_golden.json` and README §7:
+  - a normal run: 16 helper commands, 15 + 3p Drive calls (54 with the harness's 13 PNG parts), 6 saved results;
+  - a nonattempt: 2, 3 and 1.
+- **Per series start and end.**
+  - D baseline: 16 helper commands, 14 Drive calls, 7 saved results.
+  - Q baseline: 25, 20 and 11.
+- **Per restore.** Helper commands and saved results are counted to the end of the session, the RECHECK included.
+  Drive calls are counted to the RESTORE's own download-back.
+  - with the Dot's hint: 18 helper commands, 15 Drive calls, 8 saved results, 2 waits;
+  - with only the commit line: 39, 46 and 14;
+  - with no notes (step 0): 24, 23 and 13. This journal has 5 to 6 entries. README's "about 120" without notes
+    assumes about 400 entries and was not measured.
+
+README §7's qualification total (about 3,600 tool calls) still rests on these per-item counts plus G-3's polls and
+conversation steps.
+
+### 8.6 Open after integration
+
+(746ea98. §8.0 closes the MAINT-1/MAINT-5 defect, D2 and D14.)
+
+- **Plan defect: MAINT-1 and MAINT-5 together block Q/D scoring.** This was found by track M and is not resolved:
+  - assemble writes only under a dedicated `--root`;
+  - runner v4's verify-frozen finds a run only at its original absolute path;
+  - so a Q/D assembly is ASSEMBLE UNCLEAN and score_check refuses ASSEMBLE_NOT_VERIFIED.
+
+  This fails closed, but drill G-4 cannot end CONSISTENT until the planner decides how verify-frozen is run (for
+  example, a mount namespace that shows the root at the original base, or an owner-approved exception). D_baseline
+  asserts the fail-closed result.
+- D2 is over its line caps (8.4).
+- D14: the full suite took 52.2 min, which is over the 50 min target and under the 60 min ceiling. The non-reset
+  suites and the non-root pass are over their §5.2 budgets.
+- Every EQUIVALENT entry (17 core and 18 glue) waits for G-1.
+- The release gates G-1 to G-11 belong to the Dot, the owner or the reviewers, and none of them was run.
+
+---
+
+## 9. Post-build amendment from probes M008-M012 (2026-11-12)
+
+This section amends the v2.1 candidate at `a2298cb` with what the Dot's replies to probes M008 to M012 showed
+(`docs/handoff/PROBE_RESULTS_20261110.md`). **Nothing here is reviewed or admitted.** The runner `deploy/run/cps_job.py`
+stays byte-identical (runner v4, sha256 `7505e98a…f431`). Where this section and an earlier one differ, this section
+holds; README.md is the operator text (it already differed from §3's draft after the fix round, §8.0).
+
+The platform facts it rests on (the probe record is authoritative):
+- The Dot's command tool has two routes, chosen per command by `sandbox_permissions`: the standard route
+  (`use_default`) writes `/tmp`, `/dev/shm`, `/var/tmp` and the command's working folder, not `/home/agent` or
+  `~/cps-tools` (M011, M012); the elevated route (`require_escalated`) writes everywhere tested, but each request goes
+  through an automatic review that can time out, and a request the review stopped has not run (M011).
+- Both routes see the same files and the same boot id, and a `flock` blocks across commands and routes (M011).
+- Each command has its own process space; process ids are small and repeat (M010).
+- The runner's suite passed 249/249 through the standard route alone, with the repository copy, `--work` and `TMPDIR`
+  under `/tmp` (M012, 636 s).
+- A running command died once when the Dot's command host was replaced while a separate child conversation ran it
+  and the coordinating conversation waited (M008; cause unknown); it survived progress notes, owner messages and one
+  wait and wake-up in the coordinating conversation (M009, M010).
+- `/home/agent` and `/tmp` are separate 4.9 GB tmpfs (P3). M009's 403-page invented render wrote about 550 MB.
+
+### 9.1 One row per item
+
+| item | change (files: functions) | tests | mutants | track |
+|---|---|---|---|---|
+| A1 base under `/tmp` | `session_start.sh`: BASE only from `CPS_VM_BASE`, no default (missing: `STOP SESSION_LAYOUT`); a base inside HOME, or a path with whitespace, a quote, `$`, a backslash or a backquote is `SESSION_LAYOUT` (the same characters `host.layout_paths_ok` refuses); creates `BASE/tmp`; `vm.sh` starts with `export CPS_VM_BASE='<BASE>' CPS_TOOLS='<TOOLS>'`. README §1: the bootstrap block exports `CPS_VM_BASE=/tmp/cps` and clones into `/tmp/cps/repo`; every README path `/home/agent/cps/...` is `/tmp/cps/...`. `names.copypath` and `cli.delivery_commit`: the personal copy is under `BASE/deliveries/<case>/<user>/<utc14>/` (was `$HOME/cps-deliveries/...`, which the standard route cannot write); `cli.Env.idcfg` passes `base`. `host.Paths.deliveries` (dead) and its `Path` import deleted. Maintainer side: `maint/assemble.py` unchanged (see the test). Fix round (§9.8): the HOME check compares resolved paths (G5), the clear message is the README §1 block filled in (PF-2), and the personal copy's place needs an owner update of DEPLOYMENT_MODEL.md (PF-9, OQ-29) | v1r `test_a1_base_required_outside_home_and_carried_by_launcher`; mt `test_a1_verify_view_root_under_tmpfs_ancestor`; cod `test_transcript_and_copy_codes` (extended); ct `test_names_patterns` (extended); the session_start tests and FakeDot moved to a base outside HOME | W116, W117, W118, W119, W129 (fix round: W134, W135, W139) | C; M (test only); T; owner (OQ-29) |
+| A2 routes | README §1 (the bootstrap through `require_escalated`, as one command) and §2 "Routes" (everything else through `use_default`; never move a failed helper command to the elevated route; no standing approval; `prefix_rule` empty). No code | lint `t_l14_readme_rules` | W130 | C (README); T |
+| A3 operating rules | README §2.4 rules 1-7; README §3 `WAIT` is `sleep N` in the foreground. Code: `durable.DurableError.code` maps EROFS to `READ_ONLY_FS`; `cli.run_stage` maps a stage's OSError through it; `cli.main` turns an OSError before the lock, and one that escapes `run_command` (for example while a STOP is handled), into the bare STOP block; `cli.safe_stop(None, code)` prints that block. Fix round (§9.8): rules 1, 3, 5, 6 and 7 restated, rule 8 added (PF-1, PF-3 to PF-7, CC-4, CC-5); an EROFS inside a stage has its own test (G3) | cod `test_a3_erofs_ends_in_stop_block`, `test_g3_erofs_inside_a_stage_stops_read_only_fs`; lint `t_l14_readme_rules` | W120, W121, W131 (fix round: W136, W140-W142) | C; T; owner (OQ-28) |
+| A4 pid-named leftovers | `v1mod.cleanup_leftovers` (every command, under the lock, before anything else reads BASE) also removes `runtime/.tmp_[0-9]*_*` (a killed `write_atomic`), every hidden file in `inbox/journal` (a killed placement's `.png_stream_<pid>`, a killed durable write's temp file) and `qual/*/.validate_*` and `jobs/*/.validate_*` (the runner's validation folder of a killed `prepare`). The audit of the other names is §9.3. No reused segment changed (`write_atomic` and `unpack_kit` stay byte-identical); REUSE_MANIFEST.json unchanged. The runner fix (`vdir.mkdir()` without `exist_ok`, `cps_job.py` prepare) remains a runner v5 item | vio `t_a4_stale_temp_names_in_runtime_ignored`, `t_a4_stale_png_stream_and_validate_removed`; rs `D_sameboot_damaged_cache_restores` (plants `.tmp_2_VM_HELPER_CONFIG.json` and `.tmp_3_x` in runtime before its same-boot restore with a run in flight) | W122, W123, W124 | C; T |
+| A5 partial wipes | `cli.run_stage`: a stage needs `TOOLS/var/cps_vm2_setup_ok` naming this boot and the checkout's commit, else the non-sticky `STOP SETUP_MISSING HANDBACK C` before FOREGROUND.json, BASE/tmp and the runner (no HALT.json; the next `go` after the bootstrap continues). README §1: run the bootstrap when `/tmp/cps/vm.sh` or `~/cps-tools/env.sh` is missing, and what SETUP_MISSING means. The scenarios are §9.4 | rs `D_base_wiped_same_boot_restores`, `D_tools_wiped_same_boot_continues`; vio `t_a5_stage_stops_setup_missing` | W127 | C; T |
+| A6 runner's TMPDIR | `cli.run_stage`, under the lock, before every stage (and before the space check): removes `BASE/tmp` (with `remove_tree`, so read-only folders go too), makes it again and sets `TMPDIR` to it in the helper's environment, which `run_runner` and the self-test pass to every child (`env=os.environ.copy()`). `session_start.sh` creates `BASE/tmp`. vm.sh does not set TMPDIR; the helper does, so a stage gets it however the helper was started | vio `t_a6_stage_empties_tmp_and_sets_tmpdir` (a chain and a place stage) | W125, W126 | C; T |
+| A7 disk on `/tmp` | §5.4 restated (sizes, peak per stage, memory). `names.STAGE_FREE_BYTES` 1,000,000,000 -> 1,500,000,000: the finish stage's projected peak on `/tmp` is about 1,116 MB once TMPDIR and the job folder share it. README §7 "Disk". Fix round (§9.8, CC-2): 2,000,000,000, for the commit inside the stage and the download-back after it (about 1,770 MB) | vio `t_d16_stage_refuses_low_space_before_runner` (now asserts the value covers 3 x 590 MB, §9.8), `t_g2_tmp_emptied_before_space_check` | W108 (unchanged), W128, W137, W132 | C; T |
+| A8 G-3 | §1.3 G-3 and §5.4 restated from M009: 619 s for 403 pages; `pdftoppm` alone 706 s against 900 s (78%); projection 350 to 550 s; 1.5 x 550 + 60 = 885 <= 1,200; values set only from measurements. No code | none (gate) | none | gate G-3 |
+| A9 G-4 | §1.3 G-4 extended (standard route with BASE `/tmp/cps`; a real-size render through the helper's finish stage; free space at every stage start and its lowest value; `/tmp/cps` across a turn end and a wake-up; every review-stopped request; the bootstrap's network commands through the elevated route, a standard-route `git fetch` as a recorded side test). No code | none (gate) | none | gate G-4 |
+| A10 lints, samples, budgets | L14 checks the new README sentences (routes, rules 3-7, the codes, the `/tmp/cps` paths, the disk need) and the absence of `/home/agent/cps`, `~/cps/` and `~/cps-deliveries`. `tests/budget_golden.json` unchanged: no counted helper command, Drive call or saved result changed (the full suite's `test_opx10_tool_calls_match_budget_golden` and L14 pass against it). The README doc samples are unchanged (no new `<...>` token) | lint `t_l14_readme_rules`, `t_l6_readme_examples_refused`, `t_l1_codes_registered_and_tested` | W130, W131 | T |
+| A11 lines | D2a below | `wc -l` over the modules of §5.1 | none | C |
+| A12 records | this section; §0, §1.3 (G-3, G-4), §2.16.5, §5.4, §6.2, §6.3; README version line; INTEGRATION.json `amendment`; MUTANTS_RESULTS.json of each run | none | none | integrator |
+
+G-10's list of upload folders does not change: the amendment adds no UPLOAD line and moves no Drive folder.
+
+### 9.2 Decisions, codes and D2a
+
+- **SD-72 (A1): the base comes from the bootstrap block, not from the script's location.** The block names
+  `/tmp/cps` once, where the Dot reads it, and `session_start.sh` already checks that it runs from `BASE/repo`. Taking
+  the base from the script's location would make a clone left at the old `~/cps/repo` silently use `~/cps`, which
+  the standard route cannot write. A missing `CPS_VM_BASE` is `STOP SESSION_LAYOUT`; a base inside HOME is refused
+  for the same reason (W116 puts back a silent default from the script's location; W117 accepts a base inside HOME).
+- **SD-73 (A7):** `STAGE_FREE_BYTES` = 1,500,000,000 (§5.4). Superseded by SD-77 (§9.8): 2,000,000,000.
+- **SD-74 (A5):** `SETUP_MISSING` is a non-sticky STOP (like RELEASE_GATE_OPEN it writes no HALT.json): the cure is the
+  bootstrap, and nothing of the journal is lost. It is printed by `emit` directly; `stop_block` is unchanged. Since
+  §9.8 (SD-79) the Dot runs that bootstrap itself, once.
+- **SD-75 (A1):** COPYPATH is `BASE/deliveries/<case>/<user>/<utc14>/<file>`.
+- **SD-76 (A3):** a `WAIT seconds=N` block is a foreground `sleep N` through the standard route, never a platform wait
+  or wake-up.
+- **New codes.** `READ_ONLY_FS` (CODES_STOP): the helper's STOP for an EROFS, and the code the Dot tells the owner for
+  any `Read-only file system` line (README §2.4 rule 7). `SETUP_MISSING` (CODES_STOP). `REVIEW_STOPPED`: the Dot's
+  own code (README §2.4 rule 6) for a request the automatic review stopped twice; like `NO_BLOCK` it is in the README
+  and checked by L14, not in `names.CODES`, because no helper command prints it and L1 requires every registry code to
+  be printed in a full run.
+- **D2a (lines).** The caps of §5.1 were C <= 7,500, M <= 896, total <= 8,396; at `a2298cb` C was 7,496, M 896, total
+  8,392. The amendment needs these lines (C):
+
+  | module | a2298cb | amended | change | why |
+  |---|---|---|---|---|
+  | cpsvm2/cli.py | 1,663 | 1,672 | +9 | run_stage: the SETUP_MISSING check (2), emptying BASE/tmp (2), TMPDIR (1); main: two `except OSError` clauses (4); safe_stop: the bare block for env None (1); `import errno` no longer used (-1) |
+  | cpsvm2/vio/durable.py | 134 | 135 | +1 | the READ_ONLY_FS code |
+  | cpsvm2/vio/v1mod.py | 256 | 257 | +1 | the `.validate_` glob (the runtime and inbox globs fit the existing lines) |
+  | session_start.sh | 79 | 80 | +1 | the base-outside-HOME check |
+  | cpsvm2/vio/host.py | 190 | 188 | -2 | dead `Paths.deliveries` and its import deleted |
+  | cpsvm2/core/names.py | 259 | 259 | 0 | two codes, the stage value, copypath (changed lines) |
+
+  C becomes 7,506 (+10), M stays 896, the total 8,402. No code that a mutant substitution or a guard site depends on
+  was cut to meet the cap. **New caps (D2a): C <= 7,506, M <= 896, total <= 8,402.**
+
+### 9.3 A4: every pid-named path in cpsvm2
+
+| path | where | verdict |
+|---|---|---|
+| `runtime/.tmp_<pid>_<name>` | `v1reuse.write_atomic` (VM_HELPER_CONFIG.json) | **defect**: `unpack_kit` reads every file of runtime/, so a leftover is an extra kit member (KIT_CHANGE_WITH_RUN_IN_FLIGHT, or a reinstall). Fixed by the cleanup glob (A4a) |
+| `inbox/journal/.png_stream_<pid>` | `place.place_job` | **defect** (growth): a same-pid leftover is overwritten, but one of another pid stays for the rest of the boot (up to about 550 MB each). Never read by pattern. Fixed by the cleanup glob (A4b) |
+| `<jobs root>/.validate_<case>_<pid>` | runner v4 `prepare` (`make_job_config`) | **defect** (runner): a same-pid leftover makes the next prepare of that case crash (`mkdir` without `exist_ok`). Mitigated by the cleanup glob (A4c); the runner fix is a runner v5 item |
+| `BASE/.cps_vm_stage_ledger_<pid>` | `cli.genesis`, `place.place_ledger` | not a defect: a same-pid leftover is removed before `mkdir`; another pid's by `cleanup_leftovers` (`BASE/.cps_vm_stage_*`) at the start of every command |
+| `<parent>/.cps_vm_stage_<name>_<pid>` | `v1reuse.Staging` (place_job), `v1mod.place_frozen` | not a defect: `Staging.begin` removes every `.cps_vm_stage_<name>_*` first, `place_frozen` removes its own name first, and `cleanup_leftovers` removes `qual/*/` and `jobs/*/` ones; `Layout.job_folders` skips dot names |
+| `outbox/journal/.tmp_png_<pid>_<nnn>.tmp` | `savepoint` PartWriter | not a defect: `_open` unlinks an existing name; another pid's goes with `outbox/journal/.tmp_*` at the next command; the commit reads only the paths it wrote |
+| `<dir>/.tmp_<pid>_<random>_<name>` | `durable.write`, `v1reuse.write_new` | not a defect: a random part, the temp file is removed on every error, and only a kill inside the write leaves one. Files are read by exact name, never by pattern. In outbox, outbox/v2 and outbox/journal the cleanup removes it; in inbox/journal now too (A4b); in attest/ and BASE/deliver it stays until a reset (bounded by the number of kills, never read). One in a job folder (the generation record, written in a stage) belongs to a stage that died: FOREGROUND_DIED, and the clear's settle moves that folder aside |
+| `<root>/.../.cps_vm2_png_<pid>` | `maint/assemble.py` | not a defect: removed in `finally`; a killed assemble leaves its root non-empty, and assemble refuses a non-empty root (ROOT_INVALID), so the maintainer uses a new root |
+| `FOREGROUND.json` `pid`, selftest `RUN.json` `pid` | `cli.run_stage`, `v1reuse.selftest_work` | not a defect: recorded only; `foreground_check` decides by the boot id, never by the pid |
+| `outbox/selftest_<utc14>/.tmp_<pid>_RUN.json` (added by §9.8, G6) | `v1reuse.write_atomic` in `selftest_work` | not a defect: each attempt has its own `selftest_<utc14>` folder, `finish_selftest` reads `RUN.json` by its exact name, and the folder is never uploaded, listed or walked; `cleanup_leftovers` removes only `outbox/.tmp_*` at the top level, so a killed self-test's temp file stays for the boot (one per killed attempt, at most two attempts per boot) |
+
+### 9.4 A5: the two partial wipes
+
+- `D_base_wiped_same_boot_restores` (i): at head 5 of the D world BASE is removed in the same boot; TOOLS and the setup
+  marker of this boot and commit stay. The Dot runs the bootstrap with its notes (README §1: `vm.sh` is missing). No
+  setup runs (no `CPSV-RUNNING`, the marker unchanged), BASE is made again, and the session restores from the Drive
+  journal. The RESTORE has the boot id of the entry before it, and AUDIT.json lists its seq in `same_boot_restores`;
+  the audit is clean and the series ends FINAL.
+- `D_tools_wiped_same_boot_continues` (ii): at head 3 TOOLS is removed in the same boot; BASE stays. The next stage
+  stops `STOP SETUP_MISSING HANDBACK C` (twice: it is not sticky), with no HALT.json and no FOREGROUND.json. The setup
+  runs again (simulated as in every World; the real setup is SAFE-07's, not run in tests) and the Dot runs the
+  bootstrap; the next `go` continues from BASE: no RESTORE after the wipe, the cache's boot unchanged, FINAL, clean
+  audit. Without the check (W127) the stage starts without the toolchain and the scenario never sees SETUP_MISSING
+  (W127 is killed by this scenario and by vio `t_a5_stage_stops_setup_missing`).
+- After a real reset both are gone and the boot id changes: the existing restore path, unchanged.
+
+### 9.5 Deviations from the amendment's brief
+
+- **core_world's base stays `/home/agent/cps`.** It is an invented string in the pure core tests (fold and session
+  never touch a file). Changing it rewrites two reviewed guard oracles: `tests/perturb_golden.json` (780 of 2,776
+  cases change their outcome hashes, and 8 of them also their count of T32 outcomes, because the perturbations are
+  drawn from the state) and `tests/session_golden.json` (677 of 709), plus 5 rows of `tests/guard_witnesses.json`.
+  That needs its own review of the oracles and buys nothing on the Dot, so it was tried, measured and reverted. HOME
+  stays `/home/agent` in every test, as on the Dot. Every test that runs `session_start.sh` or a World now uses a base
+  outside HOME.
+- **TMPDIR is set by the helper, not by vm.sh** (A6 allowed either): `cli.run_stage` sets it, so a stage gets it however
+  the helper was started, and the in-process test worlds can check it.
+- **The personal copy moved** (beyond the README paths the brief lists): under the routes of A2 the Dot writes every
+  file for the helper through the standard route, which cannot write `$HOME/cps-deliveries` (SD-75). This conflicts
+  with the owner's `DEPLOYMENT_MODEL.md` (authority 1), which names `~/cps-deliveries/<case id>/<user>/<time>/`, and
+  with the private operating documents: an owner update is needed before everyday use (§9.8 PF-9, OQ-29).
+- **A5 needed code:** the SETUP_MISSING stage check (SD-74). Without it a stage would run without the toolchain after
+  TOOLS was wiped in the same boot.
+- **A4a is fixed by removing stale names under the lock, not by a unique temp name:** `write_atomic` is a reused
+  segment pinned by REUSE_MANIFEST.json, and with the removal at the start of every command a same-pid leftover is
+  truncated and replaced, another pid's is gone; no reused segment changed.
+- **README §3 `WAIT`** is now a foreground `sleep N` (SD-76), which rule 3 needs; the brief did not name it.
+- **D2a:** C is 6 lines over the r4 cap (§9.2).
+- **The two new reset scenarios are not in the `nonroot` group** (with them the non-root pass, 8.5 min, would go over its 10 min budget); the
+  new vio tests are in it, so `t_a4_*` and `t_a6_*` (read-only folders) ran as uid 1000.
+- **One test-only change after the first full suite:** W15 survived the first hand run, because `cli.main`'s new
+  `except OSError` also ends an OSError that escapes `run_command` in a STOP block (a bare one). `test_s11_oserror_outside_stage_prints_stop_block`
+  now also requires run_command's own block (the journal's header and HALT.json DISK_FULL). The full suite, the
+  non-root pass and W15 (with the two nonroot mutants) then ran again at the final tree (§9.6).
+- **`tests/budget_golden.json` was not re-measured:** no counted helper command, Drive call or saved result changed, and
+  the full suite's golden comparison passed against it.
+- **Delta §3 is not rewritten;** README.md is the operator text (as after §8.0).
+
+### 9.6 Runs
+
+Every run started from its own `bin/testclone.sh` snapshot of the working files, `--jobs 4`, on a 4-CPU machine, one run
+at a time. The helper tree sha256 of every run is `3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871`
+(the committed deploy/vm2 tree; tests are outside it). MUTANTS_RESULTS.json of each run records the tree and the
+snapshot commit; TEST_RESULTS.json of these runs records the tree only (corrected by §9.8: since the fix round
+TEST_RESULTS.json and MUTANTS_RESULTS.json also record `snapshot_commit` and `vm2_git_tree`, the git tree of
+deploy/vm2 with its tests). INTEGRATION.json `amendment.build_runs` keeps them; these runs are of 2cfaac5's tree and are
+superseded by §9.8.6.
+
+| run | snapshot | result | wall | uid / CapEff |
+|---|---|---|---|---|
+| root, full suite, before the S-11 test change | 98255a9 | 568 / 568 passed | 2,658.8 s (44.3 min) | 0 / full root |
+| non-root pass `--only nonroot --require-nonroot`, before the S-11 test change | 97e5b49 | 251 / 251 passed | 510.6 s | 1000 / 0 |
+| hand set (W01-W131), before the S-11 test change | 25873f9 | 129 of 132 killed; W15 SURVIVED (above); W106, W107 NOT_RUN (no `CPSVM2_NONROOT_DIR`) | 1,335 s | 0 |
+| reviewer N and legacy (G, M, B, C) | d9f129b | 68 / 68 killed | 415 s | 0 |
+| W15, W106, W107 at the final tree (W106 and W107 as uid 1000) | 4ee9d96 | 3 / 3 killed (W106, W107 by their non-root tests) | 13 s | 0; 1000 / 0 for W106, W107 |
+| non-root pass at the final tree | dcbcb95 | 251 / 251 passed | 509.2 s | 1000 / 0 |
+| root, full suite at the final tree | 58811c2 | 568 / 568 passed | 2,692.0 s (44.9 min) | 0 / full root |
+| guard, glue set: the 81 sites of cli.py (the only changed module with guard sites; the other 87 glue sites and the core sets are in unchanged functions) | 275145a | 81 sites, 73 killed, 8 survivors (GM-cli-go_checks-3-r, GM-cli-go_checks-4-r, GM-cli-go_checks-5-r, GM-cli-go_checks-6-r, GM-cli-go_checks-7-r, GM-cli-go_checks-9-r, GM-cli-go_checks-10-r, GM-cli-session_downloads-3-r), 8 of them with their EQUIVALENT entry | 2,555 s | 0 |
+| trial of W116-W131 during the build (tree 5165cf4a, one docstring line earlier) | 52af8bb | 16 / 16 killed, every listed killer failing | 240 s | 0 |
+
+The generated guard ids are unchanged: the 168 glue ids (81 of cli.py) and the core ids are the same as at `a2298cb`,
+because no function with guard sites changed (`stop_block`, `go_checks`, `clear_check` and the other glue targets are
+untouched; `run_stage`, `main`, `safe_stop` and `delivery_commit` have no guard sites). Every EQUIVALENT argument keeps
+its id; none needed a new one.
+
+D14 at the final tree: full suite 44.9 min (target 50, ceiling 60) with 568 tests (559 at `a2298cb`: seven new tests
+and two new reset scenarios); the non-reset suites 260.1 s (budget 300 s), test_resets 2,377.0 s for 210 scenarios,
+the lints 54.9 s (budget 120 s); the non-root pass 509.2 s for 251 tests (budget 600 s).
+
+### 9.7 Open after the amendment
+
+- Runner v5 (owner decision): `make_job_config`'s `.validate_<case>_<pid>` folder is made without `exist_ok`; the helper
+  only removes stale ones before each command (A4c).
+- Not pid-named and not changed: a command killed inside `unpack_kit` of an empty runtime leaves a partial runtime; with
+  a run in flight the next kit check stops KIT_CHANGE_WITH_RUN_IN_FLIGHT (fail-closed, a maintainer clear).
+- A same-boot TOOLS wipe found mid-session waits for a maintainer message (SETUP_MISSING is HANDBACK C), although the
+  bootstrap alone cures it; README §1 asks the Dot to check `~/cps-tools/env.sh` when its work starts.
+- After a TOOLS re-setup the chain prologue's fingerprint check (O47) decides whether the toolchain is the same; the
+  World simulates an identical setup only.
+- Gates: G-3 (the measurements through the helper), G-4 (the drill with A9's additions), G-1 (review 3) and the rest
+  are not run. OQ-24 and OQ-25 stay open. The `pdftoppm` margin (78% of 900 s) is the owner's (§5.4 rule step 5).
+- Not shown by any probe: the helper's own commands and a real-size render through the standard route with BASE
+  `/tmp/cps`, any network command through either route, whether a tool writes under the read-only HOME and carries on
+  silently, and the memory peak on `/tmp`.
+- Every EQUIVALENT entry (17 core, 18 glue) still waits for G-1.
+- Added by the fix round (§9.8). Not shown by any probe, and each is now a G-4 record: (a) that a Create Thread
+  conversation sees and writes `/tmp/cps` (P1 tested only `$HOME`; V writes `F/visual_review/VISUAL_REVIEW.json`
+  there); (b) that the Drive upload tool reads an UPLOAD file under `/tmp/cps/outbox` (M012 mentions a separate upload
+  copy); (c) that a `flock` held by a standard-route command blocks other commands (M011 tested an elevated holder
+  only, and every helper lock is now standard-route); (d) the memory at stage start (`/tmp` and `/home/agent` are both
+  RAM tmpfs; an out-of-memory kill would look like FOREGROUND_DIED). Also what a scheduled mailbox check does while a
+  helper command runs, and whether `/tmp/cps` survives a reset that empties `/home/agent`.
+- OQ-28 (the mailbox check against a series longer than 6 hours) and OQ-29 (the personal copy's place in the owner's
+  documents) are the owner's.
+- After `STOP SETUP_MISSING` whose bootstrap's setup failed, the second SETUP_MISSING leaves the setup log in
+  `/tmp/cps/outbox` without uploading it (the session's SETUP_FAILED upload runs only in a session restore); the Dot
+  then waits for the maintainer, who asks for the log.
+
+### 9.8 Fix round: the critics' gaps on 2cfaac5 (2026-11-12)
+
+Three critic lenses (platform, code, completeness) reviewed the amendment at `2cfaac5` and reported 27 gaps: PF-1 to
+PF-11, G1 to G8 and CC-1 to CC-8. Several are the same gap seen through two or three lenses (PF-2 = G1 = CC-1; PF-5 =
+CC-4; PF-6 with CC-5 and the README half of G3; G6 = CC-8; G7 = CC-6; PF-11 with CC-7). **Nothing here is reviewed or
+admitted.** The runner stays byte-identical (sha256 `7505e98a…f431`).
+
+**Reproduced first.** At a fresh snapshot of `2cfaac5` the critics' own mutants X1 (the space check before BASE/tmp is
+emptied), X2 (the runtime glob for one-digit pids only), X3 (a base equal to HOME accepted), X4 (an EROFS inside a stage
+mapped to WRITE_FAILED) and X5 (the README bootstrap block without its export line) all SURVIVED their tests again
+(`amend_fix/keep/repro_own_mutants.json`). In a fresh shell (`env -i`), the one-line clear of §2.4.2 with the base path
+printed `DO: STOP SESSION_LAYOUT HANDBACK C` (exit 3), and the same line after `export CPS_VM_BASE=...` bootstrapped
+(exit 0). The documentation gaps were checked against `PROBE_RESULTS_20261110.md`, `DOT_MAILBOX_PROTOCOL.md` (step 3:
+the 6-hour claim rule) and `DEPLOYMENT_MODEL.md` (the personal copies' place). No gap was rejected.
+
+#### 9.8.1 One row per gap
+
+| gap | verdict | change (files: functions) | test | mutant |
+|---|---|---|---|---|
+| PF-2 = G1 = CC-1 (major) | real | The maintainer's clear message is the README §1 bootstrap block with `COMMIT`, `--hint` and the new `--kit` filled in, run exactly, as one command through `require_escalated` (SD-78). README §1 ("A maintainer's bootstrap"; never `session_start.sh` alone), §2 "Routes" (also one a maintainer message gives you), §6; §2.4.2 marked superseded. `tests/fakes.py`: `bootstrap_script` (the block as the Dot and a clear message run it) and `dot_env` (FakeDot's bootstrap runs without `CPS_VM_BASE` and `CPS_TOOLS`, as a fresh shell on the Dot) | v1r `test_pf2_clear_bootstrap_runs_in_a_fresh_shell` (the block in `env -i` bootstraps; the one-line form stops SESSION_LAYOUT and writes nothing); lint `t_l14_readme_rules`; every World bootstrap and every clear of test_resets now depends on the block's export | W139, W140 |
+| CC-3 | real | as PF-2: the bootstrap block's export line is checked where it is (L14: exactly one `export CPS_VM_BASE=/tmp/cps` line, before the `session_start.sh` line, inside the bootstrap markers) and exercised in a shell without a preset base | lint `t_l14_readme_rules`; v1r `test_pf2_clear_bootstrap_runs_in_a_fresh_shell` | W139 (the critic's mutant; a World bootstrap that stops is never counted as a kill, §2.15.4, so the two direct tests carry it) |
+| PF-1 (major) | real | README §2.4 rule 8: the mailbox check's 6-hour rule as `DOT_MAILBOX_PROTOCOL.md` step 3 has it (a claim younger than 6 hours: nothing; 6 hours or older: `REPLY_ABANDONED_`, the owner told, later runs take the next open message). A drill or qualification series starts only when the message that starts it says how the check is handled for the series; otherwise the Dot tells the owner `MAILBOX_UNSETTLED` (case C) and runs no `go` (SD-80). §2.2 step 1 points to it. Owner track OQ-28. G-4 records what a check does while a helper command runs, and once a claim is 6 hours old | lint `t_l14_readme_rules` | W142 |
+| PF-3 (major) | real | README §2.4 rule 3 covers an open S, G or V conversation as well as a running helper command: no turn end, no platform wait or wake-up, `sleep 300` in the foreground (standard route) between checks; the owner line is now `CPS paused while a helper command or a CPS conversation ran: reply continue to resume.` README §3 OPEN_CONVERSATION and CONTINUE_CONVERSATION and §7 say the same. G-4 records whether the conversation's work survives those checks | lint `t_l14_readme_rules` | W141 |
+| PF-4 | real | README §2.4 rule 1: the coordinating conversation (the one the owner or a user talks in, which `CLAIM.md` names); a worker or a scheduled check (for example a mailbox check run by a worker) never runs the bootstrap or a helper command | lint `t_l14_readme_rules` | none (README text; L14 holds the sentence) |
+| PF-5 = CC-4 | real | README §2.4 rule 6 covers command requests only; uploads are never retried and follow §3.1 | lint `t_l14_readme_rules` | none (as PF-4) |
+| PF-6, CC-5, G3 (README half) | real | REVIEW_STOPPED: ask the owner to approve; when the owner says it is approved, run the command again, rule 6 applying afresh. READ_ONLY_FS seen by the Dot: case C. Rule 7's last sentences: the helper prints `STOP READ_ONLY_FS HANDBACK C` for its own writes; a read-only error inside the runner's tools shows as another stop of the helper (for example RUNNER_REFUSED; `run_runner` captures the tools' output), whose block the Dot follows. The post-action and evict handlers keep their codes (POST_ACTION_FAILED, EVICT_FAILED): each already ends in a full STOP block with HANDBACK C, so A3 holds, and the Dot's action is the same | lint `t_l14_readme_rules` | none for the text |
+| G3 (code half) | real (test gap) | none: `cli.run_stage` already maps an OSError of a stage through `DurableError.code` | cod `test_g3_erofs_inside_a_stage_stops_read_only_fs` (EROFS from `worker.dispatch` at an everyday prepare: STOP READ_ONLY_FS with the journal's header, HALT.json READ_ONLY_FS, no FOREGROUND.json) | W136 (= X4) |
+| PF-7 | real | README §1 "The bootstrap may be run again": it holds nothing of the series, so after it died, lost its session or ran through the standard route by mistake, the Dot runs it once more through the elevated route (a second death: NO_BLOCK; read-only through the elevated route: READ_ONLY_FS). Rules 5 and 7 name the exception | lint `t_l14_readme_rules` | none (as PF-4) |
+| PF-8 | real | README §1 and §3: `STOP SETUP_MISSING HANDBACK C` is the one HANDBACK C stop the Dot clears itself: it tells the owner, runs the bootstrap once (its setup runs again), then `go`; a second SETUP_MISSING waits for a maintainer message (SD-79). The handback paragraph names the exception. No code changed (the stop stays non-sticky, SD-74). G-4 records whether `/tmp/cps` and the boot id survive a reset that empties `/home/agent` | rs `D_tools_wiped_same_boot_continues` (follows the README: SETUP_MISSING, the bootstrap, FINAL); lint `t_l14_readme_rules` | W143 (W127 keeps the check itself) |
+| PF-9 | real (documents) | §9.5 and OQ-29: `DEPLOYMENT_MODEL.md` (authority 1) and the private operating documents still name `~/cps-deliveries`; the owner updates them before everyday use. The A1 row now has the owner track | none | none |
+| PF-10 | real (documents) | §9.7 and G-4: (a) a Create Thread conversation reading and writing `/tmp/cps`, (b) a Drive upload straight from `/tmp/cps/outbox`, (c) CPSV-BUSY against a standard-route lock holder, (d) `MemAvailable` at every stage start | none (gates) | none |
+| PF-11, CC-7 | real (documents) | §1.2 rows OPX-10 and D16-F2 and CBR-9 point at M009 and §9 A8; G-3 says "`pdftoppm` run alone on the same PDF took 706 s"; §5.4 and §6.3 likewise; §8.0's GAP-2 prerequisite restated for a `/tmp/cps` base; README §7 calls its polls and checks estimates until they are measured | lint `t_l14_readme_rules` (the §7 sentence; "come from the stage times" is absent) | none |
+| CC-2 (major) | real | `names.STAGE_FREE_BYTES` 1,500,000,000 -> 2,000,000,000 (SD-77). The finish stage's commit runs inside the stage (`Chain.run` ends in `commit_end`): job folder about 590 MB plus the entry and PNG parts about 590 MB; the Dot's download-back into `inbox/verify` after the stage adds about 590 MB, and no check covers it since the pure `on_found` (746ea98) dropped 2015773's verify check: about 1,770 MB in all, against 1.567 GB before. §5.4 table (entry, download-back, place stream, self-test work folder) and peaks restated, the "verify check" claims removed, §2.16.5 corrected, README §7 "2 GB". A check before the download-back was not reinstated: the stage check covers it with no new line | vio `t_d16_stage_refuses_low_space_before_runner` (asserts >= 3 x 590 MB) | W137 (and W128, retargeted to the new text) |
+| G2 | real (test gap) | none: the order in `cli.run_stage` was already right | vio `t_g2_tmp_emptied_before_space_check` (a planted file in BASE/tmp; the faked free space is one byte short while it exists and exactly enough once it is gone; the stage runs, no DISK_FULL) | W132 (= X1) |
+| G4 | real (test gap) | none | vio `t_a4_stale_temp_names_in_runtime_ignored` also plants `.tmp_48213_VM_HELPER_CONFIG.json` | W133 (= X2) |
+| G5 | real | `session_start.sh` line 30: the HOME check compares resolved paths, `B=$(cd "$BASE" && pwd -P)/` against `H=$(cd "$HOME" && pwd -P)/`; a base equal to HOME, one through `..`, a link into HOME and HOME with a trailing slash all stop SESSION_LAYOUT, and a missing BASE or HOME stops too (SD-81). Same line count | v1r `test_a1_base_required_outside_home_and_carried_by_launcher` (four new cases, each with a repo link that passes the REPO check) | W134 (the 2cfaac5 textual check), W135 (= X3's effect: a base equal to HOME), W117 retargeted |
+| G6 = CC-8 | real (audit line) | §9.3: one row for `outbox/selftest_<utc14>/.tmp_<pid>_RUN.json`, not a defect | none | none |
+| G7 = CC-6 | real (records) | `tests/run_tests.py` `git_record()`: TEST_RESULTS.json and MUTANTS_RESULTS.json record `snapshot_commit`, `vm2_git_tree` (the git tree of deploy/vm2 at that commit, tests included) and `vm2_clean`. §9.6's sentence corrected. INTEGRATION.json `amendment`: the headline runs are the final-tree runs of this round (9.8.6), the builder's runs are kept as `build_runs`, and the top-level `candidate_commit` is labelled as the completeness round's | the records themselves (9.8.6) | none (tooling) |
+| G8 | real | `probe_p5.py`: `--dir` is required (no default under HOME, which the standard route cannot write; SD-82). G-3 and §5.4 rule step 3 name `--dir /tmp/cps_probe_p5` and the standard route | p5 `test_g8_dir_required_never_under_home` | W138 |
+
+#### 9.8.2 Decisions and codes
+
+- **SD-77 (CC-2):** `STAGE_FREE_BYTES` = 2,000,000,000 bytes (2.067 GB with the 64 MiB margin, 1.17 times the 1,770 MB
+  from the start of a finish stage to the end of its save with M009's sizes). Supersedes SD-73's value.
+- **SD-78 (PF-2):** a clear message gives the README §1 block filled in, never a bare `session_start.sh` line; the Dot
+  runs it through `require_escalated`. The base stays set only by the block's export line (SD-72).
+- **SD-79 (PF-8):** after `STOP SETUP_MISSING HANDBACK C` the Dot runs the bootstrap once by itself; a second one waits
+  for the maintainer. Code unchanged; the printed letter stays C and the README names the exception.
+- **SD-80 (PF-1):** a series starts only when its starting message says how the scheduled mailbox check is handled;
+  otherwise `MAILBOX_UNSETTLED`. The choice itself is the owner's (OQ-28).
+- **SD-81 (G5):** the base-outside-HOME check compares resolved paths.
+- **SD-82 (G8):** `probe_p5.py --dir` is required.
+- **New code:** `MAILBOX_UNSETTLED`, the Dot's own (README §2.4 rule 8, case C). Like `NO_BLOCK` and `REVIEW_STOPPED` it
+  is in the README and checked by L14, not in `names.CODES`. No helper code is new or changed.
+- **Lines (D2a):** unchanged, C 7,506, M 896, total 8,402 (the caps of §9.2 hold). `session_start.sh` (80),
+  `core/names.py` (259) and `probe_p5.py` (131) changed lines in place; every other changed file is under `tests/` or
+  is README.md.
+
+#### 9.8.3 Deviations
+
+- G3: the README sentence is qualified instead of mapping EROFS in `run_post` and `place.evict` too (both already end
+  in a full STOP block with HANDBACK C).
+- PF-8: the README rule (the Dot runs the bootstrap once) was chosen over recording HANDBACK C as a deviation from A5
+  (ii); it matches the brief and needs no code.
+- CC-2: the stage value was raised instead of reinstating a space check before the download-back (no new line; the
+  D2a caps hold).
+- PF-4, PF-5, PF-6, PF-7 and PF-10 changed README or gate text only and have no mutant of their own; L14 holds each
+  sentence (README_RULES), and W139 to W143 cover the clear, the waits, the 6-hour rule and SETUP_MISSING.
+- FakeDot's bootstrap now runs without `CPS_VM_BASE` and `CPS_TOOLS` in its environment (a harness change), so a README
+  block without its export would stop every World's bootstrap; such a stop is never a kill (§2.15.4), so W139 is
+  carried by the two direct tests.
+- The guard sets were all re-run (not only cli.py's sites), although no function with guard sites changed: the 915
+  generated ids are the same as at `2cfaac5` and `a2298cb` (fold 545, session 202, glue 168), so every EQUIVALENT
+  entry keeps its id.
+
+#### 9.8.4 Open after the fix round
+
+- Everything in §9.7 stays open, with its additions: OQ-28 (the mailbox check against a series), OQ-29 (the personal
+  copy's place in the owner's documents), the unverified `/tmp` assumptions (a) to (d) and the reset survival of
+  `/tmp/cps`, each now a G-4 record.
+- README text without its own mutant (PF-4 to PF-7, PF-10): each sentence is held by L14's README_RULES; a reviewer
+  may ask for one mutant per sentence.
+- The runner v5 item (`.validate_<case>_<pid>` without `exist_ok`) and every gate G-1 to G-11 are not run.
+
+#### 9.8.5 Tests, lines and D14 at the final tree
+
+- New tests (4): v1r `test_pf2_clear_bootstrap_runs_in_a_fresh_shell`, vio `t_g2_tmp_emptied_before_space_check`, cod
+  `test_g3_erofs_inside_a_stage_stops_read_only_fs`, p5 `test_g8_dir_required_never_under_home`. Changed: v1r
+  `test_a1_base_required_outside_home_and_carried_by_launcher` (four G5 cases), vio
+  `t_a4_stale_temp_names_in_runtime_ignored` (a multi-digit pid) and `t_d16_stage_refuses_low_space_before_runner`
+  (the 3 x 590 MB bound), lint `t_l14_readme_rules` (12 new sentences, three changed, three new removed tokens, the block's export line),
+  rs `D_tools_wiped_same_boot_continues` (docstring: the README rule). The full suite has 572 tests (568 at
+  `2cfaac5`), the non-root pass 253 (251; t_g2 and test_g3 are in its suites).
+- New hand mutants (12): W132 to W143. Retargeted to the new text: W117 (the resolved HOME check) and W128 (the 2e9
+  value). The hand set has 144 mutants.
+- Lines: C 7,506, M 896, total 8,402, as at `2cfaac5`; the D2a caps hold.
+- D14: full suite 43.8 min (target 50, ceiling 60); the non-reset suites 261.5 s (budget 300 s); test_resets
+  2,315.1 s for 210 scenarios; the lints 53.4 s (budget 120 s); the non-root pass 505.5 s for 253 tests (budget 600 s).
+
+#### 9.8.6 Runs at the final tree
+
+Every run started from its own `bin/testclone.sh` snapshot of the working files on `2cfaac5`, `--jobs 4`, on a 4-CPU
+machine, one run at a time. Every run's record carries the helper tree sha256
+`55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e` (deploy/vm2 without tests) and the deploy/vm2 git
+tree `4f996ef9c27f9a891912fd03b4fa40c46e8bd681` (with tests), which is the tree of deploy/vm2 in the commit of this
+round (`git rev-parse <commit>:deploy/vm2`); the snapshot commits lived only in the deleted clones. The runner's sha256
+is `7505e98a…f431` in every record. INTEGRATION.json `amendment` keeps every record; MUTANTS_RESULTS.json and
+TEST_RESULTS.json of each run are in `amend_fix/keep/` of the maintainer's scratch.
+
+| run | snapshot | result | wall | uid / CapEff |
+|---|---|---|---|---|
+| root, full suite | f9eb0da | 572 / 572 passed | 2,630.0 s (43.8 min) | 0 / full root |
+| non-root pass `--only nonroot --require-nonroot` | 0e7f9d2 | 253 / 253 passed | 505.5 s | 1000 / 0 |
+| hand set W01-W143 (W106 and W107 as uid 1000) | 6b8cd62 | 144 / 144 killed; every listed killer failed | 1,325.5 s | 0; 1000 / 0 for W106, W107 |
+| reviewer N and legacy (G, M, B, C) | 05c14b9 | 68 / 68 killed (G9, M2-18, M2-36 each killed by its first test, as in §8.0) | 390.2 s | 0 |
+| guard, core set: fold | add4227 | 545 sites, 531 killed, 14 survivors, each with its EQUIVALENT entry | 3,469.8 s | 0 |
+| guard, core set: session | c4408f1 | 202 sites, 199 killed, 3 survivors, each with its EQUIVALENT entry | 1,532.5 s | 0 |
+| guard, glue set, first half by id | 7bdbf5e | 84 sites, 71 killed, 13 survivors, each with its EQUIVALENT entry | 3,583.4 s | 0 |
+| guard, glue set, second half by id | 5441c43 | 84 sites, 79 killed, 5 survivors, each with its EQUIVALENT entry | 2,335.2 s | 0 |
+| trial of W117, W128, W132-W143 (before a README reflow: helper tree `ef3cf6c2…`) | 5d67add | 14 / 14 killed, every listed killer failing | 29.2 s | 0 |
+
+The survivors are the same 17 core and 18 glue sites as at `a2298cb` and `2cfaac5`, and the 915 generated ids are
+unchanged, so every EQUIVALENT argument keeps its id; none needed a new one. They still wait for G-1.

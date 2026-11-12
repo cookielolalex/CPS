@@ -335,8 +335,9 @@ def test_plan_rows_not_in_the_table_tests():
     another run (UNCLASSIFIED), the V continuation (CONTINUE then the ended question), DELIVER_SENT's freeze, the
     owner notice, an unfinished wait (UNCLASSIFIED), and chain_next's X20 (no change, tree changed; an unknown
     verify-frozen result)."""
-    assert P.end_keys({'role': 'S'}) == {'ended': 'YES', 'conversation': 'CONV', 'prompt_pasted': 'YES'}
-    assert P.end_keys({'role': 'V'}) == {'ended': 'YES', 'conversation': 'CONV'}
+    assert P.end_keys({'role': 'S'}) == {'ended': 'YES', 'conversation': 'CONV', 'prompt_pasted': 'YES',
+                                         'tools': 'TOOLS'}
+    assert P.end_keys({'role': 'V'}) == {'ended': 'YES', 'conversation': 'CONV', 'tools': 'TOOLS'}
     w = TC.q_world()
     TC.drive(w, 'PREPARE_GENERATE', 'AI', 'FINISH', 'AI', 'REVIEW_INCOMPLETE')
     v = view(w.state, w.boot)
@@ -355,19 +356,6 @@ def test_plan_rows_not_in_the_table_tests():
     w3.commit(e)
     pc = P.pending_chain(w3.state)
     assert pc[0] == 'freeze' and pc[1]['resolution']['action'] == 'FREEZE_LOST', pc
-    w4 = TC.q_world()
-    TC.drive(w4, 'PREPARE_GENERATE')
-    m = P.mark_key('OPEN', 'A/case01', 'G1', CW.latest(w4.state['runs']['A/case01']['roles']['G1']))
-    s4 = copy.deepcopy(w4.state)
-    s4['runs']['A/case01']['roles']['G1']['status'] = 'OPENED'
-    s4['runs']['A/case01']['roles']['G1']['opened'] = {'conversation': 'conv-00000001', 'utc': CW.utc(CW.T0)}
-    v4 = view(s4, w4.boot)
-    a = P.next_action(v4)
-    assert a.do[0] == 'AWAIT_CONVERSATION'
-    s5 = copy.deepcopy(w4.state)
-    s5['runs']['A/case01']['roles']['G1']['status'] = 'OPENED'
-    s5['runs']['A/case01']['roles']['G1']['opened'] = None
-    assert m not in v4['marks']
     wd = CW.World('E1')
     wd.commit(CW.genesis(wd))
     TC.drive(wd, 'INPUTS', 'PREPARE_E', 'AI', 'FINISH', 'AI', 'DELIVER_CHECK', 'DELIVERY')
@@ -397,14 +385,14 @@ def test_session_branches():
     name in absent_twice, kit_change's GATES_CHANGED and series change, classify's REBASE_LIMIT and C10, the head
     search's HEAD_UNSTABLE end, session_next's early phases, a HINT_AHEAD stop, the LIST step, the fresh PASS phase,
     the phase index and the work sha."""
-    cp = [['I1', None, 10], ['I2', None, 10]]
-    assert SE.rule_v([['I1', 'a' * 32, 10]], 10, 's', set(), {}, 'b' * 32) == ('bad', 'md5')
-    assert SE.rule_v(cp, 10, 's', {'I1'}, {}) == ('download', [cp[1]])
-    assert SE.rule_v(cp, 10, 's', {'I1'}, {'I2': ['t', 10]}) == ('bad', 'sha')
-    assert SE.rule_v(cp, 10, 's', {'I1'}, {'I2': ['s', 10]}) == ('ok', None)
-    lk = [{'name': 'p', 'result': 'present', 'copies': [['I1', None, 10]], 'utc': CW.utc(CW.T0)},
-          {'name': 'p', 'result': 'present', 'copies': [['I2', None, 11]], 'utc': CW.utc(CW.T0)}]
-    assert SE.absent_twice(['p'], lk, 60, CW.utc(CW.T0))[1] == {'p': 'fork'}
+    cp = [['I1', 10], ['I2', 10]]
+    assert SE.rule_v(cp, 's', {'I1'}, {}) == ('download', [cp[1]])
+    assert SE.rule_v(cp, 's', {'I1'}, {'I2': ['t', 10]}) == ('bad', 'sha')
+    assert SE.rule_v(cp, 's', {'I1'}, {'I2': ['s', 10]}) == ('ok', None)
+    assert SE.rule_v(cp, 's', {'I1', 'I2'}, {}) == ('ok', None)
+    lk = [{'name': 'p', 'result': 'present', 'copies': [['I1', 10]], 'utc': CW.utc(CW.T0)},
+          {'name': 'p', 'result': 'present', 'copies': [['I2', 11]], 'utc': CW.utc(CW.T0)}]
+    assert SE.absent_twice(['p'], lk, 60, CW.utc(CW.T0))[1] == {'p': 'present'}     # sizes decide nothing (§2.2.2)
     w = TC.q_world()
     s = w.state
     hk = {'sha256': CW.KIT, 'members': CW.MEMBERS, 'config': {'gates': s['genesis']['gates'], 'series': 'Q1'},
@@ -435,10 +423,6 @@ def test_session_branches():
     ph, st = SE.session_next({'work': TC.work(hint={'seq': 9, 'kit': None}, lookups=dd.lookups), 'series': 'Q1',
                               'gates': CW.GATES, 'clear': None, 'now': CW.utc(dd.t + 999), 'base': CW.BASE})
     assert ph == 'HEAD'
-    g = dict(CW.GATES, p2_newest_first='yes')
-    ph, st = SE.session_next({'work': TC.work(), 'series': 'Q1', 'gates': g, 'clear': None, 'now': CW.utc(CW.T0),
-                              'base': CW.BASE})
-    assert ph == 'HEAD' and st.lists, st
     wk = TC.work(done=['LAYOUT', 'SETUP', 'KIT', 'CONFIG', 'FINGERPRINT'])
     for _ in range(3):
         ph, st = SE.session_next({'work': wk, 'series': 'Q1', 'gates': CW.GATES, 'clear': None,
@@ -448,7 +432,7 @@ def test_session_branches():
         wk['lookups'].append({'name': st.finds[0][2], 'result': 'absent', 'copies': [], 'utc': CW.utc(CW.T0)})
         wk['lookups'].append({'name': st.finds[0][2], 'result': 'absent', 'copies': [], 'utc': CW.utc(CW.T0 + 500)})
     assert (ph, st) == ('PASS', None), (ph, st)
-    assert SE.phase_index('LAYOUT') == 0 and len(SE.work_sha({'a': 1})) == 64
+    assert SE.phase_index('LAYOUT') == 0 and SE.phase_index('APPROVAL') < SE.phase_index('HEAD')
 
 
 @test
@@ -470,7 +454,7 @@ def test_names_and_outcome_branches():
 
 
 def hidden_drive(cw, wk, verified_sha=None, t=None, limit=200, stop_at=()):
-    """session_next against the World's entries as the Drive in the md5-hidden mode (P2): FIND gives [id, None, size];
+    """session_next against the World's entries as the Drive (v2.1 has only the md5-hidden mode): FIND gives [id, size];
     a DOWNLOAD is answered as the glue does (rule V: the downloaded copy's sha256 into work.verified; copy 1 of the head
     becomes work.head). verified_sha(name) -> the sha256 the download had (default: the expected one)."""
     t = t or cw.t + 100
@@ -478,7 +462,7 @@ def hidden_drive(cw, wk, verified_sha=None, t=None, limit=200, stop_at=()):
     for p in [p for e in cw.entries for p in e['parts']]:
         names[p['name']] = p
     for _ in range(limit):
-        v = {'work': wk, 'series': cw.series, 'gates': dict(cw.gates, p2_md5_visible='no'), 'clear': None,
+        v = {'work': wk, 'series': cw.series, 'gates': cw.gates, 'clear': None,
              'now': CW.utc(t), 'base': CW.BASE, 'transcript_ext': 'json'}
         ph, st = SE.session_next(v)
         if ph in stop_at:
@@ -489,8 +473,7 @@ def hidden_drive(cw, wk, verified_sha=None, t=None, limit=200, stop_at=()):
             for f in st.finds:
                 x = names.get(f[2])
                 size = None if x is None else 1000 if 'parts' in x else x['bytes']
-                cp = [] if x is None or f[2] in wk.get('_deleted', ()) else [['ID%020d' % len(wk['lookups']), None,
-                                                                              size]]
+                cp = [] if x is None or f[2] in wk.get('_deleted', ()) else [['ID%020d' % len(wk['lookups']), size]]
                 wk['lookups'].append({'name': f[2], 'result': 'present' if cp else 'absent', 'copies': cp,
                                       'utc': CW.utc(t)})
                 if wk.get('committed'):
@@ -501,7 +484,8 @@ def hidden_drive(cw, wk, verified_sha=None, t=None, limit=200, stop_at=()):
                 name = path.rsplit('/', 1)[1].rsplit('.', 1)[0]
                 x = names[name]
                 if name == cw.entries[-1]['name'] and not wk.get('head'):
-                    wk['head'] = {'entry': dict(x, state=cw.state, state_sha256=EN.state_sha256(cw.state))}
+                    wk['head'] = {'entry': dict(x, state=cw.state, state_sha256=EN.state_sha256(cw.state)),
+                                  'md5': CW.md5ish(name), 'sha256': CW.hx('entry', x['seq']), 'bytes': 1000}
                     break
                 want = cw.entries[-1]['prev_sha256'] if 'parts' in x else x['sha256']
                 if wk.get('committed') and name == N.entry_name(cw.series, wk['committed']['seq']):
@@ -518,6 +502,8 @@ def hidden_drive(cw, wk, verified_sha=None, t=None, limit=200, stop_at=()):
         elif isinstance(st, P.Ask) and st.context['action'] == 'RESTORE_ROLE':
             wk['resolve']['answers'] = {'ended': 'yes', 'outcome': 'NOTHING_WRITTEN', 'transcript': 'exported',
                                         'list_shows_none': 'no'}
+        elif isinstance(st, P.Ask) and st.context['action'] == 'APPROVAL':
+            wk['approval'] = 'none'
         elif isinstance(st, P.Ask) and st.context['action'] == 'LIST_SHOWS_NONE':
             wk['list_shows_none'] = True
         else:
@@ -544,14 +530,10 @@ def test_session_md5_hidden_rule_v_paths():
     ph, st, wk, t = hidden_drive(cw, base(), verified_sha=lambda n: 'c' * 64 if n == part else None)
     assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)
     wk = base()
-    wk['lookups'].append({'name': part, 'result': 'present', 'copies': [['IDX', None, 7]], 'utc': CW.utc(cw.t)})
-    ph, st, wk, t = hidden_drive(cw, wk)
-    assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)                      # a part copy of another size
-    wk = base()
-    for k, size in (('IDX', 7), ('IDY', 8)):
-        wk['lookups'].append({'name': part, 'result': 'present', 'copies': [[k, None, size]], 'utc': CW.utc(cw.t)})
-    ph, st, wk, t = hidden_drive(cw, wk)
-    assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)                      # two sizes for one part
+    for k, size in (('IDX', 7), ('IDY', 8)):           # v2.1: a size decides nothing in core; two foreign copies
+        wk['lookups'].append({'name': part, 'result': 'present', 'copies': [[k, size]], 'utc': CW.utc(cw.t)})
+    ph, st, wk, t = hidden_drive(cw, wk, verified_sha=lambda n: 'c' * 64 if n == part else None)
+    assert (ph, st) == ('HEAD', Stop_('FORK')), (ph, st)
     wk = dict(base(), hint={'seq': cw.state['seq'], 'kit': None}, _deleted=[pn])
     ph, st, wk, t = hidden_drive(cw, wk)
     assert (ph, st) == ('HEAD', Stop_('LINK_MISMATCH')), (ph, st)             # N-1 absent
@@ -615,7 +597,7 @@ def test_head_search_unstable_and_hint_ahead():
             t += r['seconds']
             continue
         k = int(r['name'][-10:-4])
-        cp = [['ID%06d' % k, 'a' * 32, 10]] if k % 2 == 1 and k < 99 else []
+        cp = [['ID%06d' % k, 10]] if k % 2 == 1 and k < 99 else []
         lookups.append({'name': r['name'], 'result': 'present' if cp else 'absent', 'copies': cp, 'utc': CW.utc(t)})
         t += 5
     assert r == {'verdict': 'stop', 'code': 'HEAD_UNSTABLE'}, r
@@ -627,8 +609,7 @@ def test_head_search_unstable_and_hint_ahead():
 
 @test
 def test_more_guard_lines():
-    """g42's everyday INPUTS refusal, utc_epoch of year 0, next_run's UNCLASSIFIED end, _open_role's UNCLASSIFIED for
-    a STARTED role that claims an opening."""
+    """g42's everyday INPUTS refusal, utc_epoch of year 0, next_run's UNCLASSIFIED end."""
     we = CW.World('E1')
     we.commit(CW.genesis(we))
     TC.drive(we, 'INPUTS')
@@ -641,11 +622,6 @@ def test_more_guard_lines():
     s = TC.ostate([A, B], [['c', 1, None]])
     s.update(phase='OPEN', notify=None, current=None, genesis=dict(s['genesis'], gates=CW.GATES))
     assert P.next_action(view(s)).code == 'UNCLASSIFIED'
-    w = TC.q_world()
-    TC.drive(w, 'PREPARE_GENERATE')
-    s5 = copy.deepcopy(w.state)
-    s5['runs']['A/case01']['roles']['G1']['opened'] = {'conversation': 'conv-00000001', 'utc': CW.utc(CW.T0)}
-    assert P.next_action(view(s5, w.boot)).code == 'UNCLASSIFIED'
 
 
 @test
@@ -670,11 +646,208 @@ def test_g22_non_config_kit_does_not_clear_a_halt():
     assert (ph, st) == ('CLASSIFY', Stop_('HALTED_' + v['code'])), (ph, st)
 
 
+# ================================================================ v2.1 (delta §1.2, §2.15.5): cm rows
+def _code(state, e):
+    try:
+        F.apply(state, e)
+        return 'OK'
+    except F.ChainInvalid as x:
+        return x.code
+
+
+def sview(w, **kw):
+    return dict({'work': w, 'series': 'Q1', 'gates': CW.GATES, 'clear': None, 'now': CW.utc(CW.T0 + 10 ** 4),
+                 'base': CW.BASE}, **kw)
+
+
+@test
+def test_int_r2_03_restore_conversation_recorded():
+    """INT-R2-03: the resolution records the conversation: the answer's, else the archived one, else null; e42 copies
+    it into ROLE.resolution and the OWNER_CHECK item shows it."""
+    w = TC.q_world()
+    TC.drive(w, 'PREPARE_GENERATE')
+    run, rk, ro = CW.open_role(w.state)
+    a = {'ended': True, 'files_found': False, 'transcript': 'not_available', 'outcome': 'NOTHING_WRITTEN',
+         'list_shows_none': None, 'conversation': 'conv-1234abcd'}
+    e = CW._restore(w, resolve=(run, rk, ro), ans=a)
+    w.commit(e)
+    res = w.state['runs'][run]['roles'][rk]['resolution']
+    assert res['conversation'] == 'conv-1234abcd' and res['owner_check'] is True, res
+    items = [i for i in O.outcomes(w.state)['owner_items'] if i['kind'] == 'OWNER_CHECK']
+    assert items and items[0]['conversation'] == 'conv-1234abcd', items
+    item, _ = SE.build_item(w.state, run, rk, {'ended': 'yes', 'transcript': 'exported'}, True)
+    assert item['conversation'] is None
+    w2 = TC.q_world()
+    TC.drive(w2, 'PREPARE_GENERATE', 'AI', 'FINISH', 'AI', 'REVIEW_INCOMPLETE')
+    run, rk, ro = CW.open_role(w2.state)
+    item, _ = SE.build_item(w2.state, run, rk, {'ended': 'yes', 'transcript': 'not_available'}, False)
+    assert item['conversation'] == ro['archives'][0]['conversation']
+
+
+@test
+def test_t7_started_after_ended_refused():
+    """T7 (N40): started_utc after ended_utc is UTC_OUT_OF_WINDOW started_utc, in names.check_answers (pure)."""
+    keys = {'started_utc': 'UTC', 'ended_utc': 'UTC'}
+    err, _ = N.check_answers(keys, [('started_utc', '2026-11-10T00:00:10Z'), ('ended_utc', '2026-11-10T00:00:09Z')],
+                             {})
+    assert err == ('UTC_OUT_OF_WINDOW', 'started_utc'), err
+    err, got = N.check_answers(keys, [('started_utc', '2026-11-10T00:00:09Z'), ('ended_utc', '2026-11-10T00:00:09Z')],
+                               {})
+    assert err is None and got['started_utc'] == got['ended_utc']
+
+
+@test
+def test_maint7_drill_series_own_folder():
+    """MAINT-7: a drill series has its own Drive folder CPS/drills/<series>."""
+    assert N.series_folder('D1') == 'CPS/drills/D1' and N.series_folder('D12') == 'CPS/drills/D12'
+    assert N.series_folder('Q1') == 'CPS/qualification' and N.series_folder('E1') == N.FOLDERS['E']
+
+
+@test
+def test_d5_clear_verdict_exact_clear_and_config_only():
+    """D5 (§2.4.3): the clear check's verdict, each reason: sha (the candidate is not the kit asked), members (a
+    member missing), clear (another series, seq or code, or a null clear), config (not config-only against the halted
+    kit); a halted kit that is not held leaves the decision to KIT_ACCEPT; a HALTED_<code> STOP clears by <code>."""
+    halt = {'series': 'Q1', 'code': 'FORK', 'head_seq': 7, 'kit_sha256': CW.KIT, 'check': {'kit12': CW.KIT2[:12]}}
+    K = {'sha256': CW.KIT, 'members': CW.MEMBERS, 'config': {'gates': {}, 'clear': None, 'doc_samples': ['a']}}
+    cand = {'sha256': CW.KIT2, 'members': [CW.MEMBERS[0], [CW.MEMBERS[1][0], CW.hx('c2')], CW.MEMBERS[2]],
+            'config': {'gates': {}, 'doc_samples': ['a'], 'clear': {'series': 'Q1', 'seq': 7, 'code': 'FORK'}},
+            'release_sha256': CW.REL}
+    assert SE.clear_verdict(halt, cand, [K]) is None
+    assert SE.clear_verdict(dict(halt, check={'kit12': 'ffffffffffff'}), cand, [K]) == 'sha'
+    assert SE.clear_verdict(halt, dict(cand, config=None), [K]) == 'members'
+    for c in ({'series': 'Q1', 'seq': 8, 'code': 'FORK'}, {'series': 'Q1', 'seq': 7, 'code': 'X'},
+              {'series': 'Q2', 'seq': 7, 'code': 'FORK'}, {'series': 'Q1', 'seq': 7}, None):
+        assert SE.clear_verdict(halt, dict(cand, config=dict(cand['config'], clear=c)), [K]) == 'clear', c
+    rel = dict(cand, members=[[CW.MEMBERS[0][0], CW.hx('r2')]] + cand['members'][1:])
+    assert SE.clear_verdict(halt, rel, [K]) == 'config'
+    assert SE.clear_verdict(halt, dict(cand, config=dict(cand['config'], doc_samples=[])), [K]) == 'config'
+    assert SE.clear_verdict(halt, dict(cand, config=dict(cand['config'], png_part_bytes=1)), [K]) is None
+    assert SE.clear_verdict(halt, dict(cand, config=dict(cand['config'], series='Q2')), [K]) == 'config'
+    assert SE.clear_verdict(halt, rel, []) is None
+    assert SE.clear_verdict(halt, rel, [dict(K, sha256=CW.KIT2)]) is None, 'only the halted kit decides'
+    hh = dict(halt, code='HALTED_UNCLASSIFIED')
+    assert SE.clear_verdict(hh, dict(cand, config=dict(cand['config'], clear={'series': 'Q1', 'seq': 7,
+                                                                             'code': 'UNCLASSIFIED'})), [K]) is None
+    Ks = dict(K, config=dict(K['config'], series='Q1'))
+    cs = dict(cand, config=dict(cand['config'], series='Q1'))
+    assert SE.clear_verdict(dict(halt, series=None), cs, [Ks]) is None, 'a halt before any series: the kit series'
+    assert SE.clear_verdict(dict(halt, series=None), dict(cs, config=dict(cs['config'], series='Q3')), [Ks]) == 'clear'
+    assert SE.clear_ok({'series': 'Q1', 'seq': 7, 'code': 'FORK'}, 'Q1', 7, 'FORK')
+    assert not SE.clear_ok({'series': 'Q1', 'seq': 7, 'code': 'FORK', 'x': 1}, 'Q1', 7, 'FORK')
+
+
+def _restore_work(cw, **kw):
+    wk = TC.work(hint={'seq': cw.state['seq'], 'kit': None}, **kw)
+    wk['kit']['config']['gates'] = cw.gates
+    return wk
+
+
+@test
+def test_d5_clearing_restore_refuses_release_change():
+    """D5 (O59): a restore that clears a local stop (cleared_local set) takes only a config-only kit change; a
+    release change there is CONFIG_CHANGE_NOT_ALLOWED although it would be acceptable without the clear."""
+    cw = TC.q_world()
+    hk = {'sha256': CW.KIT, 'members': CW.MEMBERS, 'config': {'gates': cw.gates}}
+    rel = [m[:] for m in CW.MEMBERS]
+    rel[0][1] = CW.hx('other release')
+    kit = {'sha256': CW.KIT2, 'members': rel, 'release_sha256': CW.REL2,
+           'config': {'gates': cw.gates, 'accepts_release_sha256': [CW.REL2]}}
+    assert SE.kit_change(cw.state, kit, hk)[0] is None
+    for cl, want in ((None, 'COMMIT'), ({'code': 'FORK', 'head_seq': 1, 'kit_sha256': CW.KIT}, 'KIT_ACCEPT')):
+        wk = _restore_work(cw, cleared_local=cl)
+        wk['kit'], wk['head_kit'] = kit, hk
+        ph, st, _ = TC.run_session(cw, wk)
+        assert ph == want, (cl, ph, st)
+        if cl:
+            assert st == Stop_('CONFIG_CHANGE_NOT_ALLOWED')
+
+
+@test
+def test_d6_approval_asked_before_restore_and_genesis():
+    """D6 (SD-58): on both paths (a fresh series to GENESIS, a restore to RESTORE) the session asks approval= right
+    after FINGERPRINT and before any FIND; `none` is recorded in the GENESIS and RESTORE drafts."""
+    for cw in (CW.World('Q2'), TC.q_world()):
+        wk = _restore_work(cw) if cw.state else TC.work()
+        wk['approval'] = None
+        ph, st = SE.session_next(sview(wk))
+        assert ph == 'APPROVAL' and st.keys == {'approval': 'APPROVAL'} and st.context['action'] == 'APPROVAL', ph
+        assert not wk['lookups']
+        ph, st, wk = TC.run_session(cw, wk)
+        assert st.entry['body']['approval'] == 'none' and wk['approval'] == 'none', (ph, st)
+        assert st.entry['kind'] == ('GENESIS' if cw.state is None else 'RESTORE')
+
+
+@test
+def test_d6_approval_before_head():
+    """D6 (W89): with the approval unanswered nothing of the head search is asked, even with a hint; once answered the
+    first FIND is the hinted head."""
+    w = {'done': ['LAYOUT', 'SETUP', 'KIT', 'CONFIG', 'FINGERPRINT'], 'operator': {'model': 'm', 'platform': 'p'},
+         'hint': {'seq': 5, 'kit': None}, 'lookups': []}
+    ph, st = SE.session_next(sview(w, gates={}))
+    assert ph == 'APPROVAL' and st.keys == {'approval': 'APPROVAL'}, (ph, st)
+    ph, st = SE.session_next(sview(dict(w, approval='none'), gates={}))
+    assert ph == 'HEAD' and st.finds and st.finds[0][2] == N.entry_name('Q1', 5), (ph, st)
+    assert SE.phase_index('FINGERPRINT') + 1 == SE.phase_index('APPROVAL') == SE.phase_index('HEAD') - 1
+
+
+@test
+def test_d3_head_search_ignores_void_lookups():
+    """D3 (§2.2.1, W54): a slip voids a name's lookups; the head search asks that name again."""
+    t = '2026-11-10T00:00:00Z'
+    lk = [{'name': N.entry_name('Q1', 1), 'result': 'present', 'copies': [['id1', 10]], 'utc': t, 'void': True}]
+    assert SE.head_search('Q1', None, lk, {}, t) == {'need': 'find', 'name': N.entry_name('Q1', 1)}
+    assert SE.present_copies(lk, N.entry_name('Q1', 1)) == []
+    lk.append(dict(lk[0], void=False, copies=[['id2', 10]]))
+    assert SE.present_copies(lk, N.entry_name('Q1', 1)) == [['id2', 10]]
+
+
+@test
+def test_op05_recheck_after_every_q_restore():
+    """SD-59: the step-6 RECHECK runs after every qualification and drill restore (hinted or not); an everyday restore
+    re-checks only after a moved PENDING was uploaded."""
+    com = {'seq': 2, 'utc': '2026-11-10T00:00:00Z', 'sha256': 'a' * 64, 'ids': ['x'], 'md5': 'b' * 32, 'bytes': 5}
+    v = {'now': '2026-11-10T00:00:01Z', 'gates': {}, 'series': 'Q1', 'base': CW.BASE}
+    for series in ('Q1', 'D1'):
+        w = CW.World(series, jobs=[['case01', 1, None]])
+        w.commit(CW.genesis(w))
+        ph, step = SE._commit({'committed': com, 'lookups': []}, w.state, {}, {'seq': 1, 'copies': []},
+                              dict(v, series=series))
+        assert ph == 'RECHECK', (series, ph, step)
+    ew = CW.World('E1')
+    ew.commit(CW.genesis(ew))
+    assert SE._commit({'committed': com, 'lookups': []}, ew.state, {}, {'seq': 1, 'copies': []}, v) == ('DONE', None)
+    ph, step = SE._commit({'committed': com, 'lookups': [], 'moved_pending': {'uploaded': True}}, ew.state, {},
+                          {'seq': 1, 'copies': []}, v)
+    assert ph == 'RECHECK'
+
+
+@test
+def test_gap13_c8b_after_second_restore_abandons():
+    """GAP-13 (W96): everyday INPUTS lost twice: the first restore re-prepares (T41), the second abandons (C8b with
+    reprepares 1); the fold refuses a second re-prepare."""
+    w = CW.World('E1')
+    w.commit(CW.genesis(w))
+    TC.drive(w, 'INPUTS')
+    assert SE._classify_rest(w.state)[1]['reprepare'] is True
+    TC.drive(w, 'RESTORE_REPREPARE')
+    cur = w.state['current']
+    assert w.state['runs'][cur]['reprepares'] == 1 and w.state['runs'][cur]['status'] == 'INPUTS'
+    assert SE._classify_rest(w.state) == ('C8b', {'run': cur, 'reprepare': False})
+    wk = _restore_work(w)
+    ph, st, _ = TC.run_session(w, wk)
+    assert ph == 'COMMIT' and st.entry['body']['abandon'] == {'run': cur} and st.entry['body']['reprepare'] is None
+    again = CW._restore(copy.deepcopy(w), reprepare={'run': cur, 'inputs_seq': w.state['runs'][cur]['inputs']['seq']})
+    assert _code(w.state, again) != 'OK'
+
+
 def run(only=None):
     passed, failed = 0, []
     for fn in TESTS:
         if only and fn.__name__ not in only:
             continue
+        if failed and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
+            break
         try:
             fn()
             passed += 1

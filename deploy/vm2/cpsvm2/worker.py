@@ -1,7 +1,5 @@
-"""The foreground stage body (spec §7.3, §7.5, §7.7, §8.5.1; delta §X.7.2), called in-process by cli.run_stage while
-`go` holds the helper lock. It runs the runner chain, the snapshot and the entry build up to PENDING (commit steps
-1-4), the self-test, and placement; it prints nothing. Its result is returned in memory: {'status': 'pending' |
-'done' | 'fingerprint', ...}; a Halt or OSError propagates to cli.run_stage, which makes it a 'halt' result."""
+"""The foreground stage body (spec §7.3, §7.5, §7.7, §8.5.1, §X.7.2), run in-process under the helper lock by
+cli.run_stage. It prints nothing and returns {'status': 'pending' | 'done' | 'fingerprint', ...}."""
 import os
 import time
 from pathlib import Path
@@ -35,8 +33,7 @@ def sleep(seconds):
 
 
 def probe_lock(env, job_dir):
-    """§X.7.2: acquire and release JobLock at once, up to JOB_BUSY_TRIES tries JOB_BUSY_GAP_SECONDS apart (only a
-    process of this boot that outlived a dead stage can hold it, R6); then JOB_BUSY_TOO_LONG."""
+    """§X.7.2: JobLock acquired and released at once, JOB_BUSY_TRIES tries, then JOB_BUSY_TOO_LONG."""
     for i in range(N.JOB_BUSY_TRIES):
         try:
             with JobLock(env.lay, job_dir):
@@ -87,7 +84,6 @@ class Chain:
             rk = P.consumer_role(self.R)                      # a rebase re-run of a consumer chain (§7.10)
         self.rk = rk
 
-    # ---------------------------------------------------------- facts
     def ledger_sha(self):
         return fsha(self.lay.ledger) if self.env.mode != 'everyday' else None
 
@@ -118,13 +114,12 @@ class Chain:
             ro = R['roles'][ci['role']]
             a['started_utc'] = F.latest(ro)['utc']
             a['ended_utc'] = self.interrupt_end(ci['resolution'])
-            if ro['opened']:
-                a['conversation'] = ro['opened']['conversation']
+            if ci['resolution'].get('conversation'):                                 # INT-R2-03
+                a['conversation'] = ci['resolution']['conversation']
         return runner.argv_for(sub, a)
 
     def interrupt_end(self, res):
-        """§7.4: min(RESTORE.utc, now - 1 s); the RESTORE entry is read from inbox/journal when it is there (it is
-        kept there after its commit in this boot), else now - 1 s."""
+        """§7.4: min(RESTORE.utc, now - 1 s) when the RESTORE entry is in inbox/journal, else now - 1 s."""
         t = N.utc_epoch(host.now()) - 1
         p = self.lay.inbox / 'journal' / N.entry_name(self.env.series, res['seq'])
         if p.is_file():
@@ -145,7 +140,6 @@ class Chain:
                 ro['attempt'], lt['start_no'], ai['body']['transcript']['ext']), p)
         return p
 
-    # ---------------------------------------------------------- before the chain
     def prologue(self):
         """Fingerprint (O47), §7.7 FROZEN.json placement, JobLock probe, consumer measurement (I11), G record."""
         fp = fingerprint(self.lay)[0]
@@ -180,7 +174,7 @@ class Chain:
         return None
 
     def generation_record(self, ro):
-        """§7.5: D/run/GENERATION_RECORD.json from the AI entry's attested values (write_new; an existing file halts)."""
+        """§7.5: GENERATION_RECORD.json from the AI entry (write_new); tools_enabled and the O63 notes (D9)."""
         ai = self.ai_entry(ro)
         lt, at, b = F.latest(ro), ai['body']['attested'], ai['body']
         if sha_file(lt['prompt']) != lt['prompt_sha256']:
@@ -188,22 +182,22 @@ class Chain:
         p = Path(self.job_dir) / 'run' / 'GENERATION_RECORD.json'
         if os.path.lexists(p):
             raise Halt('STOP', 'GENERATION_RECORD_EXISTS', 'the generation record exists')
-        fm = savepoint.member_bytes(self.lay.inbox / 'journal' / N.entry_name(self.env.series, ro['archives'][-1]['seq']),
-                                    'attest/final_message.txt').decode('utf-8')
+        ent = self.lay.inbox / 'journal' / N.entry_name(self.env.series, ro['archives'][-1]['seq'])
+        fm = savepoint.member_bytes(ent, 'attest/final_message.txt').decode('utf-8')
         tr = b['transcript'] or {}
         rec = {'schema': 'cps.generation-record.v1', 'case_id': self.R['case'], 'reader': self.R['reader'] or 'A',
                'platform': at['platform'], 'model': at['model'], 'effort': at['effort'],
                'conversation_id': b['conversation'], 'started_utc': at['started_utc'], 'ended_utc': at['ended_utc'],
                'prompt_sha256': lt['prompt_sha256'], 'single_user_message': at['single_user_message'],
-               'features': at['features'], 'tools_enabled': at['tools'], 'final_message': fm,
-               'transcript_status': at['transcript_status']}
+               'features': at['features'], 'tools_enabled': N.tool_list(savepoint.member_bytes(ent, 'attest/tools.txt')),
+               'final_message': fm, 'transcript_status': at['transcript_status'],
+               'notes': N.O63_NOTE % at['tools_present']['sha256']}
         if tr.get('status') == 'exported':
             rec['transcript_sha256'] = tr['sha256']
         else:
             rec['transcript_not_available_reason'] = "the operator's platform did not export the transcript (attested)"
         write_new(p, durable.doc_bytes(rec), 0o644)
 
-    # ---------------------------------------------------------- the chain
     def run(self):
         r = self.prologue()
         if r:
@@ -264,7 +258,6 @@ class Chain:
             return None
         return {'sha256': sha_file(p), 'deliverable_sha256': (d.get('deliverable_xlsx') or {}).get('sha256')}
 
-    # ---------------------------------------------------------- the entry
     def commit_end(self, out):
         env = self.env
         if out['entry'] == 'HALT':
@@ -455,15 +448,16 @@ def do_place(env, info):
     jr = Path(info['inbox'])
     placed = []
     if info.get('ledger'):
-        sha = place.place_ledger(lay, jr / N.entry_name(ser, info['ledger']['seq']), info['ledger']['sha256'])
-        placed.append({'what': 'ledger', 'path': str(lay.ledger), 'tree_sha256': sha})
+        sha, aside = place.place_ledger(lay, jr / N.entry_name(ser, info['ledger']['seq']), info['ledger']['sha256'])
+        placed.append({'what': 'ledger', 'path': str(lay.ledger), 'tree_sha256': sha, 'aside': aside})
     ff = None
     if info.get('job_dir'):
-        png = info.get('png')
+        png, snap = info.get('png'), jr / N.entry_name(ser, info['snapshot_seq'])
         parts = [jr / n for n in (png or {}).get('parts') or []]
         ai = [(jr / N.entry_name(ser, a['seq']), a['output'], (a.get('revision') or 1) > 1) for a in info.get('ai') or []]
-        t = place.place_job(lay, info['job_dir'], jr / N.entry_name(ser, info['snapshot_seq']), png, parts, ai)
-        placed.append({'what': 'job', 'path': info['job_dir'], 'tree_sha256': t})
+        before = info.get('rewalk') and os.path.lexists(info['job_dir']) and rewalk(env, info, snap)  # GAP-02
+        t, aside = place.place_job(lay, info['job_dir'], snap, png, parts, ai)
+        placed.append({'what': 'job', 'path': info['job_dir'], 'tree_sha256': t, 'aside': aside})
         for tr in info.get('transcripts') or []:
             ent = jr / N.entry_name(ser, tr['seq'])
             man = savepoint.read_entry(ent)
@@ -474,15 +468,18 @@ def do_place(env, info):
                     if not os.path.exists(dest):
                         place.place_member(ent, m[0], dest)
         if info.get('rewalk'):
-            ff = rewalk(env, info, jr / N.entry_name(ser, info['snapshot_seq']))
+            ff = bool(before) or rewalk(env, info, snap)
     return {'status': 'done', 'placed': placed, 'files_found': ff}
 
 
 def rewalk(env, info, snap_entry):
-    """§8.6 step 3: any file in the open role's output folder other than what the snapshot placed (a CONTINUED V's
-    revision 1) is a file found."""
+    """§8.6 step 3: a file in the open role's output folder that the snapshot did not place is a file found."""
     ro = env.state['runs'][info['run']]['roles'][info['open_role']]
     out = F.latest(ro)['output']
     rel = os.path.relpath(out, info['job_dir']).replace(os.sep, '/')
     snap = {(m[0], m[4]) for m in savepoint.read_entry(snap_entry)['payload']['members']}
-    return any(r[1] == 'file' and ('job/%s/%s' % (rel, r[0]), r[4]) not in snap for r in place.walk_output(out))
+    try:
+        rows = place.walk_output(out)
+    except Halt:
+        return True
+    return any(r[1] == 'file' and ('job/%s/%s' % (rel, r[0]), r[4]) not in snap for r in rows)

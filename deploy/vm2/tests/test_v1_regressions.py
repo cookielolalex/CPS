@@ -74,14 +74,14 @@ MAP = {
               'placeholders, key names, pattern names and README examples are VALUE_FORBIDDEN/VALUE_PLACEHOLDER'),
     'OP-05': ('test_op05_probe_same_session_refused', 'delegate:test_probe_p5', 'as SAFE-03'),
     'OP-06': ('test_op06_helper_never_needs_a_listing', 'direct',
-              'by construction: exact-name FIND only; LIST NEWEST 10 is a head hint, never a lookup'),
+              'by construction: exact-name FIND and DOWNLOAD by id only; v2.1 deleted the LIST head hint'),
     'OP-07': ('test_op07_drive_calls_per_run_within_budget', 'world',
               'measured Drive calls per run and per restore within the §X.5.5 budget'),
     'OP-08': ('test_op08_every_file_uploaded_once_when_drive_is_normal', 'world',
               'by construction: one commit primitive; every journal file is uploaded once on a normal Drive'),
     'OP-09': ('test_op09_selftest_worker_death_bounded', 'direct',
-              'a dead self-test is retried once (SELFTEST_DIED); OPENED is asked without a list; everyday asks in '
-              'order (the world half is test_resets test_selftest_died_retried_once_then_stops)'),
+              'a dead self-test is retried once (SELFTEST_DIED); nothing is asked between OPEN and the end; '
+              'everyday asks in order (the world half is test_resets test_selftest_died_retried_once_then_stops)'),
     'TST-01': ('test_tst01_second_start_same_attempt_chain_invalid', 'delegate:test_core_table', 'T32'),
     'TST-02': ('test_tst02_nothing_written_with_file_found_is_written', 'direct', 'forced FILES_FOUND -> T47'),
     'TST-03': ('test_tst03_not_ended_is_written', 'direct', 'forced NOT_ENDED -> T47'),
@@ -103,9 +103,9 @@ MAP = {
     'FLAGS-2': ('test_flags2_empty_carriers_distinct_per_reader', 'delegate:test_maint', 'score_check'),
     'FLAGS-3': ('test_flags3_runner_failed_runs_get_empty_carriers', 'delegate:test_maint', 'score_check'),
     'MK-1': ('test_mk1_header_slip_in_one_copy_recovers', 'direct',
-             'deploy/make_kit.py is outside cps-vm-helper.v2; its own test of the slipped header is run here'),
+             'deploy/make_kit.py (MAINT-6): its own tests of the slipped and damaged member path are run here'),
     'MK-2': ('test_mk2_duplicate_binary_names_refused', 'direct',
-             'outside cps-vm-helper.v2 (deploy/make_kit.py pack, unchanged): reported open, see the docstring'),
+             'deploy/make_kit.py pack (MAINT-6): two binary members with one file name are refused'),
     'GATE-1': ('test_gate1_gates_checked_on_every_go', 'direct', 'gates_check runs before every plan step'),
     'TEST-1': ('test_test1_kit_change_with_run_in_flight_stops', 'direct', 'KIT_CHANGE_WITH_RUN_IN_FLIGHT'),
 }
@@ -170,9 +170,7 @@ def test_f1_core_continued_v_is_t46():
     T.drive(w, 'PREPARE_GENERATE', 'AI', 'FINISH', 'AI', 'REVIEW_INCOMPLETE')
     R = w.state['runs']['A/case01']
     assert R['roles']['V1']['status'] == 'CONTINUED'
-    for oc in ('NOTHING_WRITTEN', 'WRITTEN', 'NO_CONVERSATION'):
-        e, it = resolve(w, ans(outcome=oc, transcript='not_available'))
-        assert it['action'] is None or it['action'] == 'FREEZE_VISUAL_FAILED', it
+    tc().test_t1_continued_v_other_outcomes_t48()     # T1: the fold gets every other outcome (no vacuous loop)
     e, it = resolve(w, ans(outcome='CONTINUED', transcript='not_available'))
     assert it['action'] == 'FREEZE_VISUAL_FAILED'
     bad = json.loads(json.dumps(e))
@@ -229,11 +227,11 @@ def test_f6_every_block_has_exactly_one_terminal_action():
     suites passes drive.check_grammar (FakeDot.cmd, test_vio.parse_block)."""
     from cpsvm2.core.step import PrintBlock
     from cpsvm2.vio import drive
-    for blk in (PrintBlock('KIT', downloads=(('CPS/setup', 'x' * 24, '/home/agent/cps/inbox/kit/k.zip'),)),
+    for blk in (PrintBlock('KIT', downloads=(('CPS/setup', 'x' * 24, '/tmp/cps/inbox/kit/k.zip'),)),
                 PrintBlock('WORK')):
-        body = drive.body_lines(blk, '/home/agent/cps/vm.sh')
+        body = drive.body_lines(blk, '/tmp/cps/vm.sh')
         assert [ln for ln in body if ln.startswith('DO: ')] == [body[-1]], body
-        assert body[-1] == 'DO: RUN bash /home/agent/cps/vm.sh go', body
+        assert body[-1] == 'DO: RUN bash /tmp/cps/vm.sh go', body
     h = 'CPSV series=D1 head=000001 kit=0123456789ab at=000001-0001-abcdef mode=drill state=WORK'
     for bad in ([h, 'DOWNLOAD CPS/setup ID abc TO /x'], [h, 'DO: RUN x', 'FIND CPS NAME a'], [h, 'DO: A', 'DO: B']):
         assert drive.check_grammar(bad) is not None, bad
@@ -294,15 +292,15 @@ def test_safe02_case_id_refused_before_any_write():
     placeholder is REFUSED (VALUE_FORBIDDEN/VALUE_PATTERN/VALUE_PLACEHOLDER) and every cache file stays byte-identical;
     nothing is uploaded."""
     V = tv()
-    w = V.World()
-    code, a = w.cmd('go')
-    at = V.at_of(a)
-    snap = w.cache_bytes()
     for v in ('case 01', "case'01", 'case01\n', 'casé', '１２', '{CASE_ID}', 'CASE_ID', '-lead', 'a' * 81):
-        code, out = w.cmd('answer', '--at', at, 'case=' + v)
-        assert code == 4 and out[1] in ('REFUSED VALUE_FORBIDDEN', 'REFUSED VALUE_PATTERN', 'REFUSED VALUE_PLACEHOLDER'), \
-            (v, out)
-        assert w.cache_bytes() == snap, v
+        w = V.World()                                   # a World each: the fourth refusal of a block is SLIP_LIMIT
+        code, a = w.cmd('go')
+        snap = {k: x for k, x in w.cache_bytes().items() if k != 'BLOCK.json'}
+        code, out = w.cmd('answer', '--at', V.at_of(a), 'case=' + v)
+        assert code == 4 and out[1] in ('REFUSED VALUE_FORBIDDEN case', 'REFUSED VALUE_PATTERN case',
+                                        'REFUSED VALUE_PLACEHOLDER case'), (v, out)
+        assert {k: x for k, x in w.cache_bytes().items() if k != 'BLOCK.json'} == snap, v
+        assert not getattr(w.drive, 'log', []), 'nothing uploaded'
 
 
 def test_safe04_enospc_or_short_write_at_every_durable_write():
@@ -328,15 +326,15 @@ def test_safe05_trailing_newline_and_bad_id_refused():
     for bad in ('A' * 24 + '\n', 'A' * 19, 'A/' + 'A' * 22, 'A' * 23 + 'é'):
         assert N.check_value('id', 'ID', bad, cfg) is not None, bad
     from cpsvm2.vio import drive
-    for f in ('%s:%d' % ('A' * 24, 5),):
-        assert drive.parse_copy(f, True) is not None
-    for f in ('%s:5\n' % ('A' * 24), 'A' * 24, '%s:x' % ('A' * 24), ':5'):
-        c = drive.parse_copy(f, True)
-        assert c is None or not N.fm(N.PATTERNS['SIZE'], c[-1]), f
+    ok = lambda v: N.check_value('id', 'ID', v, cfg) is None                      # noqa: E731
+    assert drive.manual_copies([['n', ['%s:%d' % ('A' * 24, 5)], False]], ['n'], ok) == (None, {'n': [['A' * 24, 5]]})
+    for f in ('%s:5\n' % ('A' * 24), 'A' * 24, '%s:x' % ('A' * 24), ':5', '%s:05' % ('A' * 24),
+              '%s:a:5' % ('A' * 24)):
+        assert drive.manual_copies([['n', [f], False]], ['n'], ok)[0] == 'VALUE_PATTERN', f
 
 
 def run_session_start(home, repo, commit, boot='0f0e0d0c-0b0a-4908-8706-050403020100', env_over=None):
-    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(home / 'cps'), CPS_TOOLS=str(home / 'cps-tools'),
+    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(home.parent / 'tmp/cps'), CPS_TOOLS=str(home / 'cps-tools'),
                CPS_VM_BOOT_ID_PATH=str(home / 'boot_id'))
     env.update(env_over or {})
     (home / 'boot_id').write_text(boot + '\n')
@@ -364,11 +362,12 @@ def test_safe06_session_start_git_error_prints_stop_block():
     subprocess.run(g + ['add', '-A'], check=True)
     subprocess.run(g + ['commit', '-q', '-m', 'invented'], check=True)
     commit = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
-    home = root / 'h'
-    (home / 'cps').mkdir(parents=True)
-    os.symlink(repo, home / 'cps/repo')
+    home, base = root / 'h', root / 'tmp/cps'                   # A1: BASE outside HOME, as /tmp/cps on the Dot
+    home.mkdir()
+    base.mkdir(parents=True)
+    os.symlink(repo, base / 'repo')
     code, out = run_session_start(home, repo, commit)
-    assert code == 0 and out[-1] == 'DO: RUN bash %s/cps/vm.sh go' % home and 'CPSV-REPO commit=' + commit in out, out
+    assert code == 0 and out[-1] == 'DO: RUN bash %s/vm.sh go' % base and 'CPSV-REPO commit=' + commit in out, out
     code, out = run_session_start(home, repo, 'f' * 40)
     assert (code, out[-1]) == (3, 'DO: STOP SESSION_COMMIT_MISMATCH HANDBACK C'), out
     (repo / 'f.txt').write_text('changed\n')
@@ -415,18 +414,19 @@ def test_op04_placeholders_refused_state_unchanged():
 
 
 def test_op06_helper_never_needs_a_listing():
-    """OP-06, by construction: the helper's only Drive reads are exact-name FIND (every copy), LIST <folder> NEWEST 10
-    as a head hint (§X.8.4) and DOWNLOAD by id. FakeDrive offers the Dot no full listing, the grammar has no PREFIX
-    form, and no shipped module prints one."""
+    """OP-06, by construction: the helper's only Drive reads are exact-name FIND (every copy; its saved result for
+    `found --raw`) and DOWNLOAD by id; v2.1 deleted the LIST head hint (§2.13). FakeDrive offers the Dot no listing, the
+    grammar has no PREFIX or LIST form, and no shipped module prints one."""
     import fakes
     from cpsvm2.vio import drive
     assert not hasattr(fakes.FakeDrive, 'find_prefix')
     dot_side = {n for n in vars(fakes.FakeDrive) if not n.startswith('_')} - {'table', 'has', 'bytes_of', 'plant',
                                                                               'remove', 'listing', 'approve'}
-    assert dot_side == {'upload', 'find', 'list_newest', 'download'}, dot_side
+    assert dot_side == {'upload', 'find', 'raw_find', 'download'}, dot_side
     h = 'CPSV series=D1 head=000001 kit=0123456789ab at=000001-0001-abcdef mode=drill state=HEAD'
-    assert drive.check_grammar([h, 'LIST CPS/reports NEWEST 10', 'DO: RUN bash /x/vm.sh go']) is None
-    for bad in ('FIND CPS/reports PREFIX CPSJ_D1_', 'LIST CPS/reports PREFIX CPSJ NEWEST 10', 'LIST CPS/reports'):
+    assert drive.check_grammar([h, 'FIND CPS/drills/D1 NAME CPSJ_D1_000002.tgz', 'DO: RUN bash /x/vm.sh go']) is None
+    for bad in ('FIND CPS/reports PREFIX CPSJ_D1_', 'LIST CPS/reports PREFIX CPSJ NEWEST 10', 'LIST CPS/reports',
+                'LIST CPS/reports NEWEST 10'):
         assert drive.check_grammar([h, bad, 'DO: RUN bash /x/vm.sh go']) is not None, bad
     for dp, _, fns in os.walk(os.path.join(VM2, 'cpsvm2')):
         for n in fns:
@@ -436,19 +436,19 @@ def test_op06_helper_never_needs_a_listing():
 
 def test_op09_selftest_worker_death_bounded():
     """OP-09: (a) a dead self-test runs again once, then SELFTEST_DIED (cli.foreground_check; the world run is
-    test_resets test_selftest_died_retried_once_then_stops); (b) without a conversation list the plan asks OPENED
-    before AWAIT; (c) everyday: the delivery question comes before any DELIVER to=user."""
+    test_resets test_selftest_died_retried_once_then_stops); (b) after OPEN the plan asks nothing in between (v2.1 has
+    no OPENED and no AWAIT); (c) everyday: the delivery question comes before any DELIVER to=user."""
     import inspect
     from cpsvm2 import cli
     src = inspect.getsource(cli.foreground_check)
     assert "fg.get('attempt') == 1" in src and "'SELFTEST_DIED'" in src
     T = tc()
-    w = T.q_world(p1_conversation_list='no')
+    w = T.q_world()
     T.drive(w, 'PREPARE_GENERATE')
     st = P.next_action(view(w.state, boot=w.boot))
     st2 = P.next_action(view(w.state, marks={st.mark: 'x'} if getattr(st, 'mark', None) else {}, boot=w.boot))
     acts = [x.do[0] if hasattr(x, 'do') else x.context.get('action') for x in (st, st2)]
-    assert acts[0] == 'OPEN_CONVERSATION' and acts[1] == 'OPENED', acts
+    assert acts == ['OPEN_CONVERSATION', 'EXPORT_TRANSCRIPT'], acts
     T.test_everyday_delivery_rows()
 
 
@@ -565,38 +565,22 @@ def test_kit1_release_swap_after_genesis_stops():
     assert SE.kit_change(w.state, kit, hk)[0] == 'KIT_CHANGE_WITH_RUN_IN_FLIGHT'
 
 
+def _mk(*names):
+    p = subprocess.run([sys.executable, '-I', '-B', os.path.join(REPO, 'deploy/test_make_kit.py')] + [
+        'MakeKitTest.' + n for n in names], cwd=WORK, capture_output=True, text=True, timeout=600)
+    assert p.returncode == 0 and 'Ran %d test' % len(names) in p.stderr, p.stderr[-800:]
+
+
 def test_mk1_header_slip_in_one_copy_recovers():
-    """MK-1 belongs to deploy/make_kit.py (not part of cps-vm-helper.v2, unchanged here); its A/B recovery tests run
-    from the checkout: the damaged and the slipped header in one copy."""
-    p = subprocess.run([sys.executable, '-I', '-B', os.path.join(REPO, 'deploy/test_make_kit.py'),
-                        'MakeKitTest.test_damaged_header_line_in_one_copy',
-                        'MakeKitTest.test_slipped_header_sha_in_one_copy'], cwd=WORK, capture_output=True, text=True,
-                       timeout=600)
-    assert p.returncode == 0 and 'Ran 2 tests' in p.stderr, p.stderr[-800:]
+    """MK-1 (MAINT-6, W38): deploy/make_kit.py settles a path dispute (NOTE.mx / NOT~.md in one copy) by majority, and
+    recovers the damaged and the slipped header in one copy."""
+    _mk('test_member_path_slip_in_one_copy_recovers', 'test_damaged_header_line_in_one_copy',
+        'test_slipped_header_sha_in_one_copy')
 
 
 def test_mk2_duplicate_binary_names_refused():
-    """MK-2 (open, outside the helper): deploy/make_kit.py pack is not changed by v2. v2's kit intake reads the kit zip
-    through the reused kit_members, which refuses a zip with two members of one name (KIT_SUMS_MISMATCH); this test
-    shows that side only."""
-    import zipfile
-    from cpsvm2.vio.v1compat import Halt
-    from cpsvm2.vio.v1reuse import kit_members
-    d = Path(tempfile.mkdtemp(prefix='mk2_', dir=WORK))
-    z = d / 'k.zip'
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')                 # zipfile warns about the duplicate name it is asked to write
-        with zipfile.ZipFile(z, 'w') as zf:
-            zf.writestr('RELEASE.json', b'{}')
-            zf.writestr('RELEASE.json', b'{"x": 1}')
-            zf.writestr('SHA256SUMS', b'')
-        try:
-            kit_members(z)
-            raise AssertionError('a kit with a duplicate member was accepted')
-        except Halt as h:
-            assert h.code.startswith('KIT_') or h.code.startswith('ARCHIVE_'), h.code
-    shutil.rmtree(d)
+    """MK-2 (MAINT-6, W39): pack refuses two binary members with one file name."""
+    _mk('test_pack_refuses_duplicate_binary_names')
 
 
 def test_gate1_gates_checked_on_every_go():
@@ -605,7 +589,7 @@ def test_gate1_gates_checked_on_every_go():
     import inspect
     from cpsvm2 import cli
     assert inspect.getsource(cli.plan_step).split('\n')[1].strip() == 'gates_check(env)'
-    assert 'RELEASE_GATE_OPEN' in cli.NOT_STICKY
+    assert "code != 'RELEASE_GATE_OPEN'" in inspect.getsource(cli.stop_block), 'the gate STOP is not sticky'
     tv().t_gate1_foreground_hold_gate()
 
 
@@ -633,22 +617,23 @@ def test_stale_at_refused():
     V = tv()
     w = V.World()
     code, a = w.cmd('go')
-    snap = w.cache_bytes()
+    snap = {k: x for k, x in w.cache_bytes().items() if k != 'BLOCK.json'}
     for args in (('answer', '--at', '000001-0001-ffffff', 'case=case01'),
                  ('found', '--at', '000001-0002-000000', '--name', 'x', '--none')):
         code, out = w.cmd(*args)
         assert code == 4 and out[1] == 'REFUSED STALE_AT', out
-        assert w.cache_bytes() == snap
+        assert {k: x for k, x in w.cache_bytes().items() if k != 'BLOCK.json'} == snap
 
 
 def test_fork_at_restore_lagging_n_plus_1():
     """G3: N+1 that lags once is found by the second FIND (w_abs later) and moves the head; a lagging foreign copy of
-    N+1 next to ours is FORK; a single absence is never accepted."""
+    N+1 next to ours makes the head N+1 with both copies, which step 3 downloads (a FORK when the bytes differ, v2.1
+    §2.1); a single absence is never accepted."""
     D = tc().Drive
     r = D('Q1', 6, lag={6: 1}).search(hint=5)
     assert (r['verdict'], r.get('seq')) == ('head', 6), r
     r = D('Q1', 6, lag={6: 1}, foreign=6).search(hint=5)
-    assert r == {'verdict': 'stop', 'code': 'FORK'}, r
+    assert (r['verdict'], r['seq'], len(r['copies'])) == ('head', 6, 2), r
 
 
 def test_rewalk_forces_written():
@@ -660,13 +645,178 @@ def test_rewalk_forces_written():
     test_tst02_nothing_written_with_file_found_is_written()
 
 
-def test_no_conversation_without_list_is_written():
-    """§8.6, O58: without a conversation list, NO_CONVERSATION for a role never OPENED is forced NO_LIST (T47)."""
+def test_no_conversation_list_gate_required():
+    """§8.6, O58 in v2.1: the conversation list is a release gate (host.gates_problem) and GENESIS requires it (t01:
+    SCHEMA_INVALID), so the NO_LIST branch is gone; NO_CONVERSATION for a STARTED role with the list showing none is
+    admissible (T43 SUPERSEDE)."""
     T = tc()
-    w = T.q_world(p1_conversation_list='no')
+    w = CW.World('Q1', gates={'p1_conversation_list': 'no'}, jobs=[['case01', 1, None]])
+    raises('SCHEMA_INVALID', lambda: F.apply(None, CW.genesis(w)))
+    w = T.q_world()
     T.drive(w, 'PREPARE_GENERATE')
-    e, it = resolve(w, ans(outcome='NO_CONVERSATION'))
-    assert (it['forced'], it['action']) == ('NO_LIST', 'FREEZE_LOST'), it
+    e, it = resolve(w, ans(outcome='NO_CONVERSATION', list_shows_none=True))
+    assert (it['forced'], it['action']) == (None, 'SUPERSEDE'), it
+
+
+def _session_world(tag):
+    root = Path(tempfile.mkdtemp(prefix=tag, dir=WORK))
+    home, base = root / 'home', root / 'tmp/cps'                # A1: BASE outside HOME
+    home.mkdir()
+    base.mkdir(parents=True)
+    os.symlink(REPO, base / 'repo')
+    boot = root / 'boot'
+    boot.write_text('0f0e0d0c-0b0a-4908-8706-050403020100\n')
+    env = dict(os.environ, HOME=str(home), CPS_VM_BASE=str(base), CPS_TOOLS=str(home / 'tools'),
+               CPS_VM_BOOT_ID_PATH=str(boot))
+    return home, env
+
+
+def _head():
+    return subprocess.run(['git', '-C', REPO, 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+
+
+def test_s08_wrong_head_stops_before_setup():
+    """S-08 (W13): a checkout whose HEAD is not --commit stops SESSION_COMMIT_MISMATCH before any setup step: no setup
+    log, no launcher, no RUNNING line."""
+    home, env = _session_world('s08')
+    (home / 'tools/var').mkdir(parents=True)
+    (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % ('f' * 40))
+    p = subprocess.run(['bash', str(home.parent / 'tmp/cps/repo/deploy/vm2/session_start.sh'), '--commit', 'f' * 40],
+                       capture_output=True, text=True, env=env, timeout=120)
+    assert p.returncode == 3 and 'DO: STOP SESSION_COMMIT_MISMATCH HANDBACK C' in p.stdout, p.stdout
+    assert 'CPSV-RUNNING' not in p.stdout and not (home.parent / 'tmp/cps/vm.sh').exists()
+    assert not list((home.parent / 'tmp/cps/outbox').glob('setup_*.log')) if (home.parent / 'tmp/cps/outbox').is_dir() \
+        else True
+
+
+def test_opx08_kit_none_bootstraps_without_hint():
+    """OPX-08 (W24, W73): `--kit none` (with any --hint) bootstraps with no hint and removes an older HINT.json."""
+    home, env = _session_world('o8')
+    commit = _head()
+    (home / 'tools/var').mkdir(parents=True)
+    (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
+    (home.parent / 'tmp/cps/outbox/v2').mkdir(parents=True)
+    (home.parent / 'tmp/cps/outbox/v2/HINT.json').write_text('{"kit": "aaaaaaaaaaaa", "seq": 3}\n')
+    p = subprocess.run(['bash', str(home.parent / 'tmp/cps/repo/deploy/vm2/session_start.sh'), '--commit', commit,
+                        '--hint', '000003', '--kit', 'none'], capture_output=True, text=True, env=env, timeout=120)
+    assert p.returncode == 0 and 'CPSV-REPO commit=' + commit in p.stdout, p.stdout
+    assert not (home.parent / 'tmp/cps/outbox/v2/HINT.json').exists(), 'a no-hint bootstrap removes an older HINT.json'
+
+
+def test_gap11_session_start_removes_pycache():
+    """GAP-11 / SD-63 (W84): session_start.sh removes every __pycache__ folder under the checkout."""
+    home, env = _session_world('g11')
+    commit = _head()
+    (home / 'tools/var').mkdir(parents=True)
+    (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
+    pyc = Path(VM2) / 'cpsvm2/__pycache__'
+    pyc.mkdir(exist_ok=True)
+    (pyc / 'x.cpython-313.pyc').write_bytes(b'not code')
+    p = subprocess.run(['bash', str(home.parent / 'tmp/cps/repo/deploy/vm2/session_start.sh'), '--commit', commit],
+                       capture_output=True, text=True, env=env, timeout=120)
+    assert p.returncode == 0, p.stdout
+    assert not pyc.exists(), 'every __pycache__ under the checkout is removed'
+
+
+def test_d16_evict_runner_frozen_folder_nonroot():
+    """D16 (F6, W106; decides in the non-root pass): a frozen job folder whose directories lost the owner write bit
+    (0555, files 0444, as the runner leaves frozen fixtures) is removed by the EVICT post action. The folder is made
+    read-only before its FROZEN snapshot here (an invented job, not a runner run; recorded in the build report)."""
+    V = tv()
+    root = V.tmpdir('d16ev')
+    env = V.SPEnv(root)
+    jd = V.make_job(root, pngs=1)
+    fz = b'{"frozen": "invented"}\n'
+    (jd / 'FROZEN.json').write_bytes(fz)
+    for dp, dns, fns in os.walk(jd, topdown=False):
+        for n in fns:
+            os.chmod(os.path.join(dp, n), 0o444)
+        os.chmod(dp, 0o555)
+    pend, entry, _, _ = V.write_png_commit(env, jd, kind='FROZEN')
+    V.place.evict(env.lay, str(jd), pend['entry']['path'], V.sha(fz), 'A_case01_FROZEN.json')
+    assert not jd.exists(), 'EVICT removed the read-only frozen folder'
+    REPORT_D16.append({'uid': os.getuid(), 'readonly_dirs': True})
+
+
+REPORT_D16 = []
+
+
+def test_a1_base_required_outside_home_and_carried_by_launcher():
+    """Amendment A1 (W116, W117, W118; fix round G5: W134, W135): session_start.sh takes BASE only from CPS_VM_BASE.
+    Without it, with a base inside HOME (the old ~/cps, HOME itself, or one that only resolves into HOME) or with a
+    quote in it, it stops SESSION_LAYOUT before it writes anything. With /tmp/cps-shaped
+    base it makes BASE/tmp and writes a vm.sh that exports CPS_VM_BASE and CPS_TOOLS with quoted absolute values, so a
+    fresh shell with neither variable set runs the helper with them (python3 is a stand-in that prints them)."""
+    home, env = _session_world('a1')
+    base, commit = Path(env['CPS_VM_BASE']), _head()
+    (home / 'tools/var').mkdir(parents=True)
+    (home / 'tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
+    sh = str(base / 'repo/deploy/vm2/session_start.sh')
+    old = home / 'cps'
+    old.mkdir()
+    os.symlink(REPO, old / 'repo')
+    for over in ({'CPS_VM_BASE': ''}, {'CPS_VM_BASE': str(old)}, {'CPS_VM_BASE': str(home)}):
+        e = {k: v for k, v in dict(env, **over).items() if v}
+        p = subprocess.run(['bash', sh if over['CPS_VM_BASE'] != str(old) else str(old / 'repo/deploy/vm2/session_start.sh'),
+                            '--commit', commit], capture_output=True, text=True, env=e, timeout=120)
+        assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), (over, p.stdout)
+        assert not (base / 'vm.sh').exists() and not (old / 'vm.sh').exists() and not (old / 'outbox').exists(), over
+    # fix round G5 (W134, W135): the HOME check compares resolved paths. Each base below has a repo link that passes the
+    # REPO check, so only the HOME check can stop it: HOME itself, a path through '..', a link into HOME, and HOME
+    # given with a trailing slash.
+    os.symlink(REPO, home / 'repo')
+    os.symlink(old, base.parent / 'link_into_home')
+    for b, h in ((home, home), (Path(str(base.parent) + '/../home/cps'), home), (base.parent / 'link_into_home', home),
+                 (old, str(home) + '/')):
+        p = subprocess.run(['bash', str(Path(b) / 'repo/deploy/vm2/session_start.sh'), '--commit', commit],
+                           capture_output=True, text=True, env=dict(env, CPS_VM_BASE=str(b), HOME=str(h)), timeout=120)
+        assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), (b, h, p.stdout)
+        assert not (Path(b) / 'vm.sh').exists() and not (old / 'outbox').exists() and not (home / 'outbox').exists(), b
+    os.unlink(home / 'repo')
+    q = Path(str(base).replace('/cps', "/c'ps"))
+    q.mkdir(parents=True)
+    os.symlink(REPO, q / 'repo')
+    p = subprocess.run(['bash', str(q / 'repo/deploy/vm2/session_start.sh'), '--commit', commit], capture_output=True,
+                       text=True, env=dict(env, CPS_VM_BASE=str(q)), timeout=120)
+    assert (p.returncode, p.stdout.splitlines()[-1]) == (3, 'DO: STOP SESSION_LAYOUT HANDBACK C'), p.stdout
+    p = subprocess.run(['bash', sh, '--commit', commit], capture_output=True, text=True, env=env, timeout=120)
+    assert p.returncode == 0 and p.stdout.splitlines()[-1] == 'DO: RUN bash %s/vm.sh go' % base, p.stdout
+    vm = (base / 'vm.sh').read_text()
+    assert "export CPS_VM_BASE='%s' CPS_TOOLS='%s'\n" % (base, home / 'tools') in vm and (base / 'tmp').is_dir(), vm
+    stub = home.parent / 'stub'
+    stub.mkdir()
+    (stub / 'python3').write_text('#!/bin/sh\necho "base=$CPS_VM_BASE tools=$CPS_TOOLS args=$*"\n')
+    os.chmod(stub / 'python3', 0o755)
+    p = subprocess.run(['env', '-i', 'PATH=%s:/usr/bin:/bin' % stub, 'HOME=%s' % home, 'bash', str(base / 'vm.sh'), 'go'],
+                       capture_output=True, text=True, timeout=60)
+    assert p.stdout.strip() == 'base=%s tools=%s args=-I -B -X pycache_prefix=/dev/null %s/repo/deploy/vm2/vm2.py go' % (
+        base, home / 'tools', base), (p.stdout, p.stderr)
+
+
+def test_pf2_clear_bootstrap_runs_in_a_fresh_shell():
+    """Fix round PF-2/G1/CC-1/CC-3 (W139): a maintainer's clear gives the README section 1 block with COMMIT, --hint and
+    the new --kit filled in (README sections 1 and 6, delta v2.1 §9.8), and the Dot runs it as one command in a fresh
+    shell, with neither CPS_VM_BASE nor CPS_TOOLS set. It bootstraps from the block's own export line: CPSV-REPO, the
+    launcher under the base and the hint. The pre-amendment one-line form (session_start.sh alone, here with the base
+    path) stops SESSION_LAYOUT in that shell and writes nothing."""
+    import fakes
+    home, env = _session_world('pf2')
+    base, commit = Path(env['CPS_VM_BASE']), _head()
+    (home / 'cps-tools/var').mkdir(parents=True)
+    (home / 'cps-tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
+    fresh = ['env', '-i', 'PATH=/usr/bin:/bin', 'HOME=%s' % home, 'CPS_VM_BOOT_ID_PATH=%s' % env['CPS_VM_BOOT_ID_PATH']]
+    one = 'bash %s/repo/deploy/vm2/session_start.sh --commit %s --hint 000005 --kit 0123456789ab' % (base, commit)
+    p = subprocess.run(fresh + ['bash', '-c', one], capture_output=True, text=True, timeout=120)
+    assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), p.stdout
+    assert not (base / 'vm.sh').exists() and not (base / 'outbox').exists()
+    script = fakes.bootstrap_script(base, commit, ('000005', '0123456789ab'))
+    assert 'export CPS_VM_BASE=%s\n' % base in script, script
+    p = subprocess.run(fresh + ['bash', '-c', script], capture_output=True, text=True, timeout=120)
+    out = p.stdout.splitlines()
+    assert p.returncode == 0 and 'CPSV-REPO commit=%s' % commit in out and out[-1] == 'DO: RUN bash %s/vm.sh go' % base, \
+        (p.stdout, p.stderr)
+    assert json.loads((base / 'outbox/v2/HINT.json').read_text()) == {'kit': '0123456789ab', 'seq': 5}
+    assert "export CPS_VM_BASE='%s' CPS_TOOLS='%s'\n" % (base, home / 'cps-tools') in (base / 'vm.sh').read_text()
 
 
 DIRECT = [test_f1_core_continued_v_is_t46, test_f2_second_start_only_after_no_conversation,
@@ -683,7 +833,10 @@ DIRECT = [test_f1_core_continued_v_is_t46, test_f2_second_start_only_after_no_co
           test_mk1_header_slip_in_one_copy_recovers, test_mk2_duplicate_binary_names_refused,
           test_gate1_gates_checked_on_every_go, test_test1_kit_change_with_run_in_flight_stops, test_stale_at_refused,
           test_fork_at_restore_lagging_n_plus_1, test_rewalk_forces_written,
-          test_no_conversation_without_list_is_written]
+          test_no_conversation_list_gate_required, test_s08_wrong_head_stops_before_setup,
+          test_opx08_kit_none_bootstraps_without_hint, test_gap11_session_start_removes_pycache,
+          test_d16_evict_runner_frozen_folder_nonroot, test_a1_base_required_outside_home_and_carried_by_launcher,
+          test_pf2_clear_bootstrap_runs_in_a_fresh_shell]
 DELEGATE = {'test_f4_outcomes_total_over_frozen_shapes': 'test_core_table',
             'test_tst01_second_start_same_attempt_chain_invalid': 'test_core_table',
             'test_f5_audit_planted_restore_unknown_to_final': 'test_maint',
@@ -797,15 +950,50 @@ def x_op07(w, s):
         assert len(mine) == 5 and calls == 15 + 3 * p, (key, len(mine), p, calls)   # <= 24 when p <= 3
 
 
-def x_op07_restore(w, s):
-    """§X.5.5: a restore with a Dot hint costs 13-20 Drive calls, counted from the reset to the RESTORE's own verify."""
+def restore_counts(w):
+    """GAP-7 (D15): one restore's tool calls. Drive calls from the reset to the RESTORE's own download-back; helper
+    commands (go, found, answer) and saved results (found --raw) from the reset's session_start up to and including
+    the command that prints the first block past the RESTORE and its re-check (head >= its seq, state not RESTORE or
+    SAVE); waits are the Dot's WAITs in that span."""
     i0 = w.dot.reset_calls[0]
-    names = [x for k, f, x in w.drive.calls[i0:] if k == 'UPLOAD' and x.endswith('.tgz')]
-    rest = names[0]
+    rest = [x for k, f, x in w.drive.calls[i0:] if k == 'UPLOAD' and x.endswith('.tgz')][0]
     calls = w.drive.calls[i0:]
     ids = {c['id'] for c in w.drive.folders[N.series_folder(w.series)][rest]}
-    last = max(i for i, c in enumerate(calls) if c[2] == rest or c[2] in ids)
-    assert 13 <= last + 1 <= 20, 'OP-07: a restore with a hint took %d Drive calls' % (last + 1)
+    out = {'drive_calls': max(i for i, c in enumerate(calls) if c[2] == rest or c[2] in ids) + 1,
+           'helper_commands': 0, 'saved_results': 0, 'waits': 0}
+    rseq, b0 = int(rest.split('_')[-1][:6]), w.dot.tally[0]['boot']
+    k0 = next(i for i, t in enumerate(w.dot.tally) if t['argv0'] == 'session_start' and t['boot'] != b0)
+    blocks = iter(w.dot.blocks[next(i for i, b in enumerate(w.dot.blocks) if b['argv'] == ['session_start'] and
+                                    b['boot'] != b0) + 1:])
+    for t in w.dot.tally[k0 + 1:]:
+        if t['argv0'] == 'WAIT':
+            out['waits'] += 1
+            continue
+        b = next(blocks)
+        out['helper_commands'] += 1
+        out['saved_results'] += '--raw' in b['argv']
+        h = dict(x.split('=', 1) for x in b['lines'][0].split()[1:]) if b['lines'][0].startswith('CPSV ') else {}
+        if h and int(h['head']) >= rseq and h['state'] not in ('RESTORE', 'SAVE'):
+            return out
+    raise AssertionError('no block past the RESTORE')
+
+
+def x_opx10_restore(w, s):
+    """GAP-7: a restore's counts equal tests/budget_golden.json `restore` for the scenario's notes (hint, commit,
+    none), and README section 7 states them (lint L14)."""
+    got = restore_counts(w)
+    REPORT_D16.append({'opx10_restore': {s.get('notes', 'hint'): got}})
+    with open(BUDGET_GOLDEN) as f:
+        want = json.load(f)['restore'][s.get('notes', 'hint')]
+    assert got == want, (s.get('notes', 'hint'), got, want)
+
+
+def x_op07_restore(w, s):
+    """§X.5.5: a restore with a Dot hint costs 13-20 Drive calls, counted from the reset to the RESTORE's own verify;
+    its counts are the golden's (GAP-7)."""
+    n = restore_counts(w)['drive_calls']
+    assert 13 <= n <= 20, 'OP-07: a restore with a hint took %d Drive calls' % n
+    x_opx10_restore(w, s)
 
 
 def x_op08(w, s):
@@ -840,6 +1028,8 @@ WORLD = [
     dict(name='test_op07_restore_calls_within_budget', cfg='D', target=('AI', 1), point='e', extra='x_op07_restore'),
     dict(name='test_op08_every_file_uploaded_once_when_drive_is_normal', cfg='D', target=None, point=None,
          extra='x_op08'),
+    dict(name='test_d16_disk_bounded_over_runs', cfg='D', target=None, point=None, extra='x_d16_disk'),
+    dict(name='test_opx10_tool_calls_match_budget_golden', cfg='D', target=None, point=None, extra='x_opx10'),
     dict(name='test_tst06_prompt_changed_halts', cfg='D', target=('AI', 1), point='a', vis='change_prompt',
          stop='HALTED_PROMPT_CHANGED', extra='x_tst06'),
     dict(name='test_int07_output_changed_after_archive_halts_before_consumer', cfg='D', target=('AI', 1), point='a',
@@ -850,6 +1040,86 @@ WORLD = [
          special='test_imp04_no_commit_file_stops'),
 ]
 x_tst06 = x_halted('PROMPT_CHANGED')
+
+
+BUDGET_GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'budget_golden.json')
+
+
+def opx10_counts(w):
+    """OPX-10 (D15): per run of the series, the helper commands (go, found, answer), the Drive calls (by the names
+    of the run's entries and parts, as x_op07) and the saved search results (found --raw) that FakeDot made. A command
+    whose block shows head h works on entry h+1, so it counts for that entry's run ('series' for the others)."""
+    es = _entries(w)
+    by = _calls_by_name(w)
+    seq = {e['seq']: e for e in es.values()}
+
+    def run_of(e):
+        b = (e or {}).get('body') or {}
+        if not isinstance(b, dict):
+            return 'series'
+        nr = b.get('new_run') or {}
+        return b.get('run') or (nr and nr['tag'] + '/' + nr['case']) or 'series'
+    out = {}
+    tally = [t for t in w.dot.tally if t['argv0'] != 'WAIT']           # FakeDot's own count (W99); a WAIT has no block
+    assert len(tally) == len(w.dot.blocks), (len(tally), len(w.dot.blocks))
+    for b, t in zip(w.dot.blocks, tally):
+        if t['argv0'] not in ('go', 'found', 'answer') or not b['lines'] or not b['lines'][0].startswith('CPSV '):
+            continue
+        h = int(dict(x.split('=', 1) for x in b['lines'][0].split()[1:])['head'])
+        c = out.setdefault(run_of(seq.get(h + 1)), {'helper_commands': 0, 'drive_calls': 0, 'saved_results': 0})
+        c['helper_commands'] += 1
+        c['saved_results'] += '--raw' in b['argv']
+    for e in es.values():
+        r = run_of(e)
+        if r in out:
+            out[r]['drive_calls'] += sum(len(by.get(n, [])) for n in [e['name']] + [p['name'] for p in e['parts']])
+            out[r]['png_parts'] = out[r].get('png_parts', 0) + sum(1 for p in e['parts'] if '_PNG' in p['name'])
+    return out
+
+
+def x_opx10(w, s):
+    """OPX-10 (W26, W99): the measured tool calls per run of the D baseline equal tests/budget_golden.json (a
+    reviewed golden, written with --update-golden), and README section 7 states the golden's numbers (lint L14)."""
+    got = {k: v for k, v in opx10_counts(w).items() if k != 'series'}
+    REPORT_D16.append({'opx10': got})
+    upd = os.environ.get('CPSVM2_UPDATE_BUDGET')         # an absolute path: write the measured golden there
+    if upd:
+        with open(BUDGET_GOLDEN) as f:
+            old = json.load(f)
+        with open(upd, 'w') as f:
+            json.dump(dict(old, D_baseline=got), f, indent=1, sort_keys=True)
+            f.write('\n')
+        return
+    with open(BUDGET_GOLDEN) as f:
+        want = json.load(f)['D_baseline']
+    assert got == want, {k: (got.get(k), want.get(k)) for k in set(got) | set(want) if got.get(k) != want.get(k)}
+
+
+def x_d16_disk(w, s):
+    """D16 (F7, W109, W110), on the D baseline (four runs in a row): from FakeDot's per-block disk records, at no block
+    are more than two run job folders present and no run's folder outlives the start of the next-but-one run (its
+    FROZEN confirmed and its EVICT run); at FINAL, before BASE is wiped, no job folder and no outbox/journal file of a
+    confirmed seq remains (DROP_LOCAL)."""
+    import re
+    recs = w.dot.disk
+    assert recs, 'no disk records'
+    assert max(len(r['jobs']) for r in recs) <= 2, max(recs, key=lambda r: len(r['jobs']))
+    first = {}
+    for k, r in enumerate(recs):
+        for j in r['jobs']:
+            first.setdefault(j, k)
+    order = sorted(first, key=first.get)
+    for a, c in zip(order, order[2:]):            # a run's folder is evicted before the next-but-one run starts
+        assert not any(a in r['jobs'] for r in recs[first[c]:]), (a, c)
+    ob = w.base / 'outbox/journal'
+    assert not [p.name for p in ob.iterdir() if p.name.startswith('CPSJ_')] if ob.is_dir() else True, \
+        sorted(p.name for p in ob.iterdir())
+    now = w.disk_record()
+    assert not now['jobs'], now
+    seqs = [{m.group(1) for n in r['journal'] for m in [re.search(r'_(\d{6})', n)] if m} for r in recs]
+    REPORT_D16.append({'disk_blocks': len(recs), 'max_jobs': max(len(r['jobs']) for r in recs),
+                       'max_journal_files': max(len(r['journal']) for r in recs),
+                       'max_journal_seqs': max(len(x) for x in seqs), 'final': now})
 
 
 def test_imp04_no_commit_file_stops(w):
@@ -887,6 +1157,8 @@ def run(only=None, work=None):
         name = t.__name__ if callable(t) else t[1]
         if only and name not in only and 'test_v1_regressions' not in only:
             continue
+        if failed and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
+            break
         try:
             if callable(t):
                 t()

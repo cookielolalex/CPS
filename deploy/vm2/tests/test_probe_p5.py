@@ -56,7 +56,7 @@ def report(out):
 
 def test_safe03_probe_p5_same_call_check_refused():
     d = tempfile.mkdtemp(dir=WORK)
-    rc, out = probe(d, 'start', '--seconds', '3')
+    rc, out = probe(d, 'start', '--seconds', '3', '--min-gap', '0')
     assert rc == 0 and out.startswith('NEXT: end this tool call now'), out
     before = listing(d)
     rc, out = probe(d, 'check', '--min-gap', '0')
@@ -67,7 +67,7 @@ def test_safe03_probe_p5_same_call_check_refused():
 
 def test_op05_probe_same_session_refused():
     d = tempfile.mkdtemp(dir=WORK)
-    probe(d, 'start', '--seconds', '2')
+    probe(d, 'start', '--seconds', '2', '--min-gap', '0')
     before = listing(d)
     rc, out = probe(d, 'check', '--min-gap', '0', how='shell')
     assert (rc, out) == (4, 'REFUSED SAME_CALL'), (rc, out)
@@ -79,7 +79,7 @@ def test_probe_too_early_other_boot_not_started():
     d = tempfile.mkdtemp(dir=WORK)
     rc, out = probe(d, 'check', how='new')
     assert (rc, out) == (4, 'REFUSED NOT_STARTED'), out
-    probe(d, 'start', '--seconds', '2')
+    probe(d, 'start', '--seconds', '2', '--min-gap', '0')
     rc, out = probe(d, 'check', how='new')
     assert (rc, out) == (4, 'REFUSED TOO_EARLY'), out
     with open(os.path.join(d, 'boot_id'), 'w') as f:
@@ -93,7 +93,7 @@ def test_probe_too_early_other_boot_not_started():
 def test_probe_detached_worker_outlives_start():
     """The worker keeps writing after start exited; a check from another session reports it (FAIL: min-gap < 480)."""
     d = tempfile.mkdtemp(dir=WORK)
-    rc, _ = probe(d, 'start', '--seconds', '4')
+    rc, _ = probe(d, 'start', '--seconds', '4', '--min-gap', '0')
     assert rc == 0
     st = json.load(open(os.path.join(d, 'probe', 'START.json')))
     assert st['caller_ppid'] == os.getpid() and st['caller_sid'] == os.getsid(0) and st['start_exited_utc']
@@ -148,8 +148,8 @@ def test_probe_verdict_pass_and_fail_from_records():
 
 def test_probe_start_refuses_alive_worker_and_hold_records():
     d = tempfile.mkdtemp(dir=WORK)
-    probe(d, 'start', '--seconds', '3')
-    rc, out = probe(d, 'start', '--seconds', '3', how='new')
+    probe(d, 'start', '--seconds', '3', '--min-gap', '0')
+    rc, out = probe(d, 'start', '--seconds', '3', '--min-gap', '0', how='new')
     assert (rc, out) == (4, 'REFUSED WORKER_ALIVE'), out
     rc, out = probe(d, 'hold', '--seconds', '1')
     h = json.load(open(out))
@@ -158,9 +158,30 @@ def test_probe_start_refuses_alive_worker_and_hold_records():
     assert wait_done(d)
 
 
+def test_maint10_probe_start_refuses_seconds_below_min_gap():
+    """MAINT-10 (b) (W44): `start` refuses --seconds below --min-gap (a worker that ends before the check proves
+    nothing) and writes nothing."""
+    d = tempfile.mkdtemp(dir=WORK)
+    rc, out = probe(d, 'start', '--seconds', '10', '--min-gap', '480')
+    assert rc == 4 and 'REFUSED SECONDS_BELOW_MIN_GAP' in out, (rc, out)
+    assert not os.path.exists(os.path.join(d, 'probe', 'START.json'))
+
+
+def test_g8_dir_required_never_under_home():
+    """Fix round G8 (W138): probe_p5.py has no default folder under HOME, which the Dot's standard route cannot write:
+    without --dir it exits 2 (usage) and writes nothing; G-3 runs it with --dir under /tmp."""
+    home = os.path.join(WORK, 'g8home')
+    os.makedirs(home)
+    p = subprocess.run([sys.executable, '-I', '-B', PROBE, 'hold', '--seconds', '0'], env=dict(env(WORK), HOME=home),
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 2 and '--dir' in p.stderr, (p.returncode, p.stdout, p.stderr)
+    assert os.listdir(home) == [], os.listdir(home)
+
+
 TESTS = [test_safe03_probe_p5_same_call_check_refused, test_op05_probe_same_session_refused,
          test_probe_too_early_other_boot_not_started, test_probe_detached_worker_outlives_start,
-         test_probe_verdict_pass_and_fail_from_records, test_probe_start_refuses_alive_worker_and_hold_records]
+         test_probe_verdict_pass_and_fail_from_records, test_probe_start_refuses_alive_worker_and_hold_records,
+         test_maint10_probe_start_refuses_seconds_below_min_gap, test_g8_dir_required_never_under_home]
 
 
 def run(only=None, work=None):
