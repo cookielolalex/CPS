@@ -117,6 +117,8 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
    `/home/agent/cps/everyday_inputs/<case>/`, then answer with that case id. Before you answer `case=`, keep the exact
    text of `JOB.json` and `JOB_TITLE.json` and the place of the user's workbook in your notes.
 2. Follow the blocks through prepare, the generator, finish and the visual reviewer, exactly as in qualification.
+   Every upload goes into the everyday records folder (`Dots Folder/CPS_JOB_RECORDS`) or the profile's `deliveries`
+   folder; both must be inside the owner's standing pre-approval of uploads (section 7).
 3. Delivery: `DELIVER ... to=copy` (make the personal copy and its log, answer the two paths), then
    `DELIVER ... to=user` (send it, answer `sent=yes`). After a reset during a delivery you are asked whether the copy
    reached the user (`arrived=`); ask the user, never send a second copy on your own.
@@ -217,7 +219,8 @@ The platform's automatic approval review sometimes refuses an upload, and a time
   exactly as printed. Never copy a time from the conversation list or from Drive.
 - **Every conversation you open (S, G, V):** it gets the prompt file's text as its only message. Never send it a
   follow-up message, never answer its questions, never attach anything. When it has ended, write its final message
-  exactly as it is (any characters, any length; never edit, shorten or summarize it) to
+  exactly as it is (any characters, up to the kit's max_ai_output_bytes, larger: `STOP AI_OUTPUT_TOO_LARGE HANDBACK C`;
+  never edit, shorten or summarize it) to
   `/home/agent/cps/attest/final_message.txt`, then run `go` and answer. If the conversation shows no final message,
   create the file empty. Write the message with your file-write tool; if you use the shell, use a quoted heredoc whose
   delimiter line does not occur in the message. After a review continuation, write its new final message the same way.
@@ -226,6 +229,8 @@ The platform's automatic approval review sometimes refuses an upload, and a time
   platform's usual set, which the kit lists. If you created it in any other way, or you know that its tools differ,
   save the list of tools you know it had, one name per line, to a file under `/home/agent/cps/attest/` and answer
   `tools=file:<the absolute path of that file>`. Never answer `none`: conversations on this platform always have tools.
+  With `tools=inventory` the record holds the kit's list (by its sha256), the platform's usual set, not a list read
+  from that conversation.
 - **A generator (G) conversation ended:** whether it ended, its conversation id, its start and end times, the
   generator's platform, model and effort, whether you sent a single message, the six features (memory, custom
   instructions, web, connectors, file uploads, other agents: `yes` or `no` as the platform shows them for that
@@ -300,15 +305,18 @@ once every 5 minutes.
 | a normal run (prepare, generator, finish with p PNG parts, visual reviewer, freeze; p is 1 to 3) | 16 | 15 + 3p | 6 | about 10 | about 15 | about 65 to 71 |
 | a scope reader in the run, or a review continuation | +6 | +6 | +2 | about +4 | about +3 | about +21 |
 | a nonattempt | 2 | 3 | 1 | 0 | 0 | 6 |
-| a restore after a reset, with your notes (with `approval=` and the re-check) | about 23 | 16 to 23 | about 9 | 0 to 2 | 1 | about 53 |
-| a restore without your notes (about 400 journal entries) | about 50 | about 45 | about 23 | 0 to 2 | 1 | about 120 |
+| a restore after a reset, with your notes (the last `CPSV` line and the commit; `approval=` and the re-check) | 18 | 15 | 8 | 0 to 2 | 3 (2 waits) | about 45 |
+| a restore with only the commit line in your notes | 39 | 46 | 14 | 0 to 2 | 3 (2 waits) | about 103 |
+| a restore without your notes (step 0), measured on a journal of 6 entries | 24 | 23 | 13 | 0 to 2 | 3 (2 waits) | about 64 |
+| a restore without your notes after about 400 journal entries (an estimate, not measured) | about 50 | about 45 | about 23 | 0 to 2 | 3 | about 120 |
 | a maintainer clear (the kit check, then a restore) | +2 | +2 | +1 | 0 | 0 | a restore + 5 |
 | one refused upload | +2 | +3 | +1 | 0 | 0 | about +6, plus the owner's time |
 
 A qualification (38 runs, 34 nonattempts, about 10 scope readers and continuations, about 10 restores, the start and
 the end of the series) is about 3,600 tool calls: about 20 hours at 20 seconds per call, plus the conversations' own
 time, the stages' running time and the owner's approval waits. This assumes that the owner has approved in advance
-every upload the helper prints (new files into `CPS/qualification`, `CPS/drills`, `CPS/reports` and `CPS/setup`);
+every upload the helper prints (new files into `CPS/qualification`, `CPS/drills`, `CPS/reports` and `CPS/setup`, and
+for everyday jobs into the everyday records folder `Dots Folder/CPS_JOB_RECORDS` and the profile's `deliveries` folder);
 otherwise expect refused uploads on most days.
 
 ## 8. Example values (refused as answers)

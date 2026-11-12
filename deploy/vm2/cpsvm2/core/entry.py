@@ -1,9 +1,4 @@
-"""The ENTRY document (spec §3.4, §3.5): exact key sets, body validators, the state hash. Pure: no I/O.
-
-validate_entry(doc, draft=False, cfg=None) -> [problem str]; empty means valid. With draft=True (the fold's S1 check,
-§5.1 step 2) the keys `state` and `state_sha256` may be absent (when present they are still checked), and the runner pin and helper
-version are left to the fold's S6 (HELPER_UNKNOWN). With cfg
-({'series', 'accepted_helper_tree_sha256'}) the series and helper-tree acceptance of §3.4 are checked too."""
+"""The ENTRY document (spec §3.4, §3.5): exact key sets, body validators, the state hash. Pure: no I/O."""
 from .names import (BOOT_ID, CASE_ID, HELPER_VERSION, HEX64, PART_EXT, RUN_KEY, RUNNER_SHA256, SERIES, TAG, UTC_S,
                     cjson, entry_name, fm, parse_part, sha)
 
@@ -151,8 +146,7 @@ def _start(st, out):
 
 
 def validate_entry(doc, draft=False, cfg=None):
-    """Every violation of §3.4/§3.5 in `doc` (a parsed ENTRY document). An entry with any problem is never written
-    and is SCHEMA_INVALID when read."""
+    """Every §3.4/§3.5 violation in `doc` (draft=True: the fold's S1 check); empty means valid."""
     if not isinstance(doc, dict):
         return ['not a dict']
     want = ENTRY_KEYS - ({'state', 'state_sha256'} - set(doc) if draft else set())

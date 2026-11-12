@@ -1,18 +1,6 @@
-"""Section T (spec §4): TABLE as data, and apply(state, entry) -> state'. Pure: no I/O, no clock.
-
-apply(state, entry): `state` is the fold state (cps.vm2-state.v1, §3.11) or None before GENESIS; `entry` an ENTRY
-document or draft (its `state`/`state_sha256` keys are ignored). Returns a NEW state; the input is never modified.
-Raises ChainInvalid(code) where code is a structural code of §4.2 (SCHEMA_INVALID, SEQ_GAP, SERIES_MISMATCH,
-CONFIRMS_MISMATCH, RELEASE_NOT_ACCEPTED, HELPER_UNKNOWN), a row id of §4.3 (a series guard T02-T06, a negative row
-T22/T32/T48, or the kind's fallback T14/T16/T25/T39/T50/T53/T56/T60/T63), or AMBIGUOUS_ROWS (a bug).
-apply_traced(state, entry) -> (state', [row ids]) also returns the rows used (top row, then T30/T31, T43-T47, T49).
-
-State keys beyond §3.11 (documented for the review): RUN.visual_record (PASS/FAIL from the last visual-record command
-with a NEXT result, for frozen.visual), RUN.rerun_expected (set by a RESTORE's rerun_expected, cleared by the run's next
-STAGE/FROZEN, which must then carry body.rerun), RUN.delivery.ack_seq (the seq of the last delivery ACK, for the
-DELIVER_USER mark, §7.1 row 17), archives[i].utc/.transcript (the AI entry's utc and transcript status, for the O52
-sheet and the O40 counts), undo.kind/undo.start (the head's kind and START, for T49) and undo.parts as
-[[name, md5, bytes]] (S4 checks the attested copies against them), rebases[i].start (the START a rebase superseded)."""
+"""Section T (spec §4): TABLE as data, and apply(state, entry) -> a NEW state. Pure: no I/O, no clock. Raises
+ChainInvalid(code): a §4.2 structural code, a §4.3 row id, or AMBIGUOUS_ROWS (a bug). apply_traced also returns
+the rows used. State keys beyond §3.11 are listed in the review notes of delta v2.1 §2.12."""
 from collections import namedtuple
 
 from . import entry as E
@@ -50,7 +38,6 @@ class ChainInvalid(Exception):
 Row = namedtuple('Row', 'id kinds kind_of guard effect doc')   # kind_of: positive | series | negative | fallback | sub
 
 
-# ---------------------------------------------------------------- state helpers (also used by plan, session, outcome)
 def is_q(state):
     return state['mode'] in ('qualification', 'drill')
 
@@ -136,7 +123,6 @@ def has_transcript(entry, role, attempt, start_no):
     return any(m[0].startswith(pre) and m[1] == 'file' for m in entry['payload']['members'])
 
 
-# ---------------------------------------------------------------- structural checks S1-S6 (§4.2)
 def structural(state, e):
     if E.validate_entry(e, draft=True):
         raise ChainInvalid('SCHEMA_INVALID')
@@ -185,7 +171,6 @@ def _s5(state, e):
         raise ChainInvalid('RELEASE_NOT_ACCEPTED')
 
 
-# ---------------------------------------------------------------- run progress (T20-T25) and new runs (T10-T14)
 def _pre(s, e):
     b = e['body']
     R = s['runs'].get(b['run'])
@@ -193,8 +178,7 @@ def _pre(s, e):
 
 
 def _consumed_ok(R, b):
-    """Every consumed item is an ARCHIVED, unconsumed role; a chain whose first command is a consumer must name
-    exactly the ARCHIVED unconsumed role of that letter (INT-R2-04)."""
+    """Every consumed item is an ARCHIVED, unconsumed role, and a consumer chain names exactly it (INT-R2-04)."""
     sub = b['commands'][0]['sub']
     if sub in CONSUMER.values():
         letter = [k for k, v in CONSUMER.items() if v == sub][0]
@@ -558,7 +542,6 @@ def e15(s, e, c):
     return s
 
 
-# ---------------------------------------------------------------- AI (T37-T39)
 def _role(s, e):
     b = e['body']
     R = s['runs'].get(b['run'])
@@ -596,7 +579,6 @@ def e37(s, e, c):
     return s
 
 
-# ---------------------------------------------------------------- RESTORE (T41-T50)
 def forced_for(state, R, ro, item):
     """§8.6 step 5: the `forced` value the helper sets for a restore item (first match), or None."""
     g = state['genesis']['gates']
@@ -613,15 +595,12 @@ def forced_for(state, R, ro, item):
 
 
 def no_conversation_admissible(state, ro):
-    """T43's conditions that do not depend on the answer: STARTED, no superseding START yet in the attempt (the
-    conversation list exists: t01 requires the gate)."""
+    """T43's conditions that do not depend on the answer: STARTED, no superseding START yet in the attempt."""
     return ro['status'] == 'STARTED' and ro['supersedes'] == 0
 
 
 def resolution_action(state, item, transcript_member):
-    """(row id, action, owner_check) for one restore item over `state` (§4.3 T43-T48, §8.6 step 6). The session uses
-    it to compute the action; the fold re-computes it and requires equality. Row 'T48' (action None) is CHAIN_INVALID.
-    transcript_member: the RESTORE payload holds transcript/<role><attempt>_<start_no>.<ext> (I6)."""
+    """(row id, action, owner_check) for one restore item (§4.3 T43-T48); the session and the fold both use it."""
     R = state['runs'].get(item['run'])
     ro = R['roles'].get(item['role'] + str(item['attempt'])) if R else None
     if ro is None or ro['status'] not in OPEN or item['start_no'] != latest(ro)['start_no'] \
@@ -815,7 +794,6 @@ def e42(s, e, c):
     return _restore_common(s, e)
 
 
-# ---------------------------------------------------------------- ACK, DELIVERY, HALT, CLEAR, FINAL, GENESIS
 ACK_KEYS = {('NOTIFY_OWNER', None): ('notified', ('yes',)), ('ASK_USER', None): ('asked', ('yes',)),
             ('ASK_USER', 'DELIVERY'): ('arrived', ('yes', 'no'))}
 
@@ -923,7 +901,6 @@ def t01(e):
             'boots': [], 'notify': None, 'ledger': None, 'undo': None, 'final': None, 'restores': 0}
 
 
-# ---------------------------------------------------------------- the table
 def _neg(s, e, c):
     return False
 

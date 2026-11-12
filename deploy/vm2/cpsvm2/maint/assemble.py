@@ -1,13 +1,7 @@
-"""vm2.py assemble (spec §10.2, delta v2.1 §2.6): rebuild every frozen run folder of a FINAL series, and the ledger,
-at their layout paths under --root, from the downloaded journal; optionally run the runner's verify-frozen on each.
-
+"""vm2.py assemble (spec §10.2, delta v2.1 §2.6, GAP-2): rebuild every frozen run of a FINAL series and the ledger
+at their layout paths under --root (an empty directory other than /) from DOWNLOADS (<dir>/<id>/<name>).
     assemble --series Q1 --dir DOWNLOADS --out ASSEMBLE.json --root EMPTY_DIR [--verify-frozen]
-
---root is an existing empty directory other than / (else REFUSED ROOT_INVALID, exit 2). The base is the GENESIS entry's;
-each job_dir must be job_dir_of(base, tag, case) and each write stay inside realpath(root) (else Bad LAYOUT_PATH).
-DOWNLOADS is <dir>/<id>/<name>; copies of one name must be byte-identical (else FORK). The runs are the FINAL entry's
-ALL_FROZEN (the audit re-derives it). Each run goes through the reused Staging into an empty target, then a strict walk
-must equal what was placed. Exit 0 iff every run was placed (with --verify-frozen: NEXT: DONE), 1 otherwise."""
+Exit 0 iff every run was placed (with --verify-frozen: NEXT: DONE through `view`), 1 otherwise."""
 import argparse
 import hashlib
 import os
@@ -25,6 +19,21 @@ from .audit import doc_bytes, open_entry, read_bytes
 
 SCHEMA = 'cps.vm2-assemble.v1'
 CARRIER = 'carrier/convert/carrier.json'
+VIEW_SH = ('cd "$1"; mount -t tmpfs cps_vm2 "$1"; shift; while [ "$1" != -- ]; do mkdir -p "$(dirname "$1")"; '
+           'if [ -d "$2" ]; then mkdir -p "$1"; else : > "$1"; fi; mount -c --bind "$2" "$1"; shift 2; done; shift; '
+           'exec "$@"')
+
+
+def view(base, real, runner):
+    """GAP-2: runner v4 verifies a Q/D run only at its original paths: a namespace shows <root><base> at <base>."""
+    top = os.path.dirname(base)
+    while not os.path.isdir(top):
+        top = os.path.dirname(top)
+    binds = [(base, real + base)] + ([(runner, runner)] if runner.startswith(top + '/') else [])
+    argv = ['unshare', '--user', '--map-root-user', '--mount', '--', 'sh', '-ec', VIEW_SH, 'sh', top]
+    for dst, src in binds:
+        argv += [dst, os.path.relpath(src, top) if src.startswith(top + '/') else src]
+    return argv + ['--'], {'tmpfs': top, 'binds': [list(b) for b in binds]}
 
 
 class Bad(Exception):
@@ -42,7 +51,7 @@ def file_sha(p):
 
 
 def walk(top):
-    """{rel: ('dir', mode) | ('file', mode, bytes, sha256)} of everything under top, never following a link."""
+    """{rel: ('dir', mode) | ('file', mode, bytes, sha256) | ('other',)} under top, never following a link."""
     out = {}
     for dp, dns, fns in os.walk(top):
         for n in dns + fns:
@@ -97,7 +106,7 @@ class Assembler:
         return t
 
     def png(self, doc, r, tmp):
-        """[(rel, mode, bytes)] of the run's PNGs: the parts of png.parts_seq joined, sha-checked, read as a tar."""
+        """[(rel, mode, bytes)] of the run's PNGs: the parts joined, sha-checked, read as a tar."""
         png = doc['payload']['png']
         pdoc = doc if png['parts_seq'] == doc['seq'] else self.entry(entry_name(self.series, png['parts_seq']))[0]
         parts = [p for p in pdoc['parts'] if p['kind'] == 'PNG']
@@ -220,15 +229,17 @@ class Assembler:
             f.write(lf)
         os.chmod(os.path.join(led, 'LEDGER.jsonl'), 0o644)
         os.chmod(led, 0o755)
+        ns, rn = None, os.path.realpath(runner_path())
         if verify:
-            if file_sha(runner_path()) != PIN:
+            if file_sha(rn) != PIN:
                 raise Bad('LAYOUT_RUNNER_NOT_PINNED', 'cps_job.py')
+            argv, ns = view(base, self.real, rn)
             for x in runs:
-                p = subprocess.run([sys.executable, '-I', '-B', str(runner_path()), 'verify-frozen', '--job-dir',
-                                    x['path']], stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+                p = subprocess.run(argv + [sys.executable, '-I', '-B', rn, 'verify-frozen', '--job-dir', x['job_dir']],
+                                   stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
                 last = ([ln for ln in p.stdout.decode('utf-8', 'replace').splitlines() if ln.strip()] or [''])[-1]
                 x['verify'] = last[6:] if last.startswith('NEXT: ') else 'EXIT_%d' % p.returncode
-        return {'schema': SCHEMA, 'series': self.series, 'root': self.root, 'verify_frozen': verify,
+        return {'schema': SCHEMA, 'series': self.series, 'root': self.root, 'verify_frozen': verify, 'view': ns,
                 'final_seq': fdoc['seq'], 'all_frozen_sha256': sha(af_raw), 'outcomes_sha256': af['outcomes_sha256'],
                 'outcomes_check_sha256': sha(cjson(af['outcomes'])),
                 'ledger': {'path': os.path.join(led, 'LEDGER.jsonl'), 'sha256': sha(lf)}, 'runs': runs}

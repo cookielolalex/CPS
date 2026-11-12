@@ -171,10 +171,16 @@ def D_clear_same_boot_setup_failed(w):
 
 
 def D_slip_wrong_id_refinds(w):
-    w.dot.policy.update(found='manual', slips=[['wrong_id', 4]])
+    w.dot.policy.update(found='manual', slips=[['wrong_id', 4], ['wrong_id_save', 5]])   # a session FIND, then a SAVE
     code, lines = go(w)
     code, lines = w.dot.run(code, lines)
-    assert any(x.startswith('REFUSED DOWNLOAD_MISSING ') for x in w.dot.refused), w.dot.refused
+    blk = [b['lines'] for b in w.dot.blocks if len(b['lines']) > 1 and b['lines'][1].startswith('REFUSED DOWNLOAD_MISSING ')]
+    assert len(blk) == 2 and ' state=SAVE' in blk[1][0], [b[:2] for b in blk]
+    for b in blk:                                     # GAP-5: the block after the REFUSED line FINDs that name again
+        name = b[1].split()[2]
+        assert any(x.startswith('FIND ') and x.endswith(' NAME ' + name) for x in b[2:]) and not any(
+            x.startswith('DOWNLOAD ') for x in b[2:]), b
+        assert any(w.drive.has(f, name) for f in list(w.drive.folders)), name     # and the commit completes
     return finish(w, code, lines)
 
 

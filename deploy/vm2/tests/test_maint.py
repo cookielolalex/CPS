@@ -33,8 +33,10 @@ WORK = None
 O63_NOTE = ('O63: generator isolation by instruction only, not enforced or audited; tools present: %s; any tools-used '
             'statement is in final_message.')
 O63_REPORT = ('Isolation of the generator, scope-reader and visual-reviewer conversations was by instruction only (owner '
-              'decision O63): neither enforced nor audited. The tools present in each conversation are recorded in its '
-              'AI entry and, for generators, in GENERATION_RECORD.json.')
+              'decision O63): neither enforced nor audited. The tools of each conversation are recorded in its AI entry '
+              '(for generators also in GENERATION_RECORD.json) as the operator attested them: the kit inventory '
+              "TOOL_INVENTORY.txt by sha256 (the platform's usual set, not that conversation's own list) or a list the "
+              'operator saved.')
 TOOLS = b'invented_tool_a\ninvented_tool_b\n'
 FMSG = 'an invented final message {with} <any> characters'.encode()
 FOLDER_ROW = 'application/vnd.google-apps.folder'
@@ -1046,6 +1048,19 @@ def halt_clear_series(j, clear=None, same=False, **cfg):
     return e['name']
 
 
+def test_gap8_isolation_statement_matches_inventory_attestation():
+    """GAP-8: with tools=inventory every AI entry records the kit inventory (by sha256), not the conversation's own tool
+    list; the isolation statement says so instead of claiming a list per conversation."""
+    j = series('o63inv', full_series)
+    ais = [e for e in j.w.entries if e['kind'] == 'AI' and e['body']['revision'] == 1]
+    assert ais and all(e['body']['attested']['tools_present']['source'] == 'inventory' for e in ais)
+    rep, asm = j.audit(), j.assemble()
+    (rc, pl, _), out = capture(build_plan, j, rep, asm, owner_checks(j, rep, all_verdicts(rep)))
+    st = pl['isolation_statement']
+    assert rc == 0 and 'TOOL_INVENTORY.txt by sha256' in st and "not that conversation's own list" in st, st
+    assert 'The tools present in each conversation are recorded' not in st and 'a list the operator saved' in st, st
+
+
 def test_maint3_audit_refuses_unauthorized_clear():
     """O59 with real kit zips: only a kit whose clear names {series, halt seq, code} authorizes the CLEAR."""
     j = Journal(tempfile.mkdtemp(dir=WORK, prefix='clear_'))
@@ -1206,6 +1221,7 @@ TESTS = [test_audit_clean_series, test_f5_audit_planted_restore_unknown_to_final
          test_maint1_self_consistent_hostile_base_confined, test_maint1_symlink_after_begin_refused,
          test_maint1_assemble_root_required_empty_dedicated, test_gap10_generation_record_tied_to_g_entry,
          test_maint2_score_check_requires_tools_attestation_and_states_isolation,
+         test_gap8_isolation_statement_matches_inventory_attestation,
          test_maint3_audit_refuses_unauthorized_clear, test_maint3_audit_checks_cleared_local,
          test_maint4_audit_only_kit_change_verdicts, test_maint5_score_check_refuses_unverified_assembly,
          test_maint7_drill_listing_with_folder_rows_clean, test_maint8_check_detects_edited_plan,

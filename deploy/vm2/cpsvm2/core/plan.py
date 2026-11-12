@@ -1,15 +1,6 @@
 """next_action (§7.1), the chain table chain_next (§7.3), the run order (§7.11). Pure: no I/O, no clock.
-
-next_action(view) -> Step. view = {
-  'state':   the fold state at the confirmed head, or None (no entry found, §8.4),
-  'marks':   STATE.marks {mark key: utc} of this boot (§2.3),
-  'local':   {'gates_ok': bool} (release gates of §12.1, evaluated by the glue on every command),
-  'now':     UTC_S of this command, 'boot_id': this boot's id,
-  'base':    BASE (absolute, ASCII), 'cfg': the kit's VM_HELPER_CONFIG.json (transcript_ext, clear, series)}.
-It is total: rows are evaluated top to bottom and the last is Stop('UNCLASSIFIED', 'C'). Row 3's CLEAR draft carries
-halt_seq and code; the glue adds kit_sha256 and kit_change (session.kit_change against the halted kit, §13.5) and stops
-with that function's code when the kit is not config-only. Rows that write a mark return
-a PrintBlock (or an Ask) whose `mark` (context['mark']) the glue writes durably before printing."""
+next_action(view) is total (its last row is Stop UNCLASSIFIED); view = {'state', 'marks', 'local', 'now',
+'boot_id', 'base', 'cfg'}. A row that writes a mark returns a block whose `mark` the glue writes first."""
 from .fold import (CONSUMER, QUAL_ROOT as ROOT, ROLE_OF_NEXT, chain, final_ready, is_q, latest, newest,
                    nonattempt, open_roles, pending_resolution)
 from .names import REVIEW_CONTINUABLE, run8
@@ -42,8 +33,7 @@ def transcript_path(base, run, ro, st, ext):
 
 
 def pending_chain(state):
-    """The RunChain rows 12-15, 19 and 20 of §7.1 for the current run, as (first sub, info), or None. info carries
-    'rerun' {'after_seq'} when the run has rerun_expected (§7.10 unbound re-run)."""
+    """The RunChain rows 12-15, 19 and 20 of §7.1 for the current run, as (first sub, info), or None."""
     cur = state['current']
     R = state['runs'].get(cur) if cur else None
     if R is None or open_roles(state):
@@ -159,8 +149,7 @@ def next_action(view):
 
 
 def sent_mark(run, prepared_seq, delivery):
-    """The mark `answer sent=yes` writes (§X.5 step 8: an answer never runs a stage; the next `go` runs the freeze
-    chain of row 17). Keyed like the DELIVER_USER mark: one per permission."""
+    """The mark `answer sent=yes` writes (§X.5 step 8); the next `go` runs row 17's freeze chain."""
     return 'DELIVER_SENT:%s:%d:%d' % (run, prepared_seq, (delivery or {}).get('ack_seq') or 0)
 
 
@@ -202,13 +191,8 @@ def _open_role(s, R, rkey, marks, view, gates):
 
 
 def chain_next(sub, result, counters, mode, bind):
-    """§7.3, first match wins. sub: the command just run. result: {'result': 'NEXT'|'REFUSED'|'UNPARSEABLE',
-    'next': NEXT first token or REFUSED code, 'codes': [str], 'record_changed', 'ledger_changed', 'tree_changed':
-    bool, 'bound': {bound values measured after this command} or None}. counters: {'n': commands run including this
-    one, 'freeze_retries': int, 'v_review_incomplete': the V role's review_incomplete, 'diverged': bool}. mode: the
-    series mode. bind: None or R.rebase_bind['bound'] ({'commands': [[sub, next, sorted codes], ...], 'values': {...}}).
-    Returns {'row', 'action': 'run'|'retry'|'end'|'stop', 'sub', 'entry': 'STAGE'|'FROZEN'|'HALT'|None, 'code',
-    'flags': [], 'diverged': bool, 'review_incomplete': bool, 'start': role letter or None}."""
+    """§7.3, first match wins, for the result of `sub`: {'row', 'action': run|retry|end|stop, 'sub', 'entry',
+    'code', 'flags', 'diverged', 'review_incomplete', 'start'}."""
     r = _chain_row(sub, result, counters, mode, bind)
     if r['action'] == 'run' and counters['n'] >= MAX_CHAIN:
         return dict(r, row='LIMIT', action='stop', sub=None, entry=None, code='INTERNAL_CHAIN_TOO_LONG')
@@ -277,8 +261,7 @@ def _chain_row(sub, res, cn, mode, bind):
 
 
 def frozen_notify(mode, final_next, flags, delivery_sent):
-    """§7.9, §11.4: the FROZEN body's `notify`. Q/D: NOTIFY_OWNER for a runner STOP_*/OWNER_DECISION, else None.
-    E: None when delivered; NOTIFY_OWNER for a runner stop; ASK_USER for any other everyday freeze."""
+    """§7.9, §11.4: the FROZEN body's `notify` (NOTIFY_OWNER, ASK_USER or None)."""
     stop = final_next.startswith('STOP_') or final_next == 'OWNER_DECISION'
     if mode != 'everyday':
         return 'NOTIFY_OWNER' if stop else None

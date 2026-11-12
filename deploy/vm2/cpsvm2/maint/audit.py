@@ -1,11 +1,7 @@
-"""vm2.py audit (spec §10.1, delta v2.1 §2.5-§2.10): the maintainer's re-check of a series from a Drive listing.
-
-    audit --series Q1 --listing LISTING.json --dir DOWNLOADS --setup-listing SETUP.json --setup-dir SETUP_DOWNLOADS
-          --out AUDIT.json [--tolerance 600]
-
-A listing is a JSON list (or {"files": [...]}) of Drive rows; DOWNLOADS holds each at <dir>/<id>/<name>. Exit 0 iff no
+"""vm2.py audit (spec §10.1, delta v2.1 §2.5-§2.10): the maintainer's re-check of a series from a Drive listing (a
+JSON list or {"files": [...]} of rows; DOWNLOADS holds each at <dir>/<id>/<name>). Writes only --out. Exit 0 iff no
 anomaly, 1 otherwise, 2 usage. AUD_REBASE_OVER_PRESENT_PART and o63 are owner or score_check items, not anomalies.
-Reads nothing but its arguments and the pinned runner; writes only --out."""
+    audit --series Q1 --listing L --dir DOWNLOADS --setup-listing S --setup-dir D --out AUDIT.json [--tolerance 600]"""
 import argparse
 import os
 import re
@@ -39,8 +35,7 @@ def read_bytes(p):
 
 
 def load_listing(path):
-    """([{'id', 'name', 'md5', 'size', 'created'}], folder rows skipped); ValueError when malformed. md5 hidden (§X.10)
-    gives md5 None: download() takes the downloaded bytes' md5."""
+    """([{'id', 'name', 'md5', 'size', 'created'}], folder rows skipped); ValueError when malformed."""
     d = sjson(read_bytes(path))
     out, folders = [], 0
     for r in d['files'] if isinstance(d, dict) else d:

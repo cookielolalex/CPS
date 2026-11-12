@@ -1,7 +1,5 @@
-"""The foreground stage body (spec §7.3, §7.5, §7.7, §8.5.1; delta §X.7.2), called in-process by cli.run_stage while
-`go` holds the helper lock. It runs the runner chain, the snapshot and the entry build up to PENDING (commit steps
-1-4), the self-test, and placement; it prints nothing. Its result is returned in memory: {'status': 'pending' |
-'done' | 'fingerprint', ...}; a Halt or OSError propagates to cli.run_stage, which makes it a 'halt' result."""
+"""The foreground stage body (spec §7.3, §7.5, §7.7, §8.5.1, §X.7.2), run in-process under the helper lock by
+cli.run_stage. It prints nothing and returns {'status': 'pending' | 'done' | 'fingerprint', ...}."""
 import os
 import time
 from pathlib import Path
@@ -35,8 +33,7 @@ def sleep(seconds):
 
 
 def probe_lock(env, job_dir):
-    """§X.7.2: acquire and release JobLock at once, up to JOB_BUSY_TRIES tries JOB_BUSY_GAP_SECONDS apart (only a
-    process of this boot that outlived a dead stage can hold it, R6); then JOB_BUSY_TOO_LONG."""
+    """§X.7.2: JobLock acquired and released at once, JOB_BUSY_TRIES tries, then JOB_BUSY_TOO_LONG."""
     for i in range(N.JOB_BUSY_TRIES):
         try:
             with JobLock(env.lay, job_dir):
@@ -87,7 +84,6 @@ class Chain:
             rk = P.consumer_role(self.R)                      # a rebase re-run of a consumer chain (§7.10)
         self.rk = rk
 
-    # ---------------------------------------------------------- facts
     def ledger_sha(self):
         return fsha(self.lay.ledger) if self.env.mode != 'everyday' else None
 
@@ -123,8 +119,7 @@ class Chain:
         return runner.argv_for(sub, a)
 
     def interrupt_end(self, res):
-        """§7.4: min(RESTORE.utc, now - 1 s); the RESTORE entry is read from inbox/journal when it is there (it is
-        kept there after its commit in this boot), else now - 1 s."""
+        """§7.4: min(RESTORE.utc, now - 1 s) when the RESTORE entry is in inbox/journal, else now - 1 s."""
         t = N.utc_epoch(host.now()) - 1
         p = self.lay.inbox / 'journal' / N.entry_name(self.env.series, res['seq'])
         if p.is_file():
@@ -145,7 +140,6 @@ class Chain:
                 ro['attempt'], lt['start_no'], ai['body']['transcript']['ext']), p)
         return p
 
-    # ---------------------------------------------------------- before the chain
     def prologue(self):
         """Fingerprint (O47), §7.7 FROZEN.json placement, JobLock probe, consumer measurement (I11), G record."""
         fp = fingerprint(self.lay)[0]
@@ -180,8 +174,7 @@ class Chain:
         return None
 
     def generation_record(self, ro):
-        """§7.5: D/run/GENERATION_RECORD.json from the AI entry's attested values and members (write_new; an existing
-        file halts). tools_enabled is the entry's tool list; notes is the fixed O63 sentence (D9)."""
+        """§7.5: GENERATION_RECORD.json from the AI entry (write_new); tools_enabled and the O63 notes (D9)."""
         ai = self.ai_entry(ro)
         lt, at, b = F.latest(ro), ai['body']['attested'], ai['body']
         if sha_file(lt['prompt']) != lt['prompt_sha256']:
@@ -205,7 +198,6 @@ class Chain:
             rec['transcript_not_available_reason'] = "the operator's platform did not export the transcript (attested)"
         write_new(p, durable.doc_bytes(rec), 0o644)
 
-    # ---------------------------------------------------------- the chain
     def run(self):
         r = self.prologue()
         if r:
@@ -266,7 +258,6 @@ class Chain:
             return None
         return {'sha256': sha_file(p), 'deliverable_sha256': (d.get('deliverable_xlsx') or {}).get('sha256')}
 
-    # ---------------------------------------------------------- the entry
     def commit_end(self, out):
         env = self.env
         if out['entry'] == 'HALT':
@@ -482,8 +473,7 @@ def do_place(env, info):
 
 
 def rewalk(env, info, snap_entry):
-    """§8.6 step 3: any file in the open role's output folder other than what the snapshot placed (a CONTINUED V's
-    revision 1) is a file found; so is an entry the strict walk refuses."""
+    """§8.6 step 3: a file in the open role's output folder that the snapshot did not place is a file found."""
     ro = env.state['runs'][info['run']]['roles'][info['open_role']]
     out = F.latest(ro)['output']
     rel = os.path.relpath(out, info['job_dir']).replace(os.sep, '/')

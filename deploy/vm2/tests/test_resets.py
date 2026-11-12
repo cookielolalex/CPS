@@ -19,7 +19,8 @@ appearance after a timeout; at the head search: a lagging head, a duplicate head
 row FIND never shows), the Dot's notes (hint, commit only, none), and the Dot's answers for an open role. Every
 scenario runs to the end of the series (or its expected STOP) and checks the oracles: O1, O2, O7, L5, L9, L12 on every
 block (fakes.FakeDot), O3 (dispositions re-derived here from O44-O46, O55-O58), O4 (audit over FakeDrive's table:
-clean) and O5 (assemble --verify-frozen at the original absolute paths after BASE is wiped) at FINAL.
+clean) and O5 (after BASE is wiped: assemble --verify-frozen into a dedicated root, every verify DONE through the
+namespace view of the original paths, and score_check build and check CONSISTENT; GAP-2) at FINAL.
 
 Entry point: run(only=None, work=None, jobs=4)."""
 import json
@@ -126,8 +127,8 @@ def scenarios():
     add('D_head_dup', 'D', ('AI', 1), 'e', vis='head_dup')
     add('D_head_foreign_next', 'D', ('AI', 1), 'e', vis='foreign_next', stop='FORK')
     add('D_head_foreign_prev_link', 'D', ('AI', 1), 'e', vis='foreign_prev', stop='LINK_MISMATCH')
-    add('D_notes_commit_only_gallop', 'D', ('STAGE', 2), 'e', notes='commit')
-    add('D_notes_none_step0', 'D', ('AI', 1), 'e', notes='none')
+    add('D_notes_commit_only_gallop', 'D', ('STAGE', 2), 'e', notes='commit', extra='x_opx10_restore')
+    add('D_notes_none_step0', 'D', ('AI', 1), 'e', notes='none', extra='x_opx10_restore')
     add('D_rebase_missing_part', 'D', ('STAGE', 2), 'd', vis='lose_part')
     add('D_two_resets', 'D', ('STAGE', 2), 'e', again=True)
     # REVIEW_INCOMPLETE (O61, F1), qualification with a scope stage (v2.1 deleted OPENED and the DL config, §5.2)
@@ -474,17 +475,14 @@ class Runner:
         assert code == 0 and rep['clean'], 'O4: audit not clean: %s %s' % (out.strip()[:300], json.dumps(
             (rep or {}).get('anomalies'))[:500])
         assert rep['outcomes_sha256'] == af['outcomes_sha256'], 'O4: audit outcomes differ from ALL_FROZEN'
-        F.force_rmtree(w.base)                         # O5 at the original absolute paths (R25)
+        F.force_rmtree(w.base)                         # O5: the original paths are gone (GAP-2)
         code, arep, out = w.assemble(d)
-        # O5 (MAINT-1): every run is placed inside the dedicated root. Runner v4 (pinned) verifies a qualification-mode
-        # run only at its original absolute path, so under a dedicated root a Q or D run's verify-frozen is
-        # STOP_FROZEN_FOLDER_CHANGED and the assembly is UNCLEAN (fail-closed, score_check ASSEMBLE_NOT_VERIFIED): the
-        # open MAINT-1/MAINT-5 decision of track M. Everyday runs verify DONE.
-        ok = ('DONE',) if st['mode'] == 'everyday' else ('DONE', 'STOP_FROZEN_FOLDER_CHANGED')
-        assert arep and not arep['problems'] and arep['runs'] and all(
-            r['verify'] in ok and r['path'].startswith(os.path.realpath(arep['root']) + '/') for r in arep['runs']) \
-            and (code == 0) == all(r['verify'] == 'DONE' for r in arep['runs']), \
-            'O5: assemble --verify-frozen: %s' % out.strip()[:300]
+        assert code == 0 and arep and arep['clean'] and not arep['problems'] and arep['runs'] and all(
+            r['verify'] == 'DONE' and r['path'].startswith(os.path.realpath(arep['root']) + '/') for r in arep['runs']) \
+            and arep['view']['binds'][0] == [str(w.base), os.path.realpath(arep['root']) + str(w.base)], \
+            'O5: assemble --verify-frozen: %s %s' % (out.strip()[:300], [r['verify'] for r in (arep or {}).get('runs', [])])
+        verdict = w.score_check(d, rep)
+        assert verdict == 'CONSISTENT', 'O5: score_check: %s' % verdict
         F.force_rmtree(d)
 
     def everyday_checks(self, w, s):

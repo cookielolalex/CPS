@@ -1,5 +1,4 @@
-"""outcomes(state) (§9.1-9.3) and final_dispositions(outcomes, verdicts) (§9.5). Pure: they read only their
-arguments. No other code derives a disposition (F4, F5)."""
+"""outcomes(state) (§9.1-9.3) and final_dispositions (§9.5): the only code that derives a disposition."""
 from .fold import chain, latest
 from .names import cjson, sha, utc_minus
 
@@ -70,8 +69,7 @@ def _item(kind, R, role, attempt, start_no, window, conversation=None):
 
 
 def outcomes(state):
-    """{'series', 'seq', 'pairs', 'o52_sheet', 'owner_items', 'reruns', 'rebases', 'counts'} (§9.1-9.3). Total:
-    any fold state gives a result (an everyday state has no pairs)."""
+    """{'series', 'seq', 'pairs', 'o52_sheet', 'owner_items', 'reruns', 'rebases', 'counts'}; total."""
     jobs = sorted(state['genesis']['jobs'] or [], key=lambda j: j[1])
     pairs, sheet, items, reruns, rebases = [], [], [], [], []
     tol = (state['genesis'].get('gates') or {}).get('p3_clock_tolerance_seconds') or 0     # §X.9 rule 5
@@ -125,9 +123,7 @@ def outcomes(state):
 
 
 def final_dispositions(outs, checks):
-    """§9.5: apply OWNER_CHECKS.json (`checks`) to `outs` = outcomes(state). Returns {'pairs', 'qualification_flagged',
-    'missing'}; raises OwnerChecksInvalid for a wrong outcomes_sha256, an unknown or duplicate id, or a verdict not
-    allowed for the item's kind. The input is not modified."""
+    """§9.5: OWNER_CHECKS.json applied to outs: {'pairs', 'qualification_flagged', 'missing'}."""
     if checks.get('outcomes_sha256') != sha(cjson(outs)):
         raise OwnerChecksInvalid('outcomes_sha256')
     byid = {i['id']: i for i in outs['owner_items']}

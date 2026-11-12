@@ -1,5 +1,4 @@
-"""Host glue (spec §2.1, §2.2, §8.2, §8.3, §12.1): v2 paths, the one clock, the kit config and its gates, the helper
-tree sha, the Ctx2 the reused segments take, and the FINGERPRINT_PASS document. Decides nothing about the journal."""
+"""Host glue (spec §2.1, §2.2, §8.2, §8.3, §12.1): paths, the clock, the kit config and gates, the PASS."""
 import datetime
 import hashlib
 import json
@@ -85,9 +84,7 @@ def repo_commit(lay):
 
 
 def load_config(raw, release, check_patterns, cap, stage_keys):
-    """§2.2 exact keys and types, gate value sets (§12.1), mode/status agreement and the release series pin (INT-09),
-    and the delta's size and stage-budget rules (§X.2). check_patterns(conversation_re, doc_samples) -> None |
-    'CONFIG_INVALID'; cap and stage_keys are core.names UPLOAD_CAP_BYTES and STAGE_KEYS. Returns the config dict."""
+    """§2.2 and §X.2: the kit config with exact keys and types, gate values and the series pin, or CONFIG_INVALID."""
     try:
         c = sjson(raw)
     except (ValueError, UnicodeDecodeError):
@@ -137,8 +134,7 @@ def load_config(raw, release, check_patterns, cap, stage_keys):
 
 
 def gates_problem(cfg, mode, cap):
-    """§12.1 release gates as the delta restates them (§X.12.1), on every command: None or the sorted names of the open
-    gates and failed budget keys."""
+    """§12.1 (§X.12.1) on every command: None or the sorted open gates and failed budget keys."""
     if mode == 'setup':
         return None
     g, bad = cfg['gates'], []

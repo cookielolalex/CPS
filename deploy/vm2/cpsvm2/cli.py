@@ -1,7 +1,5 @@
 """go / found / answer (spec §6): the glue that carries out the Steps core returns and decides nothing itself.
-Prologue: layout, HelperLock (busy: CPSV-BUSY, exit 4), the cache, a dead stage, cleanup, the clear check of a local
-stop (delta v2.1 §2.4.3), owed post actions; then a pending commit (§5), the session (§8) and next_action (§7.1). Only
-`go` runs a stage, in its own foreground (§X.7.2). Exit 0 follow, 3 STOP, 4 refused (do the block after REFUSED), 2."""
+Only `go` runs a stage, in its own foreground (§X.7.2). Exit 0 follow, 3 STOP, 4 refused, 2 usage."""
 import errno
 import os
 import re
@@ -36,7 +34,6 @@ class Out(Exception):
         self.code = code
 
 
-# ================================================================ environment and cache (§2)
 class Env:
     def __init__(self, lay, lock):
         self.lay, self.lock, self.p = lay, lock, host.Paths(lay)
@@ -118,8 +115,7 @@ def fresh(env, prefix, ext=''):
 
 
 def invalidate(env, prefix):
-    """Move the cache files, every file under BASE/attest and every entry of BASE/inbox except the boot mark into
-    outbox/v2/<prefix><utc14>/ (never deleted, SD-68); the prefix cleared_ also moves HALT.json. Returns the folder."""
+    """Move the cache files, attest/ and inbox/ (not the boot mark) to outbox/v2/<prefix><utc14>/ (SD-68)."""
     dest = fresh(env, prefix)
     dest.mkdir(parents=True)
     for p in (env.p.state, env.p.pending, env.p.block, env.p.work) + ((env.p.halt,) if prefix == 'cleared_' else ()):
@@ -135,8 +131,7 @@ def invalidate(env, prefix):
 
 
 def load_cache(env):
-    """§2.5 steps 1-2: a failure invalidates the cache (invalid_<utc14>/). A BLOCK.json behind STATE's head moves
-    alone, one ahead invalidates (OPX-07); so does halt_local without HALT.json (SD-64)."""
+    """§2.5 steps 1-2: a failure invalidates the cache; a BLOCK.json behind STATE's head moves alone (OPX-07)."""
     env.v2.mkdir(parents=True, exist_ok=True)
     docs, bad = {}, False
     for k, path, schema in (('cache', env.p.state, savepoint.STATE_SCHEMA),
@@ -204,7 +199,6 @@ def hint_kit(env):
     return k if N.fm(N.HEX12, k) else None
 
 
-# ================================================================ printing and stops (§6.1, §13)
 def basis(env):
     return N.sha(N.cjson([(env.cache or {}).get('self_sha256'), (env.pending or {}).get('self_sha256'),
                           (env.work or {}).get('self_sha256')]))
@@ -220,8 +214,7 @@ def emit(env, state_code, blk, expect, hdr=None):
 
 
 def render(env, state_code, blk, expect, hdr=None):
-    """The block's lines; each DOWNLOAD target's folder exists and holds nothing (S-09); BLOCK.json (its refusal count
-    kept for the same template) is written durably."""
+    """The block's lines (DOWNLOAD targets emptied, S-09), recorded durably in BLOCK.json."""
     for _, _, p in blk.downloads:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         if os.path.lexists(p):
@@ -250,8 +243,7 @@ def render(env, state_code, blk, expect, hdr=None):
 
 
 def stop_block(env, code, handback='C', detail=None):
-    """A STOP block; every HANDBACK C stop but RELEASE_GATE_OPEN is local sticky (HALT.json, SD-56), its header the
-    head and kit a clear names."""
+    """A STOP block; a HANDBACK C stop other than RELEASE_GATE_OPEN is local sticky (HALT.json, SD-56)."""
     hdr = None
     if handback == 'C' and code != 'RELEASE_GATE_OPEN' and os.path.isdir(env.v2):
         h = write_halt(env, code, detail)
@@ -261,8 +253,7 @@ def stop_block(env, code, handback='C', detail=None):
 
 
 def write_halt(env, code, detail):
-    """HALT.json (delta v2.1 §2.4.1), an older one kept as halt_<utc14>.json, a FORK's downloads moved to fork_<utc14>/
-    (S-03), halt_local in STATE.json and RESTORE_WORK."""
+    """HALT.json (delta v2.1 §2.4.1; a FORK's downloads kept, S-03) and halt_local in STATE.json and RESTORE_WORK."""
     if os.path.lexists(env.p.halt):
         os.replace(env.p.halt, fresh(env, 'halt_', '.json'))
     if code in ('FORK', 'LINK_MISMATCH'):
@@ -333,7 +324,6 @@ def usage(env, text):                         # counted (D3b), exit 2, no REFUSE
     bare((env.block or {}).get('lines') or [text], 2)
 
 
-# ================================================================ entry drafts and commits (§3.4, §5.1 steps 1-4)
 def draft(env, kind, body, seq=None):
     seq = seq or env.head_seq() + 1
     c = env.cache or {}
@@ -386,7 +376,6 @@ def commit_halt(env, code, detail=None):
     commit(env, draft(env, 'HALT', {'code': code, 'detail': detail or {}, 'head_seq': env.head_seq()}))
 
 
-# ================================================================ the upload loops (§5.1 steps 5-8, S-01)
 def persist(env, loop, key):
     if key is None:
         env.pending = durable.write_doc(env.p.pending, loop)
@@ -465,7 +454,6 @@ def run_post(env):                            # §5.4, each removed from STATE.p
         save_cache(env)
 
 
-# ================================================================ prologue, dispatch and the clear check (§6.7)
 def main(argv):
     if not argv or argv[0] not in ('go', 'found', 'answer'):
         print('usage: vm2.py go | found --at A --raw FILE ... | answer --at A k=v ...')
@@ -565,8 +553,7 @@ def safe_stop(env, code):
 
 
 def clear_check(env):
-    """Delta v2.1 §2.4.3 (O59): a local stop stays until the kit HINT.json names (not in `tried`) is found, downloaded
-    and names exactly this stop with a settings-only change; then it all moves aside and this `go` restores."""
+    """Delta v2.1 §2.4.3 (O59): a local stop stays until the hinted kit is found, downloaded and clears it."""
     h, why = durable.read_doc(env.p.halt, HALT_SCHEMA, sjson)
     if h is None and why is None:
         return
@@ -633,8 +620,7 @@ def end_check(env, h):                        # a refused candidate: tried, and 
 
 
 def do_clear(env, h, target):
-    """Delta v2.1 §2.4.3 steps 1-4: invalidate(cleared_), the candidate becomes the session's kit, a new RESTORE_WORK
-    carries cleared_local and the moved PENDING."""
+    """Delta v2.1 §2.4.3 steps 1-4: invalidate(cleared_), the candidate kit, a new RESTORE_WORK."""
     c, w, pe = env.cache or {}, env.work or {}, env.pending
     moved = {'seq': pe['seq'], 'name': pe['entry']['name'], 'sha256': pe['entry']['sha256'],
              'uploaded': sorted(n for n, t in pe['tries'].items() if t['uploads'])} if pe else None
@@ -648,8 +634,7 @@ def do_clear(env, h, target):
 
 
 def foreground_check(env):
-    """§X.7.2 step 4: a FOREGROUND.json under the lock means its writer died. Another boot's moves to invalid_; this
-    boot's to dead_<utc14>.json, then a self-test at attempt 1 runs again, else the stop to print after the cleanup."""
+    """§X.7.2 step 4: a FOREGROUND.json under the lock means its writer died; returns the stop to print or None."""
     fg, why = durable.read_doc(env.p.foreground, FG_SCHEMA, sjson)
     if fg is None and why is None:
         return None
@@ -668,8 +653,7 @@ def foreground_check(env):
 
 
 def go_checks(env):
-    """A `go`: the block again when it expects found or answer; after a DOWNLOAD block, the download check (a confirmed
-    id's file is refused, any other is a slip)."""
+    """A `go`: the block again when it expects found or answer; after a DOWNLOAD block, the download check."""
     b = env.block
     if not b:
         return
@@ -693,8 +677,7 @@ def go_checks(env):
 
 
 def session_slip(env, name, code, paths):
-    """The slip rule in RESTORE_WORK (delta v2.1 §2.2.1): the downloads go, `name`'s lookups are void (its ids leave
-    `verified`, `fetched` forgets it), the slip is counted; the next block (its FIND) follows the REFUSED line."""
+    """The slip rule in RESTORE_WORK (delta v2.1 §2.2.1): downloads deleted, `name`'s lookups void, slip counted."""
     w = env.work
     for p in paths:
         if os.path.lexists(p):
@@ -713,7 +696,6 @@ def session_slip(env, name, code, paths):
     env.refusal = 'REFUSED %s %s' % (code, name)
 
 
-# ================================================================ found (§6.2, delta v2.1 §2.3)
 def do_found(env, args):
     b = env.block
     try:
@@ -778,7 +760,6 @@ def do_found(env, args):
     save_work(env)
 
 
-# ================================================================ answer (§6.2, §6.3)
 def do_answer(env, args):
     b = env.block
     try:
@@ -800,7 +781,6 @@ def do_answer(env, args):
         refuse(env, code)
 
 
-# ================================================================ the loop
 def advance(env):
     for _ in range(300):
         if env.pending:
@@ -859,7 +839,6 @@ def carry(env, st):
     raise Halt('STOP', 'UNCLASSIFIED', 'a step the plan does not return')
 
 
-# ================================================================ session glue (§8)
 def done(env, phase):
     if phase not in env.work['done']:
         env.work['done'].append(phase)
@@ -917,9 +896,7 @@ def session_step(env):
 
 
 def session_downloads(env, phase, downloads, dl):
-    """The session's download check (delta v2.1 §2.1, §2.2): a missing file or another size than attested is a slip;
-    every copy is hashed into `verified`; the head N's copies go to verify_head; a journal copy 1 is kept as
-    inbox/journal/<name>; the others stay until the RESTORE's DROP_DOWNLOADS (FORK evidence)."""
+    """The session's download check (delta v2.1 §2.1, §2.2): slips, then every copy hashed into `verified`."""
     w = env.work
     for p, (name, size) in dl.items():
         if not os.path.isfile(p) or os.lstat(p).st_size != size:
@@ -938,8 +915,7 @@ def session_downloads(env, phase, downloads, dl):
 
 
 def verify_head(env, paths, shas):
-    """§8.4 step 3: N's copies agree (and hold the moved PENDING's bytes when N is its seq, else FORK); then Archive,
-    validate_entry, state sha, helper tree, runner pin, release; a failure is its code (C1)."""
+    """§8.4 step 3: N's copies agree (FORK), then the entry checks; a failure is its code (C1)."""
     w = env.work
     mp = w.get('moved_pending') or {}
     path = re.sub(r'\.[0-9]+$', '', paths[0])
@@ -981,9 +957,7 @@ def marker(path):
 
 
 def ph_setup(env):
-    """§X.6.6: session_start.sh ran the setup in the foreground. The ok marker for this boot and commit: continue; the
-    failed marker: the setup log goes to CPS/reports through the setup-file loop, then STOP SETUP_FAILED; neither:
-    STOP SETUP_FAILED (not done: the Dot re-runs a killed session_start.sh, so `go` never waits for setup)."""
+    """§X.6.6: the setup ok marker continues; else STOP SETUP_FAILED, after the failed setup's log is uploaded."""
     want = [env.boot, host.repo_commit(env.lay) or '']
     if marker(env.lay.tools / SETUP_DONE) == want:
         return done(env, 'SETUP')
@@ -995,8 +969,7 @@ def ph_setup(env):
 
 
 def upload_files(env, key, files, state_code):
-    """The setup-file loop for files kept in RESTORE_WORK[key]: prints the next block, or returns True once every file
-    is confirmed."""
+    """The setup-file loop RESTORE_WORK[key]: prints the next block, or returns True once every file is confirmed."""
     w = env.work
     if w.get(key) is None:
         for p, _, _ in files:
@@ -1076,8 +1049,7 @@ def ph_pass(env):
 
 
 def pass_phase(env, fp):
-    """§8.3: FIND the PASS of this fingerprint; every copy is downloaded and validated; none valid: the self-test runs
-    and its PASS is uploaded through the setup-file loop."""
+    """§8.3: a valid FIND-ed PASS of this fingerprint, else the self-test and its PASS uploaded."""
     w, setup = env.work, N.FOLDERS['setup']
     name = 'FINGERPRINT_PASS_%s.json' % fp
     if w.get('setup_loop') is None and not w.get('selftest_dir'):
@@ -1169,9 +1141,7 @@ IO_PHASES = {'LAYOUT': ph_layout, 'SETUP': ph_setup, 'KIT': ph_kit, 'CONFIG': ph
 
 
 def build_state(env):
-    """STATE.json for the session's commit (§2.3): the head found on Drive (or none), the confirms of its files as
-    found (missing head parts with no copy; a copy that is ours has the file's own size), and this boot's operator,
-    kit, fingerprint, PASS and cleared_local."""
+    """STATE.json for the session's commit (§2.3): the head found, its files' confirms, this boot's facts."""
     w = env.work
     head = state = None
     confirms = []
@@ -1360,7 +1330,6 @@ def reupload(env, st):
         save_work(env)
 
 
-# ================================================================ asks and answers (§6.5)
 def ask(env, st):
     ctx, a = dict(st.context), st.context['action']
     prefix = None
@@ -1448,8 +1417,7 @@ def transcript_problem(env, path):
 
 
 def tools_of(env, value):
-    """D9: the tool list a conversation had, as (bytes, source, file to drop), or TOOLS_FILE_INVALID. `inventory` is
-    the kit's TOOL_INVENTORY.txt (its sha256 checked again); `file:<abs>` a regular file the Dot saved under attest/."""
+    """D9: (bytes, source, file to drop) of `inventory` or `file:<abs under attest/>`, or TOOLS_FILE_INVALID."""
     if value == 'inventory':
         p = env.lay.runtime / 'TOOL_INVENTORY.txt'
         b = p.read_bytes() if p.is_file() else b''
@@ -1464,8 +1432,7 @@ def tools_of(env, value):
 
 
 def ai_commit(env, ctx, got):
-    """§7.5: walk the role's output folder strictly, take the final message as data (D3c) and, at revision 1, the tool
-    list (D9), commit the AI entry."""
+    """§7.5: the AI entry: output folder, the final message as data (D3c), the tool list at revision 1 (D9)."""
     R = env.state['runs'][ctx['run']]
     ro = R['roles'][ctx['role'] + str(ctx['attempt'])]
     lt = F.latest(ro)
@@ -1542,8 +1509,7 @@ def inputs_commit(env, case):
 
 
 def delivery_commit(env, ctx, got):
-    """§11.3: the personal copy and its log checked, then DELIVERY with parts DELIV01, DLOG01 to the profile folder,
-    which must print (S-06)."""
+    """§11.3: DELIVERY after the personal copy and its log are checked; the profile folder must print (S-06)."""
     R = env.state['runs'][ctx['run']]
     a, b = N.copypath(got['copy'], env.lay.home, R['case']), N.copypath(got['log'], env.lay.home, R['case'])
     if a[2] != 'PERSONAL_COPY.xlsx' or b[2] != 'PERSONALIZATION_LOG.json' or a[:2] != b[:2] or \
@@ -1579,7 +1545,6 @@ def delivery_commit(env, ctx, got):
     return None
 
 
-# ================================================================ plan commits (CLEAR §13.5, FINAL §9.4)
 def plan_commit(env, st):
     k = st.entry['kind']
     if k == 'CLEAR':                    # SD-51: the RESTORE kept the halted kit; the CLEAR takes the new one
@@ -1621,10 +1586,8 @@ def final_commit(env):
                                                      {'kind': 'ALLFZ', 'data': ab, 'folder': env.series_folder}])
 
 
-# ================================================================ foreground stages (§X.7.2)
 def needed_entries(env, kind, info):
-    """Journal entries a chain worker reads that are not local: an earlier run's FROZEN entry for §7.7 placement, the
-    AI entry of a G consumer (attested values, transcript)."""
+    """Journal entries a chain reads that are not local (a FROZEN to place, §7.7; a G consumer's AI entry)."""
     if kind != 'chain':
         return []
     s, names = env.state, []
@@ -1646,8 +1609,7 @@ def run_go(env):
 
 
 def start_chain(env, info):
-    """§7.1 RunChain: the local journal files the chain reads, the INPUTS re-check (a counted refusal, D3d), then the
-    foreground stage."""
+    """§7.1 RunChain: the local journal files, the INPUTS re-check (D3d), then the foreground stage."""
     ensure_local(env, needed_entries(env, 'chain', info), 'WORK')
     if info['first'] == 'prepare' and (info.get('info') or {}).get('inputs_seq'):
         R = env.state['runs'][info['run']]
@@ -1661,10 +1623,7 @@ def start_chain(env, info):
 
 
 def run_stage(env, kind, info):
-    """§X.7.2 steps 2-3: the free space a chain needs (SD-69), FOREGROUND.json (durably), the RUNNING line (flushed at
-    once), the body in this process under the helper lock, then FOREGROUND.json unlinked and outbox/v2 fsynced on
-    return of any status (never in a `finally`: a stage that dies leaves it for step 4), then the result absorbed. The
-    caller's loop prints the block."""
+    """§X.7.2 steps 2-3; FOREGROUND.json is removed on return, never in a `finally` (a dead stage leaves it)."""
     from . import worker
     first = info.get('first') if kind == 'chain' else None
     mx = env.cfg['stage_max_seconds'][first or kind]
@@ -1688,8 +1647,7 @@ def run_stage(env, kind, info):
 
 
 def absorb(env, kind, info, res):
-    """§7.2 step 4 in memory: halt is a STOP (or a committed HALT, run_command); pending continues with the SAVE block
-    (env.pending is set); place and selftest record their result in RESTORE_WORK; fingerprint resets the PASS."""
+    """§7.2 step 4 in memory: a halt is a STOP; place, selftest and fingerprint record their result."""
     if res.get('status') == 'halt':
         raise Halt('STOP', res['code'], 'the stage stopped')
     if kind == 'place' and env.work is not None:

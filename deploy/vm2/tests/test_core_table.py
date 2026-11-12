@@ -2090,6 +2090,30 @@ def test_t3_recheck_second_writer_at_n2_n3_forks():
 
 
 @test
+def test_t3_recheck_forks_2015773_form():
+    """T3 (N18, GAP-4) in a form that also runs at 2015773: head_search's verdict carries `via` (2015773 re-checked
+    only a non-hint head, copies were [id, md5, size]) and the re-check FINDs are later than the commit by W_abs.
+    N+2 or N+3 present is FORK. Its 2015773 runs are recorded in INTEGRATION.json reviewer_proof_table."""
+    import inspect
+    cp = (lambda i: [i, 'b' * 32, 5]) if 'md5' in inspect.signature(SE.rule_v).parameters else (lambda i: [i, 5])
+    st = q_world().state
+    N_, c0, wa = 4, CW.T0 + 1000, F.w_abs(CW.GATES)
+    com = {'seq': N_ + 1, 'utc': CW.utc(c0), 'sha256': 'a' * 64, 'ids': ['IDOURS0000000000000000'], 'md5': 'b' * 32,
+           'bytes': 5}
+    view_ = {'now': CW.utc(c0 + wa + 200), 'gates': CW.GATES, 'series': 'Q1', 'base': CW.BASE}
+
+    def recheck(present):
+        lk = [{'name': N.entry_name('Q1', N_ + k), 'utc': CW.utc(c0 + wa + 100), 'post': True,
+               'result': 'present' if k in present else 'absent',
+               'copies': [cp(com['ids'][0])] if k == 1 else [cp('IDOTHER%015d' % k)] if k in present else []}
+              for k in (1, 2, 3)]
+        return SE._commit({'committed': com, 'lookups': lk}, st, {}, {'seq': N_, 'copies': [], 'via': 'gallop'}, view_)
+    assert recheck({1}) == ('DONE', None)
+    for present in ({1, 2}, {1, 3}, {1, 2, 3}):
+        assert recheck(present) == ('RECHECK', Stop('FORK', 'C')), present
+
+
+@test
 def test_t4_continued_v_answer_of_another_boot_t39():
     """T4 (N05, g38): the continued V's AI entry (revision 2) from a boot other than continued_boot is T39."""
     w = q_world()

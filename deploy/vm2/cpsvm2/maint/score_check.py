@@ -1,14 +1,8 @@
-"""vm2.py score_check (spec §10.3, §9.5, delta v2.1 §2.8, §2.10.13): the carriers the scorer must use, and the check
-of the scorer's manifest.
-
-    score_check build --audit A --assembled S --pool L --owner-checks O --out DIR
-    score_check check --plan DIR/SCORE_PLAN.json --audit A --assembled S --pool L --owner-checks O --manifest M --out C
-
-build refuses (exit 4, writes nothing) unless the audit is clean with no o63 miss, its outcomes and the assembled
-ALL_FROZEN's agree, the assembly is clean and verified, and OWNER_CHECKS.json gives a verdict for every owner item. A
-SCORE pair's carrier is the assembled run's carrier/convert/carrier.json; an EMPTY or NONATTEMPT pair gets
-DIR/carriers/<reader>/<case>/EMPTY_CARRIER.json. It never runs the evaluator and never reads a target; it states the
-O63 isolation. check re-derives the plan from the four inputs and exits 0 only on CONSISTENT."""
+"""vm2.py score_check (spec §10.3, §9.5, delta v2.1 §2.8, §2.10.13): the carriers the scorer must use and the
+check of the scorer's manifest. build refuses (exit 4, writes nothing) unless the audit, the assembly (verified)
+and the owner checks agree; check re-derives the plan and exits 0 only on CONSISTENT. Never reads a target.
+    score_check build|check [--plan DIR/SCORE_PLAN.json] --audit A --assembled S --pool L --owner-checks O
+        [--manifest M] --out DIR|C"""
 import argparse
 import os
 import sys

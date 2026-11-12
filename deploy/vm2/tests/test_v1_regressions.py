@@ -868,15 +868,50 @@ def x_op07(w, s):
         assert len(mine) == 5 and calls == 15 + 3 * p, (key, len(mine), p, calls)   # <= 24 when p <= 3
 
 
-def x_op07_restore(w, s):
-    """§X.5.5: a restore with a Dot hint costs 13-20 Drive calls, counted from the reset to the RESTORE's own verify."""
+def restore_counts(w):
+    """GAP-7 (D15): one restore's tool calls. Drive calls from the reset to the RESTORE's own download-back; helper
+    commands (go, found, answer) and saved results (found --raw) from the reset's session_start up to and including
+    the command that prints the first block past the RESTORE and its re-check (head >= its seq, state not RESTORE or
+    SAVE); waits are the Dot's WAITs in that span."""
     i0 = w.dot.reset_calls[0]
-    names = [x for k, f, x in w.drive.calls[i0:] if k == 'UPLOAD' and x.endswith('.tgz')]
-    rest = names[0]
+    rest = [x for k, f, x in w.drive.calls[i0:] if k == 'UPLOAD' and x.endswith('.tgz')][0]
     calls = w.drive.calls[i0:]
     ids = {c['id'] for c in w.drive.folders[N.series_folder(w.series)][rest]}
-    last = max(i for i, c in enumerate(calls) if c[2] == rest or c[2] in ids)
-    assert 13 <= last + 1 <= 20, 'OP-07: a restore with a hint took %d Drive calls' % (last + 1)
+    out = {'drive_calls': max(i for i, c in enumerate(calls) if c[2] == rest or c[2] in ids) + 1,
+           'helper_commands': 0, 'saved_results': 0, 'waits': 0}
+    rseq, b0 = int(rest.split('_')[-1][:6]), w.dot.tally[0]['boot']
+    k0 = next(i for i, t in enumerate(w.dot.tally) if t['argv0'] == 'session_start' and t['boot'] != b0)
+    blocks = iter(w.dot.blocks[next(i for i, b in enumerate(w.dot.blocks) if b['argv'] == ['session_start'] and
+                                    b['boot'] != b0) + 1:])
+    for t in w.dot.tally[k0 + 1:]:
+        if t['argv0'] == 'WAIT':
+            out['waits'] += 1
+            continue
+        b = next(blocks)
+        out['helper_commands'] += 1
+        out['saved_results'] += '--raw' in b['argv']
+        h = dict(x.split('=', 1) for x in b['lines'][0].split()[1:]) if b['lines'][0].startswith('CPSV ') else {}
+        if h and int(h['head']) >= rseq and h['state'] not in ('RESTORE', 'SAVE'):
+            return out
+    raise AssertionError('no block past the RESTORE')
+
+
+def x_opx10_restore(w, s):
+    """GAP-7: a restore's counts equal tests/budget_golden.json `restore` for the scenario's notes (hint, commit,
+    none), and README section 7 states them (lint L14)."""
+    got = restore_counts(w)
+    REPORT_D16.append({'opx10_restore': {s.get('notes', 'hint'): got}})
+    with open(BUDGET_GOLDEN) as f:
+        want = json.load(f)['restore'][s.get('notes', 'hint')]
+    assert got == want, (s.get('notes', 'hint'), got, want)
+
+
+def x_op07_restore(w, s):
+    """§X.5.5: a restore with a Dot hint costs 13-20 Drive calls, counted from the reset to the RESTORE's own verify;
+    its counts are the golden's (GAP-7)."""
+    n = restore_counts(w)['drive_calls']
+    assert 13 <= n <= 20, 'OP-07: a restore with a hint took %d Drive calls' % n
+    x_opx10_restore(w, s)
 
 
 def x_op08(w, s):
@@ -967,8 +1002,10 @@ def x_opx10(w, s):
     REPORT_D16.append({'opx10': got})
     upd = os.environ.get('CPSVM2_UPDATE_BUDGET')         # an absolute path: write the measured golden there
     if upd:
+        with open(BUDGET_GOLDEN) as f:
+            old = json.load(f)
         with open(upd, 'w') as f:
-            json.dump({'D_baseline': got}, f, indent=1, sort_keys=True)
+            json.dump(dict(old, D_baseline=got), f, indent=1, sort_keys=True)
             f.write('\n')
         return
     with open(BUDGET_GOLDEN) as f:

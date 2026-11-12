@@ -1,12 +1,6 @@
-"""commit(): the save-point mechanics (spec §5). The glue (cli.py, worker.py) gives a draft, the archive members, the
-part sources and a `complete` function that folds the draft (core.fold, §5.1 step 2); this module writes the parts,
-the entry and PENDING durably (steps 3-4), prints nothing itself, and runs the upload-FIND-attest loop (steps 5-7,
-rule V by download-back, §X.5.6 refused uploads, the slip rule of delta v2.1 §2.2.1) on one loop dict: PENDING, or a
-setup-file loop kept in RESTORE_WORK (no entry). Every loop change is written durably before the caller prints.
-
-loop.tries[name] = {'uploads', 'finds_since_upload', 'refused', 'need'} where need is upload | find | wait | verify
-| done. The entry is confirmed first; parts only after (their number reveals the outcome). loop.absent lists names that
-must be absent at the entry's FIND (a rebase RESTORE's missing parts, §5.1 step 5)."""
+"""The save-point mechanics (spec §5): write_commit writes the parts, the entry and PENDING durably (steps 1-4);
+block, on_found, on_verify and slip run the upload-FIND-attest loop (rule V, refused uploads, slips; delta v2.1
+§2.1, §2.2) on one loop dict (PENDING, or a setup-file loop in RESTORE_WORK), written durably before printing."""
 import itertools
 import os
 
@@ -28,8 +22,7 @@ def _manifest_order(m):
 
 
 def payload_rows(members):
-    """members: [(arcname, 'dir'|'file', mode, src bytes|path|None)] -> sorted payload rows [path, kind, mode, bytes,
-    sha256] (§3.8)."""
+    """members -> sorted payload rows [path, kind, mode, bytes, sha256] (§3.8)."""
     rows = []
     for name, kind, mode, src in members:
         if kind == 'dir':
@@ -67,8 +60,7 @@ def member_bytes(path, name):
 
 
 def _png_parts(env, series, seq, src, want_whole):
-    """Write the PNG tar stream (MANIFEST.json + job/qa/... files) cut into parts at png_part_bytes (§3.7). Each file's
-    streamed bytes and the whole stream must be the ones the entry names (S-05), else HALT PNG_MANIFEST_UNSAFE."""
+    """The PNG tar stream cut into parts (§3.7); streamed bytes must be the entry's (S-05), else PNG_MANIFEST_UNSAFE."""
     jd, rels = src['job_dir'], src['rels']
     man = {'schema': 'cps.vm2-png.v1', 'run': src['run'], 'files': src['files']}
     want = {f[0]: f[3] for f in src['files']}
@@ -103,10 +95,7 @@ def _png_parts(env, series, seq, src, want_whole):
 
 
 def write_commit(env, draft, members, part_sources, post, complete):
-    """§5.1 steps 1-4. draft: the entry without confirms/prev_sha256/parts/payload/state (seq and name set by the
-    caller). members: archive members after MANIFEST.json. part_sources: [{'kind': 'PNG', 'job_dir', 'rels', 'files',
-    'run'} | {'kind': K, 'data': bytes, 'folder'}]. complete(entry) -> entry with state and state_sha256 (the fold; it
-    raises for an illegal transition). Returns (PENDING doc, entry, png whole sha or None)."""
+    """§5.1 steps 1-4: (PENDING doc, entry, png whole sha or None); complete(entry) is the fold."""
     if os.path.lexists(env.v2 / 'PENDING.json'):
         stop('INTERNAL_PENDING_EXISTS', 'a commit is pending')
     env.journal.mkdir(parents=True, exist_ok=True)
@@ -198,11 +187,7 @@ def _group(loop):
 
 
 def block(loop, cap, lag, folder, reprint=False):
-    """§5.1 steps 5-7 for one loop (PENDING, or a setup-file loop kept in RESTORE_WORK): the next block as (uploads,
-    finds, downloads, do, expect names), after updating the loop's tries in place (the caller writes it durably before
-    printing). None when every file is confirmed. cap: max_upload_bytes (a setup file over it is UPLOAD_TOO_LARGE, a
-    journal file ENTRY_TOO_LARGE or PART_TOO_LARGE); lag: p2_lag_seconds; folder: the series folder of the absent names.
-    A reprint (after a slip) has no UPLOAD lines (SD-60)."""
+    """§5.1 steps 5-7: the next (uploads, finds, downloads, do, names) of one loop, or None when all is confirmed."""
     if loop['verify']:
         return (), (), tuple((v['folder'], v['id'], v['path']) for v in loop['verify']), ('RUN', {}), None
     grp = _group(loop)
@@ -236,10 +221,7 @@ def block(loop, cap, lag, folder, reprint=False):
 
 
 def on_found(loop, got, refused, known, verify_dir):
-    """§5.1 step 6 with rule V (delta v2.1 §2.1) for every name of the current block. got: {name: [[id, size]]};
-    refused: the names attested --refused; known(name) -> the Drive ids already recorded for that name. A copy with an
-    unknown id is downloaded back (verify), whatever size was attested. Returns ('stop', code), ('handback', the first
-    refused name not found) or ('ok', None), with the loop updated in place."""
+    """§5.1 step 6 with rule V: ('stop', code), ('handback', a refused name not found) or ('ok', None)."""
     grp = {f['name']: f for f in _group(loop)}
     absent = set(loop['absent']) if loop.get('entry') and loop['entry']['copies'] is None else set()
     if any(got.get(n) for n in absent):
@@ -271,10 +253,7 @@ def on_found(loop, got, refused, known, verify_dir):
 
 
 def on_verify(loop):
-    """At the `go` after a DOWNLOAD block: the slips first (a missing file, a size other than the attested one, the
-    bytes of another file of the same loop), then FORK for a copy of the attested size with other bytes (its download
-    is kept for stop_block), then each copy is confirmed and deleted. Returns ('ok', None) | ('slip', code, name) |
-    ('stop', 'FORK', None)."""
+    """The `go` after a DOWNLOAD block: ('ok', None) | ('slip', code, name) | ('stop', 'FORK', None)."""
     by = {f['name']: f for f in _files(loop)}
     shas = {}
     for v in loop['verify']:
@@ -299,8 +278,7 @@ def on_verify(loop):
 
 
 def slip(loop, name, code):
-    """The slip rule (delta v2.1 §2.2.1) in one loop: every pending download is deleted and forgotten, its names are
-    FOUND again, and the slip is counted. Returns None or 'SLIP_LIMIT' (the fourth slip of the loop)."""
+    """The slip rule (delta v2.1 §2.2.1) in one loop: None, or 'SLIP_LIMIT' at the fourth slip."""
     for v in loop['verify']:
         if os.path.lexists(v['path']):
             os.unlink(v['path'])
@@ -312,8 +290,7 @@ def slip(loop, name, code):
 
 
 def finish(env, cache, pend):
-    """§5.1 step 8: the new STATE.json (head, state, confirms for the next entry, post; marks copied unchanged),
-    written durably, then PENDING removed. The post actions still owed by the earlier STATE run first (S-04)."""
+    """§5.1 step 8: the new STATE.json written durably, then PENDING removed (owed post actions first, S-04)."""
     man = read_entry(pend['entry']['path'])
     if man['state_sha256'] != pend['state_after_sha256']:
         stop('INTERNAL_ILLEGAL_TRANSITION', 'the local entry is not the pending one')

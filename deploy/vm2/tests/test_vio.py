@@ -16,6 +16,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -2692,6 +2693,15 @@ def t_maint2_s_v_entries_archive_message_and_tools():
     verbatim (attest/final_message.txt) with attest/tools.txt (a D1 run with the real runner: scope reader, G, V)."""
     with fw(series='D1', cases=(('9990101', 'large'), ('9990102', 'small'))) as w:
         w.start()
+        k = [0]
+
+        def enough(dot, lines):                  # GAP-10: stop once the first run's S, G and V entries are on Drive
+            n = len(w.drive.folders.get(N.series_folder(w.series), {}))
+            if n != k[0]:
+                k[0] = n
+                if {'S', 'G', 'V'} <= {e['body']['role'] for e in ai_entries(w) if e['kind'] == 'AI'}:
+                    return 'stop'
+        w.dot.hook = enough
         code, out = w.dot.run(*w.dot.cmd('go'))
         es = ai_entries(w)
         roles = {e['body']['role']: e for e in es if e['kind'] == 'AI' and e['body']['revision'] == 1}
@@ -2896,29 +2906,60 @@ TESTS = [t_d5_clear_check_found_accepted, t_d11_drill_genesis_refuses_existing_l
          t_printed_blocks_grammar_and_paths]
 
 
-def run(only=None, work=None):
+SLOW = ('t_maint2_s_v_entries_archive_message_and_tools', 't_opx05_empty_final_message_accepted',   # run first
+        't_opx05_final_message_any_characters_verbatim', 't_maint2_tools_file_link_refused',
+        't_maint2_generation_record_tools_and_o63_note', 't_d11_head_download_slips_and_no_block',
+        't_d11_clear_check_routes_found_only_to_its_find', 't_d16_stage_refuses_low_space_before_runner')
+
+
+def one_test(arg):
+    """Run one test by name (in a worker process when jobs > 1): (name, failure or None, the blocks it printed)."""
+    global WORK
+    name, WORK = arg
+    env0, n0, t0 = dict(os.environ), len(PRINTED), time.time()
+    fn = {f.__name__: f for f in TESTS}[name]
+    try:
+        fn()
+        bad = None
+    except Exception as e:                      # noqa: BLE001 - recorded per test
+        import traceback
+        bad = {'test': name, 'error': '%s: %s' % (type(e).__name__, e), 'trace': traceback.format_exc()[-1500:]}
+    finally:
+        os.environ.clear()
+        os.environ.update(env0)
+    if 'seen' in sys.modules:                   # the runtime half of L1 (a worker's codes are kept per pid)
+        sys.modules['seen'].dump()
+    return name, bad, PRINTED[n0:], round(time.time() - t0, 1)
+
+
+def run(only=None, work=None, jobs=1):
+    """GAP-10 (D14): with jobs > 1 the tests run in a process pool; the grammar test over every printed block last."""
     global WORK
     WORK = work or tempfile.mkdtemp(prefix='test_vio_')
     os.makedirs(WORK, exist_ok=True)
-    env0 = dict(os.environ)
-    passed, failed = 0, []
-    for fn in TESTS:
-        if only and fn.__name__ not in only:
-            continue
-        if failed and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
-            break
-        try:
-            fn()
-            passed += 1
-        except Exception as e:                      # noqa: BLE001 - recorded per test
-            import traceback
-            failed.append({'test': fn.__name__, 'error': '%s: %s' % (type(e).__name__, e),
-                           'trace': traceback.format_exc()[-1500:]})
-        finally:
-            os.environ.clear()
-            os.environ.update(env0)
-    return {'name': 'test_vio', 'tests': passed + len(failed), 'passed': passed, 'failed': [f['test'] for f in failed],
-            'detail': failed, 'counts': {'blocks_printed': len(PRINTED)}}
+    last = [t_s07_runner_loaded_from_hashed_bytes, t_printed_blocks_grammar_and_paths]   # in this process, after
+    names = sorted((f.__name__ for f in TESTS if f not in last and (not only or f.__name__ in only)),
+                   key=lambda n: n not in SLOW)                         # the pool (a World removes __pycache__)
+    ff = os.environ.get('CPSVM2_FAILFAST')     # run_tests.py --failfast (the mutation harness): serial, stop at one
+    if jobs > 1 and not ff:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=jobs) as ex:
+            res = list(ex.map(one_test, [(n, WORK) for n in names]))
+        for r in res:
+            PRINTED.extend(r[2])
+    else:
+        res = []
+        for n in names:
+            res.append(one_test((n, WORK)))
+            if ff and res[-1][1]:
+                break
+    for f in last:
+        if (not only or f.__name__ in only) and not (ff and any(r[1] for r in res)):
+            res.append(one_test((f.__name__, WORK)))
+    failed = [r[1] for r in res if r[1]]
+    return {'name': 'test_vio', 'tests': len(res), 'passed': len(res) - len(failed), 'failed': [f['test'] for f in failed],
+            'detail': failed, 'counts': {'blocks_printed': len(PRINTED),
+                                         'slowest': sorted(([r[3], r[0]] for r in res), reverse=True)[:12]}}
 
 
 if __name__ == '__main__':

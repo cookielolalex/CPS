@@ -1,6 +1,4 @@
-"""The module-level names the reused v1 segments load that are not themselves reused (spec §1.5). New code, reviewed
-in full. Values copied from deploy/vm/cps_vm.py at 95df270 where the table says so; `Halt` keeps v1's attributes
-without `to_block` (vio maps every Halt to a v2 block, §13.4); `Block` is an inert record that stores and never prints."""
+"""The module-level names the reused v1 segments load that are not themselves reused (spec §1.5); new code."""
 import json
 import os
 from pathlib import Path

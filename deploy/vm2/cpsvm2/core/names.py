@@ -1,5 +1,4 @@
-"""Names, value patterns and codes (spec §3.1, §3.2, §6.3, §13). Pure: no I/O. Every match is re.fullmatch with
-re.ASCII on a str; nothing here ever uses re.match or re.search on an attested value."""
+"""Names, value patterns and codes (spec §3.1, §3.2, §6.3, §13). Pure. Every match is re.fullmatch, re.ASCII."""
 import calendar
 import datetime
 import hashlib
@@ -48,8 +47,7 @@ KEY_NAMES = frozenset({'operator_model', 'platform', 'ended', 'conversation', 's
                        'list_shows_none', 'notified', 'case', 'copy', 'log', 'sent', 'arrived', 'asked'})
 FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents')
 
-# The upload cap with a margin, the JobLock retry bound, the stage keys (§X.2, §X.3, §X.7.2); v2.1: the raw file and
-# tool list limits and a stage's free space (delta v2.1 §2.3, §2.8, §2.16.5); the O63 texts (D9).
+# Upload cap, size limits and free space (§X.2, delta v2.1 §2.3, §2.8, §2.16.5); the O63 texts (D9).
 UPLOAD_CAP_BYTES = 94_371_840
 RAW_MAX_BYTES, MAX_TOOL_LINES, STAGE_FREE_BYTES = 1048576, 2000, 1000000000
 BASE_RE = r'/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*'
@@ -57,8 +55,10 @@ O63_NOTE = ('O63: generator isolation by instruction only, not enforced or audit
             'statement is in final_message.')
 O63_NOTE_RE = re.escape(O63_NOTE).replace('%s', '[0-9a-f]{64}')
 O63_REPORT = ('Isolation of the generator, scope-reader and visual-reviewer conversations was by instruction only '
-              '(owner decision O63): neither enforced nor audited. The tools present in each conversation are recorded '
-              'in its AI entry and, for generators, in GENERATION_RECORD.json.')
+              '(owner decision O63): neither enforced nor audited. The tools of each conversation are recorded in its AI '
+              'entry (for generators also in GENERATION_RECORD.json) as the operator attested them: the kit inventory '
+              "TOOL_INVENTORY.txt by sha256 (the platform's usual set, not that conversation's own list) or a list the "
+              'operator saved.')
 JOB_BUSY_TRIES, JOB_BUSY_GAP_SECONDS = 5, 30
 STAGE_KEYS = ('selftest', 'place', 'prepare', 'nonattempt', 'scope-finish', 'finish', 'visual-record', 'interrupt',
               'freeze')
@@ -132,8 +132,7 @@ def series_folder(series):
 
 
 def tool_list(raw):
-    """A tool list (TOOL_INVENTORY.txt, a tools=file: list): UTF-8 ending in a newline, 1 to MAX_TOOL_LINES distinct
-    lines of 1 to 200 characters, no control character, no leading or trailing space. The lines, or None."""
+    """A tool list (D9): UTF-8, newline-ended, 1 to MAX_TOOL_LINES distinct clean lines; the lines, or None."""
     try:
         t = raw.decode('utf-8')
     except (UnicodeDecodeError, AttributeError):
@@ -178,8 +177,7 @@ def _valid_date(s):
 
 
 def check_config_patterns(conversation_re, doc_samples):
-    """§2.2: the kit is CONFIG_INVALID if conversation_re matches a doc sample, a key name or a pattern name.
-    Returns None or 'CONFIG_INVALID'."""
+    """§2.2: CONFIG_INVALID if conversation_re matches a doc sample, a key name or a pattern name; else None."""
     for v in list(doc_samples) + sorted(KEY_NAMES) + sorted(PATTERNS):
         if fm(conversation_re, v):
             return 'CONFIG_INVALID'
@@ -187,8 +185,7 @@ def check_config_patterns(conversation_re, doc_samples):
 
 
 def copypath(value, home, case):
-    """§6.3 COPYPATH structure: (user, utc14, file) for $HOME/cps-deliveries/<case>/<user>/<utc14>/<file>, else None.
-    The cross-checks (same user and utc14 in both answers, realpath, regular file, size) are the glue's."""
+    """§6.3 COPYPATH: (user, utc14, file) of $HOME/cps-deliveries/<case>/<user>/<utc14>/<file>, else None."""
     pre = home.rstrip('/') + '/cps-deliveries/' + case + '/'
     if not isinstance(value, str) or not value.startswith(pre):
         return None
@@ -198,15 +195,13 @@ def copypath(value, home, case):
 
 
 def forbidden(value):
-    """§6.3 global refusal: not a str, empty, a forbidden character, any whitespace (a trailing newline included),
-    a control or non-ASCII character."""
+    """§6.3 global refusal: not a str, empty, a forbidden, whitespace, control or non-ASCII character."""
     return not isinstance(value, str) or value == '' or any(
         c in FORBIDDEN_CHARS or c.isspace() or not 32 <= ord(c) <= 126 for c in value)
 
 
 def check_value(key, pattern, value, cfg, window=None):
-    """One attested value (§6.3). Returns None or (code, key). Order: global refusals, placeholder (free-text patterns
-    only), the pattern, the window. cfg: {'drive_id_re', 'conversation_re', 'doc_samples', 'home', 'case'}."""
+    """One attested value (§6.3): None or (code, key)."""
     if forbidden(value):
         return ('VALUE_FORBIDDEN', key)
     samples = set(cfg.get('doc_samples') or ())
@@ -234,9 +229,7 @@ def check_value(key, pattern, value, cfg, window=None):
 
 
 def check_answers(expect_keys, pairs, cfg, windows=None):
-    """`answer` key=value pairs against BLOCK.expect.keys (§6.3). pairs: list of (key, value) in the order given.
-    Returns (None, {key: value}) or ((code, detail), None). Order: global refusals on every value, then the key set,
-    then each value's placeholder/pattern/window check in the expected order."""
+    """`answer` pairs against BLOCK.expect.keys (§6.3): (None, {key: value}) or ((code, detail), None)."""
     for k, v in pairs:
         if forbidden(v):
             return ('VALUE_FORBIDDEN', k), None

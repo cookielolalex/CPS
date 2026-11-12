@@ -1,7 +1,5 @@
-"""Block printing (spec §6.1, §6.4) and the parsing of `found` and `answer` arguments (§6.2, delta v2.1 §2.3). A block
-is the header, UPLOAD, FIND and DOWNLOAD lines and exactly one `DO:` line. Every path and folder is printed
-shlex-quoted and round-trips through shlex.split (else INTERNAL_PRINT); nothing printed is non-ASCII. The `--at` value
-is computed by the glue over the lines rendered with the placeholder AT_MARK, then substituted."""
+"""Block printing (spec §6.1, §6.4) and `found`/`answer` parsing (§6.2, delta v2.1 §2.3). Printed paths are
+shlex-quoted ASCII (else INTERNAL_PRINT); `--at` is computed over the lines rendered with AT_MARK."""
 import re
 import shlex
 
@@ -76,8 +74,7 @@ def do_text(do, vm):
 
 
 def check_grammar(lines):
-    """§6.1 block grammar (lint L5): header, then UPLOAD*, FIND*, DOWNLOAD*, exactly one DO: line last; no THEN/OPTION,
-    no {TOKEN}, ASCII only. Returns None or a reason."""
+    """§6.1 block grammar (lint L5): None or a reason."""
     if not lines or not re.fullmatch(r'CPSV series=\S+ head=[0-9]{6} kit=(none|[0-9a-f]{12}) at=\S+ mode='
                                      r'(qualification|everyday|drill|setup) state=[A-Z]+', lines[0]):
         return 'header'
@@ -99,8 +96,7 @@ def check_grammar(lines):
 
 
 def _line_form(ln):
-    """§6.1 line forms: UPLOAD <path> TO <folder> AS <name>, FIND <folder> NAME <name>, DOWNLOAD <folder> ID <id> TO
-    <path>."""
+    """§6.1 line forms of UPLOAD, FIND and DOWNLOAD lines."""
     try:
         t = shlex.split(ln)
     except ValueError:
@@ -109,14 +105,12 @@ def _line_form(ln):
     return len(t) == want[0] and all(t[j] == v for j, v in want[1].items())
 
 
-# ---------------------------------------------------------------- argument parsing (§6.2, §6.3)
 class Usage(Exception):
     """Argument syntax: exit 2, the current block printed again."""
 
 
 def parse_found(argv):
-    """`found --at A --raw F [--refused N ...]` or `found --at A (--name N (--file ID:SIZE ... | --none))+
-    [--refused N ...]`. Returns (at, raw path or None, [[name, [ID:SIZE strings], none]], [refused names])."""
+    """`found --at A (--raw F | (--name N (--file ID:SIZE ... | --none))+) [--refused N ...]`."""
     if len(argv) < 3 or argv[0] != '--at':
         raise Usage('found --at')
     at, rest, raw, items, refused, i = argv[1], argv[2:], None, [], [], 0
@@ -143,8 +137,7 @@ def parse_found(argv):
 
 
 def manual_copies(items, names, id_ok):
-    """The manual form's answer {name: [[id, size]]}, or the REFUSED code (FOUND_SYNTAX, FOUND_FILE_AND_NONE,
-    FOUND_NAMES_INCOMPLETE, VALUE_PATTERN)."""
+    """The manual form's answer {name: [[id, size]]}, or its REFUSED code."""
     got = {}
     for name, files, none in items:
         if name in got or (not files and not none):
@@ -169,9 +162,7 @@ def _token(o):
 
 
 def parse_raw(doc, names, id_ok):
-    """A saved tool result (delta v2.1 §2.3, D4): (detail, None) or (None, {name: [[id, size]]}). Pure. The copies of a
-    name are the entries of any element whose title equals it exactly; a name is absent only when every element is an
-    exact-name search (`results`)."""
+    """A saved tool result (D4): (detail, None) or (None, {name: [[id, size]]}) by exact title."""
     els = [doc] if len(names) == 1 and isinstance(doc, dict) else doc
     if not isinstance(els, list) or len(els) != len(names):
         return 'count', None

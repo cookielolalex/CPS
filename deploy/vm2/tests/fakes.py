@@ -319,7 +319,8 @@ class FakeDot:
        upload, HANDBACK A, and it lands) ; 'found': 'raw' | 'manual' ; 'approval': 'notes' (answer pending while a
        refusal is in the notes) | 'none' (always none: the wrong-none slip of D6) ; 'tools': 'inventory' | 'file' ;
        'final_message': None (an invented text) or the exact text (b'' for a conversation without one) ; 'inputs':
-       'restore' | 'lost' ; 'slips': [[kind, k]] with kind wrong_id, size (the k-th found), short_download, missing
+       'restore' | 'lost' ; 'slips': [[kind, k]] with kind wrong_id, size (the k-th found), wrong_id_save (the first
+       FIND of a commit loop with a copy, from the k-th found on), short_download, missing
        (the k-th download), stale_raw, swapped_raw (the k-th raw save)."""
     def __init__(self, world):
         self.w = world
@@ -566,6 +567,11 @@ class FakeDot:
         """`found` for a FIND block: the saved raw results (default) or the manual form, plus --refused."""
         self.n_found += 1
         how = self.slip_due(('wrong_id', 'size'), self.n_found)
+        hdr = (self.blocks[-1]['lines'] or [''])[0] if self.blocks else ''
+        for x in [x for x in self.policy['slips'] if x[0] == 'wrong_id_save' and x[1] <= self.n_found][:1]:
+            if not how and ' state=SAVE' in hdr and any(o['structuredContent']['results'] for _, _, o in finds):
+                self.policy['slips'].remove(x)          # GAP-5: the first commit-loop FIND with a copy from found k on
+                self.injected = how = 'wrong_id'
         objs = [copy.deepcopy(o) for _, _, o in finds]
         if how:
             for o in objs:
@@ -781,7 +787,7 @@ def cache_files(v2):
 
 # ================================================================ invented AI outputs
 def write_response(folder):
-    """G: the package's invented example response for this job (case id and inventory hash adapted)."""
+    """G: the package's invented example response for this job (case id, inventory hash and reader adapted)."""
     jd = folder.parents[1]
     case = jd.name
     inv = folder / 'input' / 'packet' / 'SOURCE_INVENTORY.json'
@@ -795,6 +801,7 @@ def write_response(folder):
         return case if x == 'EXAMPLE046F' else x
     r = walk(r)
     r['inventory_sha256'] = sha(inv.read_bytes())
+    r['limitations'].append('Invented stand-in response of the reader folder %s.' % jd.parent.name)   # A differs from B
     out = folder / 'output' / 'response.json'
     out.write_text(json.dumps(r, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
 
@@ -1193,6 +1200,33 @@ class World:
                             '--out', str(d / 'ASSEMBLE.json')] + (['--verify-frozen'] if verify else []))
         rep = json.loads((d / 'ASSEMBLE.json').read_text()) if (d / 'ASSEMBLE.json').is_file() else None
         return code, rep, out.getvalue()
+
+    def score_check(self, d, rep):
+        """O5 (GAP-2): score_check build over the audit and ASSEMBLE.json (every case of the outcomes in the pool, each
+        owner item given its passing verdict), then check with a manifest of the plan's carriers: the verdict."""
+        from cpsvm2.maint import score_check as SC
+        d = Path(d)
+        v = {'OWNER_CHECK': 'NOTHING_WRITTEN_CONFIRMED', 'SUPERSEDED_WINDOW': 'NO_CONVERSATION_IN_WINDOW',
+             'O52_SHEET': 'SHEET_CHECKED'}
+        docs = {'pool.json': {'pool': sorted({p['case'] for p in rep['outcomes']['pairs']})},
+                'oc.json': {'schema': 'cps.vm2-owner-checks.v1', 'series': self.series, 'checked_by': 'owner',
+                            'outcomes_sha256': rep['outcomes_sha256'], 'checked_utc': '2026-11-10T00:00:00Z',
+                            'unlogged': [], 'verdicts': [{'id': i['id'], 'verdict': v[i['kind']], 'note': ''}
+                                                         for i in rep['owner_items']]}}
+        for k, doc in docs.items():
+            (d / k).write_text(json.dumps(doc))
+        ins = ['--audit', str(d / 'AUDIT.json'), '--assembled', str(d / 'ASSEMBLE.json'), '--pool', str(d / 'pool.json'),
+               '--owner-checks', str(d / 'oc.json')]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            if SC.main(['build'] + ins + ['--out', str(d / 'plan')]) != 0:
+                return out.getvalue().strip()[-300:]
+            pl = json.loads((d / 'plan' / 'SCORE_PLAN.json').read_text())
+            (d / 'man.json').write_text(json.dumps({'pool': pl['pool'], 'readers': {rd: {
+                c: {'carrier_sha256': r['carrier_sha256']} for c, r in pl['readers'][rd].items()} for rd in 'AB'}}))
+            SC.main(['check', '--plan', str(d / 'plan' / 'SCORE_PLAN.json'), '--manifest', str(d / 'man.json'),
+                     '--out', str(d / 'check.json')] + ins)
+        return json.loads((d / 'check.json').read_text())['verdict'] if (d / 'check.json').is_file() else out.getvalue()
 
     def all_frozen(self):
         """ALL_FROZEN.json from the FINAL part on FakeDrive, or None."""

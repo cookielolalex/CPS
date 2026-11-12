@@ -763,6 +763,18 @@ there.
   `Bad LAYOUT_PATH`. The writes are the reused `Staging.begin`, the PNG temporary file, and the ledger folder and file.
   This confinement is the defence against a base that is hostile but self-consistent, which the string checks accept.
 - ASSEMBLE.json records `root`.
+- **verify-frozen through a namespace view (fix round, GAP-2).** Runner v4 (byte-identical) verifies a qualification
+  or drill run only at its original absolute job_dir: it looks up the ledger freeze entry by the resolved job_dir in the
+  ledger at the release's absolute `qualification.ledger`. So `--verify-frozen` runs each verify inside
+  `unshare --user --map-root-user --mount`: a private tmpfs is mounted over the deepest existing proper ancestor A of the
+  GENESIS base, the base is recreated there and `<realpath(root)><base>` is bind-mounted onto it (the runner file too,
+  when it lies under A). The shell's working directory is the old A, so the bind sources under A are read through it
+  (`mount -c`, relative paths); nothing outside the namespace changes and no path outside the root is written. The
+  runner then sees the original job_dir and ledger paths. ASSEMBLE.json records the mapping as `view` (`tmpfs` and
+  `binds`). A machine without user namespaces gives a verify `EXIT_n`: unclean, and score_check refuses
+  ASSEMBLE_NOT_VERIFIED (fail-closed). D_baseline's O5 now wipes BASE, requires ASSEMBLE clean with every verify DONE,
+  then runs score_check build and check and requires CONSISTENT. W111 (746ea98's verify at the assembled path) and
+  W112 (no bind mount) are killed by D_baseline.
 
 **Tests (TG-06).** None of them builds a hostile series through `core_world.commit`, which folds every entry:
 - ct `test_maint1_new_run_job_dir_must_be_the_layout_path`: one fold case per row T10, T11, T12 and T13 and one for the
@@ -790,7 +802,7 @@ there.
 
 The mutants are split so that one surviving check cannot hide the removal of the other: W29a removes assemble's layout
 check (killed by the forged, base and wrong-mapping tests), W29b removes the realpath confinement (killed by the
-self-consistent base and the symlink tests), W30 restores the `/` default, W93 makes assemble trust `af.genesis.base`.
+symlink test; the self-consistent base test cannot kill it, GAP-3), W30 restores the `/` default, W93 makes assemble trust `af.genesis.base`.
 
 ### 2.7 D8: the audit re-derives kit changes, CLEAR and local clears
 
@@ -1158,14 +1170,14 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W08 | STATE.post is not resumed | vio `t_s04_pending_post_resumed_before_next_commit` |
 | W09 | the PNG whole and per-file compare is removed | vio `t_s05_png_changed_before_part_write_halts` |
 | W10 | the profile-folder print check is removed | cod `test_s06_profile_folder_with_brace_refused_before_commit` |
-| W11 | the launcher has no `-X pycache_prefix=/dev/null` | lint `t_l13_launcher_ignores_bytecode`, vio `t_s07_runner_loaded_from_hashed_bytes` (the planted helper-module .pyc) |
+| W11 | the launcher has no `-X pycache_prefix=/dev/null` | lint `t_l13_launcher_ignores_bytecode` (fix round, GAP-5: `t_s07_runner_loaded_from_hashed_bytes` does not fail on W11 and left the list) |
 | W12 | `load_runner` goes through `spec_from_file_location` | vio `t_s07_runner_loaded_from_hashed_bytes` (the planted cps_job .pyc) |
 | W13 | the HEAD check comes after the setup step | v1r `test_s08_wrong_head_stops_before_setup` |
 | W14 | `render` does not create DOWNLOAD parents | vio `t_s09_download_parent_exists_when_printed` |
 | W15 | `run_command` does not catch OSError | cod `test_s11_oserror_outside_stage_prints_stop_block` |
-| W16 | a BLOCK.json behind STATE invalidates the whole cache | vio `t_opx07_stage_death_stop_names_real_head_and_kit`, rs special `test_foreground_died_same_boot_stops` |
+| W16 | a BLOCK.json behind STATE invalidates the whole cache | vio `t_gap05_block_ahead_invalidates_cache` (fix round, GAP-5: `t_opx07_stage_death_stop_names_real_head_and_kit` does not fail on W16 and left the list) |
 | W17 | `write_doc` returns a new dict | vio `t_opx01_restore_work_writes_kept`, rs oracle "one END_CONVERSATION per open role per boot" |
-| W18 | DOWNLOAD_MISSING reprints the DOWNLOAD block | vio `t_opx02_mistyped_id_refinds_then_commits`, rs `D_slip_wrong_id_refinds` |
+| W18 | DOWNLOAD_MISSING reprints the DOWNLOAD block | vio `t_opx02_mistyped_id_refinds_then_commits`, rs `D_slip_wrong_id_refinds` (fix round, GAP-5: its second slip is in a commit loop and the block after REFUSED must be a FIND) |
 | W19 | a size other than ours at `found` is STOP FORK | vio `t_opx03_size_slip_refinds`, rs `D_slip_size_refinds` |
 | W20 | the README outcome rule is removed | lint `t_l14_readme_rules` |
 | W21 | the brace and angle-bracket rule is back | vio `t_opx05_final_message_any_characters_verbatim` |
@@ -1177,7 +1189,7 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W27 | unknown `--only` names are ignored | lint `t_only_unknown_name_exits_2` |
 | W28 | the fold's `_virtual` job_dir check is removed | ct `test_maint1_new_run_job_dir_must_be_the_layout_path`, mt `test_maint1_audit_refuses_hostile_new_run` |
 | W29a | assemble's layout check is removed (realpath confinement kept) | mt `test_maint1_forged_all_frozen_job_dir`, `test_maint1_wrong_mapping_refused` |
-| W29b | assemble's realpath confinement is removed (layout check kept) | mt `test_maint1_self_consistent_hostile_base_confined`, `test_maint1_symlink_after_begin_refused` |
+| W29b | assemble's realpath confinement is removed (layout check kept) | mt `test_maint1_symlink_after_begin_refused` (GAP-3: the self-consistent base test cannot kill it) |
 | W30 | `--root` defaults to `/` | mt `test_maint1_assemble_root_required_empty_dedicated` |
 | W31 | `tools=none` is accepted | vio `t_maint2_tools_none_refused_inventory_file_accepted` |
 | W32 | the generation record has no `notes` | vio `t_maint2_generation_record_tools_and_o63_note` |
@@ -1220,7 +1232,7 @@ behaviour, or removes one v2.1 rule, and names its killing tests.
 | W68 | the refused count never resets | vio `t_d3_refused_count_resets_per_block` |
 | W69 | a `files` element without the name counts as absence | vio `t_d4_parse_raw_rules` |
 | W70 | the next-page token is ignored | vio `t_d4_parse_raw_rules` |
-| W71 | TOOL_INVENTORY.txt is not checked against `tool_inventory_sha256` | vio `t_maint2_inventory_sha_checked` |
+| W71 | TOOL_INVENTORY.txt is not checked against `tool_inventory_sha256` | vio `t_maint2_inventory_rehashed_at_attest` (fix round, GAP-5: `t_maint2_inventory_sha_checked` does not fail on W71 and left the list) |
 | W72 | `tools=file` accepts a link | vio `t_maint2_tools_file_link_refused` |
 | W73 | a no-hint bootstrap keeps an older HINT.json | v1r `test_opx08_kit_none_bootstraps_without_hint` |
 | W74 | S1 accepts an approval other than `"none"` | ct `test_d6_entry_approval_must_be_none` |
@@ -1523,9 +1535,12 @@ A row with any column not as stated means the port is not the same rule, and the
 
 **2. Tests run directly at 2015773,** each with its expected failure there:
 - mt: `test_maint1_audit_refuses_hostile_new_run` (the audit is clean); `test_maint1_forged_all_frozen_job_dir`,
-  `test_maint1_assemble_base_from_genesis`, `test_maint1_wrong_mapping_refused`,
-  `test_maint1_self_consistent_hostile_base_confined` and `test_maint1_symlink_after_begin_refused` (assemble writes
-  the hostile paths; the root is `/` by default);
+  `test_maint1_assemble_base_from_genesis`, `test_maint1_wrong_mapping_refused` and
+  `test_maint1_symlink_after_begin_refused` (assemble writes the hostile paths; the root is `/` by default). Fix round
+  (GAP-3): `test_maint1_self_consistent_hostile_base_confined` passes at 2015773 and is not in this list or in W29b's
+  kill list: a base that is consistent with its own paths is normalized and pattern-checked by `target`, so without a
+  link it cannot leave the root even with the realpath confinement removed; only the planted link of
+  `test_maint1_symlink_after_begin_refused` can, and that test is W29b's killer;
   `test_maint1_assemble_root_required_empty_dedicated` (no `--root` is accepted); `test_maint3_*` (the audit is clean);
   `test_maint4_audit_only_kit_change_verdicts` (clean); `test_maint5_*` (build accepts); `test_maint7_*` (folder rows
   refused); `test_maint8_*` (check trusts the plan); `test_maint9_*` (the window has no tolerance); `test_maint10_*`
@@ -2706,6 +2721,95 @@ branch `v21-build` as "cps-vm-helper.v2.1 candidate (not reviewed, not admitted)
 Review 3 (G-1) decides. The runner `deploy/run/cps_job.py` is byte-identical (sha256 `7505e98a…`). The numbers below
 are in `scratchpad/vm_helper/v21/keep/INTEGRATION.json`.
 
+### 8.0 Completeness fix round (2026-11-12, after 746ea98)
+
+A completeness critic found ten gaps (GAP-1 to GAP-10) in the 746ea98 candidate. This round fixes them; the numbers
+in §8.1 to §8.6 below are 746ea98's and are superseded where this subsection says so. **Nothing here is an admission.**
+
+| gap | what changed | proof (fails before the fix) |
+|---|---|---|
+| GAP-1 (D2) | Deletions 2 and 3 of §5.1 applied: module and function docstrings that restated r2, the probe delta or the data shapes cut to one line with their § reference (the reused segments' docstrings untouched), the section banner comments removed, a comment naming the old limits shortened. Deletion 1 found nothing (L10 reports no unused segment). Deletion 4 not applied (see open items). No behaviour changed: every hand, reviewer and legacy substitution still applies unchanged, and the guard ids are unchanged (docstrings and comments are no guard sites). | `count` of §8.4b; the suites and mutant sets below |
+| GAP-2 (MAINT-1 with MAINT-5) | `assemble --verify-frozen` runs each verify in a user and mount namespace that shows `<root><base>` at `<base>` (§2.6). D_baseline's O5 wipes BASE, requires ASSEMBLE clean with every verify DONE, then runs score_check build and check and requires CONSISTENT (FakeDot's invented G response now differs between readers, so the two carriers of a case are not SHARED). | D_baseline fails at 746ea98 (every Q/D verify STOP_FROZEN_FOLDER_CHANGED); W111 (746ea98's call) and W112 (no bind mount) |
+| GAP-3 | `test_maint1_self_consistent_hostile_base_confined` is out of W29b's kill list and table 2 (§2.15.6): a self-consistent base cannot leave the root without a link, so only the symlink test can kill W29b. This section states the 2015773 proof of the blocking rows (below). | – |
+| GAP-4 (N18) | ct `test_t3_recheck_forks_2015773_form` runs unchanged at 2015773 and at v2.1 (copies as [id, md5, size] when `rule_v` takes md5, a `via` key, re-check FINDs W_abs after the commit). | 2015773 plain PASS, 2015773 + my_mutants.py N18 FAIL, v2.1 + T's N18 port FAIL |
+| GAP-5 (W18) | D_slip_wrong_id_refinds requires that the block after `REFUSED DOWNLOAD_MISSING <name>` FINDs that name and prints no DOWNLOAD line, and that the file reaches Drive. The hand, reviewer and legacy mutants now run without `--failfast`, and MUTANTS_RESULTS records `listed_not_failing` for each mutant. | W18 kills D_slip_wrong_id_refinds |
+| GAP-6 | MUTANTS_RESULTS.json carries `helper_tree_sha256` and `commit`; every set was re-run at the fix-round tree (§8.3b). | – |
+| GAP-7 (OPX-10) | `tests/budget_golden.json` holds the restore counts (`restore.hint`, `restore.commit`, `restore.none`), checked by `x_opx10_restore` on test_op07_restore_calls_within_budget, D_notes_commit_only_gallop and D_notes_none_step0; README §7 has one row per measured restore and labels the 400-entry row an estimate; L14 compares the rows with the golden. | W114 |
+| GAP-8 (O63) | O63_REPORT (score_check's isolation statement) and README §4 say that `tools=inventory` records the kit inventory by sha256, the platform's usual set and not the conversation's own list; the AI entry already records the source (`tools_present.source`). | mt `test_gap8_isolation_statement_matches_inventory_attestation`; W113 |
+| GAP-9 (OPX-09, OPX-05) | README §4: any characters up to max_ai_output_bytes, larger STOP AI_OUTPUT_TOO_LARGE HANDBACK C; §7 and §2.3: the everyday records folder and the profile's deliveries folder must be in the owner's pre-approval. L14 checks all three. | W115 (and L14 fails on the 746ea98 README) |
+| GAP-10 (D14) | test_vio and test_codes run their tests in a process pool of `--jobs` workers (the pycache test and the grammar test over every printed block run last in the parent); the slowest test_vio test stops its D1 world once the first run's S, G and V entries are on Drive. | timings below |
+
+**The 2015773 proof of the blocking rows (GAP-3).** The v2.1 tests of the blocking rows fail at 2015773, but mostly
+before they reach the fixed behaviour: a shared fixture calls `fold.layout_of`, `session.clear_verdict`,
+`place.settle` and `drive.parse_raw` do not exist there, and the v2.1 FakeDot does not get past state=KIT on
+2015773. Only `t_l14_readme_rules`, `test_maint1_assemble_root_required_empty_dedicated`,
+`test_d6_approval_before_head` and a few D_refuse and D_slip scenarios fail on 2015773 behaviour. For the other
+blocking rows the regression proof is the W mutant of the row: each puts the 2015773 behaviour (or the removal of the
+v2.1 rule) into v2.1 and is killed by the row's tests (§8.3b).
+
+**Test runs (fix round).** From `bin/testclone.sh` snapshots of the fix-round working files, helper tree sha256
+`ddcdd9f1689aaafd5a569660005b21368b990b7c4885e5622dfdeb0b2b70473e`, `--jobs 4`:
+
+| run | tests | passed | wall | uid / CapEff |
+|---|---|---|---|---|
+| root, full suite (snapshot a36fc99) | 559 | 559 | 2,790.7 s (46.5 min) | 0 / full root |
+| non-root pass `--only nonroot --require-nonroot` (snapshot 06cf0d4) | 246 | 246 | 508.1 s (8.5 min) | 1000 / 0 |
+| root, full suite again after the test-only GAP-5 edits (snapshot 5206736, the committed files) | 559 | 559 | 2,970.0 s (49.5 min) | 0 / full root |
+
+In the first run the non-reset suites took 261.1 s (test_vio 118.6 s, was 482.8 s; test_codes 34.8 s), test_resets
+2,479.2 s for 208 scenarios, the lints 50.4 s; in the second 275.8 s, 2,640.0 s and 54.3 s. D14 is met in both: full
+suite <= 50 min (the second with 30 s to spare), non-reset <= 5 min, lints <= 2 min, non-root pass <= 10 min.
+
+**Lines (D2, fix round).** C 7,496 (cap 7,500; 7,566 at 2015773, 7,737 at 746ea98), M 896 (cap 896; 830, 896), all
+8,392 (baseline 8,396, target 8,390). D2's binding rules hold. Per module (2015773 / 746ea98 / fix round): cli.py 1,526
+/ 1,705 / 1,663; fold.py 1,073 / 1,085 / 1,062; session.py 565 / 571 / 539; plan.py 316 / 298 / 281; step.py 86 / 72 /
+58; savepoint.py 379 / 340 / 317; place.py 242 / 269 / 251; drive.py 197 / 224 / 215; names.py 252 / 266 / 259;
+entry.py 248 / 259 / 253; worker.py 488 / 495 / 485; v1mod.py 266 / 270 / 256; assemble.py 243 / 268 / 279; audit.py
+409 / 439 / 434; score_check.py 178 / 189 / 183; the rest in INTEGRATION.json `lines_D2`. cli.py stays above the
+plan's expected 1,513: the remaining difference is code that §2.13 adds (clear check, slips, counted refusals, raw
+results, approval, tools), and cutting it further would change the texts that 51 hand, reviewer and legacy
+substitutions are pinned to and the ids of cli's 81 glue guard sites (8 with EQUIVALENT arguments), for no behaviour
+gain.
+
+**Operator budget (D15, fix round).** Restores, from `tests/budget_golden.json` `restore` (helper commands, Drive
+calls, saved results, waits): with the hint 18, 15, 8, 2; with only the commit line 39, 46, 14, 2; without notes on
+the D baseline's 6-entry journal 24, 23, 13, 2. README §7 states these rows (L14) and keeps the 400-entry row as an
+estimate that was not measured.
+
+**Mutation runs (fix round).** Every set ran at helper tree sha256 `ddcdd9f1…` (the full suite's), each from its own
+`bin/testclone.sh` snapshot, `--jobs 4`; MUTANTS_RESULTS.json of each run records `helper_tree_sha256` and `commit`.
+The hand, reviewer and legacy sets ran without `--failfast`, so every listed killer ran.
+
+| set | mutants or sites | killed | survivors | survivors with an EQUIVALENT argument | wall |
+|---|---|---|---|---|---|
+| hand W (with W111-W115; W106 and W107 as uid 1000, CapEff 0) | 116 | 116 | 0 | – | 1,150 s |
+| reviewer N and legacy (G, M, B, C) | 68 | 68 | 0 | – | 391 s |
+| guard, core set: fold | 545 | 531 | 14 | 14 | 3,388 s |
+| guard, core set: session | 202 | 199 | 3 | 3 | 1,484 s |
+| guard, glue set (two halves by id) | 168 | 150 | 18 | 18 | 5,815 s |
+
+The survivors are the same 17 core and 18 glue sites as at 746ea98, each with its EQUIVALENT entry. Listed killers
+that did not fail on their mutant: W16's `t_opx07_stage_death_stop_names_real_head_and_kit`, W71's
+`t_maint2_inventory_sha_checked` and W11's `t_s07_runner_loaded_from_hashed_bytes` (each mutant is killed by its
+other test; the three names left the kill lists and §2.15.1), W18's `D_slip_wrong_id_refinds` (GAP-5: its first
+slip was a session FIND, outside W18's commit loop; the scenario now also slips in a SAVE loop, and a re-run of W18
+after that change is KILLED by both tests), and three legacy lists kept as written (G9, M2-18, M2-36: each killed by
+its first test). After these test-only edits the full suite ran again (Test runs above).
+
+**Open after the fix round.**
+- cli.py is 1,663 lines against the plan's expected 1,513 (the C and total caps hold; see Lines above). Contingency
+  deletion 4 was not applied: `ensure_standard` re-makes STANDARD.xlsx from the runner's copy in the job folder and
+  re-checks its sha256, `ensure_member` re-makes a notice or copy from an entry member; one function for both would
+  add a branch and save no lines.
+- GAP-2 needs, on the maintainer's machine, user namespaces (or root) and util-linux `unshare` and `mount`, and the
+  first component of the GENESIS base (`/home` for the Dot's `/home/agent/cps`). Without them a verify is `EXIT_n`,
+  ASSEMBLE is unclean and score_check refuses ASSEMBLE_NOT_VERIFIED (fail-closed). It has not run on that machine; G-4
+  ends with this step.
+- N40 and N42 are not shown at 2015773: v2.1 moved both rules (T7 into `names.check_answers`, T8 into the session
+  download check), so their v2.1 tests fail on plain 2015773; their proof is the v2.1 port.
+- README §7's no-notes row for about 400 journal entries is an estimate; FakeDot's D journal has 6 entries.
+- Every EQUIVALENT entry waits for G-1; the release gates G-1 to G-11 were not run.
+
 ### 8.1 What the integrator changed
 
 - `cli.stop_block` lost its dead `name` parameter: no caller passed it, and its guard site could not be killed. This
@@ -2814,6 +2918,8 @@ README §7's qualification total (about 3,600 tool calls) still rests on these p
 conversation steps.
 
 ### 8.6 Open after integration
+
+(746ea98. §8.0 closes the MAINT-1/MAINT-5 defect, D2 and D14.)
 
 - **Plan defect: MAINT-1 and MAINT-5 together block Q/D scoring.** This was found by track M and is not resolved:
   - assemble writes only under a dedicated `--root`;

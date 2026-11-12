@@ -551,26 +551,38 @@ WORLD = [
 ]
 
 
-def run(only=None, work=None):
+def one_test(name):
+    """One test by name (in a worker process when jobs > 1): (name, failure or None)."""
+    try:
+        {f.__name__: f for f in TESTS}[name]()
+        bad = None
+    except Exception as e:                                           # noqa: BLE001 - recorded per test
+        bad = {'test': name, 'error': '%s: %s' % (type(e).__name__, str(e)[:1200]), 'trace': traceback.format_exc()[-1500:]}
+    import seen
+    seen.dump()
+    return name, bad
+
+
+def run(only=None, work=None, jobs=1):
+    """GAP-10 (D14): with jobs > 1 the tests run in a process pool."""
     global WORK
     WORK = str(work or tempfile.mkdtemp(prefix='codes_'))
     os.makedirs(WORK, exist_ok=True)
     import seen
     seen.install()
-    passed, failed = 0, []
-    for fn in TESTS:
-        if only and fn.__name__ not in only:
-            continue
-        if failed and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
-            break
-        try:
-            fn()
-            passed += 1
-        except Exception as e:                                       # noqa: BLE001 - recorded per test
-            failed.append({'test': fn.__name__, 'error': '%s: %s' % (type(e).__name__, str(e)[:1200]),
-                           'trace': traceback.format_exc()[-1500:]})
-    seen.dump()
-    return {'name': 'test_codes', 'tests': passed + len(failed), 'passed': passed,
+    names = [f.__name__ for f in TESTS if not only or f.__name__ in only]
+    if jobs > 1 and not os.environ.get('CPSVM2_FAILFAST'):
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=jobs) as ex:
+            res = list(ex.map(one_test, names))
+    else:
+        res = []
+        for n in names:
+            res.append(one_test(n))
+            if res[-1][1] and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
+                break
+    failed = [r[1] for r in res if r[1]]
+    return {'name': 'test_codes', 'tests': len(res), 'passed': len(res) - len(failed),
             'failed': [f['test'] for f in failed], 'detail': failed, 'counts': {}}
 
 

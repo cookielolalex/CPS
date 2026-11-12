@@ -1,24 +1,8 @@
-"""The session and restore machine (§8): session_next, head_search (§8.4), classify (§8.5), the resolution of an open
-role (§8.6), kit acceptance (§8.1 step 11, §8.2 KIT_CHANGE) and the clear verdict (delta v2.1 §2.4). Pure: every
-observation comes in RESTORE_WORK.
-
-session_next(view) -> (phase, Step or None). The phase is the first unfinished §8.1 step (RESTORE_WORK phases, §2.3);
-the glue writes it into RESTORE_WORK (forward only) and carries out the Step. Step None means "an I/O phase: the glue
-does it itself and records it in work['done']": LAYOUT, SETUP, KIT, CONFIG, FINGERPRINT, PASS, CLOCK, and KIT_ACCEPT
-when the head's kit must be fetched (§8.2: it fills work['head_kit']).
-view = {'work': RESTORE_WORK, 'series', 'gates' (config gates), 'clear' (config clear), 'now' (UTC_S), 'base',
-        'transcript_ext' (config)}.
-RESTORE_WORK keys read here (the glue records each observation before calling again):
-  done [phase], operator {model, platform}|None, approval None|'none' (D6), hint {'seq': int|None, 'kit': hex12|None},
-  lookups [{'name', 'result': 'present'|'absent', 'copies': [[id, size]], 'utc', 'void'?, 'post'?}] (every FIND, in
-  order; a slip voids a name's lookups), head None|{'entry': the downloaded ENTRY, verified by the glue}, head_error
-  None|code, identity {'home', 'uid'}, kit {'sha256', 'members', 'config', 'release_sha256'}, head_kit None|{same},
-  list_shows_none None|bool (C5), resolve {'end', 'placed', 'files_found', 'export', 'answers'}, placed bool,
-  reuploaded bool, committed None|{'seq', 'md5', 'utc', 'sha256', 'bytes', 'ids'} (the RESTORE commit, for RECHECK),
-  verified {drive id: [sha256, size]} (downloads the glue hashed: rule V), cleared_local and moved_pending (a clear).
-Blocks that END or EXPORT set work['resolve']['end'|'export'] before printing (the RESTORE_WORK analogue of a mark).
-Rule V (delta v2.1 §2.1): a copy is ours iff its id is recorded, or its download-back has the attested size and the
-expected sha256. Questions about the conversation list carry after=T, T = START utc - p3_clock_tolerance_seconds."""
+"""The session and restore machine (§8, delta v2.1 §2.1-§2.5): session_next, head_search, classify, the
+resolution of an open role, kit acceptance and the clear verdict. Pure: every observation comes in RESTORE_WORK
+(its keys: spec §2.3 and delta v2.1 §2.12). session_next(view) -> (phase, Step or None); None is an I/O phase the
+glue does itself and records in work['done']. Rule V (§2.1): a copy is ours iff its id is recorded, or its
+download-back has the attested size and the expected sha256."""
 from . import fold as F
 from .names import FOLDERS, entry_name, series_folder, utc_epoch, utc_minus
 from .plan import pending_chain
@@ -47,8 +31,7 @@ def _facts(lookups, names):
 
 
 def _status(f, name, twice, w, now):
-    """'P' or 'A' for one name, or raise _Out with the lookup/wait needed (§8.4: a second absence counts only w apart;
-    a copy at any observation is present; copies are compared only by their downloads)."""
+    """'P' or 'A' for one name, or raise _Out with the FIND or WAIT needed (§8.4: two absences w apart)."""
     x = f.get(name)
     if x and x['present']:
         return 'P'
@@ -63,9 +46,7 @@ def _status(f, name, twice, w, now):
 
 
 def head_search(series, hint, lookups, gates, now):
-    """§8.4 steps 1-2 as a pure function of the observations so far. Returns {'need': 'find', 'name'} |
-    {'need': 'wait', 'seconds'} | {'verdict': 'head', 'seq', 'copies'} | {'verdict': 'fresh'} |
-    {'verdict': 'stop', 'code': HINT_AHEAD|HEAD_UNSTABLE}. Presence and absence come only from exact-name FINDs."""
+    """§8.4 steps 1-2 over the exact-name FINDs so far: a need (find, wait) or a verdict (head, fresh, stop)."""
     w, t = F.w_abs(gates), utc_epoch(now)
     f = _facts(lookups, {x['name'] for x in lookups})
     flips = sum(1 for x in f.values() if any(r == 'absent' for _, r in sorted(x['seq'])[:1])
@@ -102,8 +83,7 @@ def head_search(series, hint, lookups, gates, now):
 
 
 def pre_commit(w, gates):
-    """The lookups of the head search: those made before the RESTORE commit. The step-6 re-check's own FINDs (flagged
-    `post` by the glue) see the RESTORE at N+1 and must not move the head."""
+    """The head search's lookups: not the step-6 re-check's own FINDs (`post`), which see the RESTORE at N+1."""
     return [x for x in w['lookups'] if not x.get('post')]
 
 
@@ -118,9 +98,7 @@ def present_copies(lookups, name):
 
 
 def rule_v(copies, sha256, known_ids, verified):
-    """Rule V for the attested copies [[id, size]] of one name: ('ok', None) | ('download', [copies to download]) |
-    ('bad', 'sha'). A known id needs nothing; any other copy is ours iff its download-back has the expected sha256
-    (its size was checked against the attested one when it was hashed: a slip otherwise)."""
+    """Rule V for one name's attested copies: ('ok', None) | ('download', [copies]) | ('bad', 'sha')."""
     need = [c for c in copies if c[0] not in known_ids and c[0] not in verified]
     if need:
         return 'download', need
@@ -137,8 +115,7 @@ def _dl_block(name, need, all_copies, folder, base, sub):
 
 
 def absent_twice(names, lookups, w, now):
-    """Batch form of the double-absence check (§7.12 g, §8.4 step 5). Returns ('find', [names]) | ('wait', s) |
-    ('done', {name: 'present'|'missing'}, [{'name', 'utc': [first, second]}]) (missing = absent twice, w apart)."""
+    """The double-absence check (§7.12 g, §8.4 step 5): ('find', names) | ('wait', s) | ('done', found, abs)."""
     f, t = _facts(lookups, set(names)), utc_epoch(now)
     finds, waits, out, obs = [], [], {}, []
     for n in names:
@@ -160,8 +137,7 @@ def absent_twice(names, lookups, w, now):
 
 
 def kit_change(state, kit, head_kit):
-    """§8.1 step 11 / §8.2 KIT_CHANGE for a kit that differs from state.kit_sha256: (code or None, kit_change dict).
-    kit/head_kit: {'sha256', 'members': [[path, sha256]], 'config': dict, 'release_sha256'}."""
+    """§8.1 step 11, §8.2 KIT_CHANGE for a kit other than state.kit_sha256: (code or None, kit_change dict)."""
     a, b = head_kit['config'], kit['config']
     keys = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
     co, rif = F.config_only(head_kit['members'], kit['members']), F.run_in_flight(state)
@@ -186,8 +162,7 @@ def kit_change(state, kit, head_kit):
 
 
 def config_only_ok(from_kit, to_kit):
-    """The config-only branch of kit_change (§8.2, O59): None, or CONFIG_CHANGE_NOT_ALLOWED unless the member lists
-    differ only at VM_HELPER_CONFIG.json, the changed keys are within CHANGEABLE_KEYS and doc_samples are only added."""
+    """O59: None, or CONFIG_CHANGE_NOT_ALLOWED unless only the config changed, within CHANGEABLE_KEYS."""
     a, b = from_kit['config'], to_kit['config']
     keys = {k for k in set(a) | set(b) if a.get(k) != b.get(k)}
     if not F.config_only(from_kit['members'], to_kit['members']) or keys - F.CHANGEABLE_KEYS \
@@ -202,9 +177,7 @@ def clear_ok(clear, series, seq, code):
 
 
 def clear_verdict(halt, cand, kits):
-    """The clear check's verdict on a candidate kit (delta v2.1 §2.4.3): None (the clear proceeds) or the reason
-    'sha' | 'members' | 'clear' | 'config'. halt: HALT.json with check.kit12; cand: {'sha256', 'members', 'config'
-    (None when a member is missing or the config is not valid), 'release_sha256'}; kits: the kit dicts held."""
+    """Delta v2.1 §2.4.3: None (the clear proceeds) or the reason 'sha' | 'members' | 'clear' | 'config'."""
     if not cand['sha256'].startswith(halt['check']['kit12']):
         return 'sha'
     if cand['config'] is None:
@@ -219,8 +192,7 @@ def clear_verdict(halt, cand, kits):
 
 
 def classify(head, state, missing_parts, clear, kit_config_only, gates):
-    """§8.5 C2-C10 (C1 is the glue's step-3/4 failure). head: the head ENTRY; missing_parts: names of its parts absent
-    twice. Returns (row id, detail dict)."""
+    """§8.5 C2-C10 for the head ENTRY and its parts absent twice: (row id, detail dict)."""
     kind, body = head['kind'], head['body']
     if state['phase'] == 'HALTED':
         h = state['halt']
@@ -290,9 +262,7 @@ def restore_keys(state, run, rkey, files_found, conversation_known):
 
 
 def build_item(state, run, rkey, answers, files_found):
-    """The RESTORE resolution item (§8.6 steps 5-6) and the START draft it needs (or None). answers are the validated
-    §6.5 values ('yes'/'no' strings). The action comes from fold.resolution_action, so the fold accepts it. The item's
-    conversation is the answer's, else the archived conversation, else null (INT-R2-03)."""
+    """The RESTORE item (§8.6 steps 5-6, action from fold.resolution_action) and its START draft or None."""
     ro = state['runs'][run]['roles'][rkey]
     conv = answers.get('conversation') or (ro['archives'][0]['conversation'] if ro['archives'] else None)
     item = {'run': run, 'role': ro['role'], 'attempt': ro['attempt'], 'start_no': F.latest(ro)['start_no'],
@@ -315,8 +285,7 @@ def build_item(state, run, rkey, answers, files_found):
 
 
 def bound_of(head):
-    """§7.10 rebase binding from the head STAGE/FROZEN: its commands and the bound values (the worker measures the
-    same values with bound_values after the re-run's last command)."""
+    """§7.10 rebase binding from the head STAGE/FROZEN: its commands and bound values."""
     b = head['body']
     return {'commands': [[c['sub'], c['next'], sorted(c['codes'])] for c in b['commands']],
             'values': bound_values(b['next'], b['codes'], b['saved_qa'], b['carrier_sha256'], b['png'])}
@@ -538,8 +507,7 @@ def _place_commit(w, st, run, rebase, draft, hs, view):
 
 
 def _commit(w, st, draft, hs, view):
-    """COMMIT (§8.7) then RECHECK (§8.4 step 6). The glue adds fingerprint_sha256, pass, placed, and the START's
-    utc/boot_id (the entry's)."""
+    """COMMIT (§8.7), then RECHECK (§8.4 step 6)."""
     if not w.get('committed'):
         return 'COMMIT', Commit({'kind': 'RESTORE', 'body': draft})
     if not (F.is_q(st) or (w.get('moved_pending') or {}).get('uploaded')):        # SD-59

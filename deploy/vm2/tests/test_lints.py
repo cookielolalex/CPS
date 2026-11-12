@@ -375,6 +375,10 @@ README_RULES = (                                # D10, OPX-04, OPX-09, D3, D4, D
     'date -u +%Y-%m-%dT%H:%M:%SZ',
     '`include_base64` false',
     'not_available',
+    "any characters, up to the kit's max_ai_output_bytes, larger: `STOP AI_OUTPUT_TOO_LARGE HANDBACK C`",   # GAP-9
+    'for everyday jobs into the everyday records folder `Dots Folder/CPS_JOB_RECORDS` and the profile\'s `deliveries` folder',
+    'both must be inside the owner\'s standing pre-approval of uploads (section 7)',
+    'With `tools=inventory` the record holds the kit\'s list (by its sha256), the platform\'s usual set, not a list read',
 )
 README_ABSENT = ('STOP IDLE', 'then=', 'AWAIT_CONVERSATION', 'OPENED', 'LIST ')
 
@@ -401,6 +405,13 @@ def t_l14_readme_rules():
     assert rows.get('a normal run') == [str(run['helper_commands']), '15 + 3p', str(run['saved_results'])] and \
         rows.get('a nonattempt') == [str(na['helper_commands']), str(na['drive_calls']), str(na['saved_results'])], \
         ('L14: README section 7 differs from tests/budget_golden.json', rows, run, na)
+    rest = json.load(open(os.path.join(HERE, 'budget_golden.json')))['restore']           # GAP-7: the restore rows
+    lead = {'hint': '| a restore after a reset, with your notes', 'commit': '| a restore with only the commit line',
+            'none': '| a restore without your notes (step 0), measured'}
+    for k, pre in lead.items():
+        row = [ln for ln in readme.split('\n') if ln.startswith(pre)]
+        want = [str(rest[k][c]) for c in ('helper_commands', 'drive_calls', 'saved_results')]
+        assert len(row) == 1 and [c.strip() for c in row[0].split('|')[2:5]] == want, ('L14 restore', k, row, want)
 
 
 def t_l15_every_guard_has_a_direct_test():

@@ -80,6 +80,8 @@ def run_suite(name, mod, only, work, jobs):
         return mod.run(jobs)
     if name in ('test_core_table', 'test_reuse', 'test_core_more'):
         return mod.run(only)
+    if name in ('test_vio', 'test_codes'):
+        return mod.run(only, wd, jobs)
     if name == 'test_resets':
         return mod.run(only, wd, jobs)
     return mod.run(only, wd)

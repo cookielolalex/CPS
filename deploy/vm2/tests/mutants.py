@@ -55,7 +55,8 @@ REVIEWER = [
       ['test_t2_reader_b_waits_while_a_owes_restart'], 'B may start while A still owes its restart'),
     M('N18', SESS, [("    if not f[names[0]]['present'] or any(f[n]['present'] for n in names[1:]):",
                      "    if not f[names[0]]['present']:")],
-      ['test_t3_recheck_second_writer_at_n2_n3_forks'], 'the step-6 re-check ignores N+2/N+3'),
+      ['test_t3_recheck_second_writer_at_n2_n3_forks', 'test_t3_recheck_forks_2015773_form'],
+      'the step-6 re-check ignores N+2/N+3'),
     M('N37', SP, [("    if man['state_sha256'] != pend['state_after_sha256']:\n        stop(", "    if False:\n        stop(")],
       ['t_t6_finish_refuses_entry_that_is_not_pending'], 'finish installs a local entry that is not the pending one'),
     M('N40', NAMES, [("    if 'started_utc' in got and 'ended_utc' in got and got['started_utc'] > got['ended_utc']:",
@@ -122,7 +123,7 @@ HAND = [
     M('W16', CLI, [("        elif bl.get('head_seq') != hs:\n            d = fresh(env, 'invalid_')\n            d.mkdir(parents=True)\n"
                     "            os.replace(env.p.block, d / 'BLOCK.json')\n            bl = None",
                     "        elif bl.get('head_seq') != hs:\n            bad = True")],
-      ['t_gap05_block_ahead_invalidates_cache', 't_opx07_stage_death_stop_names_real_head_and_kit'],
+      ['t_gap05_block_ahead_invalidates_cache'],                  # GAP-5: t_opx07 does not fail on W16
       'a BLOCK.json behind STATE invalidates the whole cache'),
     M('W17', DUR, [("    write(path, doc_bytes(doc), mode)\n    return doc", "    write(path, doc_bytes(doc), mode)\n    return dict(doc)")],
       ['t_opx01_restore_work_writes_kept'], 'write_doc returns a new dict'),
@@ -179,7 +180,7 @@ HAND = [
       ['t_d4_parse_raw_rules'], 'the next-page token is ignored'),
     M('W71', CLI, [("        if sha_bytes(b) != env.cfg['tool_inventory_sha256'] or N.tool_list(b) is None:",
                     "        if N.tool_list(b) is None:")],
-      ['t_maint2_inventory_sha_checked', 't_maint2_inventory_rehashed_at_attest'], 'TOOL_INVENTORY.txt not checked against its pin (tools=inventory)'),
+      ['t_maint2_inventory_rehashed_at_attest'], 'TOOL_INVENTORY.txt not checked against its pin (tools=inventory)'),
     M('W72', CLI, [("or os.path.islink(p) or not os.path.isfile(p) \\\n            or os.path.realpath(p) != p or",
                     "or not os.path.isfile(p) \\\n            or")],
       ['t_maint2_tools_file_link_refused'], 'tools=file accepts a link (both link checks removed)'),
@@ -242,7 +243,7 @@ W13 = M('W13', 'session_start.sh', [('# 6. the checked-out commit is the one nam
 HAND.append(W13)
 # Track M mutants (built by M, ported by T): maint/*, killed by test_maint.
 HAND.append(M('W29a', 'cpsvm2/maint/assemble.py', [("            if tag not in F.QUAL_ROOT or r['job_dir'] != F.job_dir_of(base, tag, case):\n                raise Bad('LAYOUT_PATH', r['job_dir'])\n", '')], ['test_maint1_forged_all_frozen_job_dir', 'test_maint1_wrong_mapping_refused'], 'track M: W29a'))
-HAND.append(M('W29b', 'cpsvm2/maint/assemble.py', [("        if r != self.real and not r.startswith(self.real + '/'):\n            raise Bad('LAYOUT_PATH', d)\n", '')], ['test_maint1_self_consistent_hostile_base_confined', 'test_maint1_symlink_after_begin_refused'], 'track M: W29b'))
+HAND.append(M('W29b', 'cpsvm2/maint/assemble.py', [("        if r != self.real and not r.startswith(self.real + '/'):\n            raise Bad('LAYOUT_PATH', d)\n", '')], ['test_maint1_symlink_after_begin_refused'], 'track M: W29b (GAP-3: a self-consistent base cannot leave the root without a link)'))
 HAND.append(M('W30', 'cpsvm2/maint/assemble.py', [("    ap.add_argument('--root')\n", "    ap.add_argument('--root', default='/')\n"), ("    if not (a.root and os.path.isabs(a.root) and os.path.isdir(a.root) and not os.listdir(a.root)\n            and os.path.realpath(a.root) != '/'):\n", '    if not os.path.isabs(a.root):\n')], ['test_maint1_assemble_root_required_empty_dedicated'], 'track M: W30'))
 HAND.append(M('W93', 'cpsvm2/maint/assemble.py', [("        base = lay.get('base') if isinstance(lay, dict) else None\n", "        base = af['genesis']['base']\n"), (" and lay == F.layout_of(base)\n                and af['genesis']['base'] == base):", '):')], ['test_maint1_assemble_base_from_genesis'], 'track M: W93'))
 HAND.append(M('W33', 'cpsvm2/maint/score_check.py', [("    if not isinstance(au.get('o63'), dict) or au['o63'].get('missing') != []:\n", '    if False:\n')], ['test_maint2_score_check_requires_tools_attestation_and_states_isolation'], 'track M: W33'))
@@ -343,7 +344,7 @@ W2 = [
     M('W84', 'session_start.sh', [('find "$REPO" -name __pycache__ -type d -prune -exec rm -rf {} + || stop SESSION_LAYOUT\n', '')],
       ['test_gap11_session_start_removes_pycache'], 'session_start.sh keeps __pycache__ folders'),
     M('W11', 'session_start.sh', [('exec python3 -I -B -X pycache_prefix=/dev/null %q', 'exec python3 -I -B %q')],
-      ['t_l13_launcher_ignores_bytecode', 't_s07_runner_loaded_from_hashed_bytes'], 'the launcher has no -X pycache_prefix'),
+      ['t_l13_launcher_ignores_bytecode'], 'the launcher has no -X pycache_prefix'),
     M('W27', 'tests/run_tests.py', [("    if unknown:\n        print(", "    if False:\n        print(")],
       ['t_only_unknown_name_exits_2'], 'unknown --only names are ignored'),
     M('W20', 'README.md', [('When in doubt, answer `UNSURE`.', 'When in doubt, answer `NOTHING_WRITTEN`.')],
@@ -373,6 +374,25 @@ HAND.append(M('W99', 'tests/fakes.py', [("        self.tally.append({'argv0': ar
                                          "")],
                ['test_opx10_tool_calls_match_budget_golden'], 'FakeDot counts Drive calls only (no helper commands)'))
 HAND += W2
+ASM = 'cpsvm2/maint/assemble.py'
+HAND.append(M('W111', ASM, [("            argv, ns = view(base, self.real, rn)\n", "            argv, ns = [], None\n"),
+                            ("'verify-frozen', '--job-dir', x['job_dir']]", "'verify-frozen', '--job-dir', x['path']]")],
+               ['D_baseline'], 'GAP-2: verify-frozen runs at the assembled path without the namespace view (746ea98)'))
+HAND.append(M(
+    'W113', NAMES, [("'(owner decision O63): neither enforced nor audited. The tools of each conversation are recorded in its AI '\n"
+                     "              'entry (for generators also in GENERATION_RECORD.json) as the operator attested them: the kit inventory '\n"
+                     "              \"TOOL_INVENTORY.txt by sha256 (the platform's usual set, not that conversation's own list) or a list the \"\n"
+                     "              'operator saved.')",
+                     "'(owner decision O63): neither enforced nor audited. The tools present in each conversation are recorded '\n"
+                     "              'in its AI entry and, for generators, in GENERATION_RECORD.json.')")],
+    ['test_gap8_isolation_statement_matches_inventory_attestation'], 'GAP-8: the 746ea98 isolation statement'))
+HAND.append(M('W114', 'README.md', [('| 18 | 15 | 8 | 0 to 2 | 3 (2 waits) | about 45 |', '| 23 | 16 | 9 | 0 to 2 | 3 (2 waits) | about 45 |')],
+               ['t_l14_readme_rules'], 'GAP-7: the README restore row is not the measured golden'))
+HAND.append(M('W115', 'README.md', [("any characters, up to the kit's max_ai_output_bytes, larger: `STOP AI_OUTPUT_TOO_LARGE HANDBACK C`;",
+                                     'any characters, any length;')],
+               ['t_l14_readme_rules'], 'GAP-9: the README final-message sentence of 746ea98'))
+HAND.append(M('W112', ASM, [('mount -c --bind "$2" "$1"; ', '')], ['D_baseline'],
+               'GAP-2: the namespace has its tmpfs but no bind of <root><base> onto <base>'))
 HAND_OPEN = {'W57': 'retired in r4 (APPROVAL comes before HEAD): no mutant'}
 # Builder mutants whose path v2.1 deleted (§2.13, §2.15.1): no substitution, recorded with the reason.
 DELETED = {'G2': 'md5-visible mode is deleted: every copy with an unknown id is downloaded back (rule V, §2.1); G26 and '
@@ -861,10 +881,10 @@ def prepare(m, d, commit=True, check=True, unparse_base=None):
     return repo, None
 
 
-def run_kill(repo, work, names, jobs, timeout, nonroot=False):
+def run_kill(repo, work, names, jobs, timeout, nonroot=False, failfast=True):
     t0 = time.time()
     cmd = [sys.executable, '-I', '-B', os.path.join(repo, 'deploy/vm2/tests/run_tests.py'), '--work', work, '--jobs',
-           str(jobs), '--failfast', '--only', ','.join(names)]
+           str(jobs)] + (['--failfast'] if failfast else []) + ['--only', ','.join(names)]
     if nonroot:
         subprocess.run(['chown', '-R', '%d:%d' % (NONROOT_UID, NONROOT_UID), os.path.dirname(repo)], check=False)
         cmd = ['setpriv', '--reuid=%d' % NONROOT_UID, '--regid=%d' % NONROOT_UID, '--clear-groups',
@@ -910,7 +930,7 @@ def nonroot_root():
     return d
 
 
-def one(m, root, names, timeout, jobs=1):
+def one(m, root, names, timeout, jobs=1, failfast=True):
     if m.get('nonroot'):
         root = nonroot_root()
         if root is None:
@@ -923,10 +943,12 @@ def one(m, root, names, timeout, jobs=1):
         repo, why = prepare(m, d, commit=not m.get('no_commit'), check=not m.get('no_check'))
         if repo is None:
             return dict(id=m['id'], result='HARNESS_ERROR', detail=why)
-        r = run_kill(repo, os.path.join(d, 'work'), names, jobs, timeout, m.get('nonroot'))
+        r = run_kill(repo, os.path.join(d, 'work'), names, jobs, timeout, m.get('nonroot'), failfast)
         out = dict(id=m['id'], result=verdict(r), killed_by=r['failed'], run=r)
+        if not failfast:                    # GAP-5: every named killer ran; one that did not fail is a weak oracle
+            out['listed_not_failing'] = sorted(set(names) - set(r['failed']))
         with open(os.path.join(root, 'PROGRESS.jsonl'), 'a') as f:          # one line per mutant, as it ends
-            f.write(json.dumps({k: out[k] for k in ('id', 'result', 'killed_by')}) + '\n')
+            f.write(json.dumps({k: out.get(k) for k in ('id', 'result', 'killed_by', 'listed_not_failing')}) + '\n')
         return out
     finally:
         subprocess.run(['chmod', '-R', 'u+w', d], capture_output=True)
@@ -967,7 +989,7 @@ def run_set(sel, root, jobs):
             continue
         to = max(300, 3 * b['seconds'])
         with ThreadPoolExecutor(max_workers=jobs) as ex:
-            results += list(ex.map(lambda m: one(m, root, m['kill'], to), group))
+            results += list(ex.map(lambda m: one(m, root, m['kill'], to, failfast=False), group))
     return results, bases
 
 
@@ -1073,7 +1095,9 @@ def main(work, jobs, only=(), selftest=False):
                       'survivors': [dict(id=r['id'], result=r['result'], what=r.get('what'),
                                          equivalent=EQUIVALENT.get(r['id'])) for r in rs if r['result'] != 'KILLED'],
                       'killed_by': {r['id']: r.get('killed_by', [])[:3] for r in rs if r['result'] == 'KILLED'}}
-    doc = {'schema': 'cps.vm2-mutants.v2', 'mutants': len(applicable),
+    import run_tests                                    # GAP-6: the helper tree and commit the counts belong to
+    doc = {'schema': 'cps.vm2-mutants.v2', 'mutants': len(applicable), 'helper_tree_sha256': run_tests.tree_sha(),
+           'commit': git(REPO, 'rev-parse', 'HEAD').stdout.strip(),
            'killed': sum(r['result'] == 'KILLED' for r in results), 'results': results, 'baselines': bases,
            'not_applicable': not_applicable, 'hand_open': HAND_OPEN, 'deleted': DELETED, 'guards': gres,
            'table': [{'id': m['id'], 'file': m['path'], 'what': m['what'], 'kill_tests': m['kill']}
