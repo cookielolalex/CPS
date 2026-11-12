@@ -8,7 +8,7 @@ from .names import (BOOT_ID, CASE_ID, HELPER_VERSION, HEX64, PART_EXT, RUN_KEY, 
                     cjson, entry_name, fm, parse_part, sha)
 
 SCHEMA = 'cps.vm2-entry.v1'
-KINDS = ('GENESIS', 'INPUTS', 'STAGE', 'FROZEN', 'OPENED', 'AI', 'RESTORE', 'ACK', 'DELIVERY', 'HALT', 'CLEAR', 'FINAL')
+KINDS = ('GENESIS', 'INPUTS', 'STAGE', 'FROZEN', 'AI', 'RESTORE', 'ACK', 'DELIVERY', 'HALT', 'CLEAR', 'FINAL')
 ENTRY_KEYS = frozenset({'schema', 'series', 'seq', 'name', 'prev_sha256', 'kind', 'body', 'utc', 'boot_id', 'uid',
                         'home', 'fingerprint_sha256', 'helper', 'runner_sha256', 'kit_sha256', 'release_sha256',
                         'confirms', 'parts', 'payload', 'state', 'state_sha256', 'cleared_local'})
@@ -20,19 +20,17 @@ _STAGE = {'run': 'run', 'new_run': 'dict?', 'prepare_inputs_sha256': 'hex?', 'co
 BODY = {
     'INPUTS': {'tag': 'tag', 'case': 'case', 'inputs': 'dict', 'request_utc': 'utc'},
     'GENESIS': {'mode': 'str', 'operator': 'dict', 'jobs': 'list?', 'ledger': 'dict?', 'layout': 'dict',
-                'gates': 'dict', 'pass': 'dict', 'other_series_absent': 'list?'},
+                'gates': 'dict', 'pass': 'dict', 'other_series_absent': 'list?', 'approval': 'str'},
     'STAGE': _STAGE,
     'FROZEN': dict(_STAGE, frozen_sha256='hex', final_next='str', final_codes='list', restart_eligible='bool',
                    flags_added='list', notify='str?', delivery_sent='bool'),
-    'OPENED': {'run': 'run', 'role': 'role', 'attempt': 'pos', 'start_no': 'pos', 'conversation': 'str',
-               'opened_utc': 'utc'},
     'AI': {'run': 'run', 'role': 'role', 'attempt': 'pos', 'revision': 'pos', 'start_no': 'pos',
            'start_boot_id': 'str', 'ended': 'bool', 'conversation': 'str', 'attested': 'dict', 'tree_sha256': 'hex',
-           'files': 'list', 'transcript': 'dict?', 'final_message_sha256': 'hex?'},
+           'files': 'list', 'transcript': 'dict?', 'final_message_sha256': 'hex'},
     'RESTORE': {'prev_boot_id': 'str?', 'operator': 'dict', 'fingerprint_sha256': 'hex', 'pass': 'dict',
                 'head': 'dict', 'lookups': 'list', 'kit_sha256': 'hex', 'kit_change': 'dict?', 'resolutions': 'list',
                 'start': 'dict?', 'rebase': 'dict?', 'rerun_expected': 'dict?', 'reprepare': 'dict?',
-                'abandon': 'dict?', 'delivery_question': 'dict?', 'placed': 'list'},
+                'abandon': 'dict?', 'delivery_question': 'dict?', 'placed': 'list', 'approval': 'str'},
     'ACK': {'for_seq': 'pos', 'what': 'str', 'answer': 'dict'},
     'DELIVERY': {'run': 'run', 'standard_sha256': 'hex', 'copy': 'dict', 'log': 'dict', 'profile_folder': 'str'},
     'HALT': {'code': 'str', 'detail': 'dict', 'head_seq': 'int'},
@@ -46,7 +44,8 @@ NEW_RUN_KEYS = frozenset({'tag', 'case', 'reader', 'job_dir', 'restart_of'})
 COMMAND_KEYS = frozenset({'sub', 'exit', 'result', 'next', 'codes', 'record_sha256_after', 'ledger_sha256_after',
                           'stdout_sha256', 'started_utc', 'ended_utc'})
 RESOLUTION_KEYS = frozenset({'run', 'role', 'attempt', 'start_no', 'ended', 'files_found', 'outcome', 'forced',
-                             'transcript', 'list_shows_none', 'action', 'owner_check'})
+                             'transcript', 'list_shows_none', 'action', 'owner_check', 'conversation'})
+PLACED_KEYS = frozenset({'what', 'path', 'tree_sha256', 'aside'})
 KIT_CHANGE_KEYS = frozenset({'from_kit_sha256', 'to_kit_sha256', 'from_members', 'to_members', 'config_only',
                              'config_keys_changed', 'run_in_flight', 'to_accepts_release_sha256'})
 REBASE_RESTORE_KEYS = frozenset({'head_seq', 'base_seq', 'missing_parts', 'absence', 'list_shows_none', 'bound'})
@@ -94,6 +93,13 @@ def validate_body(kind, body):
             out.append('body.%s' % k)
     if out:
         return out
+    if kind in ('GENESIS', 'RESTORE') and body['approval'] != 'none':
+        out.append('body.approval')
+    if kind == 'AI' and body['revision'] == 1:
+        tp = body['attested'].get('tools_present')
+        if not (isinstance(tp, dict) and set(tp) == {'source', 'sha256'} and tp['source'] in ('inventory', 'file')
+                and fm(HEX64, tp['sha256'])):
+            out.append('attested.tools_present')
     if kind in ('STAGE', 'FROZEN'):
         if body['new_run'] is not None:
             _keys(body['new_run'], NEW_RUN_KEYS, 'new_run', out)
@@ -122,7 +128,11 @@ def validate_body(kind, body):
         if body['start'] is not None:
             _start(body['start'], out)
         for r in body['resolutions']:
-            _keys(r, RESOLUTION_KEYS, 'resolution', out)
+            if _keys(r, RESOLUTION_KEYS, 'resolution', out) and not _ok('str?', r['conversation']):
+                out.append('resolution: conversation')
+        for p in body['placed']:
+            if _keys(p, PLACED_KEYS, 'placed', out) and not _ok('str?', p['aside']):
+                out.append('placed: aside')
         if body['kit_change'] is not None:
             _keys(body['kit_change'], KIT_CHANGE_KEYS, 'kit_change', out)
         if body['rebase'] is not None:
@@ -183,7 +193,8 @@ def validate_entry(doc, draft=False, cfg=None):
     out += _parts(doc, kind, seq)
     out += _payload(doc['payload'])
     cl = doc['cleared_local']
-    if cl is not None and (not isinstance(cl, dict) or set(cl) != {'code', 'head_seq', 'kit_sha256'}):
+    if cl is not None and (not isinstance(cl, dict) or set(cl) != {'code', 'head_seq', 'kit_sha256'}
+                           or kind not in ('RESTORE', 'GENESIS')):
         out.append('cleared_local')
     if 'state' in doc and (not isinstance(doc['state'], dict) or doc['state_sha256'] != state_sha256(doc['state'])):
         out.append('state_sha256')

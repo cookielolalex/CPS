@@ -276,7 +276,10 @@ def t_l8_pinned_shas():
     adm = json.load(open(os.path.join(REPO, 'deploy/vm/ADMISSION_VM_HELPER_V1.json')))
     files = adm['files_sha256']
     assert files, 'L8: no v1 shas'
+    v21 = {'deploy/make_kit.py', 'deploy/test_make_kit.py'}        # changed on purpose by v2.1 (MAINT-6, MK-1, MK-2)
     for p, want in files.items():
+        if p in v21:
+            continue
         q = p if os.path.isabs(p) else os.path.join(REPO, p)
         if os.path.exists(q):
             assert sha_file(q) == want, 'L8: %s differs from the v1 record' % p
@@ -351,10 +354,96 @@ def t_l10_unused_reused():
     assert names
 
 
+def t_l13_launcher_ignores_bytecode():
+    """L13 (S-07, W11, W84): the launcher session_start.sh writes runs python3 -I -B -X pycache_prefix=/dev/null, and
+    session_start.sh removes every __pycache__ folder under the checkout before it writes the launcher."""
+    t = open(os.path.join(VM2, 'session_start.sh')).read()
+    assert 'exec python3 -I -B -X pycache_prefix=/dev/null' in t
+    rm = t.find('-name __pycache__')
+    assert rm >= 0 and 'rm -rf' in t[rm:rm + 120], 'session_start.sh removes __pycache__ folders'
+    assert rm < t.find('exec python3 -I -B -X pycache_prefix=/dev/null'), 'before the launcher is written'
+
+
+README_RULES = (                                # D10, OPX-04, OPX-09, D3, D4, D16 (§2.15.5 L14): exact README text
+    'When in doubt, answer `UNSURE`.',
+    'If you are not sure whether the platform refused an upload or failed, treat it as refused.',
+    'Never work around a refused upload',
+    'never repeat an upload',
+    'NO_BLOCK',
+    'RAW_INVALID',
+    '`REFUSED INPUTS_CHANGED`',
+    'date -u +%Y-%m-%dT%H:%M:%SZ',
+    '`include_base64` false',
+    'not_available',
+)
+README_ABSENT = ('STOP IDLE', 'then=', 'AWAIT_CONVERSATION', 'OPENED', 'LIST ')
+
+
+def t_l14_readme_rules():
+    """L14 (W20, W95, W104, W105): the README keeps its rules verbatim (the outcome rule with UNSURE as the default,
+    the refused-upload notes, the never-work-around and never-repeat sentences, NO_BLOCK, the RAW_INVALID table, the
+    INPUTS_CHANGED step, the attested times, the DOWNLOAD route) and none of the removed tokens."""
+    readme = open(os.path.join(VM2, 'README.md'), encoding='utf-8').read()
+    flat = ' '.join(readme.split())
+    missing = [r for r in README_RULES if ' '.join(r.split()) not in flat]
+    assert not missing, 'L14: README lacks %s' % missing
+    for o in ('NOTHING_WRITTEN', 'WRITTEN', 'UNSURE', 'NO_CONVERSATION'):
+        assert '`%s`' % o in readme, 'L14: the outcome rule names %s' % o
+    present = [t for t in README_ABSENT if t in readme]
+    assert not present, 'L14: README still has %s' % present
+    with open(os.path.join(HERE, 'budget_golden.json')) as f:                    # OPX-10 (W26): section 7 = golden
+        g = json.load(f)['D_baseline']
+    run = [v for k, v in g.items() if k.startswith('A/')][0]
+    na = [v for k, v in g.items() if k.startswith('NA-A/')][0]
+    rows = {ln.split('|')[1].strip().split(' (')[0]: [c.strip() for c in ln.split('|')[2:5]]
+            for ln in readme.split('\n') if ln.startswith('| a normal run') or ln.startswith('| a nonattempt')}
+    assert run['drive_calls'] == 15 + 3 * run.get('png_parts', 0), run
+    assert rows.get('a normal run') == [str(run['helper_commands']), '15 + 3p', str(run['saved_results'])] and \
+        rows.get('a nonattempt') == [str(na['helper_commands']), str(na['drive_calls']), str(na['saved_results'])], \
+        ('L14: README section 7 differs from tests/budget_golden.json', rows, run, na)
+
+
+def t_l15_every_guard_has_a_direct_test():
+    """L15 (D11a): every fold TABLE row, every core/session.py function with a guard site and every glue function of
+    the generated guard set has a GUARD_TESTS key with at least one test, and every listed test exists."""
+    import mutants
+    import test_core_table as TC
+    from cpsvm2.core import fold as F
+    keys = {r.id for r in F.TABLE} | {m['fn'] for m in mutants.guard_mutants({'cpsvm2/core/session.py': None})} | {
+        fn for fns in mutants.GLUE_TARGETS.values() for fn in fns}
+    missing = sorted(keys - set(TC.GUARD_TESTS))
+    assert not missing, 'L15: no direct test for %s' % missing
+    names = set()
+    for n in ('test_core_table', 'test_core_more', 'test_vio', 'test_codes', 'test_v1_regressions', 'test_maint'):
+        mod = __import__(n)
+        names |= {getattr(f, '__name__', '') for f in getattr(mod, 'TESTS', [])} | {
+            f.__name__ for f in getattr(mod, 'DIRECT', [])}
+    bad = sorted({t for v in TC.GUARD_TESTS.values() for t in v} - names)
+    assert not bad and all(TC.GUARD_TESTS[k] for k in keys), 'L15: unknown tests %s' % bad
+
+
+def t_only_unknown_name_exits_2():
+    """T11 (W27): run_tests.py --only with a name that is no suite, test, scenario, special, CONFIGS key or group exits
+    2 and lists it; a known name of each kind is accepted."""
+    import subprocess
+    import tempfile
+    d = tempfile.mkdtemp(prefix='only_')
+    p = subprocess.run([sys.executable, '-I', '-B', os.path.join(HERE, 'run_tests.py'), '--work', d, '--only',
+                        'test_core_props,no_such_test_name'], capture_output=True, text=True, timeout=600)
+    assert p.returncode == 2 and 'no_such_test_name' in p.stdout and 'test_core_props' not in p.stdout.split(
+        'names:')[-1], (p.returncode, p.stdout[-300:])
+    import run_tests
+    known = run_tests.known_names()
+    for n in ('test_core_props', 'test_t1_continued_v_other_outcomes_t48', 'D_baseline', 'D', 'nonroot',
+              'test_foreground_died_same_boot_stops', 't_d4_parse_raw_rules'):
+        assert n in known, n
+
+
 TESTS = [t_l1_codes_registered_and_tested, t_l2_import_rule_and_core_without_io, t_l2_only_cli_and_worker_import_both,
          t_l3_reuse_manifest, t_l4_core_line_coverage, t_l5_grammar_rejects, t_l6_readme_examples_refused,
          t_l7_no_or_in_exit_code_assertions, t_l8_pinned_shas, t_l9_print_rules, t_l10_unused_reused,
-         t_l11_no_detached_process]
+         t_l11_no_detached_process, t_l13_launcher_ignores_bytecode, t_l14_readme_rules,
+         t_l15_every_guard_has_a_direct_test, t_only_unknown_name_exits_2]
 
 
 def run(only=None, work=None):

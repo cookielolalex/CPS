@@ -118,8 +118,8 @@ class Chain:
             ro = R['roles'][ci['role']]
             a['started_utc'] = F.latest(ro)['utc']
             a['ended_utc'] = self.interrupt_end(ci['resolution'])
-            if ro['opened']:
-                a['conversation'] = ro['opened']['conversation']
+            if ci['resolution'].get('conversation'):                                 # INT-R2-03
+                a['conversation'] = ci['resolution']['conversation']
         return runner.argv_for(sub, a)
 
     def interrupt_end(self, res):
@@ -180,7 +180,8 @@ class Chain:
         return None
 
     def generation_record(self, ro):
-        """§7.5: D/run/GENERATION_RECORD.json from the AI entry's attested values (write_new; an existing file halts)."""
+        """§7.5: D/run/GENERATION_RECORD.json from the AI entry's attested values and members (write_new; an existing
+        file halts). tools_enabled is the entry's tool list; notes is the fixed O63 sentence (D9)."""
         ai = self.ai_entry(ro)
         lt, at, b = F.latest(ro), ai['body']['attested'], ai['body']
         if sha_file(lt['prompt']) != lt['prompt_sha256']:
@@ -188,15 +189,16 @@ class Chain:
         p = Path(self.job_dir) / 'run' / 'GENERATION_RECORD.json'
         if os.path.lexists(p):
             raise Halt('STOP', 'GENERATION_RECORD_EXISTS', 'the generation record exists')
-        fm = savepoint.member_bytes(self.lay.inbox / 'journal' / N.entry_name(self.env.series, ro['archives'][-1]['seq']),
-                                    'attest/final_message.txt').decode('utf-8')
+        ent = self.lay.inbox / 'journal' / N.entry_name(self.env.series, ro['archives'][-1]['seq'])
+        fm = savepoint.member_bytes(ent, 'attest/final_message.txt').decode('utf-8')
         tr = b['transcript'] or {}
         rec = {'schema': 'cps.generation-record.v1', 'case_id': self.R['case'], 'reader': self.R['reader'] or 'A',
                'platform': at['platform'], 'model': at['model'], 'effort': at['effort'],
                'conversation_id': b['conversation'], 'started_utc': at['started_utc'], 'ended_utc': at['ended_utc'],
                'prompt_sha256': lt['prompt_sha256'], 'single_user_message': at['single_user_message'],
-               'features': at['features'], 'tools_enabled': at['tools'], 'final_message': fm,
-               'transcript_status': at['transcript_status']}
+               'features': at['features'], 'tools_enabled': N.tool_list(savepoint.member_bytes(ent, 'attest/tools.txt')),
+               'final_message': fm, 'transcript_status': at['transcript_status'],
+               'notes': N.O63_NOTE % at['tools_present']['sha256']}
         if tr.get('status') == 'exported':
             rec['transcript_sha256'] = tr['sha256']
         else:
@@ -455,15 +457,16 @@ def do_place(env, info):
     jr = Path(info['inbox'])
     placed = []
     if info.get('ledger'):
-        sha = place.place_ledger(lay, jr / N.entry_name(ser, info['ledger']['seq']), info['ledger']['sha256'])
-        placed.append({'what': 'ledger', 'path': str(lay.ledger), 'tree_sha256': sha})
+        sha, aside = place.place_ledger(lay, jr / N.entry_name(ser, info['ledger']['seq']), info['ledger']['sha256'])
+        placed.append({'what': 'ledger', 'path': str(lay.ledger), 'tree_sha256': sha, 'aside': aside})
     ff = None
     if info.get('job_dir'):
-        png = info.get('png')
+        png, snap = info.get('png'), jr / N.entry_name(ser, info['snapshot_seq'])
         parts = [jr / n for n in (png or {}).get('parts') or []]
         ai = [(jr / N.entry_name(ser, a['seq']), a['output'], (a.get('revision') or 1) > 1) for a in info.get('ai') or []]
-        t = place.place_job(lay, info['job_dir'], jr / N.entry_name(ser, info['snapshot_seq']), png, parts, ai)
-        placed.append({'what': 'job', 'path': info['job_dir'], 'tree_sha256': t})
+        before = info.get('rewalk') and os.path.lexists(info['job_dir']) and rewalk(env, info, snap)  # GAP-02
+        t, aside = place.place_job(lay, info['job_dir'], snap, png, parts, ai)
+        placed.append({'what': 'job', 'path': info['job_dir'], 'tree_sha256': t, 'aside': aside})
         for tr in info.get('transcripts') or []:
             ent = jr / N.entry_name(ser, tr['seq'])
             man = savepoint.read_entry(ent)
@@ -474,15 +477,19 @@ def do_place(env, info):
                     if not os.path.exists(dest):
                         place.place_member(ent, m[0], dest)
         if info.get('rewalk'):
-            ff = rewalk(env, info, jr / N.entry_name(ser, info['snapshot_seq']))
+            ff = bool(before) or rewalk(env, info, snap)
     return {'status': 'done', 'placed': placed, 'files_found': ff}
 
 
 def rewalk(env, info, snap_entry):
     """§8.6 step 3: any file in the open role's output folder other than what the snapshot placed (a CONTINUED V's
-    revision 1) is a file found."""
+    revision 1) is a file found; so is an entry the strict walk refuses."""
     ro = env.state['runs'][info['run']]['roles'][info['open_role']]
     out = F.latest(ro)['output']
     rel = os.path.relpath(out, info['job_dir']).replace(os.sep, '/')
     snap = {(m[0], m[4]) for m in savepoint.read_entry(snap_entry)['payload']['members']}
-    return any(r[1] == 'file' and ('job/%s/%s' % (rel, r[0]), r[4]) not in snap for r in place.walk_output(out))
+    try:
+        rows = place.walk_output(out)
+    except Halt:
+        return True
+    return any(r[1] == 'file' and ('job/%s/%s' % (rel, r[0]), r[4]) not in snap for r in rows)

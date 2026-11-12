@@ -4,7 +4,7 @@ apply(state, entry): `state` is the fold state (cps.vm2-state.v1, §3.11) or Non
 document or draft (its `state`/`state_sha256` keys are ignored). Returns a NEW state; the input is never modified.
 Raises ChainInvalid(code) where code is a structural code of §4.2 (SCHEMA_INVALID, SEQ_GAP, SERIES_MISMATCH,
 CONFIRMS_MISMATCH, RELEASE_NOT_ACCEPTED, HELPER_UNKNOWN), a row id of §4.3 (a series guard T02-T06, a negative row
-T22/T32/T48, or the kind's fallback T14/T16/T25/T36/T39/T50/T53/T56/T60/T63), or AMBIGUOUS_ROWS (a bug).
+T22/T32/T48, or the kind's fallback T14/T16/T25/T39/T50/T53/T56/T60/T63), or AMBIGUOUS_ROWS (a bug).
 apply_traced(state, entry) -> (state', [row ids]) also returns the rows used (top row, then T30/T31, T43-T47, T49).
 
 State keys beyond §3.11 (documented for the review): RUN.visual_record (PASS/FAIL from the last visual-record command
@@ -16,9 +16,13 @@ sheet and the O40 counts), undo.kind/undo.start (the head's kind and START, for 
 from collections import namedtuple
 
 from . import entry as E
-from .names import (REVIEW_CONTINUABLE, RUNNER_SHA256, HELPER_VERSION, cjson, entry_name, mode_of, sha, utc_epoch)
+from .names import (BASE_RE, REVIEW_CONTINUABLE, RUNNER_SHA256, HELPER_VERSION, cjson, entry_name, fm, mode_of, sha,
+                    utc_epoch)
 
-OPEN = ('STARTED', 'OPENED', 'CONTINUED')
+OPEN = ('STARTED', 'CONTINUED')
+CONSUMER = {'S': 'scope-finish', 'G': 'finish', 'V': 'visual-record'}
+QUAL_ROOT = {'A': 'A', 'B': 'B', 'A-restart1': 'A_restart1', 'B-restart1': 'B_restart1', 'NA-A': 'nonattempts_A',
+             'NA-B': 'nonattempts_B'}
 ROLE_OF_NEXT = {'SCOPE_READER': 'S', 'GENERATE': 'G', 'VISUAL_REVIEW': 'V'}
 FROZEN_FLAGS = ('AI_OUTPUT_LOST', 'VISUAL_QA_FAILED_BY_RESET', 'RESTART_EXHAUSTED_BY_RESET', 'REVIEW_INCOMPLETE_LIMIT',
                 'RESET_DIVERGED')
@@ -51,6 +55,22 @@ def is_q(state):
     return state['mode'] in ('qualification', 'drill')
 
 
+def layout_of(base):
+    return {'base': base, 'qual': base + '/qual', 'jobs': base + '/jobs', 'ledger': base + '/ledger/LEDGER.jsonl',
+            'runtime': base + '/runtime'}
+
+
+def job_dir_of(base, tag, case):
+    """The one job folder of run tag/case under the genesis base (MAINT-1; worker's Layout.job_dir is the same)."""
+    return '%s/qual/%s/%s' % (base, QUAL_ROOT[tag], case) if tag in QUAL_ROOT else '%s/jobs/%s/%s' % (base, tag[1:], case)
+
+
+def jobs_of(doc):
+    """GENESIS body.jobs from a JOBS.json document (MAINT-10)."""
+    return [[c['case_id'], c.get('order'), (c.get('reason') or True) if c.get('nonattempt') else None]
+            for c in doc['cases']]
+
+
 def w_abs(gates):
     """max(60, 2 * p2_lag_seconds) (§8.4)."""
     return max(60, 2 * (gates.get('p2_lag_seconds') or 0))
@@ -61,7 +81,7 @@ def reader_of(tag):
 
 
 def open_roles(state):
-    """§4.1 open(state): [(run, role key)] of every role STARTED, OPENED or CONTINUED, in run order."""
+    """§4.1 open(state): [(run, role key)] of every role STARTED or CONTINUED, in run order."""
     return [(k, rk) for k in state['order'] for rk in sorted(state['runs'][k]['roles'])
             if state['runs'][k]['roles'][rk]['status'] in OPEN]
 
@@ -173,6 +193,15 @@ def _pre(s, e):
 
 
 def _consumed_ok(R, b):
+    """Every consumed item is an ARCHIVED, unconsumed role; a chain whose first command is a consumer must name
+    exactly the ARCHIVED unconsumed role of that letter (INT-R2-04)."""
+    sub = b['commands'][0]['sub']
+    if sub in CONSUMER.values():
+        letter = [k for k, v in CONSUMER.items() if v == sub][0]
+        want = sorted(k for k, r in R['roles'].items() if r['role'] == letter and r['status'] == 'ARCHIVED'
+                      and not r['consumed'])
+        if sorted(c['role'] + str(c['attempt']) for c in b['consumed']) != want or not want:
+            return False
     for c in b['consumed']:
         ro = R['roles'].get(c['role'] + str(c['attempt']))
         if not ro or ro['status'] != 'ARCHIVED' or ro['consumed'] or ro['archives'][-1]['revision'] != c['revision'] \
@@ -233,7 +262,7 @@ def _t31(s, R, e, st):
     return e['body']['rebase'] is not None and bind is not None and old is not None \
         and (old['role'], old['attempt']) == (st['role'], st['attempt']) and st['start_no'] == old['start_no'] + 1 \
         and old['supersedes'] == 0 and (st['role'] + str(st['attempt'])) not in R['roles'] \
-        and (s['genesis']['gates'].get('p1_conversation_list') != 'yes' or bind['list_shows_none'] is True)
+        and bind['list_shows_none'] is True
 
 
 def g20(s, R, e, c):
@@ -333,7 +362,7 @@ def _flag(R, f):
 
 def _new_role(st, seq):
     return {'role': st['role'], 'attempt': st['attempt'], 'status': 'STARTED', 'starts': [_start_rec(st, seq)],
-            'supersedes': 0, 'opened': None, 'archives': [], 'continuations': 0, 'review_incomplete': 0,
+            'supersedes': 0, 'archives': [], 'continuations': 0, 'review_incomplete': 0,
             'continued_boot': None, 'consumed': None, 'resolution': None}
 
 
@@ -425,12 +454,10 @@ def _virtual(s, e):
     b, v = e['body'], clone(s)
     nr = b['new_run']
     key = nr['tag'] + '/' + nr['case']
-    if key != b['run']:
+    if key != b['run'] or nr['job_dir'] != job_dir_of(s['genesis']['base'], nr['tag'], nr['case']):
         return None
     if s['mode'] == 'everyday':
-        R = v['runs'].get(key)
-        if R is None:
-            return None
+        R = v['runs'][key]                              # g13, the only everyday caller, requires runs[current]
         R.update(status='ACTIVE', reader=nr['reader'], job_dir=nr['job_dir'], restart_of=nr['restart_of'])
     else:
         if key in v['runs'] or reader_of(nr['tag']) != nr['reader']:
@@ -531,26 +558,13 @@ def e15(s, e, c):
     return s
 
 
-# ---------------------------------------------------------------- OPENED, AI (T35-T39)
+# ---------------------------------------------------------------- AI (T37-T39)
 def _role(s, e):
     b = e['body']
     R = s['runs'].get(b['run'])
     if b['run'] != s['current'] or R is None or R['status'] != 'ACTIVE':
         return None, None
     return R, R['roles'].get(b['role'] + str(b['attempt']))
-
-
-def g35(s, e, c):
-    R, ro = _role(s, e)
-    return ro is not None and ro['status'] == 'STARTED' and ro['opened'] is None \
-        and e['body']['start_no'] == latest(ro)['start_no']
-
-
-def e35(s, e, c):
-    b = e['body']
-    _role(s, e)[1].update(status='OPENED', opened={'seq': e['seq'], 'conversation': b['conversation'],
-                                                    'utc': b['opened_utc']})
-    return s
 
 
 def g37(s, e, c):
@@ -560,8 +574,7 @@ def g37(s, e, c):
         return False
     lt = latest(ro)
     return b['revision'] == 1 and not ro['archives'] and b['ended'] is True and b['start_no'] == lt['start_no'] \
-        and (ro['status'] == 'OPENED' or (ro['status'] == 'STARTED' and c['gates'].get('p1_conversation_list') == 'yes')) \
-        and b['start_boot_id'] == lt['boot_id'] == e['boot_id']
+        and ro['status'] == 'STARTED' and b['start_boot_id'] == lt['boot_id'] == e['boot_id']
 
 
 def g38(s, e, c):
@@ -578,7 +591,8 @@ def e37(s, e, c):
     ro['status'] = 'ARCHIVED'
     ro['archives'].append({'seq': e['seq'], 'revision': b['revision'], 'tree_sha256': b['tree_sha256'],
                            'conversation': b['conversation'], 'boot_id': e['boot_id'], 'utc': e['utc'],
-                           'transcript': (b['transcript'] or {}).get('status')})
+                           'transcript': (b['transcript'] or {}).get('status'),
+                           'tools_sha256': (b['attested'].get('tools_present') or {}).get('sha256')})
     return s
 
 
@@ -593,18 +607,15 @@ def forced_for(state, R, ro, item):
     if item['ended'] is False:
         return 'NOT_ENDED'
     if item['outcome'] == 'NO_CONVERSATION' and ro['status'] != 'CONTINUED':
-        if g.get('p1_conversation_list') == 'no' and ro['status'] == 'STARTED' and ro['opened'] is None:
-            return 'NO_LIST'
         if not (no_conversation_admissible(state, ro) and item['list_shows_none'] is True):
             return 'NO_CONVERSATION_NOT_ALLOWED'
     return None
 
 
 def no_conversation_admissible(state, ro):
-    """T43's conditions that do not depend on the answer: STARTED never OPENED, no superseding START yet in the
-    attempt, a conversation list on this platform (§6.5 asks list_shows_none only then)."""
-    return ro['status'] == 'STARTED' and ro['opened'] is None and ro['supersedes'] == 0 \
-        and state['genesis']['gates'].get('p1_conversation_list') == 'yes'
+    """T43's conditions that do not depend on the answer: STARTED, no superseding START yet in the attempt (the
+    conversation list exists: t01 requires the gate)."""
+    return ro['status'] == 'STARTED' and ro['supersedes'] == 0
 
 
 def resolution_action(state, item, transcript_member):
@@ -666,8 +677,7 @@ def g49(s, e, c):
     if u['start'] is not None:
         key = u['start']['role'] + str(u['start']['attempt'])
         ro = s['runs'][u['run']]['roles'].get(key)
-        if ro is None or ro['supersedes'] != 0 or (
-                c['gates'].get('p1_conversation_list') == 'yes' and rb['list_shows_none'] is not True):
+        if ro is None or ro['supersedes'] != 0 or rb['list_shows_none'] is not True:
             return False
         allowed.add((u['run'], key))
     return set(open_roles(s)) <= allowed
@@ -783,7 +793,7 @@ def e42(s, e, c):
         R = s['runs'][it['run']]
         ro = R['roles'][it['role'] + str(it['attempt'])]
         ro['resolution'] = {'seq': e['seq'], 'outcome': it['outcome'], 'forced': it['forced'], 'action': act,
-                            'transcript': it['transcript'], 'owner_check': oc}
+                            'transcript': it['transcript'], 'owner_check': oc, 'conversation': it['conversation']}
         if oc:
             _flag(R, 'OWNER_CHECK')
         if act == 'SUPERSEDE':
@@ -860,6 +870,7 @@ def g59(s, e, c):
     kc = b['kit_change']
     return s['phase'] == 'HALTED' and h is not None and b['halt_seq'] == h['seq'] and b['code'] == h['code'] \
         and b['kit_sha256'] == e['kit_sha256'] and kc['from_kit_sha256'] == s['kit_sha256'] \
+        and kc['from_kit_sha256'] != kc['to_kit_sha256'] \
         and kc['config_only'] is True and config_only(kc['from_members'], kc['to_members'])
 
 
@@ -897,8 +908,11 @@ def e62(s, e, c):
 def t01(e):
     b = e['body']
     mode, q = mode_of(e['series']), e['series'][0] in 'QD'
+    base = b['layout'].get('base')
     if b['mode'] != mode or q != (b['jobs'] is not None) or q != (b['ledger'] is not None) \
-            or (e['series'][0] == 'Q') != (b['other_series_absent'] is not None):
+            or (e['series'][0] == 'Q') != (b['other_series_absent'] is not None) \
+            or not fm(BASE_RE, base) or any(x in ('.', '..') for x in base.split('/')) \
+            or b['layout'] != layout_of(base) or b['gates'].get('p1_conversation_list') != 'yes':
         raise ChainInvalid('SCHEMA_INVALID')
     return {'schema': 'cps.vm2-state.v1', 'series': e['series'], 'mode': mode, 'seq': 1, 'phase': 'OPEN',
             'genesis': {'seq': 1, 'utc': e['utc'], 'release_sha256': e['release_sha256'],
@@ -919,7 +933,7 @@ g21t, e21t = _row_progress('T21')
 g23t, e23t = _row_progress('T23')
 g24t, e24t = _row_progress('T24')
 _ALL = frozenset(E.KINDS)
-_T06 = frozenset({'INPUTS', 'STAGE', 'FROZEN', 'DELIVERY', 'OPENED', 'AI'})
+_T06 = frozenset({'INPUTS', 'STAGE', 'FROZEN', 'DELIVERY', 'AI'})
 TABLE = (
     Row('T01', {'GENESIS'}, 'series', None, None, 'GENESIS on an empty series'),
     Row('T02', {'GENESIS'}, 'series', None, None, 'GENESIS on a non-empty series'),
@@ -943,8 +957,6 @@ TABLE = (
     Row('T30', {'STAGE'}, 'sub', None, None, 'START reason STAGE'),
     Row('T31', {'STAGE'}, 'sub', None, None, 'START reason REBASE'),
     Row('T32', {'STAGE'}, 'negative', None, None, 'any other START'),
-    Row('T35', {'OPENED'}, 'positive', g35, e35, 'role opened'),
-    Row('T36', {'OPENED'}, 'fallback', None, None, 'OPENED otherwise'),
     Row('T37', {'AI'}, 'positive', g37, e37, 'AI revision 1'),
     Row('T38', {'AI'}, 'positive', g38, e37, 'AI after a continuation'),
     Row('T39', {'AI'}, 'fallback', None, None, 'AI otherwise'),
@@ -993,7 +1005,7 @@ def _fallback(s, e, c):
                 if act is None or act != it['action'] or oc is not it['owner_check']:
                     return 'T48'
         return 'T50'
-    return {'INPUTS': 'T16', 'OPENED': 'T36', 'AI': 'T39', 'ACK': 'T53', 'DELIVERY': 'T56', 'HALT': 'T60',
+    return {'INPUTS': 'T16', 'AI': 'T39', 'ACK': 'T53', 'DELIVERY': 'T56', 'HALT': 'T60',
             'CLEAR': 'T60', 'FINAL': 'T63'}[k]
 
 

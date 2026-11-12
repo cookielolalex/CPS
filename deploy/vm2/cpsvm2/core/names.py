@@ -1,14 +1,15 @@
 """Names, value patterns and codes (spec §3.1, §3.2, §6.3, §13). Pure: no I/O. Every match is re.fullmatch with
 re.ASCII on a str; nothing here ever uses re.match or re.search on an attested value."""
 import calendar
+import datetime
 import hashlib
 import json
 import re
 
 RUNNER_SHA256 = '7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431'
-HELPER_VERSION = 'cps-vm-helper.v2'
+HELPER_VERSION = 'cps-vm-helper.v2.1'
 
-FOLDERS = {'Q': 'CPS/qualification', 'E': 'Dots Folder/CPS_JOB_RECORDS', 'D': 'CPS/reports',
+FOLDERS = {'Q': 'CPS/qualification', 'E': 'Dots Folder/CPS_JOB_RECORDS', 'D': 'CPS/drills',
            'setup': 'CPS/setup', 'reports': 'CPS/reports', 'static': 'CPS'}
 MODES = {'Q': 'qualification', 'E': 'everyday', 'D': 'drill'}
 
@@ -31,9 +32,9 @@ BOOT_ID = r'[0-9a-f-]{36}'
 # §6.3 attested-value patterns; ID and CONV come from the kit config (drive_id_re, conversation_re).
 PATTERNS = {
     'ID': None, 'CONV': None,
-    'MD5': r'[0-9a-f]{32}', 'SIZE': r'[1-9][0-9]{0,11}', 'UTC': UTC_S,
+    'SIZE': r'[1-9][0-9]{0,11}', 'UTC': UTC_S, 'APPROVAL': r'none|pending',
     'MODEL': r'[A-Za-z0-9._:-]{2,64}', 'PLATFORM': r'[A-Za-z0-9._:-]{2,64}', 'EFFORT': r'[a-z0-9_-]{1,32}',
-    'YES': r'yes', 'YESNO': r'yes|no', 'TOOLS': r'none|[a-z0-9_-]{1,32}(,[a-z0-9_-]{1,32}){0,31}',
+    'YES': r'yes', 'YESNO': r'yes|no', 'TOOLS': r'inventory|file:/[A-Za-z0-9._/-]{1,240}',
     'OUTCOME': r'NOTHING_WRITTEN|WRITTEN|UNSURE|NO_CONVERSATION', 'TRANSCRIPT': r'exported|not_available',
     'CASE_ID': CASE_ID, 'COPYPATH': None,
 }
@@ -43,14 +44,21 @@ FORBIDDEN_CHARS = set('{}<>\'"`$\\')
 # Every key the helper ever asks (§6.5); a free-text value equal to one of them is a placeholder (§6.3).
 KEY_NAMES = frozenset({'operator_model', 'platform', 'ended', 'conversation', 'started_utc', 'ended_utc', 'model',
                        'effort', 'single_user_message', 'memory', 'custom_instructions', 'web', 'connectors',
-                       'file_uploads', 'other_agents', 'tools', 'transcript', 'prompt_pasted', 'opened_utc', 'outcome',
+                       'file_uploads', 'other_agents', 'tools', 'transcript', 'prompt_pasted', 'outcome', 'approval',
                        'list_shows_none', 'notified', 'case', 'copy', 'log', 'sent', 'arrived', 'asked'})
 FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads', 'other_agents')
 
-# Delta (probe results): the platform's upload cap with a margin, the head-hint listing size, the JobLock retry
-# bound inside a foreground stage, and the exact stage_max_seconds keys (§X.2, §X.3, §X.7.2, §X.8.4).
+# The upload cap with a margin, the JobLock retry bound, the stage keys (§X.2, §X.3, §X.7.2); v2.1: the raw file and
+# tool list limits and a stage's free space (delta v2.1 §2.3, §2.8, §2.16.5); the O63 texts (D9).
 UPLOAD_CAP_BYTES = 94_371_840
-LIST_NEWEST_K = 10
+RAW_MAX_BYTES, MAX_TOOL_LINES, STAGE_FREE_BYTES = 1048576, 2000, 1000000000
+BASE_RE = r'/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*'
+O63_NOTE = ('O63: generator isolation by instruction only, not enforced or audited; tools present: %s; any tools-used '
+            'statement is in final_message.')
+O63_NOTE_RE = re.escape(O63_NOTE).replace('%s', '[0-9a-f]{64}')
+O63_REPORT = ('Isolation of the generator, scope-reader and visual-reviewer conversations was by instruction only '
+              '(owner decision O63): neither enforced nor audited. The tools present in each conversation are recorded '
+              'in its AI entry and, for generators, in GENERATION_RECORD.json.')
 JOB_BUSY_TRIES, JOB_BUSY_GAP_SECONDS = 5, 30
 STAGE_KEYS = ('selftest', 'place', 'prepare', 'nonattempt', 'scope-finish', 'finish', 'visual-record', 'interrupt',
               'freeze')
@@ -61,7 +69,8 @@ REVIEW_CONTINUABLE = frozenset({'REVIEW_INCOMPLETE', 'REVIEW_NOT_FRESH_CONTEXT',
 CODES_REFUSED = frozenset('''COMMAND_NOT_EXPECTED STALE_AT ARG_MISSING_KEY ARG_EXTRA_KEY ARG_DUPLICATE_KEY VALUE_FORBIDDEN
 VALUE_PLACEHOLDER VALUE_PATTERN UTC_OUT_OF_WINDOW FOUND_NAMES_INCOMPLETE FOUND_FILE_AND_NONE FOUND_SYNTAX DOWNLOAD_MISSING
 FINAL_MESSAGE_INVALID TRANSCRIPT_FILE_MISSING TRANSCRIPT_TOO_LARGE INPUTS_INVALID INPUTS_CHANGED COPY_LOG_MISMATCH
-COPY_INVALID HELPER_BUSY JOB_BUSY'''.split())
+COPY_INVALID HELPER_BUSY JOB_BUSY DOWNLOAD_INCOMPLETE COPY_MISMATCH RAW_INVALID TOOLS_FILE_INVALID'''.split())
+SLIPS = frozenset({'DOWNLOAD_MISSING', 'DOWNLOAD_INCOMPLETE', 'COPY_MISMATCH'})
 CODES_STOP = frozenset('''FORK UPLOAD_FAILED HINT_AHEAD HEAD_UNSTABLE HEAD_CORRUPT SCHEMA_INVALID STATE_SHA_MISMATCH
 CHAIN_INVALID LINK_MISMATCH HELPER_UNKNOWN RELEASE_NOT_ACCEPTED DISK_FULL WRITE_FAILED WRITE_READBACK_MISMATCH
 ENTRY_TOO_LARGE PART_TOO_LARGE INTERNAL_EMPTY_OUTPUT INTERNAL_PENDING_EXISTS INTERNAL_ILLEGAL_TRANSITION INTERNAL_PRINT
@@ -73,7 +82,7 @@ LAYOUT_RUNNER_NOT_PINNED LEDGER_MISSING LEDGER_NO_IDENTITY CLOCK_BEHIND HOME_CHA
 SESSION_LAYOUT SESSION_GIT_ERROR SESSION_REPO_DIRTY JOB_BUSY_TOO_LONG QUALIFICATION_DIVERGED_RESTART_CONFLICT
 REBASE_PART_APPEARED REBASE_LIMIT REBASE_CONFLICT CONFIG_CHANGE_NOT_ALLOWED GATES_CHANGED QUALIFICATION_SERIES_EXISTS
 SESSION_COMMIT_MISMATCH SESSION_NO_COMMIT INTERNAL_STEP_OVERFLOW UPLOAD_REFUSED UPLOAD_TOO_LARGE FINAL
-UNCLASSIFIED'''.split())
+UNCLASSIFIED SLIP_LIMIT WAIT_APPROVAL'''.split())
 CODES_HALT = frozenset('''RUNNER_REFUSED RUNNER_OUTPUT_UNPARSEABLE UNCLASSIFIED AI_OUTPUT_CHANGED WALK_UNSUPPORTED_ENTRY
 EVICT_MISMATCH EVICT_FAILED POST_ACTION_FAILED FROZEN_FOLDER_CHANGED FREEZE_INCOMPLETE PNG_MANIFEST_UNSAFE PROMPT_CHANGED
 GENERATION_RECORD_EXISTS AI_OUTPUT_TOO_LARGE PLACED_FROZEN_CHANGED'''.split())
@@ -108,18 +117,8 @@ def run8(run_key):
 
 def utc_minus(s, seconds):
     """The UTC_S time `seconds` before UTC_S s (the fail-closed clock tolerance of §X.9: T = utc - tolerance)."""
-    t = utc_epoch(s) - int(seconds or 0)
-    y, rem = 1970, t
-    while True:
-        n = 366 * 86400 if calendar.isleap(y) else 365 * 86400
-        if rem < n:
-            break
-        rem, y = rem - n, y + 1
-    mo = 1
-    while rem >= calendar.monthrange(y, mo)[1] * 86400:
-        rem, mo = rem - calendar.monthrange(y, mo)[1] * 86400, mo + 1
-    d, rem = divmod(rem, 86400)
-    return '%04d-%02d-%02dT%02d:%02d:%02dZ' % (y, mo, d + 1, rem // 3600, rem % 3600 // 60, rem % 60)
+    t = datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=utc_epoch(s) - int(seconds or 0))
+    return t.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def mode_of(series):
@@ -128,7 +127,22 @@ def mode_of(series):
 
 
 def series_folder(series):
-    return FOLDERS[series[0]]
+    """The series' journal folder; a drill series has its own (MAINT-7)."""
+    return FOLDERS['D'] + '/' + series if series[0] == 'D' else FOLDERS[series[0]]
+
+
+def tool_list(raw):
+    """A tool list (TOOL_INVENTORY.txt, a tools=file: list): UTF-8 ending in a newline, 1 to MAX_TOOL_LINES distinct
+    lines of 1 to 200 characters, no control character, no leading or trailing space. The lines, or None."""
+    try:
+        t = raw.decode('utf-8')
+    except (UnicodeDecodeError, AttributeError):
+        return None
+    lines = t[:-1].split('\n') if t.endswith('\n') else None
+    if not lines or len(lines) > MAX_TOOL_LINES or len(set(lines)) != len(lines) or any(
+            not 1 <= len(x) <= 200 or x != x.strip() or any(ord(c) < 32 or ord(c) == 127 for c in x) for x in lines):
+        return None
+    return lines
 
 
 def entry_name(series, seq):
@@ -201,8 +215,6 @@ def check_value(key, pattern, value, cfg, window=None):
         if low in {k.lower() for k in KEY_NAMES} or low in {p.lower() for p in PATTERNS} or low in {
                 s.lower() for s in samples}:
             return ('VALUE_PLACEHOLDER', key)
-    if pattern == 'TOOLS' and any(t in samples for t in value.split(',')):
-        return ('VALUE_PLACEHOLDER', key)
     if pattern == 'ID':
         rx = cfg.get('drive_id_re') or DEFAULT_DRIVE_ID_RE
     elif pattern == 'CONV':
@@ -241,6 +253,8 @@ def check_answers(expect_keys, pairs, cfg, windows=None):
         r = check_value(k, pat, got[k], cfg, (windows or {}).get(k))
         if r:
             return r, None
+    if 'started_utc' in got and 'ended_utc' in got and got['started_utc'] > got['ended_utc']:
+        return ('UTC_OUT_OF_WINDOW', 'started_utc'), None
     return None, got
 
 

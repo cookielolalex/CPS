@@ -105,6 +105,11 @@ def read_tree(tree):
     return members
 
 
+def rb(path):
+    with open(path, 'rb') as f:
+        return f.read()
+
+
 def write_new(path, data):
     with open(path, 'xb') as f:
         f.write(data)
@@ -135,20 +140,23 @@ def cmd_pack(a):
         if p not in members or not NAME.fullmatch(n):
             raise Fail(f'--binary-name {spec!r}: no such member, or not a plain file name')
         names[p] = n
-    z = zip_bytes(members)
-    kit_sha = sha(z)
-    os.makedirs(a.outdir, exist_ok=True)
-    write_new(os.path.join(a.outdir, a.kit_name), z)
-    entries = []
+    entries, binnames = [], set()
     for p in sorted(members):
         b = members[p]
         if p in names or not is_text(b):
             n = names.get(p, p.rsplit('/', 1)[-1])
+            if n in binnames:
+                raise Fail(f'{n}: two binary members would share one file name')
+            binnames.add(n)
             entries.append((f'@@ binary {p} {len(b)} {sha(b)} {n}\n'.encode('ascii'), b''))
         else:
             if re.search(rb'(^|\n)@@ ', b):
                 raise Fail(f'{p}: a line starts with "@@ "')
             entries.append((f'@@ text {p} {len(b)} {sha(b)}\n'.encode('ascii'), b + b'\n'))
+    z = zip_bytes(members)
+    kit_sha = sha(z)
+    os.makedirs(a.outdir, exist_ok=True)
+    write_new(os.path.join(a.outdir, a.kit_name), z)
     bins = [e for e in entries if e[0].startswith(b'@@ binary')]
     texts = [e for e in entries if e[0].startswith(b'@@ text')]
     parts, cur = [], []
@@ -230,37 +238,43 @@ def cmd_assemble(a):
     seen_parts = {int(h[2]) for h in heads if int(h[3]) == nparts}
     if not seen_parts >= set(range(1, nparts + 1)):
         raise Fail(f'parts missing: have {sorted(seen_parts)} of {nparts}')
-    members, problems = {}, []
+    groups, problems = {}, []        # (size, sha256) -> {path: [copies, content]} of the valid candidates only
     for path in sorted(cands):
-        if not safe_path(path):
-            problems.append(f'{path[:80]!r}: unsafe path (a damaged header?)')
-            continue
-        good = {}
         for kind, _, size, want, binname, content in cands[path]:
-            if kind == 'text':
-                if content is not None and len(content) == size and sha(content) == want:
-                    good.setdefault(want, content)
-            else:
-                if not NAME.fullmatch(binname):
-                    continue
-                fp = os.path.join(a.binaries, binname)
-                if os.path.isfile(fp):
-                    with open(fp, 'rb') as f:
-                        b = f.read()
-                    if len(b) == size and sha(b) == want:
-                        good.setdefault(want, b)
-        if len(good) == 1:
-            members[path] = next(iter(good.values()))
-        elif not good:
+            if kind == 'binary':
+                fp = os.path.join(a.binaries, binname) if NAME.fullmatch(binname) else None
+                content = rb(fp) if fp and os.path.isfile(fp) else None
+            if content is not None and len(content) == size and sha(content) == want:
+                groups.setdefault((size, want), {}).setdefault(path, [0, content])[0] += 1
+        if not any(path in g for g in groups.values()):
             kinds = {c[0] for c in cands[path]}
             what = 'binary file missing or its sha256 differs' if kinds == {'binary'} else 'no copy matches its sha256'
-            problems.append(f'{path}: {what}')
-        else:
-            problems.append(f'{path}: the copies disagree')
+            problems.append(f'{path[:80]!r}: unsafe path (a damaged header?)' if not safe_path(path) else f'{path}: {what}')
+    # MK-1: a slip in one copy's member path leaves the same content under two paths; an unsafe one is dropped when a
+    # safe one exists, the path most copies give is tried first, and --expect settles the rest (at most 64 tries).
+    options = []
+    for g in groups.values():
+        safe = sorted(p for p in g if safe_path(p))
+        if not safe:
+            problems.append(f'{sorted(g)[0][:80]!r}: unsafe path (a damaged header?)')
+            continue
+        top = max(g[p][0] for p in safe)
+        first = [p for p in safe if g[p][0] == top]
+        subsets = [[p for i, p in enumerate(safe) if k >> i & 1] for k in range(1, 1 << len(safe))]
+        options.append([[(p, g[p][1]) for p in s] for s in [first] + [x for x in subsets if x != first]])
+    owners = [p for opt in options for p, _ in opt[0]]
+    problems += [f'{p}: the copies disagree' for p in sorted(set(owners)) if owners.count(p) > 1]
     for p in problems:
         print(f'  FAILED {p}', flush=True)
     if problems:
         raise Fail(f'{len(problems)} member(s) could not be rebuilt; the kit was not written')
+    combos = [[]]
+    for opt in options:
+        combos = [c + [x] for c in combos for x in opt]
+        if len(combos) > 64:
+            raise Fail('path dispute: more than 64 combinations of member paths; the kit was not written')
+    tries = [dict(m for x in c for m in x) for c in combos]
+    members = next((t for t in tries if sha(zip_bytes(t)) == a.expect), tries[0])
     z = zip_bytes(members)
     got = sha(z)
     print(f'kit {kit_name}: {len(members) + 1} members, {len(z)} bytes, sha256 {got}', flush=True)

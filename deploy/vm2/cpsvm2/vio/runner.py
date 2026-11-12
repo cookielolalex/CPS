@@ -1,12 +1,14 @@
 """Runner v4 argv (spec §7.4), one command through the reused run_runner, and result parsing (§7.2, R2, R3). The runner
-module is loaded only after its sha256 equals the pin (for its Ledger class and restart_problem, §3.5 FROZEN)."""
-import importlib.util
+module is compiled from its pinned bytes (for its Ledger class and restart_problem, §3.5 FROZEN); the helper and the
+maintainer tools use this one loader."""
+import hashlib
 import json
 import re
+import types
 
 from . import v1compat, v1reuse
 from .v1compat import Halt, runner_path
-from .v1reuse import run_runner, sha_file
+from .v1reuse import run_runner
 
 PIN = '7505e98ac88bc09a5e0507124e4cb381a5491c1112f418bcf5ca6553ab14f431'
 CONTINUE_STEPS = ('SCOPE_READER', 'GENERATE', 'VISUAL_REVIEW', 'DELIVER_CHECK', 'FREEZE', 'DELIVER', 'DONE')
@@ -15,15 +17,17 @@ MODEL = re.compile(r'[A-Za-z0-9._:-]{2,64}')
 
 
 def load_runner():
-    """The runner module (cps_job.py) after the pin check; sets v1compat.CJ and v1reuse.CJ."""
+    """The runner module (cps_job.py) compiled from the bytes whose sha256 is the pin, never from bytecode (S-07);
+    sets v1compat.CJ and v1reuse.CJ."""
     if v1compat.CJ is not None:
         return v1compat.CJ
     p = runner_path()
-    if sha_file(p) != PIN:
+    raw = p.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != PIN:
         raise Halt('STOP', 'LAYOUT_RUNNER_NOT_PINNED', 'the runner is not the pinned v4')
-    spec = importlib.util.spec_from_file_location('cps_job_v4', str(p))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = types.ModuleType('cps_job_v4')
+    mod.__file__ = str(p)
+    exec(compile(raw, str(p), 'exec'), mod.__dict__)
     v1compat.CJ = v1reuse.CJ = mod
     return mod
 

@@ -164,6 +164,38 @@ class MakeKitTest(unittest.TestCase):
         self.assertEqual(rc, 0, o)
         self.assertIn('note: the part headers declare', o)
 
+    def test_member_path_slip_in_one_copy_recovers(self):
+        """MK-1 (MAINT-6): a slip in one copy's member path (NOTE.mx, or the unsafe NOT~.md) while copy B is intact;
+        the member is rebuilt under its real path. Two members with one content (two empty files) stay two members."""
+        wt(os.path.join(self.tree, 'NOTE.md'), 'an invented note\n')
+        wt(os.path.join(self.tree, 'sentinels/SENTINEL_y.json'), '')
+        out = os.path.join(self.d, 'mk1')
+        rc, o = run('pack', self.tree, out, '--kit-name', 'K.zip', '--part-bytes', '300',
+                    *['--binary-name=%s=%s' % (p, n) for p, (n, _) in self.bins.items()])
+        self.assertEqual(rc, 0, o)
+        kit = rb(os.path.join(out, 'K.zip'))
+        parts = sorted(os.path.join(out, n) for n in os.listdir(out) if n.endswith('.txt'))
+        a = next(p for p in parts if p.endswith('_A.txt') and b'@@ text NOTE.md ' in rb(p))
+        clean = rb(a)
+        for bad in ('NOTE.mx', 'NOT~.md'):
+            wb(a, clean.replace(b'@@ text NOTE.md ', ('@@ text %s ' % bad).encode()))
+            dest = os.path.join(self.d, bad + '.zip')
+            rc, o = run('assemble', dest, '--binaries', self.bindir, '--expect', sha(kit), *parts)
+            self.assertEqual(rc, 0, (bad, o))
+            self.assertEqual(rb(dest), kit)
+
+    def test_pack_refuses_duplicate_binary_names(self):
+        """MK-2 (MAINT-6): a/src.xls and b/src.xls would share one binary file name; pack refuses and writes nothing."""
+        t = os.path.join(self.d, 't2')
+        for p in ('a', 'b'):
+            os.makedirs(os.path.join(t, p))
+            wb(os.path.join(t, p, 'src.xls'), b'\xd0\xcf' + p.encode() * 100)
+        out = os.path.join(self.d, 'o2')
+        rc, o = run('pack', t, out, '--kit-name', 'K.zip')
+        self.assertEqual(rc, 1, o)
+        self.assertIn('src.xls: two binary members would share one file name', o)
+        self.assertFalse(os.path.exists(out) and os.listdir(out))
+
     def test_binary_mismatch_fails(self):
         n = self.bins['qualification/jobs/9990002/source.xlsx'][0]
         p = os.path.join(self.bindir, n)

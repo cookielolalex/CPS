@@ -84,6 +84,3 @@ class Block:
 
     def then(self, s):
         self.tail.append('THEN: ' + s)
-
-    def option(self, code, s):
-        self.tail.append('OPTION: %s %s' % (code, s))

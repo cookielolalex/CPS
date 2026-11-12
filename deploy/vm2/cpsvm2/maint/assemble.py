@@ -1,13 +1,13 @@
-"""vm2.py assemble (spec §10.2): rebuild every frozen run folder of a FINAL series, and the ledger, at their original
-absolute paths under --root, from the downloaded journal; optionally run the runner's verify-frozen on each.
+"""vm2.py assemble (spec §10.2, delta v2.1 §2.6): rebuild every frozen run folder of a FINAL series, and the ledger,
+at their layout paths under --root, from the downloaded journal; optionally run the runner's verify-frozen on each.
 
-    assemble --series Q1 --dir DOWNLOADS --out ASSEMBLE.json [--root /] [--verify-frozen]
+    assemble --series Q1 --dir DOWNLOADS --out ASSEMBLE.json --root EMPTY_DIR [--verify-frozen]
 
-DOWNLOADS has the layout of audit.py (<dir>/<id>/<name>); copies of one name must be byte-identical (else FORK). The
-run list is the FINAL entry's ALL_FROZEN (the audit, the scoring pre-gate, re-derives it from its own fold). Each run:
-the FROZEN entry's job/ members plus the PNG stream of its parts, through the reused Staging into an empty target
-(§8.5.1 steps 2-5), then a strict walk must equal exactly what was placed. Writes ASSEMBLE.json
-(cps.vm2-assemble.v1); exit 0 iff every run was placed (and, with --verify-frozen, gave NEXT: DONE), 1 otherwise."""
+--root is an existing empty directory other than / (else REFUSED ROOT_INVALID, exit 2). The base is the GENESIS entry's;
+each job_dir must be job_dir_of(base, tag, case) and each write stay inside realpath(root) (else Bad LAYOUT_PATH).
+DOWNLOADS is <dir>/<id>/<name>; copies of one name must be byte-identical (else FORK). The runs are the FINAL entry's
+ALL_FROZEN (the audit re-derives it). Each run goes through the reused Staging into an empty target, then a strict walk
+must equal what was placed. Exit 0 iff every run was placed (with --verify-frozen: NEXT: DONE), 1 otherwise."""
 import argparse
 import hashlib
 import os
@@ -16,10 +16,12 @@ import stat
 import subprocess
 import sys
 
-from ..core.names import ENTRY, cjson, entry_name, fm, sha
-from ..vio.v1compat import Halt
+from ..core import fold as F
+from ..core.names import BASE_RE, ENTRY, cjson, entry_name, fm, sha
+from ..vio.runner import PIN
+from ..vio.v1compat import Halt, runner_path
 from ..vio.v1reuse import Archive, Staging, remove_tree, sjson
-from .audit import RUNNER, RUNNER_SHA256, doc_bytes, open_entry, read_bytes
+from .audit import doc_bytes, open_entry, read_bytes
 
 SCHEMA = 'cps.vm2-assemble.v1'
 CARRIER = 'carrier/convert/carrier.json'
@@ -58,7 +60,7 @@ def walk(top):
 
 class Assembler:
     def __init__(self, series, ddir, root):
-        self.series, self.root, self.idx = series, root, {}
+        self.series, self.root, self.real, self.idx = series, root, os.path.realpath(root), {}
         for i in sorted(os.listdir(ddir)):
             d = os.path.join(ddir, i)
             for n in sorted(os.listdir(d)) if os.path.isdir(d) and not os.path.islink(d) else []:
@@ -78,6 +80,12 @@ class Assembler:
         except Halt as h:
             raise Bad(h.code, name)
 
+    def inside(self, d):                # d is about to be written into: it must resolve inside the root (MAINT-1)
+        r = os.path.realpath(d)
+        if r != self.real and not r.startswith(self.real + '/'):
+            raise Bad('LAYOUT_PATH', d)
+        return d
+
     def target(self, abs_path):
         if not (isinstance(abs_path, str) and abs_path.startswith('/') and os.path.normpath(abs_path) == abs_path
                 and fm(r'[A-Za-z0-9_./-]+', abs_path)):
@@ -85,6 +93,7 @@ class Assembler:
         t = os.path.join(self.root, abs_path.lstrip('/'))
         if os.path.lexists(t):
             raise Bad('PLACE_TARGET_NOT_EMPTY', abs_path)
+        self.inside(os.path.dirname(t))
         return t
 
     def png(self, doc, r, tmp):
@@ -134,6 +143,7 @@ class Assembler:
         try:
             for m in mem[1:]:
                 rel = m[0][4:]
+                self.inside(os.path.dirname(os.path.join(st.stage, rel)))
                 if m[1] == 'dir':
                     st.add_dir(rel, m[2])
                     want[rel] = ('dir', m[2])
@@ -141,14 +151,16 @@ class Assembler:
                     st.add_file(rel, a.read(m[0]), m[2])
                     want[rel] = ('file', m[2], m[3], m[4])
             if doc['payload']['png']:
-                tmp = os.path.join(os.path.dirname(target), '.cps_vm2_png_%d' % os.getpid())
+                tmp = os.path.join(self.inside(os.path.dirname(target)), '.cps_vm2_png_%d' % os.getpid())
                 try:
                     for rel, mode, data in self.png(doc, r, tmp):
+                        self.inside(os.path.dirname(os.path.join(st.stage, rel)))
                         st.add_file(rel, data, mode)
                         want[rel] = ('file', mode, len(data), sha(data))
                 finally:
                     if os.path.lexists(tmp):
                         os.unlink(tmp)
+            self.inside(st.stage)
             st.finish()
         except Halt as h:
             remove_tree(st.stage)
@@ -188,26 +200,36 @@ class Assembler:
         if sha(af_raw) != fdoc['body']['all_frozen_sha256'] or sha(lf) != fdoc['body']['ledger_final_sha256'] \
                 or af['ledger_final'] != {'sha256': sha(lf), 'bytes': len(lf)}:
             raise Bad('PLACE_SHA_MISMATCH', fdoc['name'])
-        led = self.target(af['genesis']['base'].rstrip('/') + '/ledger')
+        gdoc, ga = self.entry(entry_name(self.series, 1))       # the base is the GENESIS entry's, not ALL_FROZEN's
+        ga.close()
+        lay = gdoc['body'].get('layout') if gdoc['kind'] == 'GENESIS' else None
+        base = lay.get('base') if isinstance(lay, dict) else None
+        if not (fm(BASE_RE, base) and not {'.', '..'} & set(base.split('/')) and lay == F.layout_of(base)
+                and af['genesis']['base'] == base):
+            raise Bad('LAYOUT_PATH', 'genesis')
         for r in af['runs']:
+            tag, _, case = r['run'].partition('/')
+            if tag not in F.QUAL_ROOT or r['job_dir'] != F.job_dir_of(base, tag, case):
+                raise Bad('LAYOUT_PATH', r['job_dir'])
             self.target(r['job_dir'])
+        led = self.target(base + '/ledger')
         runs = [self.place(r) for r in af['runs']]
-        os.makedirs(os.path.dirname(led), exist_ok=True)
+        os.makedirs(self.inside(os.path.dirname(led)), exist_ok=True)
         os.mkdir(led, 0o755)
-        with open(os.path.join(led, 'LEDGER.jsonl'), 'xb') as f:
+        with open(os.path.join(self.inside(led), 'LEDGER.jsonl'), 'xb') as f:
             f.write(lf)
         os.chmod(os.path.join(led, 'LEDGER.jsonl'), 0o644)
         os.chmod(led, 0o755)
         if verify:
-            if file_sha(RUNNER) != RUNNER_SHA256:
+            if file_sha(runner_path()) != PIN:
                 raise Bad('LAYOUT_RUNNER_NOT_PINNED', 'cps_job.py')
             for x in runs:
-                p = subprocess.run([sys.executable, '-I', '-B', os.path.abspath(RUNNER), 'verify-frozen', '--job-dir',
+                p = subprocess.run([sys.executable, '-I', '-B', str(runner_path()), 'verify-frozen', '--job-dir',
                                     x['path']], stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
                 last = ([ln for ln in p.stdout.decode('utf-8', 'replace').splitlines() if ln.strip()] or [''])[-1]
                 x['verify'] = last[6:] if last.startswith('NEXT: ') else 'EXIT_%d' % p.returncode
-        return {'schema': SCHEMA, 'series': self.series, 'root': self.root, 'final_seq': fdoc['seq'],
-                'all_frozen_sha256': sha(af_raw), 'outcomes_sha256': af['outcomes_sha256'],
+        return {'schema': SCHEMA, 'series': self.series, 'root': self.root, 'verify_frozen': verify,
+                'final_seq': fdoc['seq'], 'all_frozen_sha256': sha(af_raw), 'outcomes_sha256': af['outcomes_sha256'],
                 'outcomes_check_sha256': sha(cjson(af['outcomes'])),
                 'ledger': {'path': os.path.join(led, 'LEDGER.jsonl'), 'sha256': sha(lf)}, 'runs': runs}
 
@@ -216,20 +238,23 @@ def main(argv):
     ap = argparse.ArgumentParser(prog='vm2.py assemble')
     for k in ('series', 'dir', 'out'):
         ap.add_argument('--' + k, required=True)
-    ap.add_argument('--root', default='/')
+    ap.add_argument('--root')
     ap.add_argument('--verify-frozen', action='store_true')
     a = ap.parse_args(argv)
-    if not fm(r'Q[1-9]|D[1-9][0-9]?', a.series) or not os.path.isabs(a.root):
-        print('REFUSED VALUE_PATTERN series/root')
+    if not fm(r'Q[1-9]|D[1-9][0-9]?', a.series):
+        print('REFUSED VALUE_PATTERN series')
         return 2
+    if not (a.root and os.path.isabs(a.root) and os.path.isdir(a.root) and not os.listdir(a.root)
+            and os.path.realpath(a.root) != '/'):
+        print('REFUSED ROOT_INVALID')
+        return 2
+    head = {'schema': SCHEMA, 'series': a.series, 'root': a.root, 'verify_frozen': a.verify_frozen, 'runs': []}
     try:
         rep = dict(Assembler(a.series, a.dir, a.root).run(a.verify_frozen), problems=[])
     except Bad as b:
-        rep = {'schema': SCHEMA, 'series': a.series, 'root': a.root, 'runs': [],
-               'problems': [{'code': b.code, 'name': b.name}]}
+        rep = dict(head, problems=[{'code': b.code, 'name': b.name}])
     except (OSError, ValueError, KeyError, TypeError, UnicodeDecodeError) as x:
-        rep = {'schema': SCHEMA, 'series': a.series, 'root': a.root, 'runs': [],
-               'problems': [{'code': 'ARCHIVE_UNREADABLE', 'name': type(x).__name__}]}
+        rep = dict(head, problems=[{'code': 'ARCHIVE_UNREADABLE', 'name': type(x).__name__}])
     rep['clean'] = not rep['problems'] and all(x['verify'] in (None, 'DONE') for x in rep['runs']) \
         and (not a.verify_frozen or all(x['verify'] == 'DONE' for x in rep['runs']))
     with open(a.out, 'xb') as f:

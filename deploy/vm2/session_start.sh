@@ -1,6 +1,6 @@
 #!/bin/bash
-# cps-vm-helper.v2 bootstrap after a reset or in a new operator chat (spec section 6.6).
-# Usage: bash ~/cps/repo/deploy/vm2/session_start.sh --commit <40 hex> [--hint <seq6> --kit <hex12>]
+# cps-vm-helper.v2.1 bootstrap after a reset or in a new operator chat (spec section 6.6, delta v2.1 2.10.3-2.10.7).
+# Usage: bash ~/cps/repo/deploy/vm2/session_start.sh --commit <40 hex> [--hint <seq6> --kit <hex12>|none]
 # Every failure prints a full block (no set -e). The setup runs in the foreground (delta X.6.6: no detached process).
 umask 022
 HDR='CPSV series=none head=000000 kit=none at=000000-0000-000000 mode=setup'
@@ -15,6 +15,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "usage: --commit <40 hex>"; exit 2; }
+[ "$KIT" = none ] && HINT="" KIT=""
 if [ -n "$HINT$KIT" ]; then
   [[ "$HINT" =~ ^[0-9]{6}$ && "$KIT" =~ ^[0-9a-f]{12}$ ]] || { echo "usage: --hint <seq6> --kit <hex12>"; exit 2; }
 fi
@@ -38,13 +39,20 @@ ST=$(git -C "$BASE/repo" status --porcelain --untracked-files=no 2>/dev/null) ||
 mkdir -p "$BASE"/runtime "$BASE"/jobs "$BASE"/qual "$BASE"/transcripts "$BASE"/everyday_inputs "$BASE"/inbox \
   "$BASE"/outbox/v2 "$BASE"/outbox/journal "$BASE"/attest "$BASE"/deliver "$TOOLS"/var || stop SESSION_LAYOUT
 
-# 5. the launcher (atomically, 0755) and the hint
-printf '#!/bin/bash\n[ -f %q ] && . %q\nexec python3 -I -B %q "$@"\n' "$TOOLS/env.sh" "$TOOLS/env.sh" \
-  "$BASE/repo/deploy/vm2/vm2.py" > "$BASE/.vm.sh.tmp" && chmod 0755 "$BASE/.vm.sh.tmp" &&
+# 6. the checked-out commit is the one named, before anything runs from it (S-08)
+HEAD=$(git -C "$BASE/repo" rev-parse HEAD 2>/dev/null) || stop SESSION_GIT_ERROR
+[ "$HEAD" = "$COMMIT" ] || stop SESSION_COMMIT_MISMATCH
+
+# 5. no bytecode (S-07, SD-63), the launcher (atomically, 0755; it reads no .pyc) and the hint (none: no hint)
+find "$REPO" -name __pycache__ -type d -prune -exec rm -rf {} + || stop SESSION_LAYOUT
+printf '#!/bin/bash\n[ -f %q ] && . %q\nexec python3 -I -B -X pycache_prefix=/dev/null %q "$@"\n' "$TOOLS/env.sh" \
+  "$TOOLS/env.sh" "$BASE/repo/deploy/vm2/vm2.py" > "$BASE/.vm.sh.tmp" && chmod 0755 "$BASE/.vm.sh.tmp" &&
   mv "$BASE/.vm.sh.tmp" "$BASE/vm.sh" || stop SESSION_LAYOUT
 if [ -n "$HINT" ]; then
   printf '{"kit": "%s", "seq": %d}\n' "$KIT" "$((10#$HINT))" > "$BASE/outbox/v2/.HINT.json.tmp" &&
     mv "$BASE/outbox/v2/.HINT.json.tmp" "$BASE/outbox/v2/HINT.json" || stop SESSION_LAYOUT
+else
+  rm -f "$BASE/outbox/v2/HINT.json" || stop SESSION_LAYOUT
 fi
 
 # 4. setup once per boot and commit, in the foreground (SAFE-07 with the probe results: setup takes about 130 s, well
@@ -57,7 +65,7 @@ if [ "$(cat "$OK" 2>/dev/null)" != "$BOOT $COMMIT" ]; then
   echo "CPSV-RUNNING kind=setup since=$(date -u +%Y-%m-%dT%H:%M:%SZ) max=600"
   LOG="$BASE/outbox/setup_$UTC.log"
   if ( CPS_WITH_LIBREOFFICE=host bash "$REPO/deploy/setup_vm_user.sh" && . "$TOOLS/env.sh" &&
-       python3 "$REPO/deploy/check_env.py" --out "$BASE/outbox/ENV_REPORT_$UTC.json" | grep -q '"all_met": true'
+       python3 -B "$REPO/deploy/check_env.py" --out "$BASE/outbox/ENV_REPORT_$UTC.json" | grep -q '"all_met": true'
      ) > "$LOG" 2>&1 < /dev/null; then
     echo "$BOOT $COMMIT" > "$TOOLS/var/cps_vm2_setup_ok" || stop SESSION_LAYOUT
   else
@@ -65,9 +73,6 @@ if [ "$(cat "$OK" 2>/dev/null)" != "$BOOT $COMMIT" ]; then
   fi
 fi
 
-# 6. the checked-out commit is the one named
-HEAD=$(git -C "$BASE/repo" rev-parse HEAD 2>/dev/null) || stop SESSION_GIT_ERROR
-[ "$HEAD" = "$COMMIT" ] || stop SESSION_COMMIT_MISMATCH
 echo "CPSV-REPO commit=$COMMIT"
 echo "$HDR state=SETUP"
 echo "DO: RUN bash $BASE/vm.sh go"

@@ -71,14 +71,6 @@ def md5_file(p):
     return h.hexdigest()
 
 
-def h8(x):
-    return x[:8]
-
-
-def canon(obj):
-    return json.dumps(obj, separators=(',', ':'), ensure_ascii=False, sort_keys=False)
-
-
 def sjson(raw, what='json'):
     """Strict JSON (UTF-8, no duplicate keys, no NaN/Infinity) without the runner (usable before the pin check)."""
     def hook(pairs):
@@ -405,23 +397,6 @@ def png_manifest_problem(man):
     return None
 
 
-def pkg_manifest_problem(man):
-    """T-04/T-25: every core member is job or under job/, with a plain mode; the PNG set passes png_manifest_problem."""
-    for m in (man.get('members') or []) if isinstance(man, dict) else []:
-        p = m.get('path') if isinstance(m, dict) else None
-        if not isinstance(p, str) or unsafe_name(p) or not (p == 'job' or p.startswith('job/')):
-            return 'member path'
-        if not isinstance(m.get('mode'), int) or isinstance(m.get('mode'), bool) or m['mode'] & ~0o777:
-            return 'member mode'
-    return png_manifest_problem(man)
-
-
-def check_pkg_manifest(a):
-    why = pkg_manifest_problem(a.manifest)
-    if why:
-        a.bad('ARCHIVE_UNSAFE_MEMBER', {'why': why})
-
-
 class Archive:
     """Safe reading (3.6): members by getmembers/extractfile only; every check passes before anything is written."""
     def __init__(self, path, prefixes, gz=True, code_stop=True):
@@ -670,20 +645,6 @@ def require_space(lay, need, what):
         return
     if free < need + SPACE_MARGIN:
         raise disk_full_halt(lay, need, what)
-
-
-def join_slices(paths_by_k, want_name):
-    """Join SPLIT_ slices (k -> path) of one file; None when incomplete or the whole-file hash fails."""
-    if not paths_by_k:
-        return None
-    ps = [parse_name(Path(p).name) for p in paths_by_k.values()]
-    n = ps[0]['n']
-    if set(paths_by_k) != set(range(1, n + 1)) or any(x['n'] != n or x['original'] != want_name for x in ps):
-        return None
-    data = b''.join(Path(paths_by_k[k]).read_bytes() for k in range(1, n + 1))
-    if h8(sha_bytes(data)) != ps[0]['h8']:
-        return None
-    return data
 
 
 class FP:
@@ -954,14 +915,6 @@ def run_runner(ctx, argv, log):
         except ValueError:
             continue
     return p.returncode, lines, (lines[-1] if lines else ''), lj, sha_bytes(p.stdout)
-
-
-def scrub(line):
-    """Runner lines are copied with RUNNER| ; a DELIVER path holds the title, so it is replaced by its hash."""
-    if 'DELIVER file=' in line:
-        i = line.index('DELIVER file=') + len('DELIVER file=')
-        return line[:i] + CJ.safe_path(line[i:]) if not line[i:].isascii() else line
-    return line
 
 
 def selftest_work(ctx, info):

@@ -138,13 +138,12 @@ def cleanup_leftovers(lay):
 
 
 def place_frozen(lay, job_dir, frozen_bytes, frozen_sha256):
-    """§7.7 (v2): put an earlier run's FROZEN.json back at its job folder for a reader-B or restart prepare. The bytes
-    come from outbox/frozen_json/ or the run's FROZEN entry (the caller reads them); sha(bytes) must be the state's
-    frozen_sha256 and the ledger's last freeze entry of that folder. Returns the placed folder."""
+    """§7.7 (v2.1): put an earlier run's FROZEN.json back at its job folder for a reader-B or restart prepare, settled
+    against what is there (place.settle). The bytes come from outbox/frozen_json/ or the run's FROZEN entry (the caller
+    reads them); sha(bytes) must be the state's frozen_sha256 and the ledger's last freeze entry of that folder."""
+    from .place import settle
     from .v1reuse import sha_bytes, write_new
     jd = Path(job_dir)
-    if os.path.lexists(jd):
-        stop('PLACE_TARGET_NOT_EMPTY', 'the earlier job folder exists')
     if sha_bytes(frozen_bytes) != frozen_sha256:
         stop('PLACE_SHA_MISMATCH', 'the kept FROZEN.json is not the frozen one')
     led = []
@@ -158,9 +157,14 @@ def place_frozen(lay, job_dir, frozen_bytes, frozen_sha256):
             led.append(e)
     if not led or led[-1].get('frozen_sha256') != frozen_sha256:
         stop('PLACE_SHA_MISMATCH', 'the ledger does not record this FROZEN.json for that folder')
-    jd.mkdir(parents=True, mode=0o755)
-    os.chmod(jd, 0o755)
-    write_new(jd / 'FROZEN.json', frozen_bytes, 0o444)
+    sd = jd.parent / ('.cps_vm_stage_%s_%d' % (jd.name, os.getpid()))
+    if os.path.lexists(sd):
+        remove_tree(sd)
+    sd.mkdir(parents=True, mode=0o755)
+    os.chmod(sd, 0o755)
+    write_new(sd / 'FROZEN.json', frozen_bytes, 0o444)
+    settle(lay, jd, {'FROZEN.json': ['file', 0o444, len(frozen_bytes), frozen_sha256]}, 0o755, sd,
+           lambda: os.rename(sd, jd))
     return str(jd)
 
 

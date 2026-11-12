@@ -97,11 +97,12 @@ def doc_bytes(x):
 
 
 def write_doc(path, doc, mode=0o644):
-    """A cache file (§2.3): doc_bytes with self_sha256 = sha(cjson(doc without self_sha256))."""
-    d = {k: v for k, v in doc.items() if k != 'self_sha256'}
-    d['self_sha256'] = _sha(cjson(d))
-    write(path, doc_bytes(d), mode)
-    return d
+    """A cache file (§2.3): doc_bytes with self_sha256 = sha(cjson(doc without self_sha256)), set in `doc` itself, which
+    is returned (OPX-01: no alias of the written document goes stale)."""
+    doc.pop('self_sha256', None)
+    doc['self_sha256'] = _sha(cjson(doc))
+    write(path, doc_bytes(doc), mode)
+    return doc
 
 
 def write_plain(path, doc, mode=0o644):

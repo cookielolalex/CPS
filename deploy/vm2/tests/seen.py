@@ -11,11 +11,12 @@ import re
 
 CODES = set()
 _DONE = []
-LINE_RX = re.compile(r'^(?:REFUSED ([A-Z][A-Z0-9_]+)$|DO: STOP ([A-Z][A-Z0-9_]+) HANDBACK [ABC]$)')
+LINE_RX = re.compile(r'^(?:REFUSED ([A-Z][A-Z0-9_]+)(?: \S+)*$|DO: STOP ([A-Z][A-Z0-9_]+) HANDBACK [ABC](?: name=\S+)?$)')
 
 
 def add(code):
-    if isinstance(code, str) and code and code != 'IDLE':           # STOP IDLE is §6.4's idle block, not a code
+    code = code.split(' ', 1)[0] if isinstance(code, str) else None    # 'CODE detail' records CODE
+    if code and code != 'IDLE':                                         # STOP IDLE is §6.4's idle block, not a code
         CODES.add(code[7:] if code.startswith('HALTED_') else code)
 
 
@@ -73,9 +74,9 @@ def install():
     # functions whose contract is to return a refusal or stop code (the caller prints it): record the code returned
     for mod, name, get in ((cli, 'transcript_problem', lambda r: r), (cli, 'delivery_commit', lambda r: r),
                            (cli, 'apply_answer', lambda r: r), (cli, 'ai_commit', lambda r: r),
-                           (cli, 'inputs_commit', lambda r: r), (drive, 'check_found', lambda r: r[0]),
-                           (savepoint, 'on_found', lambda r: r[1]), (savepoint, 'on_verify', lambda r: r[1]),
-                           (savepoint, 'setup_found', lambda r: r[1]), (savepoint, 'setup_verify', lambda r: r[1]),
+                           (cli, 'inputs_commit', lambda r: r), (drive, 'manual_copies', lambda r: r[0]),
+                           (savepoint, 'on_found', lambda r: r[1] if r[0] == 'stop' else None), (savepoint, 'on_verify', lambda r: r[1]),
+                           (savepoint, 'slip', lambda r: r),
                            (session, 'kit_change', lambda r: r[0]), (session, 'classify', lambda r: r[1].get('stop')),
                            (session, 'head_search', lambda r: r.get('code')),
                            (plan, 'chain_next', lambda r: r['code'] if r.get('entry') == 'HALT' or
@@ -85,12 +86,12 @@ def install():
         _wrap_ret(mod, name, get)
     emit0, bare0 = cli.emit, cli.bare
 
-    def emit(env, state_code, blk, expect, refused=None):
-        if refused is not None:
-            add(refused)
+    def emit(env, state_code, blk, expect, hdr=None):
+        if env.refusal:                                         # a slip or counted refusal: REFUSED <CODE> <detail>
+            scan([env.refusal])
         if blk.do and blk.do[0] == 'STOP':
             add(blk.do[1].get('code'))
-        return emit0(env, state_code, blk, expect, refused)
+        return emit0(env, state_code, blk, expect, hdr)
 
     def bare(lines, code):
         scan(lines)

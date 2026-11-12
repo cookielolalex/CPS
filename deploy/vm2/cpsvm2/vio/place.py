@@ -1,11 +1,13 @@
-"""Strict walk, job-folder snapshot (§3.8), placement from journal entries (§8.5.1), evict after FROZEN (§7.6) and the
-placed-FROZEN.json removal (§7.7, §5.4 UNPLACE_FROZEN). Every walk is the strict v1mod.tree_list; JobLock is held only
-for a walk, never while a runner command runs (IMP-12)."""
+"""Strict walk, job-folder snapshot (§3.8), placement from journal entries (§8.5.1) settled against what is already
+there (delta v2.1 §2.4.6), evict after FROZEN (§7.6) and the placed-FROZEN.json removal (§7.7, §5.4 UNPLACE_FROZEN).
+Every walk is the strict v1mod.tree_list; JobLock is held only for a walk or a settle, never while a runner command
+runs (IMP-12)."""
 import hashlib
 import json
 import os
 from pathlib import Path
 
+from .host import now, utc14
 from .v1compat import Halt, stop
 from .v1mod import tree_list
 from .v1reuse import (Archive, JobLock, Staging, check_ledger_identity, png_manifest_problem, png_set, remove_tree,
@@ -63,15 +65,40 @@ def ai_members(output_dir, max_bytes):
 
 
 # ---------------------------------------------------------------- placement (§8.5.1)
+def settle(lay, target, want, root_mode, stage, finish):
+    """Put a staged tree in place (SD-41): no target, the staged tree is renamed in (`finish`); a target whose strict
+    walk (path, type, mode, size, sha256) and root mode equal `want` is kept and the staging removed; any other target
+    moves to outbox/v2/aside_<utc14>/<n>/ (never deleted; its top folder made owner-writable first, SD-70), then the
+    staged tree is renamed in. Returns the aside path or None."""
+    aside = None
+    with JobLock(lay, target):
+        if os.path.lexists(target):
+            try:
+                same = os.path.isdir(target) and not os.path.islink(target) and \
+                    (os.lstat(target).st_mode & 0o777) == root_mode and {r[0]: r[1:] for r in walk(target)} == want
+            except Halt:
+                same = False
+            if same:
+                remove_tree(stage)
+                return None
+            d = lay.outbox / 'v2' / ('aside_' + utc14(now()))
+            d.mkdir(parents=True, exist_ok=True)
+            aside = str(d / str(len(os.listdir(d)) + 1))
+            if os.path.isdir(target) and not os.path.islink(target):
+                os.chmod(target, (os.lstat(target).st_mode & 0o777) | 0o200)
+            os.rename(target, aside)
+        finish()
+    return aside
+
+
 def _entry_reader(path):
     from .savepoint import read_entry
     return read_entry(path)
 
 
 def place_ledger(lay, entry_path, want_sha256):
-    """Step 1: BASE/ledger from the entry's ledger/LEDGER.jsonl member (sha checked), via a staging folder."""
-    if os.path.lexists(lay.ledger_dir):
-        stop('PLACE_TARGET_NOT_EMPTY', 'BASE/ledger exists')
+    """Step 1: BASE/ledger from the entry's ledger/LEDGER.jsonl member (sha checked), via a staging folder, settled.
+    Returns (sha256, aside)."""
     _entry_reader(entry_path)
     a = Archive(entry_path, ('MANIFEST.json', 'job', 'ledger', 'ai', 'transcript', 'attest', 'delivery', 'final'))
     try:
@@ -89,9 +116,11 @@ def place_ledger(lay, entry_path, want_sha256):
         f.flush()
         os.fsync(f.fileno())
     os.chmod(sd / 'LEDGER.jsonl', 0o644)
-    os.rename(sd, lay.ledger_dir)
+    os.chmod(sd, 0o755)
+    aside = settle(lay, lay.ledger_dir, {'LEDGER.jsonl': ['file', 0o644, len(raw), sha_bytes(raw)]}, 0o755, sd,
+                   lambda: os.rename(sd, lay.ledger_dir))
     check_ledger_identity(type('C', (), {'lay': lay})())
-    return sha_bytes(raw)
+    return sha_bytes(raw), aside
 
 
 def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
@@ -99,11 +128,9 @@ def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
     order; sha256 == png['whole_sha256']), and the ai/ members of AI entries [(entry path, output dir, replace)] into
     their output folders. The folder must be empty in the snapshot, except for a V revision >= 2 (replace): the
     REVIEW_INCOMPLETE snapshot holds revision 1 there, and the AI entry's tree is the whole folder after the
-    continuation, so it takes the folder's place (§7.8, §8.5.1 step 4). A strict walk afterwards must equal snapshot +
-    PNGs + AI outputs exactly. Returns the tree sha."""
+    continuation, so it takes the folder's place (§7.8, §8.5.1 step 4). The staged tree is settled against an existing
+    folder; a strict walk afterwards must equal snapshot + PNGs + AI outputs exactly. Returns (tree sha, aside)."""
     jd = Path(job_dir)
-    if os.path.lexists(jd):
-        stop('PLACE_TARGET_NOT_EMPTY', 'the job folder exists')
     man = _entry_reader(snap_entry)
     rows = [m for m in man['payload']['members'] if m[0] == 'job' or m[0].startswith('job/')]
     if not rows or rows[0][0] != 'job':
@@ -169,11 +196,11 @@ def place_job(lay, job_dir, snap_entry, png=None, png_part_paths=(), ai=()):
                 expect[rel] = [r[1], r[2], r[3], r[4]]
         finally:
             aa.close()
-    stg.finish()
+    aside = settle(lay, jd, expect, rows[0][2], stg.stage, stg.finish)
     got = {r[0]: r[1:] for r in walk(jd)}
     if got != expect:
         stop('PLACE_SHA_MISMATCH', 'the placed folder differs from the entries')
-    return tree_sha([[k] + v for k, v in sorted(got.items())])
+    return tree_sha([[k] + v for k, v in sorted(got.items())]), aside
 
 
 def _add_parents(stg, expect, rel):

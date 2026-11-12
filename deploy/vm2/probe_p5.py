@@ -79,6 +79,8 @@ def main(argv):
     if a.cmd in ('start', 'hold'):
         os.makedirs(d, exist_ok=True)
     if a.cmd == 'start':
+        if a.seconds < a.min_gap:                       # MAINT-10: a worker that ends before the check proves nothing
+            return refuse('SECONDS_BELOW_MIN_GAP')
         if st and st.get('boot_id') == boot_id() and alive(st.get('worker_pid')) \
                 and (read(os.path.join(d, 'DONE.json')) or {}).get('token') != st.get('token'):
             return refuse('WORKER_ALIVE')

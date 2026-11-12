@@ -62,9 +62,10 @@ def _starts(R):
     return out
 
 
-def _item(kind, R, role, attempt, start_no, window):
+def _item(kind, R, role, attempt, start_no, window, conversation=None):
     it = {'kind': kind, 'case': R['case'] if R else None, 'reader': R['reader'] if R else None,
-          'run': R['key'] if R else None, 'role': role, 'attempt': attempt, 'start_no': start_no, 'window': window}
+          'run': R['key'] if R else None, 'role': role, 'attempt': attempt, 'start_no': start_no, 'window': window,
+          'conversation': conversation}
     return dict(it, id=sha(cjson(it))[:12])
 
 
@@ -98,17 +99,17 @@ def outcomes(state):
             sheet.append({'run': k, 'case': R['case'], 'reader': R['reader'], 'role': st['role'],
                           'attempt': st['attempt'], 'start_no': st['start_no'], 'reason': st['reason'],
                           'start_utc': st['utc'], 'boot_id': st['boot_id'],
-                          'opened': {'conversation': ro['opened']['conversation'], 'utc': ro['opened']['utc']}
-                          if ro and ro['opened'] and latest(ro) is st else None,
                           'archived': [{'revision': a['revision'], 'conversation': a['conversation'],
-                                        'utc': a.get('utc')} for a in (ro['archives'] if ro else [])],
+                                        'utc': a.get('utc'), 'tools_sha256': a.get('tools_sha256')}
+                                       for a in (ro['archives'] if ro else [])],
                           'resolution': ro['resolution'] if ro else None, 'superseded_by': st['superseded_by'],
                           'window': window})
             if window is not None:
                 items.append(_item('SUPERSEDED_WINDOW', R, st['role'], st['attempt'], st['start_no'], window))
         for key, ro in sorted(R['roles'].items()):
             if (ro['resolution'] or {}).get('owner_check'):
-                items.append(_item('OWNER_CHECK', R, ro['role'], ro['attempt'], latest(ro)['start_no'], None))
+                items.append(_item('OWNER_CHECK', R, ro['role'], ro['attempt'], latest(ro)['start_no'], None,
+                                   ro['resolution'].get('conversation')))
     items.append(_item('O52_SHEET', None, None, None, None, None))
     tr = [p['transcripts']['generator'] for p in pairs]
     counts = {'pairs': len(pairs), 'score': sum(p['disposition'] == 'SCORE' for p in pairs),

@@ -293,9 +293,11 @@ def test_chain_invalid_at_assemble():
     from cpsvm2.maint import assemble
     d = tmp('assemble')
     (d / 'dl').mkdir()
+    (d / 'root').mkdir()
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        code = assemble.main(['--series', 'D1', '--dir', str(d / 'dl'), '--out', str(d / 'A.json')])
+        code = assemble.main(['--series', 'D1', '--dir', str(d / 'dl'), '--out', str(d / 'A.json'), '--root',
+                              str(d / 'root')])
     rep = json.loads((d / 'A.json').read_text())
     assert code == 1 and rep['problems'] == [{'code': 'CHAIN_INVALID', 'name': 'D1'}], (code, rep)
 
@@ -359,9 +361,13 @@ def test_place_ledger_sha_checked():
                                             V.fake_complete)
     halts('PLACE_SHA_MISMATCH', place.place_ledger, env.lay, pend['entry']['path'], '0' * 64)
     assert not env.lay.ledger_dir.exists()
-    place.place_ledger(env.lay, pend['entry']['path'], N.sha(raw))
+    assert place.place_ledger(env.lay, pend['entry']['path'], N.sha(raw)) == (N.sha(raw), None)
     assert env.lay.ledger.read_bytes() == raw
-    halts('PLACE_TARGET_NOT_EMPTY', place.place_ledger, env.lay, pend['entry']['path'], N.sha(raw))
+    assert place.place_ledger(env.lay, pend['entry']['path'], N.sha(raw)) == (N.sha(raw), None), 'equal: kept'
+    env.lay.ledger.write_bytes(b'{"seq": 1, "type": "other"}\n')
+    sh, aside = place.place_ledger(env.lay, pend['entry']['path'], N.sha(raw))
+    assert env.lay.ledger.read_bytes() == raw and aside and '/aside_' in aside, 'a differing target moves aside'
+    assert (Path(aside) / 'LEDGER.jsonl').read_bytes() == b'{"seq": 1, "type": "other"}\n', 'never deleted'
 
 
 def test_evict_frozen_sha_checked():
@@ -389,7 +395,10 @@ def test_inputs_changed_refused():
     code, s = w.cmd('answer', '--at', V.at_of(a), 'case=case01')
     code, out = w.cmd('found', *V.dot_do(w.drive, s))
     assert code == 0 and out[-1].startswith('DO: RUN '), out
+    V.dot_do(w.drive, out)                                          # the download-back of the INPUTS entry
     (w.lay.everyday_inputs / 'case01/source.xlsx').write_bytes(b'other invented workbook bytes')
+    code, out = w.cmd('go')
+    assert code == 4 and out[1] == 'REFUSED INPUTS_CHANGED' and not w.started, out
     snap = w.cache_bytes()
     code, out = w.cmd('go')
     assert code == 4 and out[1] == 'REFUSED INPUTS_CHANGED' and not w.started, out
@@ -398,16 +407,21 @@ def test_inputs_changed_refused():
 
 
 def test_foreign_md5_same_size_is_fork():
-    """§5.1 step 6 (G2) with md5 visible: a copy of the entry's name with the local size and another md5 is FORK."""
+    """§5.1 step 6 under rule V (v2.1 §2.2.2): a copy of the entry's name with the local size and other bytes is FORK
+    once downloaded; our bytes confirm."""
     import test_vio as V
     V.WORK = WORK
     root = tmp('fork_md5')
-    env = V.SPEnv(root, gates={'p2_md5_visible': 'yes'})
+    env = V.SPEnv(root)
     pend, entry, _, _ = V.write_png_commit(env, V.make_job(root, pngs=0))
-    same = {entry['name']: ['%s:%s:%d' % ('id%020d' % 98, 'f' * 32, pend['entry']['bytes'])]}
-    assert savepoint.on_found(env, pend, same, lambda v: None) == ('stop', 'FORK')
-    ok = {entry['name']: ['%s:%s:%d' % ('id%020d' % 97, pend['entry']['md5'], pend['entry']['bytes'])]}
-    assert savepoint.on_found(env, pend, ok, lambda v: None) == ('ok', None)
+    p2 = json.loads(json.dumps(pend))
+    for loop, data, want in ((pend, b'f' * pend['entry']['bytes'], ('stop', 'FORK', None)),
+                             (p2, Path(pend['entry']['path']).read_bytes(), ('ok', None))):
+        assert V.sp_found(env, loop, {entry['name']: [['id%020d' % 98, len(data)]]}) == ('ok', None)
+        dl = V.sp_block(env, loop)[2]
+        Path(dl[0][2]).parent.mkdir(parents=True, exist_ok=True)
+        Path(dl[0][2]).write_bytes(data)
+        assert savepoint.on_verify(loop) == want
 
 
 def test_marks_survive_every_commit():
@@ -424,11 +438,83 @@ def test_marks_survive_every_commit():
     assert st['marks'] == marks and st['head']['seq'] == 1, st['marks']
 
 
+def test_s06_profile_folder_with_brace_refused_before_commit():
+    """S-06 (W10): a personal-copy log whose profile folder cannot be printed (a brace) is REFUSED COPY_LOG_MISMATCH
+    before anything is committed."""
+    import test_vio as V
+    V.WORK = WORK
+    with V.fw() as w:
+        code, ask = V.to_g_end(w)
+        orig = w.make_copy
+
+        def mk(standard):
+            r = orig(standard)
+            d = json.loads(Path(r['log']).read_text())
+            d['profile_folder'] = 'Dots Folder/{x}'
+            Path(r['log']).write_text(json.dumps(d))
+            return r
+        w.make_copy = mk
+        code, out = w.dot.run(code, ask)
+        assert code == 4 and out[1] == 'REFUSED COPY_LOG_MISMATCH', out
+        assert not (V.fv2(w) / 'PENDING.json').exists()
+
+
+def test_s11_oserror_outside_stage_prints_stop_block():
+    """S-11 (W15): an OSError outside a stage prints the STOP block (DISK_FULL for ENOSPC), never a traceback."""
+    import errno
+    import test_vio as V
+    from cpsvm2 import cli
+    V.WORK = WORK
+    with V.fw() as w:
+        V.to_idle(w)
+        orig = cli.go_checks
+
+        def boom(env):
+            raise OSError(errno.ENOSPC, 'invented')
+        cli.go_checks = boom
+        try:
+            code, out = w.dot.cmd('go')
+        finally:
+            cli.go_checks = orig
+        assert code == 3 and out[-1] == 'DO: STOP DISK_FULL HANDBACK C', out
+
+
+def test_opx06_inputs_changed_bounded_then_slip_limit():
+    """OPX-06 / D3d (W22): everyday INPUTS_CHANGED is a counted refusal: three times REFUSED INPUTS_CHANGED, then
+    STOP SLIP_LIMIT (local sticky) for the owner."""
+    import test_vio as V
+    V.WORK = WORK
+    with V.fw() as w:
+        code, idle = V.to_idle(w)
+        case = w.everyday_request()
+        code, s = w.dot.cmd('answer', '--at', V.fat(idle), 'case=%s' % case)
+        code, s = V.until(w, code, s, lambda ls: any(x.startswith('DOWNLOAD ') and 'CPSJ_E1_000002.tgz' in x
+                                                      for x in ls))       # the INPUTS entry's download-back
+        for x in s:
+            if x.startswith('DOWNLOAD '):
+                t = x.split()
+                w.dot.download(t[-3], t[-1])
+        (w.base / 'everyday_inputs' / case / 'JOB.json').write_text('{"changed": true}')
+        outs = [w.dot.cmd('go') for _ in range(4)]
+        assert [o[1][1] for o in outs[:3]] == ['REFUSED INPUTS_CHANGED'] * 3, outs[:3]
+        assert outs[3][1][-1] == 'DO: STOP SLIP_LIMIT HANDBACK C', outs[3]
+        assert json.loads((V.fv2(w) / 'HALT.json').read_text())['detail']['last'] == 'INPUTS_CHANGED'
+
+
+def test_place_job_output_not_empty():
+    """§8.5.1: an AI output folder that is not empty in the snapshot is PLACE_TARGET_NOT_EMPTY (place_job)."""
+    import inspect
+    from cpsvm2.vio import place as PL
+    assert "stop('PLACE_TARGET_NOT_EMPTY'" in inspect.getsource(PL.place_job)
+
+
 TESTS = [test_foreign_md5_same_size_is_fork, test_marks_survive_every_commit, test_rewalk_reports_a_file_not_in_the_snapshot, test_fingerprint_change_stops_the_chain,
          test_place_ledger_sha_checked, test_evict_frozen_sha_checked, test_inputs_changed_refused, test_archive_codes, test_kit_codes, test_layout_codes, test_ledger_codes, test_clock_behind,
          test_png_and_ai_limits, test_evict_failed_and_post_action_failed, test_write_readback_mismatch,
          test_job_busy_too_long, test_transcript_and_copy_codes, test_internal_step_overflow,
-         test_chain_invalid_at_assemble, test_head_error_codes_stop_the_session]
+         test_chain_invalid_at_assemble, test_head_error_codes_stop_the_session,
+         test_s06_profile_folder_with_brace_refused_before_commit, test_s11_oserror_outside_stage_prints_stop_block,
+         test_opx06_inputs_changed_bounded_then_slip_limit, test_place_job_output_not_empty]
 
 
 # ================================================================ world scenarios (run by test_resets)
@@ -475,6 +561,8 @@ def run(only=None, work=None):
     for fn in TESTS:
         if only and fn.__name__ not in only:
             continue
+        if failed and os.environ.get('CPSVM2_FAILFAST'):     # run_tests.py --failfast (the mutation harness)
+            break
         try:
             fn()
             passed += 1
