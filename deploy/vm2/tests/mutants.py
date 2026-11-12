@@ -396,10 +396,11 @@ HAND.append(M('W112', ASM, [('mount -c --bind "$2" "$1"; ', '')], ['D_baseline']
 # Amendment from probes M008-M012 (delta v2.1 §9): W116-W131.
 SS, V1M = 'session_start.sh', 'cpsvm2/vio/v1mod.py'
 A1T = ['test_a1_base_required_outside_home_and_carried_by_launcher']
+G5L = 'B=$(cd "$BASE" 2>/dev/null && pwd -P)/ H=$(cd "$HOME" 2>/dev/null && pwd -P)/; case "$B" in "$H"*|/) stop SESSION_LAYOUT ;; esac'
 HAND += [
     M('W116', SS, [('BASE="${CPS_VM_BASE:-}"', 'BASE="${CPS_VM_BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)}"')],
       A1T, 'A1: a missing CPS_VM_BASE silently takes the base from the script\'s location'),
-    M('W117', SS, [('case "$BASE/" in "$HOME"/*) stop SESSION_LAYOUT ;; esac\n', '')], A1T,
+    M('W117', SS, [(G5L + '\n', '')], A1T,
       'A1: a base inside HOME (the old ~/cps) is accepted'),
     M('W118', SS, [('\\nexport CPS_VM_BASE=', '\\nCPS_VM_BASE=')], A1T,
       'A1: vm.sh sets BASE and TOOLS without exporting them, so the helper does not see them'),
@@ -427,7 +428,7 @@ HAND += [
     M('W127', CLI, [("    if marker(env.lay.tools / SETUP_DONE) != [env.boot, host.repo_commit(env.lay) or '']:", "    if False:")],
       ['t_a5_stage_stops_setup_missing', 'D_tools_wiped_same_boot_continues'],
       'A5: a stage runs without the setup of this boot and commit'),
-    M('W128', NAMES, [('STAGE_FREE_BYTES = 1048576, 2000, 1500000000', 'STAGE_FREE_BYTES = 1048576, 2000, 1000000000')],
+    M('W128', NAMES, [('STAGE_FREE_BYTES = 1048576, 2000, 2000000000', 'STAGE_FREE_BYTES = 1048576, 2000, 1000000000')],
       ['t_d16_stage_refuses_low_space_before_runner'], 'A7: the stage check of r5 (1 GB), under the M009 peak on /tmp'),
     M('W129', NAMES, [("pre = base.rstrip('/') + '/deliveries/' + case + '/'", "pre = base.rstrip('/') + '/cps-deliveries/' + case + '/'")],
       ['test_transcript_and_copy_codes', 'test_names_patterns'], 'A1: the personal copy is not taken from BASE/deliveries'),
@@ -436,6 +437,48 @@ HAND += [
       ['t_l14_readme_rules'], 'A2: the README sends the bootstrap through the standard route'),
     M('W131', 'README.md', [('never start that command again yourself. Run\n   `go` once', 'run that command again. Run\n   `go` once')],
       ['t_l14_readme_rules'], 'A3: the README lets the Dot re-run a command that died'),
+]
+# The amendment's fix round (delta v2.1 §9.8): W132-W143.
+HAND += [
+    M('W132', CLI, [("    remove_tree(env.lay.base / 'tmp')               # A6: a killed stage's temporary files go; the "
+                     "runner's TMPDIR\n    (env.lay.base / 'tmp').mkdir()\n    os.environ['TMPDIR'] = str(env.lay.base / 'tmp')\n"
+                     "    if kind == 'chain':\n        require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')\n",
+                     "    if kind == 'chain':\n        require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')\n"
+                     "    remove_tree(env.lay.base / 'tmp')\n    (env.lay.base / 'tmp').mkdir()\n"
+                     "    os.environ['TMPDIR'] = str(env.lay.base / 'tmp')\n")],
+      ['t_g2_tmp_emptied_before_space_check'], 'G2: the space check runs before BASE/tmp is emptied'),
+    M('W133', V1M, [("lay.runtime.glob('.tmp_[0-9]*_*')", "lay.runtime.glob('.tmp_[0-9]_*')")],
+      ['t_a4_stale_temp_names_in_runtime_ignored'], 'G4: only one-digit pids are removed from runtime/'),
+    M('W134', SS, [(G5L, 'case "$BASE/" in "$HOME"/*) stop SESSION_LAYOUT ;; esac')], A1T,
+      'G5: the HOME check compares the paths as written (2cfaac5)'),
+    M('W135', SS, [('case "$B" in "$H"*|/)', 'case "$B" in "$H"?*|/)')], A1T, 'G5: a base equal to HOME is accepted'),
+    M('W136', CLI, [("        res = {'status': 'halt', 'code': durable.DurableError(e.errno).code}",
+                     "        res = {'status': 'halt', 'code': 'DISK_FULL' if e.errno == 28 else 'WRITE_FAILED'}")],
+      ['test_g3_erofs_inside_a_stage_stops_read_only_fs'], 'G3: an EROFS inside a stage is WRITE_FAILED'),
+    M('W137', NAMES, [('STAGE_FREE_BYTES = 1048576, 2000, 2000000000', 'STAGE_FREE_BYTES = 1048576, 2000, 1500000000')],
+      ['t_d16_stage_refuses_low_space_before_runner'],
+      'CC-2: the amendment\'s 1.5 GB stage check, under the finish stage\'s peak with its save'),
+    M('W138', 'probe_p5.py', [("    ap.add_argument('--dir', required=True)                     # G8: never a default under HOME "
+                               "(read-only on the Dot)",
+                               "    ap.add_argument('--dir', default=os.path.join(os.environ.get('HOME', '/nonexistent'), "
+                               "'cps_probe_p5'))")],
+      ['test_g8_dir_required_never_under_home'], 'G8: probe_p5.py defaults its folder under HOME'),
+    M('W139', 'README.md', [('export CPS_VM_BASE=/tmp/cps\n[ -d /tmp/cps/repo/.git ]', '[ -d /tmp/cps/repo/.git ]')],
+      ['test_pf2_clear_bootstrap_runs_in_a_fresh_shell', 't_l14_readme_rules'],
+      'CC-3/PF-2: the bootstrap block (and so every clear message) without its export line'),
+    M('W140', 'README.md', [("The maintainer's message gives you the bootstrap of\nsection 1 with its values filled in (`COMMIT`, "
+                             "`--hint` and a new `--kit` value). Run it exactly, as one command\nthrough the elevated route, then "
+                             "`go`.", "The maintainer's message gives you a bootstrap line\nwith a new `--kit` value. Run that line "
+                             "exactly, then `go`.")],
+      ['t_l14_readme_rules'], 'PF-2: README section 6 asks for the one-line clear of 2cfaac5'),
+    M('W141', 'README.md', [("Between two checks of\n   such a conversation run `sleep 300` in the foreground through the standard "
+                             "route. ", '')],
+      ['t_l14_readme_rules'], 'PF-3: the README gives no waiting method between conversation checks'),
+    M('W142', 'README.md', [(' and the claim is younger than 6\n   hours', '')],
+      ['t_l14_readme_rules'], 'PF-1: the README omits the 6-hour claim rule'),
+    M('W143', 'README.md', [('This is the one HANDBACK C stop you clear yourself: tell the owner, run the bootstrap\n  once '
+                             '(with your notes), then `go`.', 'Tell the owner and wait for a maintainer message.')],
+      ['t_l14_readme_rules'], 'PF-8: SETUP_MISSING waits for a maintainer message although the bootstrap cures it'),
 ]
 HAND_OPEN = {'W57': 'retired in r4 (APPROVAL comes before HEAD): no mutant'}
 # Builder mutants whose path v2.1 deleted (§2.13, §2.15.1): no substitution, recorded with the reason.
@@ -1141,7 +1184,7 @@ def main(work, jobs, only=(), selftest=False):
                       'killed_by': {r['id']: r.get('killed_by', [])[:3] for r in rs if r['result'] == 'KILLED'}}
     import run_tests                                    # GAP-6: the helper tree and commit the counts belong to
     doc = {'schema': 'cps.vm2-mutants.v2', 'mutants': len(applicable), 'helper_tree_sha256': run_tests.tree_sha(),
-           'commit': git(REPO, 'rev-parse', 'HEAD').stdout.strip(),
+           'commit': git(REPO, 'rev-parse', 'HEAD').stdout.strip(), **run_tests.git_record(),
            'killed': sum(r['result'] == 'KILLED' for r in results), 'results': results, 'baselines': bases,
            'not_applicable': not_applicable, 'hand_open': HAND_OPEN, 'deleted': DELETED, 'guards': gres,
            'table': [{'id': m['id'], 'file': m['path'], 'what': m['what'], 'kill_tests': m['kill']}

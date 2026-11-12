@@ -2538,11 +2538,13 @@ def t_d5_halted_restore_no_cleared_local():
 
 def t_d16_stage_refuses_low_space_before_runner():
     """D16 (SD-69, W108): free space one byte below STAGE_FREE_BYTES plus the margin: STOP DISK_FULL step stage before
-    FOREGROUND.json and before the runner; at exactly that value the stage runs. Amendment A7 (W128): the value covers
-    the largest stage's peak on /tmp, M009's 403-page render (about 550 MB) held twice (visual_qa renders into TMPDIR,
-    now BASE/tmp, then copies into the job folder) plus the LibreOffice profile (about 16 MB, M008)."""
+    FOREGROUND.json and before the runner; at exactly that value the stage runs. Amendment A7 (W128) and its fix round
+    (CC-2, W137): the value covers the finish stage's peak on /tmp through the save that follows it, with M009's sizes:
+    the job folder (about 590 MB), the commit's PNG parts and entry in outbox/journal (about 590 MB, written inside the
+    stage by commit_end) and their download-back into inbox/verify (about 590 MB, which no later check covers). The
+    render's own peak (550 MB twice in TMPDIR and the job folder, plus 16 MB) is below that."""
     from cpsvm2.vio import v1reuse
-    assert N.STAGE_FREE_BYTES >= 2 * 550 * 10 ** 6 + 16 * 10 ** 6, N.STAGE_FREE_BYTES
+    assert N.STAGE_FREE_BYTES >= 3 * 590 * 10 ** 6 >= 2 * 550 * 10 ** 6 + 16 * 10 ** 6, N.STAGE_FREE_BYTES
     for short, want_stop in ((1, True), (0, False)):
         with fw() as w:
             code, idle = to_idle(w)
@@ -2625,6 +2627,39 @@ def t_a6_stage_empties_tmp_and_sets_tmpdir():
         assert at == {'tmpdir': str(t), 'left': [], 'foreground': True}, at
 
 
+def t_g2_tmp_emptied_before_space_check():
+    """Fix round G2 (W132): BASE/tmp is emptied before the stage's space check. A killed render's files there (here one
+    planted file stands for them) never count against STAGE_FREE_BYTES: the free space reported is one byte short while
+    the file exists and exactly enough once it is gone, and the stage runs instead of stopping DISK_FULL."""
+    from cpsvm2 import worker
+    from cpsvm2.vio import v1reuse
+    env = stage_env('g2')
+    t = env.lay.base / 'tmp'
+    t.mkdir()
+    (t / 'left_by_a_killed_render.png').write_bytes(b'invented page' * 1000)
+    real, need = shutil.disk_usage, N.STAGE_FREE_BYTES + 64 * 1024 * 1024
+    seen_at, out = {}, io.StringIO()
+
+    def du(p):
+        r = real(p)
+        return type(r)(r.total, r.used, need - (1 if (t / 'left_by_a_killed_render.png').exists() else 0))
+
+    def fake(k, info, e):
+        seen_at['ran'] = True
+        return {'status': 'done'}
+    wd, v1reuse.shutil.disk_usage, worker.dispatch = worker.dispatch, du, fake
+    code, tmp0 = None, os.environ.get('TMPDIR')
+    try:
+        with contextlib.redirect_stdout(out):
+            cli.run_stage(env, 'chain', {'run': 'E20261110T000000Z/c1', 'first': 'prepare'})
+    except cli.Out as o:
+        code = o.code
+    finally:
+        v1reuse.shutil.disk_usage, worker.dispatch = real, wd
+        os.environ.pop('TMPDIR', None) if tmp0 is None else os.environ.update(TMPDIR=tmp0)
+    assert code is None and seen_at.get('ran') and not env.p.halt.exists(), out.getvalue()
+
+
 def t_a5_stage_stops_setup_missing():
     """Amendment A5 (W127): a stage needs the setup marker of this boot and commit in TOOLS. Without it (TOOLS gone) or
     with another boot's, `go` prints STOP SETUP_MISSING before FOREGROUND.json and the runner, writes no HALT.json
@@ -2656,7 +2691,8 @@ def fakes_rm(p):
 
 
 def t_a4_stale_temp_names_in_runtime_ignored():
-    """Amendment A4a (W122): a killed write_atomic leaves .tmp_<pid>_<name> in runtime/. With a run in flight the kit
+    """Amendment A4a (W122; fix round G4, W133): a killed write_atomic leaves .tmp_<pid>_<name> in runtime/ (one-digit
+    pids on the Dot, any number of digits elsewhere). With a run in flight the kit
     check (unpack_kit) must not see it: cleanup_leftovers, which every command runs under the lock first, removes
     such names, and the verdict is the one without them ('same'; 'config' for a config-only change), never
     KIT_CHANGE_WITH_RUN_IN_FLIGHT. A kit member stays."""
@@ -2666,7 +2702,7 @@ def t_a4_stale_temp_names_in_runtime_ignored():
     m = {'RELEASE.json': b'{"invented": 1}\n', 'VM_HELPER_CONFIG.json': b'{"invented": 2}\n', 'tables/T.json': b'{}\n'}
     assert v1reuse.unpack_kit(lay, m, False) == 'unpacked'
     for cfg, want in ((m['VM_HELPER_CONFIG.json'], 'same'), (b'{"invented": 3}\n', 'config')):
-        for n in ('.tmp_2_VM_HELPER_CONFIG.json', '.tmp_3_x'):
+        for n in ('.tmp_2_VM_HELPER_CONFIG.json', '.tmp_3_x', '.tmp_48213_VM_HELPER_CONFIG.json'):   # G4 (W133): any pid
             (lay.runtime / n).write_bytes(b'left by a killed command')
         v1mod.cleanup_leftovers(lay)
         assert v1reuse.unpack_kit(lay, dict(m, **{'VM_HELPER_CONFIG.json': cfg}), True) == want
@@ -3007,7 +3043,7 @@ def t_gap04_moved_pending_foreign_copy_forks():
     env.work = None
 
 
-TESTS = [t_a6_stage_empties_tmp_and_sets_tmpdir, t_a5_stage_stops_setup_missing, t_a4_stale_temp_names_in_runtime_ignored,
+TESTS = [t_a6_stage_empties_tmp_and_sets_tmpdir, t_g2_tmp_emptied_before_space_check, t_a5_stage_stops_setup_missing, t_a4_stale_temp_names_in_runtime_ignored,
          t_a4_stale_png_stream_and_validate_removed, t_d5_clear_check_found_accepted, t_d11_drill_genesis_refuses_existing_ledger, t_d11_session_download_names_kept, t_d11_local_download_checked_at_go, t_d11_link_copy_download_keeps_the_head, t_d11_head_download_slips_and_no_block, t_d11_session_slip_voids_only_its_name, t_d11_clear_check_routes_found_only_to_its_find, t_d5_settle_root_mode_link_and_file_targets, t_d11_stop_block_sticky_only_for_handback_c, t_d11_on_found_handback_and_absent, t_d11_found_raw_path_rules, t_maint2_inventory_rehashed_at_attest, t_d11_parse_raw_edges, t_gap02_files_found_before_settle, t_gap04_moved_pending_foreign_copy_forks, t_c1_post_failure_finishes_pending_halt_first, t_d5_kit_in_use_never_checks, t_d5_halted_kit_never_checks, t_commit_entry_then_parts, t_commit_duplicates_same_md5_kept, t_commit_fork_foreign_md5,
          t_commit_bounded_reupload, t_commit_late_appearing_copy_is_harmless, t_commit_md5_hidden_download_back,
          t_commit_refused_upload_find_before_reupload, t_commit_rebase_absence_third_check,

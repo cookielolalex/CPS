@@ -388,26 +388,46 @@ README_RULES = (                                # D10, OPX-04, OPX-09, D3, D4, D
     'leave `prefix_rule` empty',
     'run no helper command',
     'never end your turn and never set a wait or a wake-up',
-    '`CPS paused while a helper command ran: reply continue to resume.`',
+    '`CPS paused while a helper command or a CPS conversation ran: reply continue to resume.`',
     'Never use `ps`, `kill` or a process id to judge whether a helper command runs',
     'never start that command again yourself. Run `go` once and do the block it prints.',
     'Retry it once through the same route. If the review stops it again, stop and tell the owner `REVIEW_STOPPED`',
-    'Never run it again through the elevated route or in another folder. Stop and tell the owner `READ_ONLY_FS`',
+    'Never run it again through the elevated route or in another folder (the bootstrap is the exception, section 1). '
+    'Stop and tell the owner `READ_ONLY_FS`',
     '`go` stops with `STOP SETUP_MISSING HANDBACK C` before the stage',
-    'A runner stage needs 1.5 GB free there',
+    # the amendment's fix round (delta v2.1 §9.8; W139-W143): the clear bootstrap, waits, the 6-hour claim, the exceptions
+    'run exactly that, as one command through the elevated route, then run `go`. Never run `session_start.sh` alone',
+    'The maintainer\'s message gives you the bootstrap of section 1 with its values filled in',
+    'It holds nothing of the series, so it is the one command you start again yourself',
+    'This is the one HANDBACK C stop you clear yourself: tell the owner, run the bootstrap once (with your notes)',
+    'Between two checks of such a conversation run `sleep 300` in the foreground through the standard route',
+    'Check it once every 5 minutes, with `sleep 300` in the foreground between checks',
+    'A worker or a scheduled check (for example a mailbox check run by a worker) never runs the bootstrap or a helper '
+    'command',
+    'Uploads are never retried: an upload the review refused follows section 3.1.',
+    'One inside the runner\'s tools shows as another stop of the helper',
+    'the claim is younger than 6 hours',
+    'If it does not say, tell the owner `MAILBOX_UNSETTLED` (case C) and do not run `go`.',
+    'the polls and checks are estimates until the stage times and conversation lengths are measured on this VM',
+    'A runner stage needs 2 GB free there',
 )
 README_ABSENT = ('STOP IDLE', 'then=', 'AWAIT_CONVERSATION', 'OPENED', 'LIST ', '/home/agent/cps', '~/cps/',
-                 '~/cps-deliveries')
+                 '~/cps-deliveries', 'Run that line exactly', 'bootstrap line', 'come from the stage times')
 
 
 def t_l14_readme_rules():
-    """L14 (W20, W95, W104, W105, W130, W131): the README keeps its rules verbatim (the outcome rule with UNSURE as the
-    default, the refused-upload notes, the never-work-around and never-repeat sentences, NO_BLOCK, the RAW_INVALID
+    """L14 (W20, W95, W104, W105, W130, W131, W139-W143): the README keeps its rules verbatim (the outcome rule with
+    UNSURE as the default, the refused-upload notes, the never-work-around and never-repeat sentences, NO_BLOCK, the RAW_INVALID
     table, the INPUTS_CHANGED step, the attested times, the DOWNLOAD route; amendment A1-A3: the /tmp/cps base, the two
     routes, the operating rules with REVIEW_STOPPED, READ_ONLY_FS and SETUP_MISSING, the disk need) and none of the
-    removed tokens (also no old ~/cps or /home/agent/cps path)."""
+    removed tokens (also no old ~/cps or /home/agent/cps path). Fix round (CC-3, W139): the bootstrap block itself
+    exports the base before it runs session_start.sh."""
     readme = open(os.path.join(VM2, 'README.md'), encoding='utf-8').read()
     flat = ' '.join(readme.split())
+    blk = readme.split('<!-- bootstrap:begin -->', 1)[1].split('<!-- bootstrap:end -->', 1)[0].splitlines()
+    ex = [i for i, ln in enumerate(blk) if ln == 'export CPS_VM_BASE=/tmp/cps']
+    ss = [i for i, ln in enumerate(blk) if 'session_start.sh' in ln]
+    assert len(ex) == 1 and len(ss) == 1 and ex[0] < ss[0], 'L14: the bootstrap block exports CPS_VM_BASE first'
     missing = [r for r in README_RULES if ' '.join(r.split()) not in flat]
     assert not missing, 'L14: README lacks %s' % missing
     for o in ('NOTHING_WRITTEN', 'WRITTEN', 'UNSURE', 'NO_CONVERSATION'):

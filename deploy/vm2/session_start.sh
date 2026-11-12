@@ -20,14 +20,14 @@ if [ -n "$HINT$KIT" ]; then
   [[ "$HINT" =~ ^[0-9]{6}$ && "$KIT" =~ ^[0-9a-f]{12}$ ]] || { echo "usage: --hint <seq6> --kit <hex12>"; exit 2; }
 fi
 
-# 1. HOME, BASE, TOOLS: absolute, no whitespace or quote; BASE is set (no default), outside HOME, not a git checkout
+# 1. HOME, BASE, TOOLS: absolute, no whitespace or quote; BASE is set (no default), resolved outside HOME, no git checkout
 case "${HOME:-}" in /*) ;; *) stop SESSION_LAYOUT ;; esac
 BASE="${CPS_VM_BASE:-}"
 TOOLS="${CPS_TOOLS:-$HOME/cps-tools}"
 case "$BASE" in /*) ;; *) stop SESSION_LAYOUT ;; esac
 case "$TOOLS" in /*) ;; *) stop SESSION_LAYOUT ;; esac
 case "$HOME$BASE$TOOLS" in *[[:space:]\'\"\\\$\`]*) stop SESSION_LAYOUT ;; esac
-case "$BASE/" in "$HOME"/*) stop SESSION_LAYOUT ;; esac
+B=$(cd "$BASE" 2>/dev/null && pwd -P)/ H=$(cd "$HOME" 2>/dev/null && pwd -P)/; case "$B" in "$H"*|/) stop SESSION_LAYOUT ;; esac
 [ -e "$BASE/.git" ] && stop SESSION_LAYOUT
 
 # 2. this script runs from BASE/repo, a clean checkout; a git error is a STOP, never a pass (SAFE-06)

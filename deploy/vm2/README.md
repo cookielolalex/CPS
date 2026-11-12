@@ -4,8 +4,9 @@ This page is for the Dot, the operator of CPS jobs on the VM. The helper prints 
 what the block says, then run what its last line says. You never decide anything about the journal yourself.
 
 Specification: `docs/handoff/VM_HELPER_V2_SPEC.md`, changed by `docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md` and
-`docs/handoff/VM_HELPER_V21_DELTA.md`. This page includes the v2.1 amendment from probes M008 to M012 (delta section
-9): the helper's files are under `/tmp/cps`, each command has its route, and section 2.4 gives the operating rules.
+`docs/handoff/VM_HELPER_V21_DELTA.md`. This page includes the v2.1 amendment from probes M008 to M012 and its fix
+round (delta section 9): the helper's files are under `/tmp/cps`, each command has its route, and section 2.4 gives
+the operating rules.
 
 ## 1. After a reset, or in a new operator chat
 
@@ -41,11 +42,20 @@ bash /tmp/cps/repo/deploy/vm2/session_start.sh --commit "$COMMIT" [--hint <seq6>
   once more. A second failure: stop and tell the owner `SESSION_GIT_ERROR` (case C).
 - `session_start.sh` prints `CPSV-REPO commit=<40 hex>`. Keep that line in your notes together with the last `CPSV`
   line you saw.
-- When a maintainer message gives you a bootstrap line (for example with a new `--kit` value to clear a stop, section
-  6), run exactly that line instead, then run `go`.
-- A stage needs the setup of this boot and commit. If `~/cps-tools` is gone or was set up for another boot or commit,
-  `go` stops with `STOP SETUP_MISSING HANDBACK C` before the stage, and nothing changes: tell the owner, and run the
-  bootstrap when the maintainer's message gives you its line.
+- **A maintainer's bootstrap.** When a maintainer message gives you a bootstrap (the block above with `COMMIT`,
+  `--hint` and a new `--kit` value filled in, for example to clear a stop, section 6), run exactly that, as one
+  command through the elevated route, then run `go`. Never run `session_start.sh` alone: without the line
+  `export CPS_VM_BASE=/tmp/cps` it stops with `SESSION_LAYOUT`.
+- **The bootstrap may be run again.** It holds nothing of the series, so it is the one command you start again
+  yourself: if it died, if its session is gone, or if you ran it through the standard route by mistake (it then
+  shows `Read-only file system`), run it once more through the elevated route. If it dies again, tell the owner
+  `NO_BLOCK`; if it shows `Read-only file system` through the elevated route, tell the owner `READ_ONLY_FS` (both
+  case C).
+- **`STOP SETUP_MISSING HANDBACK C`.** A stage needs the setup of this boot and commit. If `~/cps-tools` is gone, was
+  set up for another boot or commit, or its setup failed, `go` stops with `STOP SETUP_MISSING HANDBACK C` before the
+  stage, and nothing changes. This is the one HANDBACK C stop you clear yourself: tell the owner, run the bootstrap
+  once (with your notes), then `go`. If `go` stops with `SETUP_MISSING` again, wait for a maintainer message (the
+  setup's log stays in `/tmp/cps/outbox`).
 
 ## 2. The rule
 
@@ -68,11 +78,11 @@ starts with `CPSV ` through the `DO:` line, which is always the last line. If th
 owner `NO_BLOCK` (case C).
 
 **Routes.** Your command tool runs each command through one of two routes, chosen by `sandbox_permissions`. Run the
-bootstrap of section 1 through the elevated route (`require_escalated`). Run everything else for the helper through
-the standard route (`use_default`): every helper command (`bash /tmp/cps/vm.sh ...`) and every file you write for the
-helper (the saved search results under `/tmp/cps/attest`, the `cp` of a download to the path a DOWNLOAD line names,
-the final message and tool lists, the everyday inputs and the personal copy). The standard route can write `/tmp`,
-where all of these are. Never move a helper command to the elevated route because it failed (section 2.4). Create no
+bootstrap of section 1, also one that a maintainer message gives you, through the elevated route
+(`require_escalated`). Run everything else for the helper through the standard route (`use_default`): every helper
+command (`bash /tmp/cps/vm.sh ...`) and every file you write for the helper (the saved search results under
+`/tmp/cps/attest`, the `cp` of a download to the path a DOWNLOAD line names, the final message and tool lists, the
+everyday inputs and the personal copy). The standard route can write `/tmp`, where all of these are. Never move a helper command to the elevated route because it failed (section 2.4). Create no
 standing approval and no prefix rule: leave `prefix_rule` empty.
 
 A refusal (exit 4) adds one line `REFUSED <CODE>` right after the header, sometimes followed by the key or the file
@@ -120,8 +130,8 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
 
 ### 2.2 Qualification and drill (series Q1, D1)
 
-1. The maintainer gives you the commit and the kit (the `--hint 000000 --kit` value of the first session). Run the
-   bootstrap of section 1, then `go`.
+1. The maintainer gives you the commit and the kit (the `--hint 000000 --kit` value of the first session). Check
+   rule 8 of section 2.4 first. Then run the bootstrap of section 1, then `go`.
 2. Follow every block. The helper runs the kit's job list in this order: first the cases without a source, as
    nonattempts, all of them for reader A and then all of them for reader B; then reader A for every other case in the
    list's order; then reader B for every case in the same order. A run that the helper restarts comes right after it.
@@ -155,29 +165,43 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
 
 ### 2.4 Operating rules
 
-1. Work in the conversation that the owner's or the maintainer's message started. Never hand a helper command, a
-   stage or a block's UPLOAD, FIND or DOWNLOAD lines to another conversation or worker. The conversations the helper
-   asks you to open (the generator, the scope reader and the visual reviewer) run no helper command; never ask them
-   to run one.
+1. Work in the coordinating conversation: the one in which the owner (or a user) talks to you, which a maintainer
+   message's `CLAIM.md` names. A worker or a scheduled check (for example a mailbox check run by a worker) never runs
+   the bootstrap or a helper command. Never hand a helper command, a stage or a block's UPLOAD, FIND or DOWNLOAD lines
+   to another conversation or worker. The conversations the helper asks you to open (the generator, the scope reader and
+   the visual reviewer) run no helper command; never ask them to run one.
 2. Run each helper command in the foreground and poll its own session until it exits (section 2).
-3. Prefer polling to waiting. While a helper command runs, never end your turn and never set a wait or a wake-up.
-   The scheduled mailbox check does nothing while your work is claimed, so it will not resume this conversation. If
-   your turn ends anyway, end your last message to the owner with exactly this line:
-   `CPS paused while a helper command ran: reply continue to resume.`
-   When the owner replies `continue`, poll that command's session; if you no longer have it, follow rule 5.
+3. Prefer polling to waiting. While a helper command runs, and while a conversation you opened for the helper (S, G
+   or V) has not ended, never end your turn and never set a wait or a wake-up of the platform. Between two checks of
+   such a conversation run `sleep 300` in the foreground through the standard route. If your turn ends anyway, end
+   your last message to the owner with exactly this line:
+   `CPS paused while a helper command or a CPS conversation ran: reply continue to resume.`
+   When the owner replies `continue`, poll that command's session or check that conversation; if you no longer have
+   the command's session, follow rule 5.
 4. Never use `ps`, `kill` or a process id to judge whether a helper command runs: each command has its own process
    space, and the ids repeat. Only the helper's own lines decide: `CPSV-RUNNING`, `CPSV-BUSY` and the block.
 5. If a poll says that the process is unknown, or the session is gone, never start that command again yourself. Run
    `go` once and do the block it prints. After a stage died, that block is `STOP FOREGROUND_DIED HANDBACK C` (after
    the self-test: `STOP SELFTEST_DIED HANDBACK C`, or, the first time, the self-test once more). If the dead command
-   ran no stage, it is the block to follow. If the command still runs, `go` prints `CPSV-BUSY` and `DO: POLL`.
-6. A request that the platform's automatic review stopped before it ran (for example a review timeout) has not run.
-   Retry it once through the same route. If the review stops it again, stop and tell the owner `REVIEW_STOPPED`, the
-   command and the review's message. Only the bootstrap goes through the elevated route and its review.
+   ran no stage, it is the block to follow. If the command still runs, `go` prints `CPSV-BUSY` and `DO: POLL`. The
+   bootstrap is the exception (section 1).
+6. A command that the platform's automatic review stopped before it ran (for example a review timeout) has not run.
+   Only the bootstrap goes through the elevated route and its review. Retry it once through the same route. If the
+   review stops it again, stop and tell the owner `REVIEW_STOPPED`, the command and the review's message, and ask the
+   owner to approve it; when the owner says it is approved, run it again, and this rule applies afresh. Uploads are
+   never retried: an upload the review refused follows section 3.1.
 7. Any `Read-only file system` in a command's output means that the command wrote outside `/tmp` or ran through the
-   wrong route. Never run it again through the elevated route or in another folder. Stop and tell the owner
-   `READ_ONLY_FS`, that line and your last `CPSV` line. A helper command that meets a read-only file system prints
-   `STOP READ_ONLY_FS HANDBACK C` itself.
+   wrong route. Never run it again through the elevated route or in another folder (the bootstrap is the exception,
+   section 1). Stop and tell the owner `READ_ONLY_FS`, that line and your last `CPSV` line, then wait for a maintainer
+   message (case C). When the helper's own write meets a read-only file system, it prints
+   `STOP READ_ONLY_FS HANDBACK C` itself. One inside the runner's tools shows as another stop of the helper (for
+   example `RUNNER_REFUSED`); follow that block.
+8. The scheduled mailbox check does nothing while a maintainer message is claimed and the claim is younger than 6
+   hours, so it will not resume this conversation. Once the claim is 6 hours old, the check uploads a
+   `REPLY_ABANDONED_` file for that message, tells the owner and lets later runs take the next open message. A drill
+   or a qualification series runs far longer than 6 hours: start one (section 2.2) only when the message that starts
+   it says how the scheduled mailbox check is handled for the series (for example that the owner paused it). If it
+   does not say, tell the owner `MAILBOX_UNSETTLED` (case C) and do not run `go`.
 
 ## 3. The actions (the `DO:` line)
 
@@ -188,8 +212,8 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
 | `ATTEST ... answer --at A k1=PATTERN1 ...` | run `answer` with a real value for each key, matching the pattern named | follow the output |
 | `ATTEST after=T bash ... answer ...` | as above; `list_shows_none=yes` means your conversation list shows **no** conversation of that role (section 4) with `attachedAt` at or after T, and `conversation=` is the id of the conversation of that role with `attachedAt` at or after T | follow the output |
 | `POLL` | another helper command still runs: go back to its session and poll it until it exits, then follow its block. If you no longer have that session, `WAIT seconds=60`, then run `go` | follow that block |
-| `OPEN_CONVERSATION role=R prompt=P folder=F` | open a new conversation (Create Thread, same environment, no extra settings) and give it the full text of file P as its only message. Roles S and G may use only folder F. Role V may open only the PNG files the prompt lists (under F) and may write only `F/visual_review/VISUAL_REVIEW.json`. Never send it a follow-up message. Check it once every 5 minutes | when it has ended: write its final message to the file (section 4), run `go` |
-| `CONTINUE_CONVERSATION role=V conversation=C message=M` | send the text of file M in conversation C (the only message you ever send into an existing conversation). Check it once every 5 minutes | when it has ended: write its final message to the file, run `go` |
+| `OPEN_CONVERSATION role=R prompt=P folder=F` | open a new conversation (Create Thread, same environment, no extra settings) and give it the full text of file P as its only message. Roles S and G may use only folder F. Role V may open only the PNG files the prompt lists (under F) and may write only `F/visual_review/VISUAL_REVIEW.json`. Never send it a follow-up message. Check it once every 5 minutes, with `sleep 300` in the foreground between checks (section 2.4 rule 3) | when it has ended: write its final message to the file (section 4), run `go` |
+| `CONTINUE_CONVERSATION role=V conversation=C message=M` | send the text of file M in conversation C (the only message you ever send into an existing conversation). Check it once every 5 minutes, with `sleep 300` in the foreground between checks | when it has ended: write its final message to the file, run `go` |
 | `END_CONVERSATION role=R after=UTC [conversation=C]` | stop the CPS conversation of that role opened after UTC, if it is still running | run `go` |
 | `EXPORT_TRANSCRIPT role=R to=P [conversation=C] [after=UTC]` | export that conversation's transcript to P; if your platform cannot, do nothing | run `go` |
 | `NOTIFY_OWNER file=P ATTEST ... notified=YES` | tell the owner the content of P | run the answer |
@@ -199,12 +223,14 @@ again, then run `go`. Never edit, rename or delete a file on Drive.
 | `WAIT seconds=N` | run `sleep N` in the foreground (standard route); set no wait or wake-up of the platform | run `go` |
 | `STOP UPLOAD_REFUSED HANDBACK A name=N` | keep N in your notes as refused; tell the owner the code, the file name N and your last `CPSV` line, and ask the owner to approve or deny the upload in the platform | run `go` when the owner says so. Take N out of your notes only when the owner tells you the upload was approved or denied; if the owner only says to continue, keep N in your notes |
 | `STOP WAIT_APPROVAL HANDBACK A` | an upload of this series still waits for the owner (you answered `approval=pending`): ask the owner to approve or deny it | run `go` when the owner says so. Take it out of your notes only when the owner tells you it was approved or denied; if the owner only says to continue, keep it and answer `approval=pending` again |
+| `STOP SETUP_MISSING HANDBACK C` | the setup of this boot is missing: tell the owner, then run the bootstrap of section 1 once (with your notes) | run `go`; if it stops with `SETUP_MISSING` again, nothing until a maintainer message |
 | `STOP <CODE> HANDBACK C` | stop; upload nothing more; tell the owner the code, your last `CPSV` line and, for `SLIP_LIMIT`, the last REFUSED line you saw | nothing until a maintainer message (section 6) |
 | `STOP <CODE> HANDBACK B` | stop; tell the owner that qualification generation is complete | nothing |
 
 Handback letters: **A** the owner must do something in the platform (approve or deny an upload), then you run `go`
 and the series goes on; **B** the series is complete; **C** stop and wait for the maintainer (nothing more is
-uploaded). `STOP ... HANDBACK A` is the only stop after which you run the helper again without a new message.
+uploaded). Apart from `SETUP_MISSING` (section 1), `STOP ... HANDBACK A` is the only stop after which you run the
+helper again without a new message.
 
 ### 3.1 When the platform refuses an upload
 
@@ -332,8 +358,9 @@ instead. Follow the blocks; never re-open a conversation on your own.
 
 ## 6. When the maintainer clears a stop
 
-A `STOP <CODE> HANDBACK C` stays until the maintainer clears it. The maintainer's message gives you a bootstrap line
-with a new `--kit` value. Run that line exactly, then `go`. The helper first finds and downloads the new kit (one FIND
+A `STOP <CODE> HANDBACK C` stays until the maintainer clears it. The maintainer's message gives you the bootstrap of
+section 1 with its values filled in (`COMMIT`, `--hint` and a new `--kit` value). Run it exactly, as one command
+through the elevated route, then `go`. The helper first finds and downloads the new kit (one FIND
 block, one DOWNLOAD block) and checks that it names exactly your stop. If it does not, or if the kit cannot be found
 or downloaded, it prints the same STOP again: tell the owner, and wait for the next message. If it does, it continues
 from the journal as after a reset: answer its questions, `approval=` first. Do nothing else on the VM in between, and
@@ -345,9 +372,9 @@ has saved it; you never delete files on Drive.
 
 The helper's test harness counts the helper commands, Drive calls and saved search results on invented jobs; the
 conversation steps are counted from this page (each is one tool call: `date -u`, creating the conversation, reading it
-back, writing its final message to the file); the polls and checks come from the stage times and conversation lengths
-measured on this VM. Poll a running helper command each time the command tool returns; check a running conversation
-once every 5 minutes.
+back, writing its final message to the file); the polls and checks are estimates until the stage times and
+conversation lengths are measured on this VM. Poll a running helper command each time the command tool returns; check
+a running conversation once every 5 minutes, with `sleep 300` between checks.
 
 | item | helper commands | Drive calls | saved search results | conversation steps | polls and checks | tool calls in all |
 |---|---|---|---|---|---|---|
@@ -363,7 +390,7 @@ once every 5 minutes.
 
 **Disk.** `/tmp` is a 4.9 GB file system held in memory. It holds the repository copy, everything under `/tmp/cps`
 and the runner's temporary files in `/tmp/cps/tmp`, which the helper empties before every stage. A runner stage needs
-1.5 GB free there; with less the helper stops with `STOP DISK_FULL HANDBACK C` before the runner starts. Never delete
+2 GB free there; with less the helper stops with `STOP DISK_FULL HANDBACK C` before the runner starts. Never delete
 the helper's files to make room.
 
 A qualification (38 runs, 34 nonattempts, about 10 scope readers and continuations, about 10 restores, the start and

@@ -95,6 +95,31 @@ def readme_bootstrap():
     return [ln for ln in blk.splitlines() if ln.strip() and not ln.startswith('```')]
 
 
+def bootstrap_script(base, commit, hint):
+    """The README section 1 block as the Dot runs it, and as a maintainer's clear message gives it (README section 6,
+    delta v2.1 §9.8): COMMIT and the hint filled in, /tmp/cps read as this world's base, the clone a link to REPO."""
+    script = []
+    for ln in readme_bootstrap():
+        ln = ln.replace('/tmp/cps', str(base))             # the README's base (A1) is this World's base
+        if ln.startswith('COMMIT='):
+            ln = 'COMMIT=%s' % commit
+        elif 'git clone' in ln:
+            ln = '[ -d {0}/repo/.git ] || {{ mkdir -p {0} && ln -s {1} {0}/repo; }}'.format(
+                shlex.quote(str(base)), shlex.quote(str(REPO)))
+        elif 'session_start.sh' in ln:
+            ln = ln.replace(' [--hint <seq6> --kit <hex12>]', '')
+            if hint:
+                ln += ' --hint %s --kit %s' % hint
+        script.append(ln)
+    return '\n'.join(script)
+
+
+def dot_env(e):
+    """A fresh shell of the Dot (amendment fix round, CC-3): no CPS_VM_BASE or CPS_TOOLS preset, so only the block's
+    own export line sets the base (TOOLS is the default ~/cps-tools)."""
+    return {k: v for k, v in e.items() if k not in ('CPS_VM_BASE', 'CPS_TOOLS')}
+
+
 # ================================================================ the clock
 W_ABS_TEST = 2
 
@@ -738,21 +763,9 @@ class FakeDot:
 
     def bootstrap(self, commit, hint):
         w = self.w
-        script = []
-        for ln in readme_bootstrap():
-            ln = ln.replace('/tmp/cps', str(w.base))             # the README's base (A1) is this World's base
-            if ln.startswith('COMMIT='):
-                ln = 'COMMIT=%s' % commit
-            elif 'git clone' in ln:
-                ln = '[ -d {0}/repo/.git ] || {{ mkdir -p {0} && ln -s {1} {0}/repo; }}'.format(
-                    shlex.quote(str(w.base)), shlex.quote(str(REPO)))
-            elif 'session_start.sh' in ln:
-                ln = ln.replace(' [--hint <seq6> --kit <hex12>]', '')
-                if hint:
-                    ln += ' --hint %s --kit %s' % hint
-            script.append(ln)
-        p = subprocess.run(['bash', '-c', '\n'.join(script)], capture_output=True, text=True, env=w.env(),
-                           timeout=600)
+        assert w.tools == w.home / 'cps-tools', 'the Dot sets no CPS_TOOLS: TOOLS is ~/cps-tools'
+        p = subprocess.run(['bash', '-c', bootstrap_script(w.base, commit, hint)], capture_output=True, text=True,
+                           env=dot_env(w.env()), timeout=600)
         lines = [ln for ln in p.stdout.splitlines() if ln]
         seen.scan(lines)
         self.boot_err = p.stderr

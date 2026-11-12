@@ -742,8 +742,9 @@ REPORT_D16 = []
 
 
 def test_a1_base_required_outside_home_and_carried_by_launcher():
-    """Amendment A1 (W116, W117, W118): session_start.sh takes BASE only from CPS_VM_BASE. Without it, with a base inside
-    HOME (the old ~/cps) or with a quote in it, it stops SESSION_LAYOUT before it writes anything. With /tmp/cps-shaped
+    """Amendment A1 (W116, W117, W118; fix round G5: W134, W135): session_start.sh takes BASE only from CPS_VM_BASE.
+    Without it, with a base inside HOME (the old ~/cps, HOME itself, or one that only resolves into HOME) or with a
+    quote in it, it stops SESSION_LAYOUT before it writes anything. With /tmp/cps-shaped
     base it makes BASE/tmp and writes a vm.sh that exports CPS_VM_BASE and CPS_TOOLS with quoted absolute values, so a
     fresh shell with neither variable set runs the helper with them (python3 is a stand-in that prints them)."""
     home, env = _session_world('a1')
@@ -760,6 +761,18 @@ def test_a1_base_required_outside_home_and_carried_by_launcher():
                             '--commit', commit], capture_output=True, text=True, env=e, timeout=120)
         assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), (over, p.stdout)
         assert not (base / 'vm.sh').exists() and not (old / 'vm.sh').exists() and not (old / 'outbox').exists(), over
+    # fix round G5 (W134, W135): the HOME check compares resolved paths. Each base below has a repo link that passes the
+    # REPO check, so only the HOME check can stop it: HOME itself, a path through '..', a link into HOME, and HOME
+    # given with a trailing slash.
+    os.symlink(REPO, home / 'repo')
+    os.symlink(old, base.parent / 'link_into_home')
+    for b, h in ((home, home), (Path(str(base.parent) + '/../home/cps'), home), (base.parent / 'link_into_home', home),
+                 (old, str(home) + '/')):
+        p = subprocess.run(['bash', str(Path(b) / 'repo/deploy/vm2/session_start.sh'), '--commit', commit],
+                           capture_output=True, text=True, env=dict(env, CPS_VM_BASE=str(b), HOME=str(h)), timeout=120)
+        assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), (b, h, p.stdout)
+        assert not (Path(b) / 'vm.sh').exists() and not (old / 'outbox').exists() and not (home / 'outbox').exists(), b
+    os.unlink(home / 'repo')
     q = Path(str(base).replace('/cps', "/c'ps"))
     q.mkdir(parents=True)
     os.symlink(REPO, q / 'repo')
@@ -780,6 +793,32 @@ def test_a1_base_required_outside_home_and_carried_by_launcher():
         base, home / 'tools', base), (p.stdout, p.stderr)
 
 
+def test_pf2_clear_bootstrap_runs_in_a_fresh_shell():
+    """Fix round PF-2/G1/CC-1/CC-3 (W139): a maintainer's clear gives the README section 1 block with COMMIT, --hint and
+    the new --kit filled in (README sections 1 and 6, delta v2.1 §9.8), and the Dot runs it as one command in a fresh
+    shell, with neither CPS_VM_BASE nor CPS_TOOLS set. It bootstraps from the block's own export line: CPSV-REPO, the
+    launcher under the base and the hint. The pre-amendment one-line form (session_start.sh alone, here with the base
+    path) stops SESSION_LAYOUT in that shell and writes nothing."""
+    import fakes
+    home, env = _session_world('pf2')
+    base, commit = Path(env['CPS_VM_BASE']), _head()
+    (home / 'cps-tools/var').mkdir(parents=True)
+    (home / 'cps-tools/var/cps_vm2_setup_ok').write_text('0f0e0d0c-0b0a-4908-8706-050403020100 %s\n' % commit)
+    fresh = ['env', '-i', 'PATH=/usr/bin:/bin', 'HOME=%s' % home, 'CPS_VM_BOOT_ID_PATH=%s' % env['CPS_VM_BOOT_ID_PATH']]
+    one = 'bash %s/repo/deploy/vm2/session_start.sh --commit %s --hint 000005 --kit 0123456789ab' % (base, commit)
+    p = subprocess.run(fresh + ['bash', '-c', one], capture_output=True, text=True, timeout=120)
+    assert (p.returncode, p.stdout.splitlines()[-1:]) == (3, ['DO: STOP SESSION_LAYOUT HANDBACK C']), p.stdout
+    assert not (base / 'vm.sh').exists() and not (base / 'outbox').exists()
+    script = fakes.bootstrap_script(base, commit, ('000005', '0123456789ab'))
+    assert 'export CPS_VM_BASE=%s\n' % base in script, script
+    p = subprocess.run(fresh + ['bash', '-c', script], capture_output=True, text=True, timeout=120)
+    out = p.stdout.splitlines()
+    assert p.returncode == 0 and 'CPSV-REPO commit=%s' % commit in out and out[-1] == 'DO: RUN bash %s/vm.sh go' % base, \
+        (p.stdout, p.stderr)
+    assert json.loads((base / 'outbox/v2/HINT.json').read_text()) == {'kit': '0123456789ab', 'seq': 5}
+    assert "export CPS_VM_BASE='%s' CPS_TOOLS='%s'\n" % (base, home / 'cps-tools') in (base / 'vm.sh').read_text()
+
+
 DIRECT = [test_f1_core_continued_v_is_t46, test_f2_second_start_only_after_no_conversation,
           test_f3_core_classify_reads_only_the_head, test_f6_every_block_has_exactly_one_terminal_action,
           test_f7_core_transcript_member_required, test_safe01_unsupported_entries_halt_nothing_deleted,
@@ -796,7 +835,8 @@ DIRECT = [test_f1_core_continued_v_is_t46, test_f2_second_start_only_after_no_co
           test_fork_at_restore_lagging_n_plus_1, test_rewalk_forces_written,
           test_no_conversation_list_gate_required, test_s08_wrong_head_stops_before_setup,
           test_opx08_kit_none_bootstraps_without_hint, test_gap11_session_start_removes_pycache,
-          test_d16_evict_runner_frozen_folder_nonroot, test_a1_base_required_outside_home_and_carried_by_launcher]
+          test_d16_evict_runner_frozen_folder_nonroot, test_a1_base_required_outside_home_and_carried_by_launcher,
+          test_pf2_clear_bootstrap_runs_in_a_fresh_shell]
 DELEGATE = {'test_f4_outcomes_total_over_frozen_shapes': 'test_core_table',
             'test_tst01_second_start_same_attempt_chain_invalid': 'test_core_table',
             'test_f5_audit_planted_restore_unknown_to_final': 'test_maint',

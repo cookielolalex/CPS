@@ -379,8 +379,9 @@ def D_base_wiped_same_boot_restores(w):
 
 def D_tools_wiped_same_boot_continues(w):
     """Amendment A5 (ii) (W127): TOOLS (~/cps-tools) is gone in the same boot while BASE stays. The next stage stops with
-    STOP SETUP_MISSING before the runner, and nothing is sticky (no HALT.json). The light setup runs again (simulated, as
-    in every World) and the Dot runs the bootstrap; the helper continues from BASE: no RESTORE after the wipe, FINAL."""
+    STOP SETUP_MISSING before the runner, and nothing is sticky (no HALT.json; a second `go` prints the same stop). The
+    Dot then does what README section 1 says (fix round PF-8): it runs the bootstrap once, whose light setup runs again
+    (simulated, as in every World), and the helper continues from BASE: no RESTORE after the wipe, FINAL."""
     code, lines = go(w)
     w.dot.hook = lambda dot, ls: 'stop' if hdr(ls).get('head') == '000003' else None
     code, lines = w.dot.run(code, lines)

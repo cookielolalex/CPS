@@ -1,4 +1,4 @@
-<!-- Status: PLAN (spec delta r5) for cps-vm-helper.v2.1; not built, not reviewed, not admitted. Written 2026-11-11 from deploy/vm2/ADMISSION_VM_HELPER_V2.json (admission review 2 of 1d31801: DO_NOT_ADMIT, 47 findings), the reviewers' findings and probes, and the maintainer decisions D1-D16 for v2.1. Revised the same day (r4) after three critic lenses (integrity, operator, tests); section 7 answers each of their 35 gaps. Amended the same day (r5) by maintainer decision D16, which carries the operator's answers to probe M007 (facts F1-F8, invented data) into the plan; section 7.4 says what r5 changed and where. Applies on top of docs/handoff/VM_HELPER_V2_SPEC.md r2 and docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md. Section 9 (2026-11-12) records the post-build amendment from probes M008-M012; not reviewed, not admitted. -->
+<!-- Status: PLAN (spec delta r5) for cps-vm-helper.v2.1; not built, not reviewed, not admitted. Written 2026-11-11 from deploy/vm2/ADMISSION_VM_HELPER_V2.json (admission review 2 of 1d31801: DO_NOT_ADMIT, 47 findings), the reviewers' findings and probes, and the maintainer decisions D1-D16 for v2.1. Revised the same day (r4) after three critic lenses (integrity, operator, tests); section 7 answers each of their 35 gaps. Amended the same day (r5) by maintainer decision D16, which carries the operator's answers to probe M007 (facts F1-F8, invented data) into the plan; section 7.4 says what r5 changed and where. Applies on top of docs/handoff/VM_HELPER_V2_SPEC.md r2 and docs/handoff/VM_HELPER_V2_SPEC_DELTA_PROBES.md. Section 9 (2026-11-12) records the post-build amendment from probes M008-M012 and its fix round (§9.8); not reviewed, not admitted. -->
 
 # cps-vm-helper.v2.1: delta r5 to SPEC_V2 r2 and the probe delta
 
@@ -17,7 +17,8 @@ Authority, in this order:
 3. The admission record `deploy/vm2/ADMISSION_VM_HELPER_V2.json`.
 4. r2 and the probe delta.
 
-Decisions this plan makes beyond D1-D16 are numbered **SD-35** to **SD-71** and listed again in §6.1.
+Decisions this plan makes beyond D1-D16 are numbered **SD-35** to **SD-71** and listed again in §6.1. The amendment's
+are SD-72 to SD-76 (§9.2) and its fix round's SD-77 to SD-82 (§9.8.2).
 
 Notation:
 - `C`, `M` and `T` are the build tracks (§1.1).
@@ -117,7 +118,7 @@ Notation:
 | OPX-07 | minor | In `cli.load_cache`, a BLOCK.json behind the valid STATE's head moves alone to `invalid_<utc14>/` and the cache stays valid; a BLOCK.json ahead of it invalidates the cache. HALT.json takes the head and the kit from the journal (§2.4.1) | vio `t_opx07_stage_death_stop_names_real_head_and_kit`, `t_gap05_block_ahead_invalidates_cache` | W16, W50, W79 | C; T |
 | OPX-08 | minor | `session_start.sh`: `--kit none` (with any `--hint`) means no hint, and a no-hint bootstrap removes an older HINT.json. `cli.render`: a session block's header shows the head this session verified. README §1 | v1r `test_opx08_kit_none_bootstraps_without_hint` | W24, W73 | C; T |
 | OPX-09 | minor | (a) README run order (all nonattempts for A, then for B; all A runs; all B runs). (b) `STOP IDLE` leaves the README. (c) `drive.do_text` prints `STOP UPLOAD_REFUSED HANDBACK A name=<N>`. (d) The tools answer is redefined (D9). (e) Attested times are `date -u` readings, answered as printed. (f) NO_BLOCK also applies when there is no CPSV line. (g) A refused upload leaves the Dot's notes only when the owner says it was approved or denied. (h) D16 (F5, §2.16.3): README §3.1 says that the Dot never works around a refused upload and waits for the owner; every UPLOAD the helper prints must be inside the owner's standing approval (G-10) | vio `t_opx09_refused_stop_names_the_file`; lint `t_l14_readme_rules` (with the never-work-around sentence) | W25, W95, W105 | C; T; gate G-10 |
-| OPX-10 | plausible | README §7 budget (D15, SD-67): helper commands, Drive calls and saved results from `tests/budget_golden.json`, polls and conversation checks from G-3, restores without notes, the RECHECK, refused uploads (zero under G-10). FakeDot counts helper commands, Drive calls, saved results and waits (fakes.py) | v1r `test_opx10_tool_calls_match_budget_golden` (World extras `x_opx10` on the D baseline and on Q_baseline, `x_op07_restore`); lint `t_l14_readme_rules` (the README table equals the golden) | W26, W99 | C (README, fakes.py); T; gates G-3 (with M008, D16), G-10 |
+| OPX-10 | plausible | README §7 budget (D15, SD-67): helper commands, Drive calls and saved results from `tests/budget_golden.json`, polls and conversation checks from G-3, restores without notes, the RECHECK, refused uploads (zero under G-10). FakeDot counts helper commands, Drive calls, saved results and waits (fakes.py) | v1r `test_opx10_tool_calls_match_budget_golden` (World extras `x_opx10` on the D baseline and on Q_baseline, `x_op07_restore`); lint `t_l14_readme_rules` (the README table equals the golden) | W26, W99 | C (README, fakes.py); T; gates G-3 (with M009 and §9 A8, D16), G-10 |
 | T1 | major | tests only; the vacuous `test_f1_core_continued_v_is_t46` loop is replaced by fold-level items (§2.15.6) | ct `test_t1_continued_v_other_outcomes_t48` | N06 | T |
 | T2 | major | tests only | ct `test_t2_reader_b_waits_while_a_owes_restart`, with RESET_DIVERGED and A-restart1 controls | N07 | T |
 | T3 | major | tests only; `test_session_rebase_and_recheck_fork` is rebuilt so that it FORKs through the sha branch | ct `test_t3_recheck_second_writer_at_n2_n3_forks` | N18 | T |
@@ -140,9 +141,9 @@ Notation:
 | MAINT-9 | minor | `Audit.review` widens its window by the genesis gate `p3_clock_tolerance_seconds`, as `core/outcome.outcomes` does | mt `test_maint9_review_window_widened` | W42 | M |
 | MAINT-10 | minor | (a) C: `fold.jobs_of(jobs_doc)`, used by `cli.genesis`. M: the audit compares GENESIS `body.jobs` with `jobs_of` of the genesis kit's jobs file (`AUD_KIT` detail `jobs`). (b) C: `probe_p5.py start` refuses `--seconds` below `--min-gap` | mt `test_maint10_genesis_jobs_differ_from_kit_unclean`; p5 `test_maint10_probe_start_refuses_seconds_below_min_gap` | W43 (M), W44 (C) | C; M; T |
 | TST-MUT (blocking item) | major | `tests/mutants.py`: for each mutant, a local clone, the substitutions, a commit, the clean-HEAD check, then the run (§2.15.4). The copytree is deleted. The guard mutants are generated for fold, session and the commit and restore glue (§2.15.2) | `run_tests.py --mutants --selftest`: W45a gives HARNESS_ERROR; W45b's reset failures carry `bootstrap_stop` and are not KILLED; W13 is KILLED; the generated set holds the reviewer and v2.1 sites. D16: a mutant marked `nonroot` runs its killing set only in the non-root pass (§2.15.4, SD-71) | W45a, W45b | T |
-| D16-F2 (stage time) | D16 | no helper code. The release gate's hold check stays (`host.gates_problem`: every `stage_max_seconds` value + 60 <= `foreground_hold_seconds` <= `gates.p5_foreground_hold_seconds`, else RELEASE_GATE_OPEN). G-3 sets the values only after probe M008, by the rule of §5.4; OQ-25 holds the owner's choice if a stage does not fit. README's hold value is the release kit's (§3 notes) | none new: the existing gate tests stay; the values are kit data | none | gates G-3, G-9; OQ-25 |
+| D16-F2 (stage time) | D16 | no helper code. The release gate's hold check stays (`host.gates_problem`: every `stage_max_seconds` value + 60 <= `foreground_hold_seconds` <= `gates.p5_foreground_hold_seconds`, else RELEASE_GATE_OPEN). G-3 sets the values only from its own measurements through the helper (probe M009 measured the render outside it, §9 A8), by the rule of §5.4; OQ-25 holds the owner's choice if a stage does not fit. README's hold value is the release kit's (§3 notes) | none new: the existing gate tests stay; the values are kit data | none | gates G-3, G-9; OQ-25 |
 | D16-F6 (non-root) | D16 | SD-70: `place.settle` sets the owner write bit on a target directory before it moves the target aside to another parent. SD-71: T builds the non-root pass (`run_tests.py --require-nonroot`, the `nonroot` group, `nonroot` mutants); the integrator runs it and records its counts in TEST_RESULTS.json and INTEGRATION.json (§2.16.4) | vio `t_d16_settle_moves_readonly_target_aside` (non-root); v1r `test_d16_evict_runner_frozen_folder_nonroot` (non-root); the non-root pass of the `nonroot` group | W106 (non-root), W107 (non-root) | C (place); T; integrator |
-| D16-F7 (disk) | D16 | SD-69: `cli.run_stage` calls `require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')` for every chain, before FOREGROUND.json is written; `names.STAGE_FREE_BYTES = 1000000000` (1500000000 since §9 A7). FakeDot records the job folders and journal files present at every block (§2.16.5, §5.4) | vio `t_d16_stage_refuses_low_space_before_runner`; v1r `test_d16_disk_bounded_over_runs` (World extra `x_d16_disk` on D_baseline) | W108, W109, W110 | C (cli, names, fakes.py); T |
+| D16-F7 (disk) | D16 | SD-69: `cli.run_stage` calls `require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')` for every chain, before FOREGROUND.json is written; `names.STAGE_FREE_BYTES = 1000000000` (1,500,000,000 since §9 A7; 2,000,000,000 since §9.8, CC-2). FakeDot records the job folders and journal files present at every block (§2.16.5, §5.4) | vio `t_d16_stage_refuses_low_space_before_runner`; v1r `test_d16_disk_bounded_over_runs` (World extra `x_d16_disk` on D_baseline) | W108, W109, W110 (W128, W137 for the §9 values) | C (cli, names, fakes.py); T |
 
 ### 1.3 Conditions before release and gates
 
@@ -156,7 +157,7 @@ Notation:
 | CBR-6 | direct tests for T1-T4; test_f1 replaced; the mutation harness fixed (committed clones, the clean-HEAD check); T11; the real SIGKILL test; an independent reviewer reproduces the full suite and the full mutant run at the release commit | rows T1-T4, T11, S-12, TST-MUT; gate G-1 | T, GATE |
 | CBR-7 | operator path fixes OPX-02, OPX-05, OPX-06, S-01, OPX-04 | those rows | C, T |
 | CBR-8 | the O63 helper layer is implemented; the owner records a dated prompt-clause decision before any qualification run | row MAINT-2; gate G-2 | C, M, T, GATE |
-| CBR-9 | stage times measured on the operator VM (the 1,200 s hold against the longest stage); a reset drill on invented data on the operator VM, with a refused upload then a reset, and a same-boot local clear; the operator budget restated (OPX-10) | the budget: row OPX-10 and §5.3 (C, T); the measurements and the drill: gates G-3 (with probe M008 and the rule of §5.4, D16), G-4, G-10; the disk and non-root rows D16-F6 and D16-F7 | C, T, GATE |
+| CBR-9 | stage times measured on the operator VM (the 1,200 s hold against the longest stage); a reset drill on invented data on the operator VM, with a refused upload then a reset, and a same-boot local clear; the operator budget restated (OPX-10) | the budget: row OPX-10 and §5.3 (C, T); the measurements and the drill: gates G-3 (with probe M009, §9 A8, and the rule of §5.4, D16), G-4, G-10; the disk and non-root rows D16-F6 and D16-F7 | C, T, GATE |
 | CBR-10 | score_check's own admission; MAINT-5 and MAINT-8 fixed | rows MAINT-5, MAINT-8; gate G-8 | M, GATE |
 | CBR-11 | owner approval of the release kit and of the README; runner v4 byte-identical unless the owner chooses runner re-admission under O63 | gates G-9, G-2; lint L8 keeps the runner pin | GATE, T |
 
@@ -166,8 +167,8 @@ Gates need the Dot, the owner or a reviewer. They are not built.
 |---|---|---|
 | G-1 | Independent admission review 3 at the v2.1 commit. It reproduces the full suite, the non-root pass (D16, SD-71) and the full mutant runs (hand, reviewer, builder, guard and `nonroot` mutants), and reviews every `EQUIVALENT` entry (§2.15.2). | reviewers |
 | G-2 | The owner's dated decision on the O63 prompt layer, one of two options. (a) An owner-approved O63 suffix in the three templates. That needs an O42 ruling on the harness change, and runner re-admission v5 for the visual template's pin. (b) An O63 amendment that accepts the frozen prompts' restrictions plus the helper's attested tools-present lists and the fixed isolation statement. **Inconsistency for the owner:** the record's CBR-11 ties runner re-admission to option (b), but its `o63_implementation` text ties it to option (a). | owner |
-| G-3 | On the operator VM. **Done by probe M009 (§9 A8):** the large render itself, outside the helper: `visual_qa.py` rendered 403 A3 pages at 150 dpi of an invented workbook in 619 s (550 MB); its `pdftoppm` call alone took 706 s, 78% of the writer's 900 s per-call timeout. Projection, not a measurement: the largest real finish stage takes about 350 to 550 s on the Dot, so 1.5 x 550 + 60 = 885 <= 1,200 and the 1,200 s hold is expected to fit. **Remains**, every item through the standard route with BASE `/tmp/cps`: (a) the finish stage of a real-size invented job (visual QA of about 336 to 403 A3 pages at 150 dpi) run through the helper's `go`; (b) the longest run of every other `stage_max_seconds` key, the self-test included; (c) the interval at which the command tool returns while a long command runs (OQ-24); (d) the duration of the generator, scope-reader and visual-reviewer conversations of a dev-trial run. No `stage_max_seconds` value is set from a projection: the kit's values are 1.5 times the measured stage values, each with +60 <= `foreground_hold_seconds`. If any value does not fit 1,200 s, the rule of §5.4 applies (M008's 1,800 s hold completed once), and OQ-25 goes to the owner if that does not settle it. README §7's poll and check counts and its totals, and README §2's hold value, are written from these values before G-9. | Dot, maintainer |
-| G-4 | A drill on the operator VM: series D1 in `CPS/drills/D1`, invented jobs. It covers a reset at a commit boundary, a reset during an open generator (the Dot answers by the README rule: UNSURE unless the conversation never ran), a reset during a V continuation, one that forces a rebase, a refused upload followed by a reset (approval=pending), and a same-boot local clear. It also measures, on an invented file: whether an exact-name search returns a copy after it was moved to the Drive trash, and whether it returns a copy of the same name in another folder (OQ-23). It ends with `assemble --verify-frozen` into a dedicated root, a clean audit and score_check CONSISTENT. Because G-10 comes first, the drill's refused upload is provoked on purpose and named in the drill plan: the owner's pre-approval leaves out one named invented drill file, or the owner denies it at the platform's prompt (D16, F5). **Added by §9 (A9):** every helper command and every file the Dot writes for the helper goes through the standard route (`use_default`) with BASE `/tmp/cps`; the bootstrap's network commands go through the elevated route (`require_escalated`), and, as a recorded side test only, the Dot tries `git fetch` once through the standard route; one invented job of real size whose visual QA renders about 336 to 403 A3 pages at 150 dpi goes through the helper's finish stage; the free space of `/tmp` and of `/home/agent` is recorded at every stage start and its lowest value kept; the drill records whether `/tmp/cps` survives a turn end and a wake-up; every request that the automatic review stopped is recorded with its time and message. | Dot, maintainer |
+| G-3 | On the operator VM. **Done by probe M009 (§9 A8):** the large render itself, outside the helper: `visual_qa.py` rendered 403 A3 pages at 150 dpi of an invented workbook in 619 s (550 MB); `pdftoppm` run alone on the same PDF took 706 s, longer than the whole render step and 78% of the 900 s per-call timeout that `visual_qa.render` applies to the same call. Projection, not a measurement: the largest real finish stage takes about 350 to 550 s on the Dot, so 1.5 x 550 + 60 = 885 <= 1,200 and the 1,200 s hold is expected to fit. **Remains**, every item through the standard route with BASE `/tmp/cps`: (a) the finish stage of a real-size invented job (visual QA of about 336 to 403 A3 pages at 150 dpi) run through the helper's `go`; (b) the longest run of every other `stage_max_seconds` key, the self-test included; (c) the interval at which the command tool returns while a long command runs (OQ-24); (d) the duration of the generator, scope-reader and visual-reviewer conversations of a dev-trial run. No `stage_max_seconds` value is set from a projection: the kit's values are 1.5 times the measured stage values, each with +60 <= `foreground_hold_seconds`. If any value does not fit 1,200 s, the rule of §5.4 applies (M008's 1,800 s hold completed once; step 3's hold runs as `probe_p5.py hold --dir /tmp/cps_probe_p5 --seconds 1800` through the standard route, §9.8 G8), and OQ-25 goes to the owner if that does not settle it. README §7's poll and check counts and its totals, and README §2's hold value, are written from these values before G-9; until then README §7 calls its polls and checks estimates (§9.8 PF-11). | Dot, maintainer |
+| G-4 | A drill on the operator VM: series D1 in `CPS/drills/D1`, invented jobs. It covers a reset at a commit boundary, a reset during an open generator (the Dot answers by the README rule: UNSURE unless the conversation never ran), a reset during a V continuation, one that forces a rebase, a refused upload followed by a reset (approval=pending), and a same-boot local clear. It also measures, on an invented file: whether an exact-name search returns a copy after it was moved to the Drive trash, and whether it returns a copy of the same name in another folder (OQ-23). It ends with `assemble --verify-frozen` into a dedicated root, a clean audit and score_check CONSISTENT. Because G-10 comes first, the drill's refused upload is provoked on purpose and named in the drill plan: the owner's pre-approval leaves out one named invented drill file, or the owner denies it at the platform's prompt (D16, F5). **Added by §9 (A9):** every helper command and every file the Dot writes for the helper goes through the standard route (`use_default`) with BASE `/tmp/cps`; the bootstrap's network commands go through the elevated route (`require_escalated`), and, as a recorded side test only, the Dot tries `git fetch` once through the standard route; one invented job of real size whose visual QA renders about 336 to 403 A3 pages at 150 dpi goes through the helper's finish stage; the free space of `/tmp` and of `/home/agent` is recorded at every stage start and its lowest value kept; the drill records whether `/tmp/cps` survives a turn end and a wake-up; every request that the automatic review stopped is recorded with its time and message. **Added by §9.8 (fix round):** the same-boot local clear is cleared with the maintainer's message as README §6 now gives it (the section-1 block with its values filled in, through `require_escalated`); the drill records what a scheduled mailbox check does while a helper command runs or a CPS conversation is open (in the coordinating conversation and in a worker), and once the drill's claim is 6 hours old, unless the owner paused the check for the drill (README §2.4 rule 8, OQ-28); whether an AI-role conversation's work survives the coordinator's checks with `sleep 300` between them (README §2.4 rule 3); whether `/tmp/cps` and the boot id survive a reset that empties `/home/agent`; that a Create Thread conversation reads and writes under `/tmp/cps` (G and S read their folder, V writes `F/visual_review/VISUAL_REVIEW.json`); that the Drive upload tool uploads a file straight from `/tmp/cps/outbox`; that a second helper command prints `CPSV-BUSY` while a standard-route helper command holds the lock; and `MemAvailable` from `/proc/meminfo` at every stage start, with its lowest value. | Dot, maintainer |
 | G-5 | On invented data on the operator VM: an upload is refused by the approval review, the VM is reset while the approval is pending, then the owner approves. The Dot records whether the approved upload lands after the VM is gone. The refused upload is one that the standing approval of G-10 does not cover, named in advance (D16, F5). | Dot, owner |
 | G-6 | TOOL_INVENTORY.txt is the union of the tool names that two probe conversations report. Both are created the documented way with invented content. The Dot saves the list, one name per line; the maintainer puts it in the kit, pinned by `tool_inventory_sha256`. M006 saw 386 to 419 tools, so a single conversation is not enough. | Dot, maintainer |
 | G-7 | The Drive folder `CPS/drills/D<n>` exists before a drill series starts. | maintainer |
@@ -486,6 +487,9 @@ it (§2.4.4).
 
 The message to the Dot gives one exact line,
 `bash ~/cps/repo/deploy/vm2/session_start.sh --commit <C> --hint <seq6> --kit <k12'>`, and then `go`.
+**Superseded by §9.8 (PF-2):** since §9 A1 that line stops `SESSION_LAYOUT` (no `CPS_VM_BASE`). The message gives the
+README §1 bootstrap block with `COMMIT=<C>` and `--hint <seq6> --kit <k12'>` filled in, which the Dot runs exactly, as
+one command through `require_escalated`, and then `go`.
 
 #### 2.4.3 The clear check (`cli.clear_check`, which replaces `sticky_halt`)
 
@@ -1669,8 +1673,11 @@ directories: `shutil.rmtree` fails with EACCES, and so does `os.rename` of a 055
   finish stage's commit, the tree plus its PNG parts. Nothing checks before the runner writes the stage's PNG pages and
   PDF, so a full disk there would fail inside the runner and could be recorded as a failed stage. `cli.run_stage` now
   calls `require_space(env.lay, N.STAGE_FREE_BYTES, 'stage')` for every chain before it writes FOREGROUND.json, with
-  `STAGE_FREE_BYTES = 1000000000` (1,500,000,000 since §9 A7, for BASE on `/tmp`): one large run's tree (about 270 MB), its PNG parts in `outbox/journal` (about 230
-  MB) and their download-back in `inbox/verify` (about 230 MB), with room to spare. A refusal is the existing local
+  `STAGE_FREE_BYTES = 1000000000`: with r5's sizes, one large run's tree (about 270 MB), its PNG parts in
+  `outbox/journal` (about 230 MB) and their download-back in `inbox/verify` (about 230 MB), with room to spare.
+  §9 A7 raised it to 1,500,000,000 and §9.8 (CC-2) to 2,000,000,000 for BASE on `/tmp` with M009's sizes (§5.4). The
+  download-back check of 2015773 (`require_space(..., 'verify')`) left with the pure `on_found` at 746ea98, so the
+  stage check is what covers the download-back now. A refusal is the existing local
   sticky `STOP DISK_FULL` (§2.4.7, VM environment) before the runner starts. Test vio
   `t_d16_stage_refuses_low_space_before_runner`; mutant W108.
 - **The retention test.** No existing test asserts that earlier runs leave nothing behind: test_resets' final and
@@ -2265,7 +2272,8 @@ setup; the toolchain takes about 2.3 GB, of which 541 MB are re-downloadable cac
 - r5 projected that stage at about 850 s on the Dot (4.5 times, the ratio of the suite's small jobs). M009 measured the
   large render itself on the Dot, outside the helper: `visual_qa.py` rendered 403 pages of an invented 3,100-row
   workbook in 619 s and wrote about 550 MB (the maintainer machine gives 335 pages in 332 s), about 1.55 times slower
-  per page; `pdftoppm` alone took 706 s for the 403 pages (530 MB), about 2 times slower per page.
+  per page; `pdftoppm` run alone on the same PDF took 706 s for the 403 pages (530 MB), about 2 times slower per page
+  and longer than the whole render step.
 - Projection, not a measurement: the largest real finish stage takes about 350 to 480 s on the Dot (190 to 193 s
   times 1.55 to 2, times 1.2 for the 20% more pages the Dot's LibreOffice makes), or up to about 550 s with the 14%
   spread between M009's two timings of the same call.
@@ -2275,7 +2283,8 @@ setup; the toolchain takes about 2.3 GB, of which 541 MB are re-downloadable cac
   1.5 x 777 + 60 = 1,226 s > 1,200 s. Unless G-3 measures less through the helper, rule step 3 applies; M008's 1,800 s
   hold completed once (31 beats, exit 0).
 - **The `pdftoppm` margin (risk).** `visual_qa.render`, in the admitted writer package outside the helper, allows each
-  LibreOffice and `pdftoppm` call 900 s. M009's standalone call took 706 s, 78% of that, on denser invented pages. A
+  LibreOffice and `pdftoppm` call 900 s. `pdftoppm` run alone on M009's PDF took 706 s, 78% of that, on denser
+  invented pages. A
   real job about 1.6 to 1.9 times the largest seen so far, or an unusually slow run, could reach the timeout. That
   would fail inside the writer whatever the hold (rule step 5).
 
@@ -2294,7 +2303,8 @@ setup; the toolchain takes about 2.3 GB, of which 541 MB are re-downloadable cac
    pages and its `pdftoppm` call alone outside the helper. G-3 measures through the helper, through the standard route
    with BASE `/tmp/cps`: the finish stage of a real-size invented job, the self-test and the other keys.
 2. If 1.5 x each measured value + 60 <= 1,200 s, the values are set as G-3 says.
-3. Otherwise G-3 also runs `probe_p5.py hold` for 1,800 s on the Dot. If that hold completes, the release kit sets
+3. Otherwise G-3 also runs `probe_p5.py hold --dir /tmp/cps_probe_p5 --seconds 1800` on the Dot, through the
+   standard route (`--dir` is required since §9.8, G8). If that hold completes, the release kit sets
    `gates.p5_foreground_hold_seconds` to it and `foreground_hold_seconds` to 1,800 (neither is changeable; the owner
    approves the kit at G-9), the values must satisfy + 60 <= 1,800, and README sections 2 and 2.2 show 1,800.
 4. If the 1,800 s hold does not complete, or a value still does not fit, there is no release until the owner decides
@@ -2315,9 +2325,11 @@ the M009 sizes are an invented render on the Dot with denser pages, used here as
 | BASE/runtime (the kit) | the release kit's size (not measured here) | the boot |
 | one run's job folder | up to about 270 MB (230 MB PNG pages, r5); with M009's render about 590 MB | until EVICT after its FROZEN entry is confirmed |
 | a commit's PNG parts in `outbox/journal` | up to about 230 MB (r5), about 550 MB (M009) | until DROP_LOCAL after the commit is confirmed |
-| their download-back in `inbox/verify` | the same | deleted after the comparison |
+| the commit's entry archive in `outbox/journal` (the job folder's other files, the PDF included) | at most `max_entry_bytes`; about 40 MB with M009's job | until DROP_LOCAL after the commit is confirmed |
+| their download-back in `inbox/verify` (parts and entry; the Dot's `cp`, after the stage) | the same, about 590 MB (M009) | deleted after the comparison |
+| a place stage's joined PNG stream `inbox/journal/.png_stream_<pid>` | about 550 MB (M009) | deleted after the placement's check |
+| the self-test's work folder `outbox/selftest_<utc14>/work` | the export suite's work folder (not measured here) | the boot |
 | BASE/tmp during a render | the PDF and every page PNG (about 550 MB, M009) and the LibreOffice profile (about 16 MB, M008) | emptied before the next stage (§9 A6) |
-| the entry archive | at most `max_entry_bytes` | until DROP_LOCAL |
 | `aside_<utc14>/`, `fork_<utc14>/`, `cleared_<utc14>/`, `invalid_<utc14>/`, `outbox/v2/raw/` | an aside job folder up to the job folder's size; the rest small | never deleted by the helper; a reset frees them |
 
 - **Peak per stage (projection, from the sizes above).**
@@ -2327,24 +2339,34 @@ the M009 sizes are an invented render on the Dot with denser pages, used here as
     into the job folder, so both exist before the temporary folder is removed: about 2 x 550 + 16 = 1,116 MB written by
     the stage. Before §9 the two halves were on different file systems (TMPDIR on `/tmp`, the job folder on
     `/home/agent`); now both are on `/tmp`.
-  - the finish stage's commit, after the stage: the PNG parts (about 550 MB; the commit's own check asks for 1.1 times
-    the members and PNG files) and then their download-back (about 550 MB; the verify check).
+  - the finish stage's commit runs **inside** the stage (`Chain.run` ends in `commit_end`, which runs the snapshot check
+    and `savepoint.write_commit`): the job folder (about 590 MB) and the entry and PNG parts in `outbox/journal`
+    (about 590 MB; the commit's own check asks for 1.1 times the members and PNG files), 1,180 MB. After the stage
+    the Dot downloads the parts and the entry back into `inbox/verify` (about 590 MB). No check runs before that
+    download-back since 746ea98 (the pure `on_found` of S-01 has no `require_space`), so the stage check must cover
+    it: about 1,770 MB from the start of the finish stage to the end of its save (§9.8, CC-2).
   - place (a restore): the staged job tree (up to about 590 MB) and the joined PNG stream in `inbox/journal` (about
-    550 MB, deleted after the check), with the downloaded parts already on disk. No STAGE_FREE_BYTES check runs for a
-    place stage; a full disk there is an ENOSPC inside the stage and ends `STOP DISK_FULL`.
+    550 MB, deleted after the check), with the downloaded parts already on disk (about 550 MB): about 1,690 MB. No
+    STAGE_FREE_BYTES check runs for a place stage; a full disk there is an ENOSPC inside the stage and ends
+    `STOP DISK_FULL`. A place stage runs after a reset or a clear, when `/tmp` holds little else.
+  - the self-test: its work folder stays for the boot (not measured here; M012's whole runner suite used 145 MB).
 - **Peak on disk.** EVICT and DROP_LOCAL are post actions, and the post resume runs before the next command (S-04). So at
-  most two run job folders are on disk, plus one commit's parts and their download-back: about 2 x 590 + 550 + 550 =
-  2.3 GB with M009's sizes (1.0 GB with r5's), plus the repository and the kit, inside the 4.9 GB of `/tmp`.
+  most two run job folders are on disk, plus one commit's parts and entry and their download-back: about 2 x 590 + 590
+  + 590 = 2.4 GB with M009's sizes (1.0 GB with r5's), plus the repository and the kit, inside the 4.9 GB of `/tmp`.
 - **The stage check.** `STAGE_FREE_BYTES` is checked on BASE's file system (`/tmp`) before every chain stage, with the
   existing 64 MiB margin. r5's 1,000,000,000 bytes (1.067 GB with the margin) does not cover the finish stage's
-  1,116 MB now that TMPDIR and the job folder share `/tmp`. §9 sets 1,500,000,000 bytes (1.567 GB with the margin,
-  1.4 times that peak). The snapshot, commit and verify checks then run with the real sizes.
-- **Memory.** At that peak `/tmp` holds about 2.3 GB and `/home/agent` about 2.4 GB, about 4.7 GB of the VM's memory,
-  which leaves about 5 GB for LibreOffice, `pdftoppm` and Chromium. Not measured; G-4 records the free space at every
-  stage start, and an out-of-memory kill would show as FOREGROUND_DIED.
+  1,116 MB now that TMPDIR and the job folder share `/tmp`. §9 set 1,500,000,000 bytes (1.567 GB with the margin) for
+  that render peak alone. The fix round (§9.8, CC-2, SD-77) also counts the commit inside the stage and the
+  download-back after it, about 1,770 MB, and sets 2,000,000,000 bytes (2.067 GB with the margin, 1.17 times that
+  peak). Inside the stage the snapshot and commit checks then run with the real sizes; nothing checks again before
+  the download-back.
+- **Memory.** At that peak `/tmp` holds about 2.4 GB and `/home/agent` about 2.4 GB, about 4.8 GB of the VM's memory,
+  which leaves about 5 GB for LibreOffice, `pdftoppm` and Chromium. Not measured; G-4 records the free space and
+  `MemAvailable` at every stage start (§9.8), and an out-of-memory kill would show as FOREGROUND_DIED.
 - **Within one boot** every same-boot clear that moves a job folder aside keeps it (up to about 590 MB). After about
-  three such clears in one boot, SD-69 or a later check stops `DISK_FULL` (local sticky, HANDBACK C); the owner decides
-  what to free (the existing DISK_FULL text). A reset frees all of it.
+  three or four such clears in one boot (2.067 GB of about 4.8 GB free must stay), SD-69 or a later check stops
+  `DISK_FULL` (local sticky, HANDBACK C); the owner decides what to free (the existing DISK_FULL text). A reset frees
+  all of it.
 - The test that runs several runs in a row and asserts the retention is v1r `test_d16_disk_bounded_over_runs`
   (§2.16.5); no earlier test asserts it.
 
@@ -2429,6 +2451,17 @@ the M009 sizes are an invented render on the Dot with denser pages, used here as
   folder? Without them those uploads are refused every time (§2.16.3).
 - **OQ-27** (owner; D16, F8): will the owner pre-approve re-running the light setup after a VM reset? In M007 the Dot
   waited about two hours for that approval. This plan does not decide it; §5.3 and §6.3 state the cost either way.
+- **OQ-28** (owner; §9.8 PF-1): how does a helper series that runs far longer than 6 hours coexist with the 30-minute
+  mailbox check of `DOT_MAILBOX_PROTOCOL.md`? Under that protocol a claim 6 hours old or older is marked abandoned
+  (`REPLY_ABANDONED_`, "Mnnn needs you: abandoned"), and later runs take the next open message, which could then be
+  carried out while the series runs. Options: the owner pauses the check for the series; the series is not run under a
+  mailbox claim (the owner starts it in the coordinating conversation); or a change to the fixed mailbox prompt.
+  README §2.4 rule 8 makes the Dot start a series only when the message that starts it says how the check is handled,
+  else it tells the owner `MAILBOX_UNSETTLED`. G-4 records what a check does while a helper command runs.
+- **OQ-29** (owner; §9.8 PF-9): the personal copy moved to `/tmp/cps/deliveries/<case>/<user>/<utc14>/` (SD-75) because
+  the standard route cannot write HOME, but `DEPLOYMENT_MODEL.md` (authority 1) and the private operating documents
+  still name `~/cps-deliveries/<case id>/<user>/<time>/`. The owner updates them before everyday use; until then the
+  two places differ, and README §3 (the DELIVER row) is the one the helper checks.
 
 ### 6.3 Risks
 
@@ -2481,12 +2514,12 @@ the M009 sizes are an invented render on the Dot with denser pages, used here as
   Dot; the projection for the largest real finish stage is now about 350 to 550 s, which fits 1.5 x value + 60 <=
   1,200 s. The self-test (777 s measured outside the helper) does not fit 1,200 s. The release gate keeps such a kit
   from running (§5.4), so the risk is a release delayed until G-3 and OQ-25 settle it, not a silent failure. The
-  writer's own 900 s per-call timeout is the tighter limit: M009's `pdftoppm` call alone took 706 s (78%); it is
+  writer's own 900 s per-call timeout is the tighter limit: `pdftoppm` run alone on M009's PDF took 706 s (78%); it is
   outside the helper.
 - **Memory-backed disk (D16, F1; restated by §9 A7).** `/home/agent` and `/tmp` are tmpfs of 4.9 GB each on a VM with
   about 9.9 GB of RAM, so files on them use the same memory as the runner, LibreOffice and `pdftoppm`. Since §9 `/tmp`
   holds BASE, the repository and the runner's temporary files; `require_space` sees only the free bytes of `/tmp`. The
-  projected peak is about 2.3 GB on `/tmp` (§5.4); deleting aside folders with a reset bounds the rest; G-4 records the
+  projected peak is about 2.4 GB on `/tmp` (§5.4); deleting aside folders with a reset bounds the rest; G-4 records the
   free space at every stage start and watches for an out-of-memory kill, which would show as FOREGROUND_DIED.
 - **The routes (§9 A2, A3).** Every helper command depends on the standard route writing `/tmp`. The elevated route's
   automatic review stops some requests (M011: one timeout, then a retry ran); only the bootstrap uses it. A helper
@@ -2778,6 +2811,13 @@ are in `scratchpad/vm_helper/v21/keep/INTEGRATION.json`.
 A completeness critic found ten gaps (GAP-1 to GAP-10) in the 746ea98 candidate. This round fixes them; the numbers
 in §8.1 to §8.6 below are 746ea98's and are superseded where this subsection says so. **Nothing here is an admission.**
 
+**Numbers after §9 (2026-11-12).** This subsection's numbers are those of `a2298cb`. The amendment (§9) and its fix
+round (§9.8) supersede them: the full suite has 572 tests (559 here) and passed at the fix round's tree in 2,630.0 s;
+the non-root pass has 253 tests (246 here), 505.5 s; the hand set has 144 mutants (116 here), all killed; the
+reviewer and legacy sets are unchanged (68, all killed); the guard sets have the same 915 ids and the same 17 core and
+18 glue survivors, each with its EQUIVALENT entry; the lines are C 7,506, M 896, total 8,402 under the D2a caps of
+§9.2 (C 7,496, M 896, total 8,392 here). §9.8.6 has the runs, with their trees and snapshots.
+
 | gap | what changed | proof (fails before the fix) |
 |---|---|---|
 | GAP-1 (D2) | Deletions 2 and 3 of §5.1 applied: module and function docstrings that restated r2, the probe delta or the data shapes cut to one line with their § reference (the reused segments' docstrings untouched), the section banner comments removed, a comment naming the old limits shortened. Deletion 1 found nothing (L10 reports no unused segment). Deletion 4 not applied (see open items). No behaviour changed: every hand, reviewer and legacy substitution still applies unchanged, and the guard ids are unchanged (docstrings and comments are no guard sites). | `count` of §8.4b; the suites and mutant sets below |
@@ -2854,7 +2894,9 @@ its first test). After these test-only edits the full suite ran again (Test runs
   re-checks its sha256, `ensure_member` re-makes a notice or copy from an entry member; one function for both would
   add a branch and save no lines.
 - GAP-2 needs, on the maintainer's machine, user namespaces (or root) and util-linux `unshare` and `mount`, and the
-  first component of the GENESIS base (`/home` for the Dot's `/home/agent/cps`). Without them a verify is `EXIT_n`,
+  first component of the GENESIS base (`/home` for the Dot's `/home/agent/cps`; since §9 A1 the base is `/tmp/cps`, so
+  the private tmpfs covers the maintainer's `/tmp`, the deepest existing ancestor, with the assembly root and the
+  runner bound from under it: mt `test_a1_verify_view_root_under_tmpfs_ancestor`, W119). Without them a verify is `EXIT_n`,
   ASSEMBLE is unclean and score_check refuses ASSEMBLE_NOT_VERIFIED (fail-closed). It has not run on that machine; G-4
   ends with this step.
 - N40 and N42 are not shown at 2015773: v2.1 moved both rules (T7 into `names.check_answers`, T8 into the session
@@ -3014,13 +3056,13 @@ The platform facts it rests on (the probe record is authoritative):
 
 | item | change (files: functions) | tests | mutants | track |
 |---|---|---|---|---|
-| A1 base under `/tmp` | `session_start.sh`: BASE only from `CPS_VM_BASE`, no default (missing: `STOP SESSION_LAYOUT`); a base inside HOME, or a path with whitespace, a quote, `$`, a backslash or a backquote is `SESSION_LAYOUT` (the same characters `host.layout_paths_ok` refuses); creates `BASE/tmp`; `vm.sh` starts with `export CPS_VM_BASE='<BASE>' CPS_TOOLS='<TOOLS>'`. README §1: the bootstrap block exports `CPS_VM_BASE=/tmp/cps` and clones into `/tmp/cps/repo`; every README path `/home/agent/cps/...` is `/tmp/cps/...`. `names.copypath` and `cli.delivery_commit`: the personal copy is under `BASE/deliveries/<case>/<user>/<utc14>/` (was `$HOME/cps-deliveries/...`, which the standard route cannot write); `cli.Env.idcfg` passes `base`. `host.Paths.deliveries` (dead) and its `Path` import deleted. Maintainer side: `maint/assemble.py` unchanged (see the test) | v1r `test_a1_base_required_outside_home_and_carried_by_launcher`; mt `test_a1_verify_view_root_under_tmpfs_ancestor`; cod `test_transcript_and_copy_codes` (extended); ct `test_names_patterns` (extended); the session_start tests and FakeDot moved to a base outside HOME | W116, W117, W118, W119, W129 | C; M (test only); T |
+| A1 base under `/tmp` | `session_start.sh`: BASE only from `CPS_VM_BASE`, no default (missing: `STOP SESSION_LAYOUT`); a base inside HOME, or a path with whitespace, a quote, `$`, a backslash or a backquote is `SESSION_LAYOUT` (the same characters `host.layout_paths_ok` refuses); creates `BASE/tmp`; `vm.sh` starts with `export CPS_VM_BASE='<BASE>' CPS_TOOLS='<TOOLS>'`. README §1: the bootstrap block exports `CPS_VM_BASE=/tmp/cps` and clones into `/tmp/cps/repo`; every README path `/home/agent/cps/...` is `/tmp/cps/...`. `names.copypath` and `cli.delivery_commit`: the personal copy is under `BASE/deliveries/<case>/<user>/<utc14>/` (was `$HOME/cps-deliveries/...`, which the standard route cannot write); `cli.Env.idcfg` passes `base`. `host.Paths.deliveries` (dead) and its `Path` import deleted. Maintainer side: `maint/assemble.py` unchanged (see the test). Fix round (§9.8): the HOME check compares resolved paths (G5), the clear message is the README §1 block filled in (PF-2), and the personal copy's place needs an owner update of DEPLOYMENT_MODEL.md (PF-9, OQ-29) | v1r `test_a1_base_required_outside_home_and_carried_by_launcher`; mt `test_a1_verify_view_root_under_tmpfs_ancestor`; cod `test_transcript_and_copy_codes` (extended); ct `test_names_patterns` (extended); the session_start tests and FakeDot moved to a base outside HOME | W116, W117, W118, W119, W129 (fix round: W134, W135, W139) | C; M (test only); T; owner (OQ-29) |
 | A2 routes | README §1 (the bootstrap through `require_escalated`, as one command) and §2 "Routes" (everything else through `use_default`; never move a failed helper command to the elevated route; no standing approval; `prefix_rule` empty). No code | lint `t_l14_readme_rules` | W130 | C (README); T |
-| A3 operating rules | README §2.4 rules 1-7; README §3 `WAIT` is `sleep N` in the foreground. Code: `durable.DurableError.code` maps EROFS to `READ_ONLY_FS`; `cli.run_stage` maps a stage's OSError through it; `cli.main` turns an OSError before the lock, and one that escapes `run_command` (for example while a STOP is handled), into the bare STOP block; `cli.safe_stop(None, code)` prints that block | cod `test_a3_erofs_ends_in_stop_block`; lint `t_l14_readme_rules` | W120, W121, W131 | C; T |
+| A3 operating rules | README §2.4 rules 1-7; README §3 `WAIT` is `sleep N` in the foreground. Code: `durable.DurableError.code` maps EROFS to `READ_ONLY_FS`; `cli.run_stage` maps a stage's OSError through it; `cli.main` turns an OSError before the lock, and one that escapes `run_command` (for example while a STOP is handled), into the bare STOP block; `cli.safe_stop(None, code)` prints that block. Fix round (§9.8): rules 1, 3, 5, 6 and 7 restated, rule 8 added (PF-1, PF-3 to PF-7, CC-4, CC-5); an EROFS inside a stage has its own test (G3) | cod `test_a3_erofs_ends_in_stop_block`, `test_g3_erofs_inside_a_stage_stops_read_only_fs`; lint `t_l14_readme_rules` | W120, W121, W131 (fix round: W136, W140-W142) | C; T; owner (OQ-28) |
 | A4 pid-named leftovers | `v1mod.cleanup_leftovers` (every command, under the lock, before anything else reads BASE) also removes `runtime/.tmp_[0-9]*_*` (a killed `write_atomic`), every hidden file in `inbox/journal` (a killed placement's `.png_stream_<pid>`, a killed durable write's temp file) and `qual/*/.validate_*` and `jobs/*/.validate_*` (the runner's validation folder of a killed `prepare`). The audit of the other names is §9.3. No reused segment changed (`write_atomic` and `unpack_kit` stay byte-identical); REUSE_MANIFEST.json unchanged. The runner fix (`vdir.mkdir()` without `exist_ok`, `cps_job.py` prepare) remains a runner v5 item | vio `t_a4_stale_temp_names_in_runtime_ignored`, `t_a4_stale_png_stream_and_validate_removed`; rs `D_sameboot_damaged_cache_restores` (plants `.tmp_2_VM_HELPER_CONFIG.json` and `.tmp_3_x` in runtime before its same-boot restore with a run in flight) | W122, W123, W124 | C; T |
 | A5 partial wipes | `cli.run_stage`: a stage needs `TOOLS/var/cps_vm2_setup_ok` naming this boot and the checkout's commit, else the non-sticky `STOP SETUP_MISSING HANDBACK C` before FOREGROUND.json, BASE/tmp and the runner (no HALT.json; the next `go` after the bootstrap continues). README §1: run the bootstrap when `/tmp/cps/vm.sh` or `~/cps-tools/env.sh` is missing, and what SETUP_MISSING means. The scenarios are §9.4 | rs `D_base_wiped_same_boot_restores`, `D_tools_wiped_same_boot_continues`; vio `t_a5_stage_stops_setup_missing` | W127 | C; T |
 | A6 runner's TMPDIR | `cli.run_stage`, under the lock, before every stage (and before the space check): removes `BASE/tmp` (with `remove_tree`, so read-only folders go too), makes it again and sets `TMPDIR` to it in the helper's environment, which `run_runner` and the self-test pass to every child (`env=os.environ.copy()`). `session_start.sh` creates `BASE/tmp`. vm.sh does not set TMPDIR; the helper does, so a stage gets it however the helper was started | vio `t_a6_stage_empties_tmp_and_sets_tmpdir` (a chain and a place stage) | W125, W126 | C; T |
-| A7 disk on `/tmp` | §5.4 restated (sizes, peak per stage, memory). `names.STAGE_FREE_BYTES` 1,000,000,000 -> 1,500,000,000: the finish stage's projected peak on `/tmp` is about 1,116 MB once TMPDIR and the job folder share it. README §7 "Disk" | vio `t_d16_stage_refuses_low_space_before_runner` (now also asserts the value covers 2 x 550 MB + 16 MB) | W108 (unchanged), W128 | C; T |
+| A7 disk on `/tmp` | §5.4 restated (sizes, peak per stage, memory). `names.STAGE_FREE_BYTES` 1,000,000,000 -> 1,500,000,000: the finish stage's projected peak on `/tmp` is about 1,116 MB once TMPDIR and the job folder share it. README §7 "Disk". Fix round (§9.8, CC-2): 2,000,000,000, for the commit inside the stage and the download-back after it (about 1,770 MB) | vio `t_d16_stage_refuses_low_space_before_runner` (now asserts the value covers 3 x 590 MB, §9.8), `t_g2_tmp_emptied_before_space_check` | W108 (unchanged), W128, W137, W132 | C; T |
 | A8 G-3 | §1.3 G-3 and §5.4 restated from M009: 619 s for 403 pages; `pdftoppm` alone 706 s against 900 s (78%); projection 350 to 550 s; 1.5 x 550 + 60 = 885 <= 1,200; values set only from measurements. No code | none (gate) | none | gate G-3 |
 | A9 G-4 | §1.3 G-4 extended (standard route with BASE `/tmp/cps`; a real-size render through the helper's finish stage; free space at every stage start and its lowest value; `/tmp/cps` across a turn end and a wake-up; every review-stopped request; the bootstrap's network commands through the elevated route, a standard-route `git fetch` as a recorded side test). No code | none (gate) | none | gate G-4 |
 | A10 lints, samples, budgets | L14 checks the new README sentences (routes, rules 3-7, the codes, the `/tmp/cps` paths, the disk need) and the absence of `/home/agent/cps`, `~/cps/` and `~/cps-deliveries`. `tests/budget_golden.json` unchanged: no counted helper command, Drive call or saved result changed (the full suite's `test_opx10_tool_calls_match_budget_golden` and L14 pass against it). The README doc samples are unchanged (no new `<...>` token) | lint `t_l14_readme_rules`, `t_l6_readme_examples_refused`, `t_l1_codes_registered_and_tested` | W130, W131 | T |
@@ -3036,9 +3078,10 @@ G-10's list of upload folders does not change: the amendment adds no UPLOAD line
   the base from the script's location would make a clone left at the old `~/cps/repo` silently use `~/cps`, which
   the standard route cannot write. A missing `CPS_VM_BASE` is `STOP SESSION_LAYOUT`; a base inside HOME is refused
   for the same reason (W116 puts back a silent default from the script's location; W117 accepts a base inside HOME).
-- **SD-73 (A7):** `STAGE_FREE_BYTES` = 1,500,000,000 (§5.4).
+- **SD-73 (A7):** `STAGE_FREE_BYTES` = 1,500,000,000 (§5.4). Superseded by SD-77 (§9.8): 2,000,000,000.
 - **SD-74 (A5):** `SETUP_MISSING` is a non-sticky STOP (like RELEASE_GATE_OPEN it writes no HALT.json): the cure is the
-  bootstrap, and nothing of the journal is lost. It is printed by `emit` directly; `stop_block` is unchanged.
+  bootstrap, and nothing of the journal is lost. It is printed by `emit` directly; `stop_block` is unchanged. Since
+  §9.8 (SD-79) the Dot runs that bootstrap itself, once.
 - **SD-75 (A1):** COPYPATH is `BASE/deliveries/<case>/<user>/<utc14>/<file>`.
 - **SD-76 (A3):** a `WAIT seconds=N` block is a foreground `sleep N` through the standard route, never a platform wait
   or wake-up.
@@ -3075,6 +3118,7 @@ G-10's list of upload folders does not change: the amendment adds no UPLOAD line
 | `<dir>/.tmp_<pid>_<random>_<name>` | `durable.write`, `v1reuse.write_new` | not a defect: a random part, the temp file is removed on every error, and only a kill inside the write leaves one. Files are read by exact name, never by pattern. In outbox, outbox/v2 and outbox/journal the cleanup removes it; in inbox/journal now too (A4b); in attest/ and BASE/deliver it stays until a reset (bounded by the number of kills, never read). One in a job folder (the generation record, written in a stage) belongs to a stage that died: FOREGROUND_DIED, and the clear's settle moves that folder aside |
 | `<root>/.../.cps_vm2_png_<pid>` | `maint/assemble.py` | not a defect: removed in `finally`; a killed assemble leaves its root non-empty, and assemble refuses a non-empty root (ROOT_INVALID), so the maintainer uses a new root |
 | `FOREGROUND.json` `pid`, selftest `RUN.json` `pid` | `cli.run_stage`, `v1reuse.selftest_work` | not a defect: recorded only; `foreground_check` decides by the boot id, never by the pid |
+| `outbox/selftest_<utc14>/.tmp_<pid>_RUN.json` (added by §9.8, G6) | `v1reuse.write_atomic` in `selftest_work` | not a defect: each attempt has its own `selftest_<utc14>` folder, `finish_selftest` reads `RUN.json` by its exact name, and the folder is never uploaded, listed or walked; `cleanup_leftovers` removes only `outbox/.tmp_*` at the top level, so a killed self-test's temp file stays for the boot (one per killed attempt, at most two attempts per boot) |
 
 ### 9.4 A5: the two partial wipes
 
@@ -3103,7 +3147,9 @@ G-10's list of upload folders does not change: the amendment adds no UPLOAD line
 - **TMPDIR is set by the helper, not by vm.sh** (A6 allowed either): `cli.run_stage` sets it, so a stage gets it however
   the helper was started, and the in-process test worlds can check it.
 - **The personal copy moved** (beyond the README paths the brief lists): under the routes of A2 the Dot writes every
-  file for the helper through the standard route, which cannot write `$HOME/cps-deliveries` (SD-75).
+  file for the helper through the standard route, which cannot write `$HOME/cps-deliveries` (SD-75). This conflicts
+  with the owner's `DEPLOYMENT_MODEL.md` (authority 1), which names `~/cps-deliveries/<case id>/<user>/<time>/`, and
+  with the private operating documents: an owner update is needed before everyday use (§9.8 PF-9, OQ-29).
 - **A5 needed code:** the SETUP_MISSING stage check (SD-74). Without it a stage would run without the toolchain after
   TOOLS was wiped in the same boot.
 - **A4a is fixed by removing stale names under the lock, not by a unique temp name:** `write_atomic` is a reused
@@ -3125,8 +3171,11 @@ G-10's list of upload folders does not change: the amendment adds no UPLOAD line
 
 Every run started from its own `bin/testclone.sh` snapshot of the working files, `--jobs 4`, on a 4-CPU machine, one run
 at a time. The helper tree sha256 of every run is `3357a205a3d78bf337b3ddeea51fd56207ffbed711a78147c19c3c240b565871`
-(the committed deploy/vm2 tree; tests are outside it). MUTANTS_RESULTS.json and TEST_RESULTS.json of each run record
-the tree and the snapshot commit; INTEGRATION.json `amendment` keeps them.
+(the committed deploy/vm2 tree; tests are outside it). MUTANTS_RESULTS.json of each run records the tree and the
+snapshot commit; TEST_RESULTS.json of these runs records the tree only (corrected by §9.8: since the fix round
+TEST_RESULTS.json and MUTANTS_RESULTS.json also record `snapshot_commit` and `vm2_git_tree`, the git tree of
+deploy/vm2 with its tests). INTEGRATION.json `amendment.build_runs` keeps them; these runs are of 2cfaac5's tree and are
+superseded by §9.8.6.
 
 | run | snapshot | result | wall | uid / CapEff |
 |---|---|---|---|---|
@@ -3165,3 +3214,139 @@ the lints 54.9 s (budget 120 s); the non-root pass 509.2 s for 251 tests (budget
   `/tmp/cps`, any network command through either route, whether a tool writes under the read-only HOME and carries on
   silently, and the memory peak on `/tmp`.
 - Every EQUIVALENT entry (17 core, 18 glue) still waits for G-1.
+- Added by the fix round (§9.8). Not shown by any probe, and each is now a G-4 record: (a) that a Create Thread
+  conversation sees and writes `/tmp/cps` (P1 tested only `$HOME`; V writes `F/visual_review/VISUAL_REVIEW.json`
+  there); (b) that the Drive upload tool reads an UPLOAD file under `/tmp/cps/outbox` (M012 mentions a separate upload
+  copy); (c) that a `flock` held by a standard-route command blocks other commands (M011 tested an elevated holder
+  only, and every helper lock is now standard-route); (d) the memory at stage start (`/tmp` and `/home/agent` are both
+  RAM tmpfs; an out-of-memory kill would look like FOREGROUND_DIED). Also what a scheduled mailbox check does while a
+  helper command runs, and whether `/tmp/cps` survives a reset that empties `/home/agent`.
+- OQ-28 (the mailbox check against a series longer than 6 hours) and OQ-29 (the personal copy's place in the owner's
+  documents) are the owner's.
+- After `STOP SETUP_MISSING` whose bootstrap's setup failed, the second SETUP_MISSING leaves the setup log in
+  `/tmp/cps/outbox` without uploading it (the session's SETUP_FAILED upload runs only in a session restore); the Dot
+  then waits for the maintainer, who asks for the log.
+
+### 9.8 Fix round: the critics' gaps on 2cfaac5 (2026-11-12)
+
+Three critic lenses (platform, code, completeness) reviewed the amendment at `2cfaac5` and reported 27 gaps: PF-1 to
+PF-11, G1 to G8 and CC-1 to CC-8. Several are the same gap seen through two or three lenses (PF-2 = G1 = CC-1; PF-5 =
+CC-4; PF-6 with CC-5 and the README half of G3; G6 = CC-8; G7 = CC-6; PF-11 with CC-7). **Nothing here is reviewed or
+admitted.** The runner stays byte-identical (sha256 `7505e98a…f431`).
+
+**Reproduced first.** At a fresh snapshot of `2cfaac5` the critics' own mutants X1 (the space check before BASE/tmp is
+emptied), X2 (the runtime glob for one-digit pids only), X3 (a base equal to HOME accepted), X4 (an EROFS inside a stage
+mapped to WRITE_FAILED) and X5 (the README bootstrap block without its export line) all SURVIVED their tests again
+(`amend_fix/keep/repro_own_mutants.json`). In a fresh shell (`env -i`), the one-line clear of §2.4.2 with the base path
+printed `DO: STOP SESSION_LAYOUT HANDBACK C` (exit 3), and the same line after `export CPS_VM_BASE=...` bootstrapped
+(exit 0). The documentation gaps were checked against `PROBE_RESULTS_20261110.md`, `DOT_MAILBOX_PROTOCOL.md` (step 3:
+the 6-hour claim rule) and `DEPLOYMENT_MODEL.md` (the personal copies' place). No gap was rejected.
+
+#### 9.8.1 One row per gap
+
+| gap | verdict | change (files: functions) | test | mutant |
+|---|---|---|---|---|
+| PF-2 = G1 = CC-1 (major) | real | The maintainer's clear message is the README §1 bootstrap block with `COMMIT`, `--hint` and the new `--kit` filled in, run exactly, as one command through `require_escalated` (SD-78). README §1 ("A maintainer's bootstrap"; never `session_start.sh` alone), §2 "Routes" (also one a maintainer message gives you), §6; §2.4.2 marked superseded. `tests/fakes.py`: `bootstrap_script` (the block as the Dot and a clear message run it) and `dot_env` (FakeDot's bootstrap runs without `CPS_VM_BASE` and `CPS_TOOLS`, as a fresh shell on the Dot) | v1r `test_pf2_clear_bootstrap_runs_in_a_fresh_shell` (the block in `env -i` bootstraps; the one-line form stops SESSION_LAYOUT and writes nothing); lint `t_l14_readme_rules`; every World bootstrap and every clear of test_resets now depends on the block's export | W139, W140 |
+| CC-3 | real | as PF-2: the bootstrap block's export line is checked where it is (L14: exactly one `export CPS_VM_BASE=/tmp/cps` line, before the `session_start.sh` line, inside the bootstrap markers) and exercised in a shell without a preset base | lint `t_l14_readme_rules`; v1r `test_pf2_clear_bootstrap_runs_in_a_fresh_shell` | W139 (the critic's mutant; a World bootstrap that stops is never counted as a kill, §2.15.4, so the two direct tests carry it) |
+| PF-1 (major) | real | README §2.4 rule 8: the mailbox check's 6-hour rule as `DOT_MAILBOX_PROTOCOL.md` step 3 has it (a claim younger than 6 hours: nothing; 6 hours or older: `REPLY_ABANDONED_`, the owner told, later runs take the next open message). A drill or qualification series starts only when the message that starts it says how the check is handled for the series; otherwise the Dot tells the owner `MAILBOX_UNSETTLED` (case C) and runs no `go` (SD-80). §2.2 step 1 points to it. Owner track OQ-28. G-4 records what a check does while a helper command runs, and once a claim is 6 hours old | lint `t_l14_readme_rules` | W142 |
+| PF-3 (major) | real | README §2.4 rule 3 covers an open S, G or V conversation as well as a running helper command: no turn end, no platform wait or wake-up, `sleep 300` in the foreground (standard route) between checks; the owner line is now `CPS paused while a helper command or a CPS conversation ran: reply continue to resume.` README §3 OPEN_CONVERSATION and CONTINUE_CONVERSATION and §7 say the same. G-4 records whether the conversation's work survives those checks | lint `t_l14_readme_rules` | W141 |
+| PF-4 | real | README §2.4 rule 1: the coordinating conversation (the one the owner or a user talks in, which `CLAIM.md` names); a worker or a scheduled check (for example a mailbox check run by a worker) never runs the bootstrap or a helper command | lint `t_l14_readme_rules` | none (README text; L14 holds the sentence) |
+| PF-5 = CC-4 | real | README §2.4 rule 6 covers command requests only; uploads are never retried and follow §3.1 | lint `t_l14_readme_rules` | none (as PF-4) |
+| PF-6, CC-5, G3 (README half) | real | REVIEW_STOPPED: ask the owner to approve; when the owner says it is approved, run the command again, rule 6 applying afresh. READ_ONLY_FS seen by the Dot: case C. Rule 7's last sentences: the helper prints `STOP READ_ONLY_FS HANDBACK C` for its own writes; a read-only error inside the runner's tools shows as another stop of the helper (for example RUNNER_REFUSED; `run_runner` captures the tools' output), whose block the Dot follows. The post-action and evict handlers keep their codes (POST_ACTION_FAILED, EVICT_FAILED): each already ends in a full STOP block with HANDBACK C, so A3 holds, and the Dot's action is the same | lint `t_l14_readme_rules` | none for the text |
+| G3 (code half) | real (test gap) | none: `cli.run_stage` already maps an OSError of a stage through `DurableError.code` | cod `test_g3_erofs_inside_a_stage_stops_read_only_fs` (EROFS from `worker.dispatch` at an everyday prepare: STOP READ_ONLY_FS with the journal's header, HALT.json READ_ONLY_FS, no FOREGROUND.json) | W136 (= X4) |
+| PF-7 | real | README §1 "The bootstrap may be run again": it holds nothing of the series, so after it died, lost its session or ran through the standard route by mistake, the Dot runs it once more through the elevated route (a second death: NO_BLOCK; read-only through the elevated route: READ_ONLY_FS). Rules 5 and 7 name the exception | lint `t_l14_readme_rules` | none (as PF-4) |
+| PF-8 | real | README §1 and §3: `STOP SETUP_MISSING HANDBACK C` is the one HANDBACK C stop the Dot clears itself: it tells the owner, runs the bootstrap once (its setup runs again), then `go`; a second SETUP_MISSING waits for a maintainer message (SD-79). The handback paragraph names the exception. No code changed (the stop stays non-sticky, SD-74). G-4 records whether `/tmp/cps` and the boot id survive a reset that empties `/home/agent` | rs `D_tools_wiped_same_boot_continues` (follows the README: SETUP_MISSING, the bootstrap, FINAL); lint `t_l14_readme_rules` | W143 (W127 keeps the check itself) |
+| PF-9 | real (documents) | §9.5 and OQ-29: `DEPLOYMENT_MODEL.md` (authority 1) and the private operating documents still name `~/cps-deliveries`; the owner updates them before everyday use. The A1 row now has the owner track | none | none |
+| PF-10 | real (documents) | §9.7 and G-4: (a) a Create Thread conversation reading and writing `/tmp/cps`, (b) a Drive upload straight from `/tmp/cps/outbox`, (c) CPSV-BUSY against a standard-route lock holder, (d) `MemAvailable` at every stage start | none (gates) | none |
+| PF-11, CC-7 | real (documents) | §1.2 rows OPX-10 and D16-F2 and CBR-9 point at M009 and §9 A8; G-3 says "`pdftoppm` run alone on the same PDF took 706 s"; §5.4 and §6.3 likewise; §8.0's GAP-2 prerequisite restated for a `/tmp/cps` base; README §7 calls its polls and checks estimates until they are measured | lint `t_l14_readme_rules` (the §7 sentence; "come from the stage times" is absent) | none |
+| CC-2 (major) | real | `names.STAGE_FREE_BYTES` 1,500,000,000 -> 2,000,000,000 (SD-77). The finish stage's commit runs inside the stage (`Chain.run` ends in `commit_end`): job folder about 590 MB plus the entry and PNG parts about 590 MB; the Dot's download-back into `inbox/verify` after the stage adds about 590 MB, and no check covers it since the pure `on_found` (746ea98) dropped 2015773's verify check: about 1,770 MB in all, against 1.567 GB before. §5.4 table (entry, download-back, place stream, self-test work folder) and peaks restated, the "verify check" claims removed, §2.16.5 corrected, README §7 "2 GB". A check before the download-back was not reinstated: the stage check covers it with no new line | vio `t_d16_stage_refuses_low_space_before_runner` (asserts >= 3 x 590 MB) | W137 (and W128, retargeted to the new text) |
+| G2 | real (test gap) | none: the order in `cli.run_stage` was already right | vio `t_g2_tmp_emptied_before_space_check` (a planted file in BASE/tmp; the faked free space is one byte short while it exists and exactly enough once it is gone; the stage runs, no DISK_FULL) | W132 (= X1) |
+| G4 | real (test gap) | none | vio `t_a4_stale_temp_names_in_runtime_ignored` also plants `.tmp_48213_VM_HELPER_CONFIG.json` | W133 (= X2) |
+| G5 | real | `session_start.sh` line 30: the HOME check compares resolved paths, `B=$(cd "$BASE" && pwd -P)/` against `H=$(cd "$HOME" && pwd -P)/`; a base equal to HOME, one through `..`, a link into HOME and HOME with a trailing slash all stop SESSION_LAYOUT, and a missing BASE or HOME stops too (SD-81). Same line count | v1r `test_a1_base_required_outside_home_and_carried_by_launcher` (four new cases, each with a repo link that passes the REPO check) | W134 (the 2cfaac5 textual check), W135 (= X3's effect: a base equal to HOME), W117 retargeted |
+| G6 = CC-8 | real (audit line) | §9.3: one row for `outbox/selftest_<utc14>/.tmp_<pid>_RUN.json`, not a defect | none | none |
+| G7 = CC-6 | real (records) | `tests/run_tests.py` `git_record()`: TEST_RESULTS.json and MUTANTS_RESULTS.json record `snapshot_commit`, `vm2_git_tree` (the git tree of deploy/vm2 at that commit, tests included) and `vm2_clean`. §9.6's sentence corrected. INTEGRATION.json `amendment`: the headline runs are the final-tree runs of this round (9.8.6), the builder's runs are kept as `build_runs`, and the top-level `candidate_commit` is labelled as the completeness round's | the records themselves (9.8.6) | none (tooling) |
+| G8 | real | `probe_p5.py`: `--dir` is required (no default under HOME, which the standard route cannot write; SD-82). G-3 and §5.4 rule step 3 name `--dir /tmp/cps_probe_p5` and the standard route | p5 `test_g8_dir_required_never_under_home` | W138 |
+
+#### 9.8.2 Decisions and codes
+
+- **SD-77 (CC-2):** `STAGE_FREE_BYTES` = 2,000,000,000 bytes (2.067 GB with the 64 MiB margin, 1.17 times the 1,770 MB
+  from the start of a finish stage to the end of its save with M009's sizes). Supersedes SD-73's value.
+- **SD-78 (PF-2):** a clear message gives the README §1 block filled in, never a bare `session_start.sh` line; the Dot
+  runs it through `require_escalated`. The base stays set only by the block's export line (SD-72).
+- **SD-79 (PF-8):** after `STOP SETUP_MISSING HANDBACK C` the Dot runs the bootstrap once by itself; a second one waits
+  for the maintainer. Code unchanged; the printed letter stays C and the README names the exception.
+- **SD-80 (PF-1):** a series starts only when its starting message says how the scheduled mailbox check is handled;
+  otherwise `MAILBOX_UNSETTLED`. The choice itself is the owner's (OQ-28).
+- **SD-81 (G5):** the base-outside-HOME check compares resolved paths.
+- **SD-82 (G8):** `probe_p5.py --dir` is required.
+- **New code:** `MAILBOX_UNSETTLED`, the Dot's own (README §2.4 rule 8, case C). Like `NO_BLOCK` and `REVIEW_STOPPED` it
+  is in the README and checked by L14, not in `names.CODES`. No helper code is new or changed.
+- **Lines (D2a):** unchanged, C 7,506, M 896, total 8,402 (the caps of §9.2 hold). `session_start.sh` (80),
+  `core/names.py` (259) and `probe_p5.py` (131) changed lines in place; every other changed file is under `tests/` or
+  is README.md.
+
+#### 9.8.3 Deviations
+
+- G3: the README sentence is qualified instead of mapping EROFS in `run_post` and `place.evict` too (both already end
+  in a full STOP block with HANDBACK C).
+- PF-8: the README rule (the Dot runs the bootstrap once) was chosen over recording HANDBACK C as a deviation from A5
+  (ii); it matches the brief and needs no code.
+- CC-2: the stage value was raised instead of reinstating a space check before the download-back (no new line; the
+  D2a caps hold).
+- PF-4, PF-5, PF-6, PF-7 and PF-10 changed README or gate text only and have no mutant of their own; L14 holds each
+  sentence (README_RULES), and W139 to W143 cover the clear, the waits, the 6-hour rule and SETUP_MISSING.
+- FakeDot's bootstrap now runs without `CPS_VM_BASE` and `CPS_TOOLS` in its environment (a harness change), so a README
+  block without its export would stop every World's bootstrap; such a stop is never a kill (§2.15.4), so W139 is
+  carried by the two direct tests.
+- The guard sets were all re-run (not only cli.py's sites), although no function with guard sites changed: the 915
+  generated ids are the same as at `2cfaac5` and `a2298cb` (fold 545, session 202, glue 168), so every EQUIVALENT
+  entry keeps its id.
+
+#### 9.8.4 Open after the fix round
+
+- Everything in §9.7 stays open, with its additions: OQ-28 (the mailbox check against a series), OQ-29 (the personal
+  copy's place in the owner's documents), the unverified `/tmp` assumptions (a) to (d) and the reset survival of
+  `/tmp/cps`, each now a G-4 record.
+- README text without its own mutant (PF-4 to PF-7, PF-10): each sentence is held by L14's README_RULES; a reviewer
+  may ask for one mutant per sentence.
+- The runner v5 item (`.validate_<case>_<pid>` without `exist_ok`) and every gate G-1 to G-11 are not run.
+
+#### 9.8.5 Tests, lines and D14 at the final tree
+
+- New tests (4): v1r `test_pf2_clear_bootstrap_runs_in_a_fresh_shell`, vio `t_g2_tmp_emptied_before_space_check`, cod
+  `test_g3_erofs_inside_a_stage_stops_read_only_fs`, p5 `test_g8_dir_required_never_under_home`. Changed: v1r
+  `test_a1_base_required_outside_home_and_carried_by_launcher` (four G5 cases), vio
+  `t_a4_stale_temp_names_in_runtime_ignored` (a multi-digit pid) and `t_d16_stage_refuses_low_space_before_runner`
+  (the 3 x 590 MB bound), lint `t_l14_readme_rules` (12 new sentences, three changed, three new removed tokens, the block's export line),
+  rs `D_tools_wiped_same_boot_continues` (docstring: the README rule). The full suite has 572 tests (568 at
+  `2cfaac5`), the non-root pass 253 (251; t_g2 and test_g3 are in its suites).
+- New hand mutants (12): W132 to W143. Retargeted to the new text: W117 (the resolved HOME check) and W128 (the 2e9
+  value). The hand set has 144 mutants.
+- Lines: C 7,506, M 896, total 8,402, as at `2cfaac5`; the D2a caps hold.
+- D14: full suite 43.8 min (target 50, ceiling 60); the non-reset suites 261.5 s (budget 300 s); test_resets
+  2,315.1 s for 210 scenarios; the lints 53.4 s (budget 120 s); the non-root pass 505.5 s for 253 tests (budget 600 s).
+
+#### 9.8.6 Runs at the final tree
+
+Every run started from its own `bin/testclone.sh` snapshot of the working files on `2cfaac5`, `--jobs 4`, on a 4-CPU
+machine, one run at a time. Every run's record carries the helper tree sha256
+`55a090738b023e7a668ba7a6cd5555678c40d8b4e0966e4f6bed8a862d53cf7e` (deploy/vm2 without tests) and the deploy/vm2 git
+tree `4f996ef9c27f9a891912fd03b4fa40c46e8bd681` (with tests), which is the tree of deploy/vm2 in the commit of this
+round (`git rev-parse <commit>:deploy/vm2`); the snapshot commits lived only in the deleted clones. The runner's sha256
+is `7505e98a…f431` in every record. INTEGRATION.json `amendment` keeps every record; MUTANTS_RESULTS.json and
+TEST_RESULTS.json of each run are in `amend_fix/keep/` of the maintainer's scratch.
+
+| run | snapshot | result | wall | uid / CapEff |
+|---|---|---|---|---|
+| root, full suite | f9eb0da | 572 / 572 passed | 2,630.0 s (43.8 min) | 0 / full root |
+| non-root pass `--only nonroot --require-nonroot` | 0e7f9d2 | 253 / 253 passed | 505.5 s | 1000 / 0 |
+| hand set W01-W143 (W106 and W107 as uid 1000) | 6b8cd62 | 144 / 144 killed; every listed killer failed | 1,325.5 s | 0; 1000 / 0 for W106, W107 |
+| reviewer N and legacy (G, M, B, C) | 05c14b9 | 68 / 68 killed (G9, M2-18, M2-36 each killed by its first test, as in §8.0) | 390.2 s | 0 |
+| guard, core set: fold | add4227 | 545 sites, 531 killed, 14 survivors, each with its EQUIVALENT entry | 3,469.8 s | 0 |
+| guard, core set: session | c4408f1 | 202 sites, 199 killed, 3 survivors, each with its EQUIVALENT entry | 1,532.5 s | 0 |
+| guard, glue set, first half by id | 7bdbf5e | 84 sites, 71 killed, 13 survivors, each with its EQUIVALENT entry | 3,583.4 s | 0 |
+| guard, glue set, second half by id | 5441c43 | 84 sites, 79 killed, 5 survivors, each with its EQUIVALENT entry | 2,335.2 s | 0 |
+| trial of W117, W128, W132-W143 (before a README reflow: helper tree `ef3cf6c2…`) | 5d67add | 14 / 14 killed, every listed killer failing | 29.2 s | 0 |
+
+The survivors are the same 17 core and 18 glue sites as at `a2298cb` and `2cfaac5`, and the 915 generated ids are
+unchanged, so every EQUIVALENT argument keeps its id; none needed a new one. They still wait for G-1.

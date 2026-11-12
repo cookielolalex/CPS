@@ -167,10 +167,21 @@ def test_maint10_probe_start_refuses_seconds_below_min_gap():
     assert not os.path.exists(os.path.join(d, 'probe', 'START.json'))
 
 
+def test_g8_dir_required_never_under_home():
+    """Fix round G8 (W138): probe_p5.py has no default folder under HOME, which the Dot's standard route cannot write:
+    without --dir it exits 2 (usage) and writes nothing; G-3 runs it with --dir under /tmp."""
+    home = os.path.join(WORK, 'g8home')
+    os.makedirs(home)
+    p = subprocess.run([sys.executable, '-I', '-B', PROBE, 'hold', '--seconds', '0'], env=dict(env(WORK), HOME=home),
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 2 and '--dir' in p.stderr, (p.returncode, p.stdout, p.stderr)
+    assert os.listdir(home) == [], os.listdir(home)
+
+
 TESTS = [test_safe03_probe_p5_same_call_check_refused, test_op05_probe_same_session_refused,
          test_probe_too_early_other_boot_not_started, test_probe_detached_worker_outlives_start,
          test_probe_verdict_pass_and_fail_from_records, test_probe_start_refuses_alive_worker_and_hold_records,
-         test_maint10_probe_start_refuses_seconds_below_min_gap]
+         test_maint10_probe_start_refuses_seconds_below_min_gap, test_g8_dir_required_never_under_home]
 
 
 def run(only=None, work=None):

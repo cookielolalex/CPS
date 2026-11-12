@@ -533,6 +533,32 @@ def test_a3_erofs_ends_in_stop_block():
         assert json.loads((w.base / 'outbox/v2/HALT.json').read_text())['code'] == 'READ_ONLY_FS'
 
 
+def test_g3_erofs_inside_a_stage_stops_read_only_fs():
+    """Fix round G3 (W136): an OSError with errno EROFS raised inside a stage (worker.dispatch, the runner's prepare of
+    an everyday job) ends in the full block STOP READ_ONLY_FS HANDBACK C with the journal's header; HALT.json records
+    READ_ONLY_FS and FOREGROUND.json is gone (a stage that ended, not one that died)."""
+    import errno
+    import test_vio as V
+    from cpsvm2 import worker
+    V.WORK = WORK
+    with V.fw() as w:
+        code, idle = V.to_idle(w)
+        w.everyday_request()
+        code, save = w.dot.cmd('answer', '--at', V.fat(idle), 'case=%s' % w.everyday[-1])
+
+        def erofs(kind, info, env):
+            raise OSError(errno.EROFS, 'Read-only file system', str(env.lay.base / 'tmp'))
+        orig = worker.dispatch
+        worker.dispatch = erofs
+        try:
+            code, lines = V.until(w, code, save, lambda ls: 'STOP' in ls[-1])
+        finally:
+            worker.dispatch = orig
+        assert code == 3 and lines[0].startswith('CPSV series=E1 ') and lines[-1] == 'DO: STOP READ_ONLY_FS HANDBACK C', lines
+        assert json.loads((w.base / 'outbox/v2/HALT.json').read_text())['code'] == 'READ_ONLY_FS'
+        assert not (w.base / 'outbox/v2/FOREGROUND.json').exists()
+
+
 def test_opx06_inputs_changed_bounded_then_slip_limit():
     """OPX-06 / D3d (W22): everyday INPUTS_CHANGED is a counted refusal: three times REFUSED INPUTS_CHANGED, then
     STOP SLIP_LIMIT (local sticky) for the owner."""
@@ -568,7 +594,7 @@ TESTS = [test_foreign_md5_same_size_is_fork, test_marks_survive_every_commit, te
          test_job_busy_too_long, test_transcript_and_copy_codes, test_internal_step_overflow,
          test_chain_invalid_at_assemble, test_head_error_codes_stop_the_session,
          test_s06_profile_folder_with_brace_refused_before_commit, test_s11_oserror_outside_stage_prints_stop_block,
-         test_a3_erofs_ends_in_stop_block,
+         test_a3_erofs_ends_in_stop_block, test_g3_erofs_inside_a_stage_stops_read_only_fs,
          test_opx06_inputs_changed_bounded_then_slip_limit, test_place_job_output_not_empty]
 
 

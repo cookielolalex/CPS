@@ -49,7 +49,7 @@ FEATURES = ('memory', 'custom_instructions', 'web', 'connectors', 'file_uploads'
 
 # Upload cap, size limits and free space (§X.2, delta v2.1 §2.3, §2.8, §2.16.5); the O63 texts (D9).
 UPLOAD_CAP_BYTES = 94_371_840
-RAW_MAX_BYTES, MAX_TOOL_LINES, STAGE_FREE_BYTES = 1048576, 2000, 1500000000
+RAW_MAX_BYTES, MAX_TOOL_LINES, STAGE_FREE_BYTES = 1048576, 2000, 2000000000
 BASE_RE = r'/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*'
 O63_NOTE = ('O63: generator isolation by instruction only, not enforced or audited; tools present: %s; any tools-used '
             'statement is in final_message.')

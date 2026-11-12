@@ -64,6 +64,19 @@ def tree_sha():
     return hashlib.sha256(json.dumps(sorted(rows), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def git_record():
+    """Fix round G7/CC-6: the snapshot commit this run's files belong to, the git tree of deploy/vm2 at that commit
+    (tests included, unlike helper_tree_sha256) and whether deploy/vm2's tracked files equal it."""
+    import subprocess
+    repo = os.path.dirname(os.path.dirname(VM2))
+
+    def g(*a):
+        p = subprocess.run(['git', '-C', repo] + list(a), capture_output=True, text=True)
+        return p.stdout.strip() if p.returncode == 0 else None
+    return {'snapshot_commit': g('rev-parse', 'HEAD'), 'vm2_git_tree': g('rev-parse', 'HEAD:deploy/vm2'),
+            'vm2_clean': g('status', '--porcelain', '--untracked-files=no', '--', 'deploy/vm2') == ''}
+
+
 def test_names(name, mod):
     """The test names a suite answers to in --only."""
     if name == 'test_resets':
@@ -151,7 +164,7 @@ def main(argv):
            'failed': [{'suite': r['name'], 'tests': r['failed'], 'detail': r['detail']} for r in results if r['failed']],
            'suites': [{k: r.get(k) for k in ('name', 'tests', 'passed', 'seconds', 'counts')} for r in results],
            'seconds': round(time.time() - t0, 1), 'free_bytes_at_start': free, 'jobs': a.jobs, 'only': only,
-           'helper_tree_sha256': tree_sha(), 'runner_sha256': runner_sha, 'uid': uid, 'cap_eff': cap}
+           'helper_tree_sha256': tree_sha(), 'runner_sha256': runner_sha, 'uid': uid, 'cap_eff': cap, **git_record()}
     with open(os.path.join(a.work, 'TEST_RESULTS.json'), 'w') as f:
         json.dump(doc, f, indent=1, sort_keys=True, default=str)
     print(json.dumps({k: doc[k] for k in ('tests', 'passed', 'seconds')}))

@@ -57,7 +57,7 @@ def refuse(code):
 def main(argv):
     ap = argparse.ArgumentParser(prog='probe_p5.py')
     ap.add_argument('cmd', choices=('start', 'hold', 'check', '_worker'))
-    ap.add_argument('--dir', default=os.path.join(os.environ.get('HOME', '/nonexistent'), 'cps_probe_p5'))
+    ap.add_argument('--dir', required=True)                     # G8: never a default under HOME (read-only on the Dot)
     ap.add_argument('--seconds', type=int, default=900)
     ap.add_argument('--min-gap', type=int, default=480)
     ap.add_argument('--token', default='')
