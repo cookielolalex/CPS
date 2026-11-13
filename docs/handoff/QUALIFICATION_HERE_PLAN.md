@@ -1,6 +1,6 @@
 # Qualification in the maintainer's session: plan (O64–O69)
 
-**Status: draft plan, revision 3, 2026-11-13. Not admitted. Nothing has run on qualification inputs.**
+**Status: draft plan, revision 3c, 2026-11-13. Not admitted. Nothing has run on qualification inputs.**
 
 How we got here:
 - **Revision 1** went to three critics. Their 57 findings were resolved in revision 2.
@@ -9,6 +9,7 @@ How we got here:
 - **A mechanics probe on invented data (P1a)** has tested the platform mechanisms the plan depends on (section 7).
 - **The orchestration is simpler** than in revision 2. There are no operator AI contexts and no lanes. The main session runs the deterministic driver itself and launches each fresh context as its own workflow.
 - **An independent coverage check** of this revision listed 20 items: 19 fixes, all applied here, and one note to keep a text unchanged.
+- **Revision 3c**, before the rehearsal, brings this page in line with the built toolkit and its independent pre-rehearsal review. It names the main session's keep-alive Monitor (5.10, 5.5) and keeps it apart from the paused hourly heartbeat (section 2). It adds the restricted-type check at P3 (section 6, 5.5, 5.6), says how a launch that never started is read (5.3), lists invented-id copies among the probe runs (section 6) and adds one tripwire check (5.5). The gate, the bar and the evaluation are unchanged.
 
 No runtime, admission or ledger exists yet. The private procedure holds the exact paths, commands and configurations; this page is the public summary. It names cases only by counts and roles, and paths only by placeholders.
 
@@ -51,7 +52,7 @@ Placeholders:
 - One scoring, in separate evaluator contexts, with frozen evaluator v4 (`compare_target050.py`, `fc723405…`) and aggregator v2 (`aggregate_qualification050.py`, `e5aa4fc7…`).
 - **The bar (O12, O31).** 30 independently eligible, revision-compatible pairs, including 10 reserved (the pool has 15 reserved). For each reader, pooled matched/counted over the 30 pool pairs must be at least 0.95, and no case may fall below 0.90. C/D is reported against 0.75 and does not gate (O24). The other elements are listed in section 5.8.
 - The exclusions, the WT-A5 closure, the 38 reserved projects, the dimension-plus rule and every frozen output.
-- The heartbeat stays paused. Private evidence stays off GitHub.
+- The hourly heartbeat automation of the research work (AGENTS.md: paused unless the user resumes it) stays paused. It is neither the main session's keep-alive Monitor (5.10), which runs during qualification, nor the O62 mailbox task, which 5.10 disables. Private evidence stays off GitHub.
 
 ## 3. What changes from the Dot protocol, and why
 
@@ -162,7 +163,7 @@ A restart kills running agents and commands. Files on disk survive.
   - **A killed `freeze` that left no `FROZEN.json`.** The folder can never be frozen under runner v4. Gate item 1 fails, and so the gate fails.
   - **A killed scope reader or generator.** If its file was not written, and the technical test of 5.2 holds, record `interrupt` with the times from the transcript, then restart (5.2). If the file was written, go on (5.2).
   - **A killed visual reviewer.** If it wrote nothing, one replacement reviewer is allowed for that run (O45). If it wrote anything, visual QA has failed.
-  - **A context that was launched but never opened a conversation** (no journal entry and no transcript). Launch it again (O58), once per attempt.
+  - **A context that was launched but never opened a conversation** (no `started` journal entry and no transcript; a journal `failed` line with an empty agent id counts as never opened). Launch it again (O58), once per attempt; a second failed launch of the same run and role goes to the owner.
 - Every such event gets a private incident record with the restart's time and the evidence of its cause. The killed context's transcript is kept (O56).
 
 ### 5.4 Visual-review completion (O61)
@@ -178,17 +179,18 @@ A restart kills running agents and commands. Files on disk survive.
 
 ### 5.5 Isolation audit
 
-- **Who and when.** A pinned audit script reads every transcript in the window, from the admission freeze to the anchoring of `ALL_FROZEN.json`. That covers scope readers, generators, visual reviewers, completions, interrupted contexts, auditors and the main session itself.
+- **Who and when.** A pinned audit script reads every transcript in the window, from the admission freeze to the anchoring of `ALL_FROZEN.json`. That covers scope readers, generators, visual reviewers, completions, interrupted contexts, auditors, the P3 type probe and the main session itself.
   - The deterministic audit runs after each run is frozen, and again in full before `ALL_FROZEN.json`.
-  - A tripwire in the driver scans new transcripts at every driver pass. It looks for any tool outside the role's agent type, any unpinned injected item, any change of the platform version recorded in the transcript, and any prompt-delivery mismatch. It stops new launches at once if it finds one, and the owner is told before anything else is launched.
+  - A tripwire in the driver scans new transcripts at every driver pass. It looks for any tool outside the role's agent type, any unpinned injected item, any change of the platform version recorded in the transcript, any prompt-delivery mismatch, and any path outside the role's files that contains one of the old never-touch markers. It stops new launches at once if it finds one, and the owner is told before anything else is launched.
 - **What it checks.** Every tool call, with every path normalized and resolved, including `cd` and relative paths. Every injected item: its type and content hash must match the pinned values for the role, agent type and turn. A transcript line that cannot be decoded is an audit error that goes to the owner; it is never skipped.
 - **Allowed:**
   - a generator reads its run's `input/`, writes its `output/`, and runs `python3`;
   - a scope reader reads its two input files and writes its one response;
   - a visual reviewer opens only the listed PNG files and writes its review;
   - an auditor reads nothing (its list is in its prompt) and writes only its verdict files;
+  - the P3 type probe reads only its own invented input and output folders and writes only its output folder;
   - every role hands back its report once, at the end;
-  - the main session uses only its listed records, the driver, the pinned completion text, the anchor uploads, and its own background commands (the boot-id log and the driver's wake-up check).
+  - the main session uses only its listed records, the driver, the pinned completion text, the anchor uploads, and its own background commands (the boot-id log, the driver's wake-up check and the keep-alive Monitor).
 - **Provenance rule.** A read outside those sets is still allowed in two cases only:
   - the file is the platform's saved copy of a long output of the same context, named in an earlier tool result of the same transcript;
   - the file was created earlier in the same transcript, by a command whose inputs were all allowed, at a path no other transcript in the window wrote to. The audit builds a write index across all transcripts to check this.
@@ -224,7 +226,7 @@ A restart kills running agents and commands. Files on disk survive.
 ### 5.6 Conversation census (O52, as replaced by O66)
 
 - The census covers every transcript with any entry in the window: every workflow, every resumed-conversation file, the main session and any other agent of this session.
-- Every qualification agent must match a driver record, one to one, by workflow run, label and agent id: a launch, a relaunch, a replacement, an auditor or a completion.
+- Every qualification agent must match a driver record, one to one, by workflow run, label and agent id: a launch, a relaunch, a replacement, an auditor, a completion or the P3 type probe.
 - Any other context found writing into, or producing an output for, a qualification job fails that run, and the owner is told.
 - The owner gets the census summary to confirm before any target is downloaded.
 
@@ -311,7 +313,7 @@ Outcomes, in this order of precedence:
 - **Other work.** The maintainer's hourly mailbox scheduled task (O62) is disabled and kept for its history. The VM-helper work is paused. Neither resumes before P7 ends without the owner's word (O67).
 - **CPU.** No other CPU-heavy job runs during P2 measurements or during P5–P6.
 - **The main checkout.** From P3 until `ALL_FROZEN.json` is anchored, nothing is committed, checked out, pulled or edited there, and no instruction, settings or agent-definition file changes.
-- **Background commands.** The main session may run its own background commands and monitors: the boot-id log and the driver's wake-up check. Their notices reach only the main session, as measured. No other context may start one.
+- **Background commands.** The main session may run its own background commands and monitors: the boot-id log, the driver's wake-up check, and a keep-alive Monitor that prints one fixed line every 20 minutes, so that the main session is not left idle while work runs (idle reclaim is the leading hypothesis for the container restarts). Each is typed byte for byte as the private procedure pins it. Their notices reach only the main session, as measured. No other context may start one.
 - **The scratchpad.** The main session writes nothing in the session scratchpad except launchers in the launch folder.
 - **Answers.** Historical answers and other answer-bearing material are not on the container (P1). The one exception is the live main-session transcript. It holds earlier evaluation text and cannot be removed; it lies outside every role's files and is audited.
 
@@ -322,9 +324,9 @@ Outcomes, in this order of precedence:
 | P0 Plan review | Revision 2 | One independent fresh-context review (two reviewers). The owner answers the open questions | **Done:** both reviewers approved with listed fixes, applied in this revision; O66–O69 recorded |
 | P1a Mechanics probe | P0 | Invented data only, after the task list was emptied: prompt delivery through a launcher, injected items, label mapping, follow-up to a finished agent, a stop, effort, the restricted agent type, the general-purpose type, cross-context notices | **Done** (section 7) |
 | P1 Build | P1a | **First, while their inputs are in place:** the qualification runtime generated with the pinned staging script, the clean dependency bundle, the rehearsal inputs and the development-trial behaviour counts. **Then answer isolation (O68):** every answer-, target-, comparison-, expectation-, raw-row-, study- and prior-output-bearing folder, and every earlier subagent transcript and saved tool output of this session (except the development-trial and probe transcripts the audit needs, after a scan), archived to the maintainer-only Drive folder as one split stream, verified by md5, then deleted locally; reproducible working folders deleted; the maintainer's records moved out of the scratchpad; a hash scan of the whole filesystem finds no registered target. **Then:** release clone; the driver, the audit, the launcher template and the evaluation scripts, with tests on invented data; runner and export self-tests from a throwaway clone; environment fingerprint including the CLI; Drive upload limit measured | All tests pass; clean hash scan; at least 10 GB free; fingerprint recorded |
-| P2 Rehearsal | P1 exit; section 5.10 conditions met | `<R>` with its own release, admission, ledger and `JOBS.json`: 4 exposed tuning cases (one large and scoped, one ordinary `.xlsx`, one more `.xls`, one contract job), A then B, driven by the main session. A full-shape run with 6 contexts in flight. Induced faults. Probe runs on exposed cases in separate probe roots, so that at least 16 generators and 16 visual reviewers are measured. At least one auditor, one target-blind reviewer and one download context | Every test passes, or the plan is amended and reviewed again; rates, disk, time, unrecoverable windows and the restart rate measured |
+| P2 Rehearsal | P1 exit; section 5.10 conditions met | `<R>` with its own release, admission, ledger and `JOBS.json`: 4 exposed tuning cases (one large and scoped, one ordinary `.xlsx`, one more `.xls`, one contract job), A then B, driven by the main session. A full-shape run with 6 contexts in flight. Induced faults. Probe runs on exposed cases (and invented-id byte copies of them) in separate probe roots, so that at least 16 generators and 16 visual reviewers are measured. At least one auditor, one target-blind reviewer and one download context | Every test passes, or the plan is amended and reviewed again; rates, disk, time, unrecoverable windows and the restart rate measured |
 | P2x Admission review | P2 exit | One independent fresh-context review of the built toolkit (driver, audit, launcher and completion templates, injected-item pins, evaluation scripts, evaluation plan, review briefs and rubric, agent definition), its tests and the P2 results, against this plan. It can send the plan back to P0. One or two fix rounds are budgeted. If the recomputed restart risk exceeds 20%, the owner chooses between the two options of section 11 (O69(d)) | The review admits the toolkit; the owner's choice is recorded if needed |
-| P3 Admission | P2x exit; owner go | Session check and hash scan again; disk gate (projected need from P2, about 18–20 GB); check the runtime is byte-identical to the staged kit except for the path prefix; freeze the evaluation plan; freeze the admission; write the release; independent hash-only pre-flight; upload a hash anchor | Pre-flight passes; anchor on Drive |
+| P3 Admission | P2x exit; owner go | Session check and hash scan again; disk gate (projected need from P2, about 18–20 GB); check the runtime is byte-identical to the staged kit except for the path prefix; freeze the evaluation plan; freeze the admission; write the release; a type probe (one restricted-type context with an invented prompt, audited and censused like any handout) showing that the agent type is registered in the current boot; independent hash-only pre-flight; upload a hash anchor | Pre-flight passes; anchor on Drive |
 | P4 Nonattempts | P3 exit | 17 nonattempts, reader A | 17 folders frozen and verified |
 | P5 Run A | P4 exit; 5.10 rechecked | 36 runs, up to 6 contexts in flight; freeze, verify and audit each; auditors as needed | Every A run frozen, verified and audited, with every auditor verdict frozen; anchor on Drive |
 | P6 Run B | P5 exit | The same for B | Every B run frozen, verified and audited |
