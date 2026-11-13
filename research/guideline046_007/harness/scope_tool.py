@@ -634,7 +634,7 @@ def propose(inv_raw, route):
     }
     if not applies:
         for s, sh in zip(out_sheets, sheets):
-            s['in_scope'] = sh.meta['in_scope']          # v3: the packet's flag (false only on an empty sheet, checked above)
+            s['in_scope'] = sh.index not in empty or bool(sh.meta['in_scope'])   # v3: an empty sheet keeps the packet's flag
             s['reason'] = (f'scope stage not applied: {litcf} literal or cached-formula content cells, not more than {route.SCOPE_THRESHOLD} (R59)'
                            if s['in_scope'] else REASONS['empty'])
             s['linked_analysis_blocks'] = 0
