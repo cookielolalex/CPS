@@ -8,6 +8,7 @@ How we got here:
 - **The owner's answers** to the plan's questions are recorded as O66–O69 (commit `7b58c35`).
 - **A mechanics probe on invented data (P1a)** has tested the platform mechanisms the plan depends on (section 7).
 - **The orchestration is simpler** than in revision 2. There are no operator AI contexts and no lanes. The main session runs the deterministic driver itself and launches each fresh context as its own workflow.
+- **An independent coverage check** of this revision listed 20 items: 19 fixes, all applied here, and one note to keep a text unchanged.
 
 No runtime, admission or ledger exists yet. The private procedure holds the exact paths, commands and configurations; this page is the public summary. It names cases only by counts and roles, and paths only by placeholders.
 
@@ -15,7 +16,7 @@ Placeholders:
 - `<W>`: the private qualification work area on the maintainer's container. It lies outside the session scratchpad and outside the platform's transcript folders.
 - `<Q>`, `<R>`: the qualification root and the rehearsal root inside `<W>`. They never share a ledger.
 - `<release clone>`: a separate git clone of this repository inside `<W>`, checked out at the release commit.
-- `<launch folder>`: one folder inside the session scratchpad. It holds only the launcher scripts of contexts in flight, because the platform's Workflow tool accepts script paths only from there.
+- `<launch folder>`: one folder inside the session scratchpad. It holds only the launcher scripts of contexts in flight, because the platform's Workflow tool refused script paths in the work area. Of the places it accepts, the working directory is this repository's checkout, which must stay untouched, so the launchers go in the session scratchpad (P1a).
 
 ## 1. The decisions
 
@@ -32,7 +33,7 @@ Placeholders:
   - (a) Opening the 15 reserved pool answers spends them. A later Dot qualification may reuse the same 30 pairs only on the unchanged frozen system.
   - (b) O65 also covers the duplicate-family alternate's target.
   - (c) If an element that needs no target fails first, the reserved targets stay closed.
-  - (d) The owner accepted a 15–20% chance that a container restart fails the gate. **The measured risk is likely higher** (section 11), so the owner is asked to re-confirm before P3 if it exceeds 20%.
+  - (d) The owner accepted a 15–20% chance that a container restart fails the gate. **The measured risk is likely higher** (section 11). If it exceeds 20%, the owner chooses before P3 between re-confirming at the measured figure and first admitting a reviewed runner revision (section 11).
 - **What a pass covers.** A pass qualifies CPS as run from a Claude Code session, with the model and effort recorded in section 5.9. It does not qualify the Dot, which needs its own qualification on the same frozen system.
 
 ## 2. What stays the same
@@ -69,7 +70,7 @@ Placeholders:
 - **Tools:** Read, Write, Edit, Bash, Glob and Grep, plus the platform's hand-back tool. There is no connector, web, Drive, mail, GitHub, task-list, scheduling, skill or agent tool, and no tool-schema loader.
 - **System prompt:** the definition's short instruction to use only the paths the task names, and temporary files only in the task's output folder, plus the platform's fixed workflow-subagent notes.
 - **When it became available.** The platform loads agent definitions only at session start. So the type failed when it was first tried mid-session, and worked after the next container restart reloaded the registry (P1a).
-- **Fallback.** If the type disappeared before P3, the platform's general-purpose type would be used with full disclosure. There is never a switch after P3.
+- **Fallback.** If `cps-qual-ctx` is unavailable before P3, P3 waits. The general-purpose type is used only after the owner re-confirms O66's fallback, shown the measured task-list writes (8 of 132 default-type transcripts: 16 creates, 15 updates, 7 stops) and its 58-tool list. T1b, T8 and T14 are then re-run on that type, and the P2x review re-checks. There is never a switch after P3.
 - **Why it is needed.** In this session's earlier workflow subagents of the default type, 8 of 132 transcripts held task-list writes (16 creates, 15 updates and 7 stops), two of them by review agents. Under 5.5 any such write is a breach, and the restricted type has no such tools.
 
 **What each fresh context receives besides the prompt** (measured on the restricted type at P1a; the rehearsal records the exact list and content hashes again, and the admission pins them):
@@ -143,7 +144,7 @@ These are fixed in the admission before the ledger's first entry, and they never
   - any ending without positive technical evidence.
 - If the file exists, even partly written, there is no restart. The run goes on with `scope-finish` or `finish`, so a bad file becomes a recorded failure.
 - The runner's two forms apply unchanged:
-  - **Form 1:** freeze the folder, then prepare again under the restart jobs root.
+  - **Form 1:** freeze the folder, then prepare again under a restart jobs root (`<reader>_restart1`, or `<reader>_restart2` after an orphan prepare, 5.3).
   - **Form 2:** in place, after an agreed scope.
 - **Stops before any response.** After any `STOP_` or `INTERRUPTED` stage before a response, the driver always takes the one Form 1 restart that the runner's restart rule allows, and tells the owner. Prepare is deterministic, so this selects nothing. If the restarted folder stops again, it is frozen as a failed run and run B goes ahead.
 
@@ -152,10 +153,10 @@ These are fixed in the admission before the ledger's first entry, and they never
 A restart kills running agents and commands. Files on disk survive.
 - **Never resume a qualification workflow.** Resuming would replay cached results and silently start a second conversation for any agent that was running.
 - **The boot id.** The driver records it with every launch and every runner command. A changed boot id proves that every earlier process and workflow is dead, so recovery needs no waiting period.
-- **The main session.** It resumes the qualification when it is next prompted. In this session, every restart so far brought it a system notice.
+- **The main session.** It resumes the qualification when it is next prompted. In this session, the last two restarts each brought it a system notice.
 - **Rules for each run that was in flight:**
   - **A killed `prepare`.** The stage is recorded as `INTERRUPTED`, and the run takes its one Form 1 restart.
-  - **A `prepare` killed after it created the job folder but before its ledger entry.** The orphan folder is recorded with a hash manifest and listed as an unledgered predecessor. The pair is prepared again in the restart root, and that counts as its one restart.
+  - **A `prepare` killed after it created the job folder but before its ledger entry.** That prepare opened no AI context and selects nothing, so it is not counted as the pair's restart. The orphan folder gets a manifest and is listed as an unledgered predecessor. The pair is prepared again under `<reader>_restart1` (under `<reader>_restart2` if the orphan was itself in `<reader>_restart1`). The runner's restart rule then applies unchanged, and any restart it allows goes under `<reader>_restart2`. A second orphan of the same pair goes to the owner, with nothing consumed.
   - **A killed `scope-finish` or `finish`.** These stages freeze the response before anything else, so the run has failed, with no restart. The runner allows no other outcome, and the ledger cannot be rolled back.
   - **A killed `visual-record`.** Visual QA has failed for the run.
   - **A killed `freeze` that left no `FROZEN.json`.** The folder can never be frozen under runner v4. Gate item 1 fails, and so the gate fails.
@@ -173,7 +174,7 @@ A restart kills running agents and commands. Files on disk survive.
   - The resumed conversation is written to a second transcript file: a full copy of the earlier entries plus the new turn. The audit and the census read both files.
   - If the delivered text differs from the pinned text, the completion counts as used and visual QA fails.
 - **Test T4 is still a hard exit condition of P2.** The probe used a default-type agent, so the rehearsal repeats it on the restricted type. If it fails, the plan returns to review with a different reviewer design. There is no pre-accepted "no completion" fallback.
-- **The reviewer's stated conversation id.** Every context can see the session's link, and a reviewer may write it as its own conversation id. When the review states an id that differs from the reviewer's agent id, the driver records the review without the operator's id flag (the runner accepts this when the review states one). It records both ids privately, and the census maps the review to its transcript. This costs no completion and is not a visual QA failure.
+- **The reviewer's stated conversation id.** Every context can see the session's link, and a reviewer may write it as its own conversation id. When the review states an id that differs from the reviewer's agent id, the driver records the review without the driver's `--reviewer-conversation-id` flag (the runner accepts this when the review states one). It records both ids privately, and the census maps the review to its transcript. This costs no completion and is not a visual QA failure.
 
 ### 5.5 Isolation audit
 
@@ -193,7 +194,7 @@ A restart kills running agents and commands. Files on disk survive.
   - the file was created earlier in the same transcript, by a command whose inputs were all allowed, at a path no other transcript in the window wrote to. The audit builds a write index across all transcripts to check this.
 - **Deviation (recorded, not a breach):**
   - reading the shared task list while it holds only the pinned (empty) content;
-  - a scratch write outside the run folder that no other context touches, and a listing of the scratchpad that shows only the context's own files and the launch folder's name;
+  - a write in the session scratchpad, outside the launch folder, that no other context touches, and a listing of the scratchpad that shows only the context's own files and the launch folder's name;
   - a non-`python3` shell command confined to the role's files;
   - reading a repository file that the prompt itself names, at the release commit's bytes. These are generic, public files with no case data.
 - **Breach:**
@@ -290,7 +291,7 @@ Outcomes, in this order of precedence:
 - **Agent type.** `cps-qual-ctx` (definition sha256 pinned) for scope readers, generators, visual reviewers, auditors and every evaluation role except the download role. The download role needs the Drive tools, so it runs as the general-purpose type and is audited to its one declared file.
 - **Injected context and platform.** These are pinned, and the driver refuses every launch if any of them differs:
   - the sha256 of `AGENTS.md` and of the agent definition;
-  - the platform settings files;
+  - the platform settings files that stay byte-stable across restarts (the others are recorded per boot, as accepted at the P2x review);
   - the platform's plugin and skill folders;
   - the Claude Code CLI version and entry file;
   - the allowed task-list reminder forms (absent, or empty).
@@ -311,6 +312,7 @@ Outcomes, in this order of precedence:
 - **CPU.** No other CPU-heavy job runs during P2 measurements or during P5–P6.
 - **The main checkout.** From P3 until `ALL_FROZEN.json` is anchored, nothing is committed, checked out, pulled or edited there, and no instruction, settings or agent-definition file changes.
 - **Background commands.** The main session may run its own background commands and monitors: the boot-id log and the driver's wake-up check. Their notices reach only the main session, as measured. No other context may start one.
+- **The scratchpad.** The main session writes nothing in the session scratchpad except launchers in the launch folder.
 - **Answers.** Historical answers and other answer-bearing material are not on the container (P1). The one exception is the live main-session transcript. It holds earlier evaluation text and cannot be removed; it lies outside every role's files and is audited.
 
 ## 6. Phases
@@ -319,10 +321,10 @@ Outcomes, in this order of precedence:
 |---|---|---|---|
 | P0 Plan review | Revision 2 | One independent fresh-context review (two reviewers). The owner answers the open questions | **Done:** both reviewers approved with listed fixes, applied in this revision; O66–O69 recorded |
 | P1a Mechanics probe | P0 | Invented data only, after the task list was emptied: prompt delivery through a launcher, injected items, label mapping, follow-up to a finished agent, a stop, effort, the restricted agent type, the general-purpose type, cross-context notices | **Done** (section 7) |
-| P1 Build | P1a | **Answer isolation (O68):** every answer-, target-, comparison-, expectation-, raw-row-, study- and prior-output-bearing folder, and every earlier subagent transcript and saved tool output of this session (except the development-trial and probe transcripts the audit needs, after a scan), archived to the maintainer-only Drive folder as one split stream, verified by md5, then deleted locally; reproducible working folders deleted; the maintainer's records moved out of the scratchpad; a hash scan of the whole filesystem finds no registered target. **Then:** the qualification runtime generated with the pinned staging script before its inputs move; release clone; clean dependency bundle; the driver, the audit, the launcher template and the evaluation scripts, with tests on invented data; runner and export self-tests from a throwaway clone; environment fingerprint including the CLI; Drive upload limit measured | All tests pass; clean hash scan; at least 10 GB free; fingerprint recorded |
+| P1 Build | P1a | **First, while their inputs are in place:** the qualification runtime generated with the pinned staging script, the clean dependency bundle, the rehearsal inputs and the development-trial behaviour counts. **Then answer isolation (O68):** every answer-, target-, comparison-, expectation-, raw-row-, study- and prior-output-bearing folder, and every earlier subagent transcript and saved tool output of this session (except the development-trial and probe transcripts the audit needs, after a scan), archived to the maintainer-only Drive folder as one split stream, verified by md5, then deleted locally; reproducible working folders deleted; the maintainer's records moved out of the scratchpad; a hash scan of the whole filesystem finds no registered target. **Then:** release clone; the driver, the audit, the launcher template and the evaluation scripts, with tests on invented data; runner and export self-tests from a throwaway clone; environment fingerprint including the CLI; Drive upload limit measured | All tests pass; clean hash scan; at least 10 GB free; fingerprint recorded |
 | P2 Rehearsal | P1 exit; section 5.10 conditions met | `<R>` with its own release, admission, ledger and `JOBS.json`: 4 exposed tuning cases (one large and scoped, one ordinary `.xlsx`, one more `.xls`, one contract job), A then B, driven by the main session. A full-shape run with 6 contexts in flight. Induced faults. Probe runs on exposed cases in separate probe roots, so that at least 16 generators and 16 visual reviewers are measured. At least one auditor, one target-blind reviewer and one download context | Every test passes, or the plan is amended and reviewed again; rates, disk, time, unrecoverable windows and the restart rate measured |
-| P2x Admission review | P2 exit | One independent fresh-context review of the built toolkit (driver, audit, launcher and completion templates, injected-item pins, evaluation scripts, evaluation plan, review briefs and rubric, agent definition), its tests and the P2 results, against this plan. It can send the plan back to P0. One or two fix rounds are budgeted. If the recomputed restart risk exceeds 20%, the owner re-confirms (O69(d)) | The review admits the toolkit; the owner re-confirmation is recorded if needed |
-| P3 Admission | P2x exit; owner go | Check the runtime is byte-identical to the staged kit except for the path prefix; freeze the evaluation plan; freeze the admission; write the release; independent hash-only pre-flight; upload a hash anchor | Pre-flight passes; anchor on Drive |
+| P2x Admission review | P2 exit | One independent fresh-context review of the built toolkit (driver, audit, launcher and completion templates, injected-item pins, evaluation scripts, evaluation plan, review briefs and rubric, agent definition), its tests and the P2 results, against this plan. It can send the plan back to P0. One or two fix rounds are budgeted. If the recomputed restart risk exceeds 20%, the owner chooses between the two options of section 11 (O69(d)) | The review admits the toolkit; the owner's choice is recorded if needed |
+| P3 Admission | P2x exit; owner go | Session check and hash scan again; disk gate (projected need from P2, about 18–20 GB); check the runtime is byte-identical to the staged kit except for the path prefix; freeze the evaluation plan; freeze the admission; write the release; independent hash-only pre-flight; upload a hash anchor | Pre-flight passes; anchor on Drive |
 | P4 Nonattempts | P3 exit | 17 nonattempts, reader A | 17 folders frozen and verified |
 | P5 Run A | P4 exit; 5.10 rechecked | 36 runs, up to 6 contexts in flight; freeze, verify and audit each; auditors as needed | Every A run frozen, verified and audited, with every auditor verdict frozen; anchor on Drive |
 | P6 Run B | P5 exit | The same for B | Every B run frozen, verified and audited |
@@ -365,7 +367,7 @@ Outcomes, in this order of precedence:
 - **T6.** The ledger, job locks and global slots hold with 6 contexts in flight. A busy refusal consumes nothing. The platform's limit on concurrent workflows is measured.
 - **T8 (exit).** The isolation audit classifies every call and every injected item of every rehearsal, probe, P1a and development-trial transcript. The flag and breach rates are reported per role. There are zero breaches by restricted-type contexts.
 - **T9.** A `.xls` source and a contract job build through the clean bundle and the runner's pinned environment.
-- **T10.** Measured: disk, time and transcript size per run; every unrecoverable window per role (section 11); and the container restart rate from the boot-id log. The disk projection fits with margin.
+- **T10.** Measured: disk, time and transcript size per run; every unrecoverable window per role (section 11); and the container restart rate under qualification-like load, from the boot-id log. The disk projection fits with margin.
 - **T11.** The explicit effort option is accepted and recorded.
 - **T12.** A binary file of known sha256 (a bound source, not a target) downloads byte-exact through the Drive connector, and an anchor upload verifies.
 - **T13.** The evaluation scripts run correctly on invented fixtures, including the 62-run stage 0, the review rule and every eligibility branch.
@@ -392,12 +394,19 @@ Then, in order:
    - The isolation and census results.
 
    This record is frozen. If any element fails on the 60 pool runs, the result is FAIL and the reserved targets stay closed (O69(c)). The alternate's own result decides only whether it may later replace its primary.
-2. **Download.** One fresh context per pool case downloads its target read-only (O65). It may call only the metadata and download tools, on its one declared file id.
+2. **Download.** One fresh context per pool case downloads its target read-only (O65). Its tools are fixed, and nothing else is allowed:
+   - the tool-schema loader, used only once, to load exactly the Drive metadata and download tools;
+   - those two tools, on its one declared file id;
+   - a read of its own saved download result;
+   - the shell, running only the pinned decode-and-verify script, which writes only into that case's target folder;
+   - the hand-back.
+
+   Checks:
    - The bytes must equal Drive's md5 and size, and the id, parent folder, title and modification time must equal the held listing.
-   - A non-reserved target must also equal its registered sha256. If the Drive file has changed since the screen, the registered copy from the maintainer-only archive is used and the difference is recorded. A mismatch with no registered copy makes the target ineligible.
+   - A non-reserved target must also equal its registered sha256. A non-reserved target whose bytes differ from the registered sha256 is ineligible.
 3. **Eligibility, in two steps.**
    - First the checks that read no answer values (identity, header layout, dimension-plus screen), frozen on their own.
-   - Only if the duplicate-family primary fails one of those, and the alternate's runs passed stage 0, is the alternate's target downloaded (O69(b)) and put through the same checks.
+   - Only if the duplicate-family primary fails one of those, and the alternate's runs passed stage 0, is the alternate's target downloaded (O69(b)) and put through the same checks, by the second eligibility runner before its remaining checks.
    - Then the remaining checks, frozen as the eligibility record.
    - If a pool case is ineligible and no permitted swap fixes it, the evaluation stops here (5.8).
 4. **Comparison.** A pinned script runs evaluator v4 on each of the 60 scored carriers (or the empty carrier), in a fresh evaluator context per case, and freezes the outputs. That context then reads the A/B row pointers only, to find A/B errors, each confirmed from the source by the review rule. It never repairs or rescores anything.
@@ -407,7 +416,8 @@ Then, in order:
 Rules for the evaluation contexts:
 - **Launch.** They are launched like the generation contexts, from driver-written launchers, with the delivery check and the census. They run as the restricted type, except the download role.
 - **Audit.** They are audited, with roles for download, eligibility, review and comparison, before the aggregator runs. Any Drive call other than the declared ones, or any read of another target, goes to the owner and is reported with the gate.
-- **Failures.** A context that dies having written nothing is replaced once, with the same input. A partly written output is frozen as it is, and that case is NOT DECIDED and goes to the owner. Deterministic steps may run again only if they reproduce the same bytes.
+- **Failures.** A context that dies having written nothing is replaced once, with the same input. A partly written output is frozen as it is, and that case is NOT DECIDED and goes to the owner. A second death is also NOT DECIDED. For a confirming review, a second death, or a partly written output, means the flag counts (5.8 item 4). Deterministic steps may run again only if they reproduce the same bytes.
+- **Download tool breaches.** Any other tool use by a download context voids that download (at P1a, default-type agents loaded other deferred tools unprompted, such as the monitor tool). One replacement download context is allowed per case, whether the first one died or breached; a second breach (or a second failure of either kind) makes the case NOT DECIDED, and it goes to the owner.
 - **The brief.** The evaluation brief allows exactly the case's pinned target, and states that `ALL_FROZEN.json` is anchored.
 - **Closed targets.** The other 23 reserved targets stay closed (22 if the alternate is used).
 
@@ -445,11 +455,15 @@ The public record never includes case ids, Drive ids, session or agent ids, priv
 
   On development numbers these windows add up to about 5–9 run-hours, which overlap to about 4–7 hours of wall time. The container restarted three times on 2026-11-13 before 07:10 UTC. Revision 2 assumed about two a day.
 
-  The chance that a restart fails at least one pool run is roughly 1 − exp(−rate × open-window time): about 28–44% at two restarts a day, and about 70–94% at the rate seen on 2026-11-13. One failed pool run fails the gate (the 0.90 floor), and the pool has no margin. O69(d) accepted 15–20%, so the owner re-confirms before P3 with the figure measured at P2. A boot-id log has run every five minutes since 2026-11-13 to measure the rate. No rule can be relaxed. The owner's choices are to accept the measured risk, or to wait until the measured rate is lower.
+  The chance that a restart fails at least one pool run is roughly 1 − exp(−rate × open-window time): about 28–44% at two restarts a day, and about 70–94% at the rate seen on 2026-11-13. One failed pool run fails the gate (the 0.90 floor), and the pool has no margin. O69(d) accepted 15–20%, so the owner decides before P3 with the figure measured at P2 (next item). A boot-id log has run since 2026-11-13 to measure the rate. No rule of this plan can be relaxed within the qualification. Waiting at the P2 exit for a longer measurement can only refine the figure.
+- **The restarts so far came under heavy load.** The three container restarts on 2026-11-13 each happened while heavy VM-helper test or mutant runs (4 parallel jobs) were running. A load or memory cause is a hypothesis. It is now measured: a logger in `<W>` records the boot id, load, free memory and the largest process every 60 seconds. P2 records the restart rate under qualification-like load. If the measured risk over all unrecoverable windows exceeds 20%, two options go to the owner before P3:
+  - re-confirm O69(d) at the measured figure; or
+  - first build and admit a runner revision that lets an interrupted deterministic stage (`scope-finish` after the response freeze, `finish`, `visual-record`, `freeze`) be re-run when it reproduces the same bytes. That revision needs an independent review and its own admission, and it is never made mid-qualification.
 - **A CLI change at a restart** could change the wrapper, the system prompt, the tools or the injected items mid-qualification. It is fingerprinted and checked per transcript entry, and it stops the qualification until the owner decides.
-- **Disk.** About 21.7 GB is free after the removal of a reproducible 8.5 GB test install, out of about 39 GB usable. Development job folders took 85–264 MB each. With generator transcripts in two copies, P5–P8 need roughly 18–20 GB. More space comes from the answer-isolation cleanup in P1. The driver holds a new `prepare` when the remaining projected need does not fit.
+- **Disk.** About 21.7 GB is free after the removal of a reproducible 8.5 GB test install, out of about 40 GB usable. Development job folders took 85–264 MB each. With generator transcripts in two copies, P5–P8 need roughly 18–20 GB. More space comes from the answer-isolation cleanup in P1. The driver holds a new `prepare` when the remaining projected need does not fit.
 - **The platform cannot confine file access.** Every context can reach the whole disk. Isolation therefore rests on:
   - the restricted agent type, which has no connector, web, Drive, task-list or agent tools;
+    - In this session's earlier default-type workflow subagents, 8 of 132 transcripts held task-list writes (16 creates, 15 updates, 7 stops). The restricted type has no task-list tools. The download role (general-purpose) is the only qualification role that still has them.
   - instruction;
   - removing answers from the disk;
   - the tripwire and the full audit.
@@ -467,20 +481,23 @@ The public record never includes case ids, Drive ids, session or agent ids, priv
 
 | Question | Answer |
 |---|---|
-| 1 effort | Answered by measurement (T11): `xhigh` |
 | 2, 3, 4, 5 | O66 |
 | 6, 9 | O67 |
-| 7 | O68. It also covers the reproducible test install, which has been removed |
+| 7 | O68 |
 | 10, 11, 12, 13 | O69(a)–(d) |
+
+Question 1 (effort) and the deletion of the test install are taken by the maintainer's reading, not by an owner answer; both are listed under the notices below.
 
 **Still open:**
 - **What a pass enables.** Who runs everyday jobs while the Dot is unavailable, and under which release status. This is needed before P9.
 
 **Conditional, at the P2x exit:**
-- **Infrastructure risk.** If the restart risk measured at P2 over all unrecoverable windows exceeds 20%, re-confirm O69(d) with the measured figure before P3. On today's numbers this is expected.
+- **Infrastructure risk.** If the restart risk measured at P2 over all unrecoverable windows exceeds 20%, choose before P3: re-confirm O69(d) at the measured figure, or first have a runner revision built, independently reviewed and admitted that lets an interrupted deterministic stage be re-run when it reproduces the same bytes (section 11). On today's numbers this choice is expected.
 
 **Notices** (no answer needed):
 - **`AGENTS.md`.** The "no `AGENTS.md`" part of O66 cannot be met on this platform: it is injected even for the restricted type. Everything else in O66 holds, and any read that `AGENTS.md` prompts outside a role's files is still a breach.
 - **Stage 0.** A target-free failure confined to the duplicate-family primary's runs makes the result FAIL. The alternate replaces its primary only for an ineligible target, and only if its own runs passed stage 0.
 - **Thresholds.** A reserved case with no copy sheet and a trace share between 0.5 and 0.8 makes the result NOT DECIDED.
-- **Orphan prepare.** A `prepare` killed before its ledger entry is handled by the pre-registered orphan rule (5.3), and it uses up the pair's one restart.
+- **Orphan prepare.** A `prepare` killed before its ledger entry is handled by the pre-registered orphan rule (5.3), and it does not use up the pair's one restart.
+- **Effort.** Question 1 is taken as answered by its own recommended rule (T11 measured `xhigh`, the development-trial setting). Say if this reading is wrong.
+- **Test install.** The 8.5 GB reproducible test install was deleted under the maintainer's reading of O68 (reproducible working folders). The P0 review had asked for an explicit OK. Say if this reading is wrong.
