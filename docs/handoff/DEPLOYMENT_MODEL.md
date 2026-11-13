@@ -126,3 +126,27 @@ The owner reported that the Dot is currently unavailable and asked the maintaine
 - **What a pass covers.** A pass qualifies CPS when it is run from a Claude Code session. It does not qualify the Dot. The Dot needs its own qualification on the same frozen system before it runs CPS for users.
 - **O65, "Yes, read-only".** Once every qualification output is frozen, fresh evaluator contexts may download the pool cases' historical 未填 files from their Google Drive project folders. They only read these files; nothing outside the Dot folder is edited.
 - The detailed procedure is in [QUALIFICATION_HERE_PLAN.md](QUALIFICATION_HERE_PLAN.md).
+
+## The owner's answers on the qualification plan (O66–O69, 2026-11-13)
+
+- **O66, "Accept": isolation evidence.**
+  - Every AI context's full transcript is kept, and a pinned script audits every tool call and every injected item. A read outside the role's folders fails the run.
+  - Fresh contexts are Workflow subagents. The platform context they receive is disclosed in the plan. A restricted agent type, with file and shell tools only and no `AGENTS.md`, is used if the rehearsal shows it works.
+  - The audit replaces O63's tools-used statement.
+  - The owner's census confirmation before any target download replaces the O52 check.
+  - The rehearsal in this environment replaces the Dot-only gates: the VM helper admission, the probes and the reset drill.
+- **O67, "Agree": pausing other work.** From the rehearsal until generation is closed:
+  - the hourly Dot-mailbox scheduled task (O62) is disabled;
+  - the VM-helper work is paused;
+  - the session task list is frozen.
+
+  The owner will not use the skip or stop controls on qualification agents.
+- **O68, "Approve": answer isolation.**
+  - Every local folder that holds historical answers, targets, comparisons, expectations, studies or earlier outputs is archived to a new maintainer-only Drive folder, outside the Dot's shared folder.
+  - Each upload is checked by size and md5, and then the local copy is deleted.
+  - Reproducible working folders may be deleted.
+- **O69, "Accept all": evaluation policy.**
+  - Opening the 15 reserved pool answers spends them. A later qualification of the Dot may reuse the same 30 pairs only on the unchanged frozen system, and any new rule candidate needs a new held-out set.
+  - O65 also covers the duplicate-family alternate's target, if the alternate rule triggers.
+  - If an element that needs no target fails first, the reserved targets stay closed.
+  - The owner accepts the estimated 15–20% chance that a container restart during a commit step fails a run, and with it the gate, with no retry.
