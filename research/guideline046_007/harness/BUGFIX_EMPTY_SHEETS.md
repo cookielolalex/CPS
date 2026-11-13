@@ -27,7 +27,7 @@ Harness of candidate 046g. Engineering fix found in qualification rehearsal R1, 
 
 Unchanged: `scope_agree.py`, `SCOPE_READER_PROMPT_TEMPLATE.md`, `prepare_run.py`, `make_job_config.py`, the builders, the package (route v4.3), runner v4, the evaluator and the aggregator.
 
-Equivalence. An empty sheet has no cell, so it adds no content cell, no BILL1 candidate or near candidate, no bill line, no analysis block, no link and no flag. Every value v3 computes for the other sheets is therefore the value it computes for the same workbook without the empty sheets. The only differences are the empty sheets' own entries (in the proposal, the digest, the decision's scope fact and the inventory's sheet list), the sheet indexes after them, and the hashes. On an inventory without an empty sheet, v3 computes exactly what v2 computed; only the version string and the tool sha256 in the proposal and digest differ.
+Equivalence. An empty sheet has no cell, so it adds no content cell, no BILL1 candidate or near candidate, no bill line, no analysis block, no link and no flag. Every value v3 computes for the other sheets is therefore the value it computes for the same workbook without the empty sheets. The only differences are the empty sheets' own entries (in the proposal, the digest, the decision's scope fact and the inventory's sheet list), the sheet indexes after them, and the hashes. On an inventory without an empty sheet, v3 computes exactly what v2 computed; only the version string, the tool sha256 and the hashes that depend on them differ.
 
 ## Tests
 
@@ -43,17 +43,23 @@ It writes each invented workbook with and without empty sheets (one of them hidd
 - Refusals that must not change: the scoped packet, and the same packet without `context:scope`, are refused `FULL_INVENTORY_REQUIRED` by both tools (a non-empty sheet out of scope); a full inventory with empty sheets that carries `context:scope` is refused `ALREADY_SCOPED` by both tools; an out-of-scope sheet with `rows * columns == 0` that carries a view or a cell is refused `FULL_INVENTORY_REQUIRED` by both tools. A reader that puts an empty sheet in scope makes `scope_agree.py` hold the case. The tool is deterministic on an inventory with empty sheets.
 
 Results on 2026-11-13 (maintainer machine; work folders outside the repository):
-- `run_empty_sheet_tests.py`: 64 of 64 passed (`.xlsx` and `.xls`, small and large). The same suite run against the unchanged v2 tools fails: `FULL_INVENTORY_REQUIRED` on every workbook with empty sheets (11 failed checks before the large pairs stop).
+- `run_empty_sheet_tests.py`: 64 of 64 passed (`.xlsx` and `.xls`, small and large). The same suite run against the unchanged v2 tools fails: `FULL_INVENTORY_REQUIRED` on every workbook with empty sheets (11 of 23 checks fail; the large pairs stop at the tool and the refusal checks do not run).
 - `run_scope_stage_tests.py`: 62 of 62 passed (unchanged suite, including `tool_refuses_scoped_inventory` with `FULL_INVENTORY_REQUIRED` and `tool_refuses_inventory_already_carrying_scope_fact` with `ALREADY_SCOPED`).
 - `run_route_tests.py` (route v4.3, writer004 parity): 284 of 284 passed.
-- `deploy/run/test_cps_job.py` (runner v4 end to end on invented jobs, from a clean local clone with the fix committed locally): RUNNER_TESTS_RESULT.
-- A runner-level dry run (a scratch driver, not in the repository) ran runner v4 `prepare` and `scope-finish`, `render_views.py` included, on the same invented workbooks with and without empty sheets: DRYRUN_RESULT.
+- `deploy/run/test_cps_job.py` (runner v4 end to end on invented jobs, from a clean local clone with the fix committed locally): 249 of 249 passed (no runner test has an empty sheet; this shows the fix changes nothing else on the runner path).
+- A runner-level dry run (a scratch driver, not in the repository) ran runner v4 `prepare` and `scope-finish`, `render_views.py` included, on the same invented workbooks with and without empty sheets: 18 of 18 checks passed (`.xlsx` and `.xls`: the small jobs end `PREPARED_NOT_SCOPED` with `NEXT: GENERATE`, the large jobs `NEXT: SCOPE_READER` and, after an agreeing invented reader, `scope-finish` `NEXT: GENERATE` on the scoped packet; the recorded prepare and scope-finish facts equal those of the same workbook without empty sheets). On the unchanged tree the same driver reproduces the defect: every job with empty sheets stops with `NEXT: STOP_SCOPE_TOOL_REFUSED`.
 - `test_compare_source047.py` in the same folder tests the superseded evaluator compare_source047 and does not touch the harness; it needs a fixture carrier that the 046g route tests do not produce, and fails the same way on the unchanged tree.
 
 ## Files and pins
 
 Changed or added files and their sha256 after the fix:
 
-FILES_TABLE
+| File | Change | sha256 (before) | sha256 (after) |
+|---|---|---|---|
+| `research/guideline046_007/harness/scope_tool.py` | v2 to v3 (code and docstring) | `e9190c2f9f0caf9fb030d0aab2b1ab569e3606dff4d3d1752eb1b8b9c4d756af` | `4bd332ff7dad910a4945b056315453a6ce900dff8dfd051f91971cb08262ab63` |
+| `research/guideline046_007/harness/make_scoped_inventory.py` | acceptance rule in `load_inputs`, docstring | `9a6fca56af4402f296286df3853688e6366a7970c3ea90f0bc6eec8ab392b2d9` | `3a1aec720a182254b8a7e2673a60114d1337af9ce39e7f967f0619cba758ff2d` |
+| `research/guideline046_007/harness/README.md` | step 1 of the scope stage, v3 line in the validation record | `9bbad019f98f8f81155a96a1aa53ab11e102c60690b6dcb3870a0c7b05ad3496` | `2027355d91f0c617f20f094cfa432d4c57c3bdbe336bf8e4c0e910f5afc19ee1` |
+| `research/guideline046_007/route_tests/run_empty_sheet_tests.py` | new test suite | none | `b35e8232d30f0d78ce082e0efe06a699be65ca01e8550875afc24d2f4d2b7038` |
+| `research/guideline046_007/harness/BUGFIX_EMPTY_SHEETS.md` | this note | none | (this file) |
 
-Places that pin the old sha256 of `scope_tool.py` (`e9190c2f9f0caf9fb030d0aab2b1ab569e3606dff4d3d1752eb1b8b9c4d756af`) or `make_scoped_inventory.py` (`9a6fca56af4402f296286df3853688e6366a7970c3ea90f0bc6eec8ab392b2d9`) must be updated before the fixed harness is used: the release's `pinned_files_sha256`, the qualification admission's tool pins (and its freeze record), and the qualification toolkit's expected repository hashes. The harness README's validation record keeps the v2 hash as history (the v2 runs it records); its new line names v3. `scope_agree.py`, `SCOPE_READER_PROMPT_TEMPLATE.md` and every other pinned file keep their hashes.
+Places that pin the old sha256 of `scope_tool.py` (`e9190c2f9f0caf9fb030d0aab2b1ab569e3606dff4d3d1752eb1b8b9c4d756af`) or `make_scoped_inventory.py` (`9a6fca56af4402f296286df3853688e6366a7970c3ea90f0bc6eec8ab392b2d9`) must be updated before the fixed harness is used: the release's `pinned_files_sha256` and its repository commit (a release names one commit, so the fix needs a new release commit), the qualification admission's tool pins (and its freeze record), and the qualification toolkit's expected repository hashes and release commit. The qualification plan's statement that no pinned file has changed since the runner admission no longer holds for these two files. The harness README's validation record keeps the v2 hash as history (the v2 runs it records); its new line names v3. `scope_agree.py`, `SCOPE_READER_PROMPT_TEMPLATE.md` and every other pinned file keep their hashes.
