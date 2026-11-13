@@ -150,3 +150,15 @@ The owner reported that the Dot is currently unavailable and asked the maintaine
   - O65 also covers the duplicate-family alternate's target, if the alternate rule triggers.
   - If an element that needs no target fails first, the reserved targets stay closed.
   - The owner accepts the estimated 15–20% chance that a container restart during a commit step fails a run, and with it the gate, with no retry.
+
+## Archive and evidence storage (O70, O71, 2026-11-13)
+
+Each Google Drive connector call from the maintainer's session carries at most about 4.2 MB, about 3.1 MB of file content, so O68's Drive archive of about 1–1.5 GB is not feasible.
+- **O70, "Encrypt locally".**
+  - The answer-bearing local folders are encrypted on the container with AES-256.
+  - Only the small key and the manifest go to the maintainer-only Drive folder. The plaintext and the local key are then deleted.
+  - The owner accepts that the encrypted local copy is lost if the container is reclaimed.
+  - This replaces only the Drive upload step of O68; the rest of O68 stands.
+- **O71, "Small records".**
+  - After the qualification runs, the small records of each run go to the maintainer-only Drive folder, compressed into parts under 3 MB: the response, the carrier, the delivered workbook, the run and generation records, and `FROZEN.json`. The hash anchors go there too.
+  - Page images and full transcripts stay on the container only.
