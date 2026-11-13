@@ -109,3 +109,20 @@ Probe M006 showed that the Dot cannot create a conversation without its app tool
 - Every generator, scope-reader and visual-reviewer prompt forbids any tool except reading and writing the files it lists, and asks the conversation to end with a statement of the tools it used; that statement is frozen with the final message.
 - The generation record lists the tools that were present.
 - The qualification report states plainly that isolation was by instruction, not enforced or audited.
+
+## Qualification in the maintainer's session (O64, O65, 2026-11-13)
+
+The owner reported that the Dot is currently unavailable and asked the maintainer's session to keep working until CPS is ready for deployment.
+- **O64, "Qualify here".** The qualification outputs are generated in the maintainer's Claude Code cloud session, not on the Dot. For qualification, this replaces the rule in O36, O37 and O42 that the Dot generates.
+- **What stays the same:**
+  - the frozen 046g;
+  - the admitted writer v2.8.2, saved_qa v6.4 and visual_qa v4.5;
+  - runner v4 in qualification mode, with a frozen qualification admission, the ledger and `JOBS.json`;
+  - two readers, A and B. Each scope reader, generator and visual reviewer runs in a fresh context that receives only its prompt and the folders that prompt names;
+  - no retries;
+  - every output, including every reserved one, is frozen before any historical answer is opened;
+  - scoring happens once, in separate evaluator contexts, with the frozen evaluator v4 and aggregator v2;
+  - the bar (O12, O31).
+- **What a pass covers.** A pass qualifies CPS when it is run from a Claude Code session. It does not qualify the Dot. The Dot needs its own qualification on the same frozen system before it runs CPS for users.
+- **O65, "Yes, read-only".** Once every qualification output is frozen, fresh evaluator contexts may download the pool cases' historical 未填 files from their Google Drive project folders. They only read these files; nothing outside the Dot folder is edited.
+- The detailed procedure is in [QUALIFICATION_HERE_PLAN.md](QUALIFICATION_HERE_PLAN.md).
