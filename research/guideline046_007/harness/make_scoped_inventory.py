@@ -10,7 +10,8 @@ Verify: python3 -I -B make_scoped_inventory.py --verify --full /abs/FULL/SOURCE_
                                                [--expect-scoped-sha256 HEX]   (the hash pinned in the admission)
 
 The projection changes exactly these records and keeps every other record byte-identical:
-  - sheets[]: in_scope set from the decision (the full inventory has every sheet in scope);
+  - sheets[]: in_scope set from the decision (the full inventory has every sheet in scope, except an empty sheet,
+    rows x columns = 0 with no cell or view, which the builders write out of scope and the decision keeps out of scope);
   - cells[]: the cells of out-of-scope sheets are removed; kept cells are unchanged except their `views` list, which is
     renumbered with the view-id map below (a kept cell whose views keep their ids is byte-identical);
   - views[] and source.carrier_source.views: the views of out-of-scope sheets are removed and the kept views renumbered
@@ -114,7 +115,9 @@ def load_inputs(full_raw, decision_raw, route):
         route.Inventory(full_raw)
     except (route.Rejected, KeyError, TypeError, ValueError) as e:
         raise Refused('FULL_INVENTORY_REJECTED_BY_ROUTE', repr(e)[:300])
-    if not all(s['in_scope'] for s in full['sheets']):
+    used, viewed = {c['sheet_index'] for c in full['cells']}, {v['sheet'] for v in full['views']}
+    if not all(s['in_scope'] or (s['rows'] * s['columns'] == 0 and s['index'] not in used and s['name'] not in viewed)
+               for s in full['sheets']):       # an empty sheet is out of scope as the builders write it (BUGFIX_EMPTY_SHEETS.md)
         raise Refused('FULL_INVENTORY_REQUIRED')
     if any(f['ref'] == route.SCOPE_REF for f in full['context_facts']):
         raise Refused('ALREADY_SCOPED')
