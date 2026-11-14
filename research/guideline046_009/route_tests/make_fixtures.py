@@ -852,8 +852,8 @@ def scoped_fixtures(enc, index):
 
 # ---------------------------------------------------------------- route v4.4 (046i, owner decision O72): no total row; whole workbook
 NOTOTAL_BILL = {k: v for k, v in SCOPED_BILL.items() if k != (7, 'E')}      # SCOPED_BILL without its 合計 cell (scope-stage NT1)
-NOTOTAL_REASON = ('bill: the only sheet with a BILL1 header row and no 合計 or 總計 below it in a price column; the scope runs to its '
-                  'last content row and R49 ends the quoted range inside it (R59 item 2, O72)')
+NOTOTAL_REASON = ('bill: the only sheet with a BILL1 header row and no cell reading exactly 合計 or 總計 below it in a price column; '
+                  'the scope runs to its last content row and R49 ends the quoted range inside it (R59 item 2, O72)')
 WHOLE_REASON = ('whole workbook: no sheet has a BILL1 header row (five or six of its labels), so every sheet except an empty one is in '
                 'scope and the packet is read as an unscoped packet; the role is a label, not an R49 decision (R59 item 9, O72)')
 EMPTY_REASON = 'other: an empty sheet (rows x columns = 0, no cell), which the builders write out of scope; never yields rows (R49)'

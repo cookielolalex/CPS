@@ -1,6 +1,6 @@
 # Bug fix: empty sheets refused by the scope stage (2026-11-13)
 
-Harness of candidate 046g. Engineering fix found in qualification rehearsal R1, under owner decision O64. It changes no rule of the package, the route, the runner, the builders, the evaluator or the aggregator.
+Harness of candidate 046i. Developed in place in 046g's harness as work in progress, reviewed (ADMIT_WITH_FIXES), then moved into 046i; 046g was restored to its frozen bytes (release commit `4c40004`). Engineering fix found in qualification rehearsal R1, under owner decision O64. It changes no rule of the package, the route, the runner, the builders, the evaluator or the aggregator. The paths below name 046i's folder; the hashes and results in "Tests" and "Files and pins" are those of the reviewed fix as it stood in 046g's folder (history).
 
 ## Defect
 
@@ -31,10 +31,10 @@ Equivalence. An empty sheet has no cell, so it adds no content cell, no BILL1 ca
 
 ## Tests
 
-New suite `research/guideline046_007/route_tests/run_empty_sheet_tests.py` (invented workbooks only):
+New suite `research/guideline046_009/route_tests/run_empty_sheet_tests.py` (invented workbooks only):
 
 ```sh
-python3 -I -B research/guideline046_007/route_tests/run_empty_sheet_tests.py --work /abs/NEW_DIR --deps-bundle /abs/DEPS_BUNDLE [--soffice soffice]
+python3 -I -B research/guideline046_009/route_tests/run_empty_sheet_tests.py --work /abs/NEW_DIR --deps-bundle /abs/DEPS_BUNDLE [--soffice soffice]
 ```
 
 It writes each invented workbook with and without empty sheets (one of them hidden), as `.xlsx` and as `.xls` (converted by LibreOffice), and prepares each exactly as runner v4 does: `make_job_config.py`, then the builder of the format with `python3 -I -S -B` (the unbound inventory stands in for `render_views.py`, which only binds image pins).
@@ -61,5 +61,13 @@ Changed or added files and their sha256 after the fix:
 | `research/guideline046_007/harness/README.md` | step 1 of the scope stage, v3 line in the validation record | `9bbad019f98f8f81155a96a1aa53ab11e102c60690b6dcb3870a0c7b05ad3496` | `2027355d91f0c617f20f094cfa432d4c57c3bdbe336bf8e4c0e910f5afc19ee1` |
 | `research/guideline046_007/route_tests/run_empty_sheet_tests.py` | new test suite | none | `b35e8232d30f0d78ce082e0efe06a699be65ca01e8550875afc24d2f4d2b7038` |
 | `research/guideline046_007/harness/BUGFIX_EMPTY_SHEETS.md` | this note | none | (this file) |
+
+In 046i the fix ships in `scope_tool.py` v4 (`cps046i-scope-tool.v4`) together with owner decision O72; the empty-sheet suite expects that version and adds no-total and whole-workbook pairs with empty sheets. The independent review asked for wording that covers empty sheets on unscoped packets in a later candidate: FIELD_ROLES R59 item 8 now states that an empty sheet is out of scope on every packet and is no missing source (046i decision D10).
+
+| Candidate | `scope_tool.py` | `make_scoped_inventory.py` | Note |
+|---|---|---|---|
+| 046g (frozen, `4c40004`) | v2 `e9190c2f…` | `9a6fca56…` | refuses empty sheets |
+| 046g WIP (`d1d2735`, reviewed) | v3 `4bd332ff…` | `3a1aec72…` | this fix, history; never released |
+| 046i | v4 (`cps046i-scope-tool.v4`) | 046i file | this fix shipped with O72; hashes in `../DECISIONS_046i.md` and the freeze review |
 
 Places that pin the old sha256 of `scope_tool.py` (`e9190c2f9f0caf9fb030d0aab2b1ab569e3606dff4d3d1752eb1b8b9c4d756af`) or `make_scoped_inventory.py` (`9a6fca56af4402f296286df3853688e6366a7970c3ea90f0bc6eec8ab392b2d9`) must be updated before the fixed harness is used: the release's `pinned_files_sha256` and its repository commit (a release names one commit, so the fix needs a new release commit), the qualification admission's tool pins (and its freeze record), and the qualification toolkit's expected repository hashes and release commit. The qualification plan's statement that no pinned file has changed since the runner admission no longer holds for these two files. The harness README's validation record keeps the v2 hash as history (the v2 runs it records); its new line names v3. `scope_agree.py`, `SCOPE_READER_PROMPT_TEMPLATE.md` and every other pinned file keep their hashes.

@@ -1,4 +1,4 @@
-"""Scope-stage tests for candidate 046g (FIELD_ROLES R59) with invented fixtures only.
+"""Scope-stage tests for candidates 046g and 046i (FIELD_ROLES R59) with invented fixtures only.
 
 Builds an invented FULL 材料清單 inventory (summary, bill, analysis and resource-statistics sheets; more than 2,500
 content cells; the bill sheet is the one of make_fixtures.SCOPED_BILL), runs the four harness tools on it
@@ -6,8 +6,15 @@ content cells; the bill sheet is the one of make_fixtures.SCOPED_BILL), runs the
 BILL1 and the R51 conditions, holds, the threshold, determinism, agreement and disagreement, the projection's
 byte-identity, verify on tampered outputs, view images, and that route v4.3 accepts the scoped packet together with the
 valid scoped response of make_fixtures (end to end), the agreement value of an admissible and of a stand-in decision
-(046g round 1, review item S13), and that route v4.3 rejects a packet built from a stand-in decision. No project data
-is read.
+(046g round 1, review item S13), and that the route rejects a packet built from a stand-in decision.
+046i (owner decision O72, FIELD_ROLES R59 items 2 and 9): the 046g fixture whose bill lost its 合計 cell held the case
+(tool_holds_zero_bill1_candidates); it is O72's first pattern, so that check is re-specified by design as
+tool_no_total_scopes_to_last_content_row (BILL1.NOTOTAL.v1). The zero-candidate hold stays covered by a workbook whose only
+header-like row carries five of the six labels (tool_holds_zero_bill1_candidates_five_of_six). New o72_* checks: the
+no-total pipeline (digest additions, agreement and disagreements, build, verify, route), the whole-workbook pipeline
+(BILL1.NOHEADER.v1: every sheet in scope, the scoped inventory equals the full one plus the fact), its agreement cases,
+a stand-in decision on either rule and a hand-edited proposal with an unknown bill rule (PROPOSAL_BILL_RULE). No project
+data is read.
 Usage: python3 -I run_scope_stage_tests.py --work NEWDIR
 """
 import argparse, copy, hashlib, importlib.util, json, subprocess, sys
@@ -169,6 +176,166 @@ def pipeline(work, tag, raw, reader_over=None, kind='fresh_context_scope_reader'
     code, out, err = run(SCOPED, '--full', full, '--decision', dec, '--out-dir', d / 'packet')
     res.update(build_code=code, build_out=jout(out), build_err=err, decision=dec, scoped=d / 'packet' / 'SOURCE_INVENTORY.json')
     return res
+
+
+def o72_tests(work, h, nb, main_prop, main_dig):
+    """046i (owner decision O72, FIELD_ROLES R59 items 2 and 9): inventory-level checks of the two new bill rules."""
+    hp = h.get('proposal', {})
+    dg = json.loads((h['dir'] / 'tool' / 'SCOPE_DIGEST.json').read_text(encoding='utf-8'))
+    s2 = next(s for s in dg['sheets'] if s['index'] == 2)
+    record('o72_nototal_digest_line_counts_and_tail', s2['counts'].get('lines_from_first_item_below_header_to_last_content_row') ==
+           {'lines': 5, 'priced': 3, 'not_estimated': 1, 'other_price_text': 0, 'unpriced_no_status': 1}
+           and s2['counts'].get('priced_or_not_estimated_line_rows') == [3, 4, 6, 10] and s2['counts'].get('last_unpriced_no_status_line_row') == 5
+           and [x['row'] for x in s2.get('priced_or_not_estimated_lines_tail', [])] == [4, 6, 10]
+           and [r['row'] for r in s2['priced_or_not_estimated_lines_tail'][-1]['context']] == [8, 9, 10]
+           and 'lines_from_first_item_below_header_to_first_exact_price_column_total' not in s2['counts']
+           and s2['price_column_total_rows_count'] == 0 and s2['last_rows'][-1]['row'] == 10
+           and dg['note'].endswith('On a sheet with a bill header and no exact 合計/總計 price-column row, the lines run to its last content row.')
+           and all('priced_or_not_estimated_lines_tail' not in s for s in dg['sheets'] if s['index'] != 2), s2.get('counts'))
+    record('o72_nototal_bill_reason_and_flag', hp['sheets'][1]['reason'].startswith('bill: the only sheet with a BILL1 header row and no cell reading exactly')
+           and [f['detail'] for f in hp['flags'] if f['code'] == 'BILL1_NO_TOTAL_ROW'] == [
+               {'header_row': 2, 'end_row': 10, 'note': 'no 合計/總計 in a price column below the header (O72)'}]
+           and hp['flags'][0]['code'] == 'BILL1_NO_TOTAL_ROW', hp.get('flags'))
+    record('o72_nototal_agree_frozen_admissible_fact_rule', h.get('agree_code') == 0 and h['agree_out'].get('admissible') is True
+           and json.loads(h['decision'].read_text(encoding='utf-8'))['scope_fact']['bill_rule'] == 'BILL1.NOTOTAL.v1'
+           and json.loads(h['decision'].read_text(encoding='utf-8'))['scope_fact']['end_row'] == 10, h.get('agree_err'))
+    bo = h.get('build_out', {})
+    record('o72_nototal_build_verify_route_pass', h.get('build_code') == 0 and bo.get('verify') == 'PASS'
+           and bo['route_check_inventory'] == {'status': 'PASS', 'route': 'cps046i-route.v4.4', 'scope': 'applied', 'policy_checks': 'applied',
+                                               'violations': [], 'warnings': ['R59_LINKED_ANALYSIS_OUT_OF_SCOPE']}
+           and bo['stats']['content_cells_scoped'] == 38, bo)
+    sraw = h['scoped'].read_bytes() if 'scoped' in h else b''
+    fact = next((f_ for f_ in json.loads(sraw or b'{"context_facts":[]}')['context_facts'] if f_['ref'] == 'context:scope'), {})
+    record('o72_nototal_basis', 'R49 decides where the quoted range ends inside it; owner decision O72' in fact.get('basis', '')
+           and 'candidate 046i' in fact.get('basis', ''), fact.get('basis', '')[:200])
+    # the A50-style response on the built no-total packet: rows 3, 4 and 6; the cells after row 6 as on an unscoped packet
+    rp = work / 'o72_nototal_response.json'
+    rp.write_text(json.dumps(F.nototal_response(sha(sraw)), ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+    code, out, _ = run(ROUTE, 'check', '--inventory', h['scoped'], '--response', rp)
+    o = jout(out)
+    record('o72_nototal_e2e_route_check_pass', code == 0 and o.get('status') == 'PASS' and o.get('scope') == 'applied', o.get('violations', [])[:5])
+    prop, dig = h['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', h['dir'] / 'tool' / 'SCOPE_DIGEST.json'
+
+    def agree(tag, rd):
+        rp_ = work / f'reader_o72_{tag}.json'
+        rp_.write_text(json.dumps(rd, ensure_ascii=False), encoding='utf-8')
+        code, out, err = run(AGREE, '--proposal', prop, '--digest', dig, '--reader', rp_, '--out-dir', work / f'agree_o72_{tag}')
+        return code, jout(out), jout(err)
+    for tag, over, whats in (('nototal_end_row_last_item', {'end_row': 6}, {'end_row'}),
+                             ('nototal_nulls', {'bill_sheet_index': None, 'end_row': None}, {'bill_sheet_index', 'end_row', 'reader_bill_role'})):
+        code, o, e = agree(tag, reader_for(prop, dig, **over))
+        record(f'o72_agree_holds_{tag}', code == 3 and o.get('status') == 'HELD_FOR_OWNER' and {d_['what'] for d_ in o.get('differences', [])} == whats, o)
+    code, o, e = agree('nototal_standin', reader_for(prop, dig, kind='engineering_stand_in'))
+    sd = work / 'agree_o72_nototal_standin' / 'SCOPE_DECISION.json'
+    ok = code == 0 and o.get('admissible') is False and sd.exists()
+    if ok:
+        code, out, err = run(SCOPED, '--full', h['full'], '--decision', sd, '--out-dir', work / 'o72_nototal_standin_packet')
+        so = jout(out)
+        ok = code == 0 and so['route_check_inventory']['violations'] == ['R59_SCOPE_FACT_INVALID']
+    record('o72_nototal_stand_in_not_admissible_route_rejects', ok, o)
+    # hand-edited proposals: an unknown bill rule, or a BILL1.NOHEADER.v1 rule with a bill sheet, are refused
+    for tag, edit in (('unknown_rule', lambda p_: p_['bill'].update(rule='BILL1.v9')),
+                      ('noheader_with_bill_sheet', lambda p_: p_['bill'].update(rule='BILL1.NOHEADER.v1')),
+                      ('nototal_null_end_row', lambda p_: p_['bill'].update(end_row=None))):
+        pj = json.loads(prop.read_text(encoding='utf-8'))
+        edit(pj)
+        pe = work / f'proposal_{tag}.json'
+        pe.write_bytes((json.dumps(pj, ensure_ascii=False, indent=1) + '\n').encode('utf-8'))
+        code, out, err = run(AGREE, '--proposal', pe, '--digest', dig, '--reader', work / 'reader_o72_nototal_standin.json', '--out-dir', work / f'agree_{tag}')
+        record(f'o72_agree_refuses_proposal_{tag}', code == 1 and jout(err).get('code') == 'PROPOSAL_BILL_RULE' and not (work / f'agree_{tag}').exists(), err[-200:])
+    # an item-like priced line below a signature line under an all-unpriced range (design finding R3, NT6): the tool's
+    # condition (i) is false and the analysis sheet is scoped out; a reader following the template puts it in scope and holds
+    ub = {k: v for k, v in F.SCOPED_BILL.items() if not (k[0] in (3, 6, 7) and k[1] in 'EF') and k not in ((4, 'F'), (8, 'F'))}
+    w = pipeline(work, 'o72_priced_tail', build_full(bill=ub)[1])
+    wp = w.get('proposal', {})
+    record('o72_nototal_priced_tail_scopes_analysis_out', wp.get('status') == 'PROPOSED' and wp['bill']['rule'] == 'BILL1.NOTOTAL.v1'
+           and wp['r51']['condition_i_all_unpriced_no_status'] is False and wp['r51']['by_state']['priced'] == 1
+           and [s['index'] for s in wp['sheets'] if s['in_scope']] == [2], wp.get('r51'))
+    wdg = json.loads((w['dir'] / 'tool' / 'SCOPE_DIGEST.json').read_text(encoding='utf-8'))
+    c2 = next(s for s in wdg['sheets'] if s['index'] == 2)['counts']
+    record('o72_nototal_priced_tail_visible_in_digest', c2['priced_or_not_estimated_line_rows'] == [10] and c2['last_unpriced_no_status_line_row'] == 6, c2)
+    rd = reader_for(w['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', w['dir'] / 'tool' / 'SCOPE_DIGEST.json', sheet_flag=(2, True))
+    rp_ = work / 'reader_o72_priced_tail.json'
+    rp_.write_text(json.dumps(rd, ensure_ascii=False), encoding='utf-8')
+    code, out, err = run(AGREE, '--proposal', w['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', '--digest', w['dir'] / 'tool' / 'SCOPE_DIGEST.json',
+                         '--reader', rp_, '--out-dir', work / 'agree_o72_priced_tail')
+    record('o72_nototal_priced_tail_reader_puts_analysis_in_scope_holds', code == 3 and [d_['what'] for d_ in jout(out).get('differences', [])] == ['in_scope'], out)
+    # BILL1.NOHEADER.v1: the bill header with 序號 and 品名規格 carries four of the six labels; no sheet has a header row
+    hb = dict(F.SCOPED_BILL)
+    hb[(2, 'A')], hb[(2, 'B')] = (T, '序號', False), (T, '品名規格', False)
+    full_d, full_raw = build_full(bill=hb)
+    n = pipeline(work, 'o72_whole', full_raw)
+    np_ = n.get('proposal', {})
+    record('o72_whole_proposed_three_nulls_every_sheet_in_scope', n['tool_code'] == 0 and np_.get('status') == 'PROPOSED'
+           and np_['bill']['rule'] == np_['rule']['bill'] == 'BILL1.NOHEADER.v1'
+           and [np_['bill'][k] for k in ('sheet_index', 'header_row', 'end_row', 'end_cell', 'first_item_row', 'price_columns')] == [None] * 6
+           and np_['bill']['candidates'] == [] and np_['holds'] == [] and np_['r51']['in_range_lines'] == 0
+           and np_['r51']['condition_i_all_unpriced_no_status'] is False
+           and [(s['index'], s['role'], s['in_scope'], s['linked_analysis_blocks']) for s in np_['sheets']] == [
+               (1, 'summary', True, 0), (2, 'other', True, 0), (3, 'analysis', True, 0), (4, 'resource_statistics', True, 0)]
+           and all(s['reason'].startswith('whole workbook: no sheet has a BILL1 header row') for s in np_['sheets'])
+           and np_['flags'][0] == {'id': 'F1', 'sheet_index': None, 'code': 'BILL1_NO_HEADER',
+                                   'detail': {'sheets_in_scope': 4, 'note': 'no row carries five or six BILL1 header labels (O72)'}}
+           and np_['in_scope_content_cells'] == np_['content_cells_census'], [n['tool_out'], n['tool_err'][-300:]])
+    record('o72_whole_agree_frozen_fact', n.get('agree_code') == 0 and n['agree_out'].get('admissible') is True
+           and json.loads(n['decision'].read_text(encoding='utf-8'))['scope_fact']['bill_rule'] == 'BILL1.NOHEADER.v1'
+           and [json.loads(n['decision'].read_text(encoding='utf-8'))['scope_fact'][k] for k in ('bill_sheet_index', 'bill_header_row', 'end_row')] == [None] * 3,
+           n.get('agree_err'))
+    bo = n.get('build_out', {})
+    rec = json.loads((n['dir'] / 'packet' / 'SCOPED_INVENTORY_RECEIPT.json').read_text(encoding='utf-8')) if n.get('build_code') == 0 else {}
+    record('o72_whole_build_identity_projection_verify_route_pass', n.get('build_code') == 0 and bo.get('verify') == 'PASS'
+           and bo['stats']['cells_removed'] == 0 and bo['stats']['views_removed'] == 0 and bo['stats']['views_renumbered'] == 0
+           and bo['stats']['cells_kept_byte_identical'] == len(full_d['cells']) and bo['stats']['sheet_in_scope_flags_changed'] == 0
+           and all(int(k) == v for k, v in rec.get('view_id_map', {}).items())
+           and bo['route_check_inventory']['status'] == 'PASS' and bo['route_check_inventory']['scope'] == 'applied', bo)
+    sraw = n['scoped'].read_bytes() if 'scoped' in n else b''
+    sl, fl = sraw.decode('utf-8').split('\n'), full_raw.decode('utf-8').split('\n')
+    record('o72_whole_scoped_equals_full_plus_the_fact', len(sl) == len(fl) + 1 and [x.rstrip(',') for x in sl if 'context:scope' not in x]
+           == [x.rstrip(',') for x in fl], [len(sl), len(fl)])
+    fact = next((f_ for f_ in json.loads(sraw or b'{"context_facts":[]}')['context_facts'] if f_['ref'] == 'context:scope'), {})
+    record('o72_whole_basis', fact.get('basis', '').startswith('Scope decision for this packet (FIELD_ROLES R59 item 9, candidate 046i, owner decision O72).')
+           and 'the scope stage fixed no bill sheet and no end row' in fact['basis'] and 'Read it as an unscoped packet' in fact['basis'])
+    prop, dig = n['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', n['dir'] / 'tool' / 'SCOPE_DIGEST.json'
+    ndg = json.loads(dig.read_text(encoding='utf-8'))
+    record('o72_whole_digest_unchanged_in_form', ndg['note'].endswith('first exact 合計/總計 price-column row.')
+           and not any('priced_or_not_estimated_lines_tail' in s or 'lines_from_first_item_below_header_to_last_content_row' in s['counts'] for s in ndg['sheets']))
+    for tag, mutate, whats in (
+            ('names_bill_sheet', lambda r: (r.update(bill_sheet_index=2, end_row=7), r['sheets'][1].update(role='bill')),
+             {'bill_sheet_index', 'end_row', 'reader_bill_role'}),
+            ('nonempty_sheet_out', lambda r: r['sheets'][3].update(in_scope=False), {'in_scope'}),
+            ('bill_role_with_nulls', lambda r: r['sheets'][1].update(role='bill'), {'reader_bill_role'})):
+        rd = reader_for(prop, dig)
+        mutate(rd)
+        rp_ = work / f'reader_o72_whole_{tag}.json'
+        rp_.write_text(json.dumps(rd, ensure_ascii=False), encoding='utf-8')
+        code, out, err = run(AGREE, '--proposal', prop, '--digest', dig, '--reader', rp_, '--out-dir', work / f'agree_o72_whole_{tag}')
+        record(f'o72_whole_agree_holds_{tag}', code == 3 and {d_['what'] for d_ in jout(out).get('differences', [])} == whats, out[-300:])
+    rd = reader_for(prop, dig)
+    rd['sheets'][0]['role'] = 'other'
+    rp_ = work / 'reader_o72_whole_role_only.json'
+    rp_.write_text(json.dumps(rd, ensure_ascii=False), encoding='utf-8')
+    code, out, err = run(AGREE, '--proposal', prop, '--digest', dig, '--reader', rp_, '--out-dir', work / 'agree_o72_whole_role_only')
+    record('o72_whole_role_difference_recorded_not_held', code == 0 and jout(out).get('role_differences') == 1)
+    rp_ = work / 'reader_o72_whole_standin.json'
+    rp_.write_text(json.dumps(reader_for(prop, dig, kind='engineering_stand_in'), ensure_ascii=False), encoding='utf-8')
+    code, out, err = run(AGREE, '--proposal', prop, '--digest', dig, '--reader', rp_, '--out-dir', work / 'agree_o72_whole_standin')
+    ok = code == 0 and jout(out).get('admissible') is False
+    if ok:
+        code, out, err = run(SCOPED, '--full', n['full'], '--decision', work / 'agree_o72_whole_standin' / 'SCOPE_DECISION.json',
+                             '--out-dir', work / 'o72_whole_standin_packet')
+        ok = code == 0 and jout(out)['route_check_inventory']['violations'] == ['R59_SCOPE_FACT_INVALID']
+    record('o72_whole_stand_in_not_admissible_route_rejects', ok)
+    # determinism on both rules
+    for tag, res in (('nototal', h), ('whole', n)):
+        d2 = work / f'determinism_{tag}'
+        run(TOOL, '--inventory', res['full'], '--out-dir', d2)
+        record(f'o72_tool_deterministic_{tag}', (d2 / 'SCOPE_PROPOSAL.json').read_bytes() == (res['dir'] / 'tool' / 'SCOPE_PROPOSAL.json').read_bytes()
+               and (d2 / 'SCOPE_DIGEST.json').read_bytes() == (res['dir'] / 'tool' / 'SCOPE_DIGEST.json').read_bytes())
+    # below the threshold a no-header workbook computes exactly what v3 computed: NOT_APPLIED, rule BILL1.v1, no bill
+    small = pipeline(work, 'o72_whole_small', build_full(bill=hb, blocks=100)[1])
+    sp = small.get('proposal', {})
+    record('o72_below_threshold_not_applied_rule_v1', sp.get('status') == 'NOT_APPLIED' and sp['bill']['rule'] == sp['rule']['bill'] == 'BILL1.v1'
+           and sp['bill']['sheet_index'] is None and sp['holds'] == [] and sp['flags'] == [], sp.get('bill'))
 
 
 def main():
@@ -361,10 +528,24 @@ def main():
     # BILL1 holds and the threshold
     nb = dict(F.SCOPED_BILL)
     nb.pop((7, 'E'))
-    h = pipeline(work, 'no_total', build_full(bill=nb)[1], expect_tool=4)
-    hp = json.loads((h['dir'] / 'tool' / 'SCOPE_PROPOSAL.json').read_text(encoding='utf-8')) if h['tool_code'] == 4 else {}
-    record('tool_holds_zero_bill1_candidates', h['tool_code'] == 4 and hp.get('status') == 'HOLD' and hp['bill']['candidates'] == []
-           and [x['code'] for x in hp['holds']] == ['BILL1_CANDIDATES_NOT_ONE'], h['tool_out'])
+    # 046i (O72): this 046g hold fixture is O72's first pattern (one six-label header, no 合計/總計 in a price column);
+    # re-specified by design: BILL1.NOTOTAL.v1, the bill sheet to its last content row
+    h = pipeline(work, 'no_total', build_full(bill=nb)[1])
+    hp = h.get('proposal', {})
+    record('tool_no_total_scopes_to_last_content_row', h['tool_code'] == 0 and hp.get('status') == 'PROPOSED' and hp['bill']['candidates'] == []
+           and hp['bill']['rule'] == hp['rule']['bill'] == 'BILL1.NOTOTAL.v1' and hp['bill']['sheet_index'] == 2 and hp['bill']['header_row'] == 2
+           and hp['bill']['end_row'] == 10 and hp['bill']['end_cell'] is None and hp['bill']['first_item_row'] == 3 and hp['holds'] == []
+           and hp['r51']['in_range_lines'] == 5 and hp['r51']['by_state'] == {'priced': 3, 'not_estimated': 1, 'other_price_text': 0, 'unpriced_no_status': 1}
+           and hp['r51']['condition_i_all_unpriced_no_status'] is False and [s['index'] for s in hp['sheets'] if s['in_scope']] == [2]
+           and {'BILL1_NO_TOTAL_ROW', 'NEAR_BILL1_CANDIDATE'} <= {f['code'] for f in hp['flags']}, h['tool_out'])
+    # 046i: the zero-candidate hold stays: the only header-like row carries five of the six labels (品名規格 is not a name word)
+    fb = dict(F.SCOPED_BILL)
+    fb[(2, 'B')] = (T, '品名規格', False)
+    h5 = pipeline(work, 'five_of_six', build_full(bill=fb)[1], expect_tool=4)
+    hp5 = json.loads((h5['dir'] / 'tool' / 'SCOPE_PROPOSAL.json').read_text(encoding='utf-8')) if h5['tool_code'] == 4 else {}
+    record('tool_holds_zero_bill1_candidates_five_of_six', h5['tool_code'] == 4 and hp5.get('status') == 'HOLD' and hp5['bill']['candidates'] == []
+           and hp5['bill']['rule'] == 'BILL1.v1' and [x['code'] for x in hp5['holds']] == ['BILL1_CANDIDATES_NOT_ONE'], h5['tool_out'])
+    o72_tests(work, h, nb, prop, dig)
     h = pipeline(work, 'two_bills', build_full(extra_bill_copy=True)[1], expect_tool=4)
     record('tool_holds_two_bill1_candidates', h['tool_code'] == 4 and h['tool_out'].get('bill_candidates') == [2, 5] and h['tool_out'].get('holds') == ['BILL1_CANDIDATES_NOT_ONE'], h['tool_out'])
     code, _, err = run(AGREE, '--proposal', h['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', '--digest', h['dir'] / 'tool' / 'SCOPE_DIGEST.json',

@@ -1,4 +1,4 @@
-"""Empty-sheet tests for the 046g scope stage (harness/BUGFIX_EMPTY_SHEETS.md) with invented workbooks only.
+"""Empty-sheet tests for the 046i scope stage (harness/BUGFIX_EMPTY_SHEETS.md) with invented workbooks only.
 
 The builders write a sheet with rows x columns = 0 as in_scope false. scope_tool.py v2 and make_scoped_inventory.py
 refused every inventory with an in_scope-false sheet (FULL_INVENTORY_REQUIRED), so a workbook with an empty sheet could
@@ -15,6 +15,10 @@ image pins), and checks that a workbook with empty sheets prepares exactly like 
     pinned hash, and the route's check-inventory on the scoped packet gives the same result (scope applied).
 It also checks the refusals that must not change: an already-scoped inventory (a non-empty sheet out of scope, with or
 without context:scope) and an empty sheet that carries a view or a cell. No project data is read.
+046i (owner decision O72): the tool version is cps046i-scope-tool.v4, and two more large pairs check that empty sheets
+change nothing on the new bill rules: NT4 (a bill with a six-label header and no 合計/總計 row: BILL1.NOTOTAL.v1, the scope
+to its last content row) and NH3 (a list whose header has four of the six labels, a summary sheet and a hidden memo
+sheet: BILL1.NOHEADER.v1, the whole workbook in scope except the empty sheets).
 
 Usage: python3 -I -B run_empty_sheet_tests.py --work /abs/NEWDIR --deps-bundle /abs/BUNDLE [--soffice soffice]
   --deps-bundle: the builders' bundle (private/deps with openpyxl 3.1.5 and xlrd 2.0.2, PORTABLE_SOURCE_INPUTS.json and
@@ -294,7 +298,7 @@ def norm_proposal(p, m, empties):
     b['per_sheet'] = {str(m[int(k)]): v for k, v in b['per_sheet'].items() if int(k) not in empties}
     b['sheet_index'] = m.get(b['sheet_index'])
     p['r51']['analysis_sheets'] = {str(m[int(k)]): v for k, v in p['r51']['analysis_sheets'].items()}
-    p['flags'] = [dict(f, sheet_index=m[f['sheet_index']]) for f in p['flags']]
+    p['flags'] = [dict(f, sheet_index=m.get(f['sheet_index'])) for f in p['flags']]     # 046i: BILL1_NO_HEADER has sheet_index null
     for h in p['holds']:
         if 'candidates' in h:
             h['candidates'] = [m[i] for i in h['candidates']]
@@ -311,7 +315,7 @@ def norm_digest(dg, m, empties):
 def norm_fact(f, m, empties):
     f = {k: v for k, v in f.items() if k not in ('digest_sha256', 'full_inventory_sha256', 'decision_sha256')}
     f['sheets'] = [dict(s, index=m[s['index']]) for s in f['sheets'] if s['index'] not in empties]
-    f['bill_sheet_index'] = m[f['bill_sheet_index']]
+    f['bill_sheet_index'] = m.get(f['bill_sheet_index'])      # 046i: null under BILL1.NOHEADER.v1
     return f
 
 
@@ -371,7 +375,7 @@ def pair_small(env, fmt, kind):
     rw, ro = scope_stage(dw, iw), scope_stage(do, io)
     record(f'{tag}: scope_tool.py accepts the inventory with empty sheets (exit 0, NOT_APPLIED, no digest)',
            rw['tool_code'] == 0 and rw['proposal']['status'] == 'NOT_APPLIED' and rw['proposal']['digest'] is None
-           and not (dw / 'tool' / 'SCOPE_DIGEST.json').exists() and rw['proposal']['tool']['version'] == 'cps046g-scope-tool.v3',
+           and not (dw / 'tool' / 'SCOPE_DIGEST.json').exists() and rw['proposal']['tool']['version'] == 'cps046i-scope-tool.v4',
            [rw['tool_code'], rw['tool_err'][-300:]])
     pw, po = rw.get('proposal', {}), ro.get('proposal', {})
     nw = norm_proposal(pw, m, empties) if pw else None
@@ -463,6 +467,94 @@ def pair_large(env, fmt):
     return {'dir': dw, 'full': iw, 'invw': invw, 'scoped': rw['scoped'], 'scw': scw, 'empties': empties, 'decision': dw / 'decision' / 'SCOPE_DECISION.json'}
 
 
+def nt_sheets(items=450):
+    """046i NT4: large_sheets without the 合計 cell: one six-label header, no 合計/總計 in a price column (BILL1.NOTOTAL.v1)."""
+    sheets, end = large_sheets(items)
+    name, cells, merges, state = sheets[1]
+    return [sheets[0], (name, [c for c in cells if c[0] != f'E{end}'], merges, state)], end
+
+
+def nh_sheets(items=450):
+    """046i NH3: a priced list headed 序號/品名規格/單位/數量/單價/金額 (four of the six BILL1 labels), the summary sheet and a
+    hidden memo sheet: no sheet has a BILL1 header row (BILL1.NOHEADER.v1)."""
+    lst = [('A1', '示例工程 價目表', False)] + [(c + '2', x, False) for c, x in zip('ABCDEF', ('序號', '品名規格', '單位', '數量', '單價', '金額'))]
+    for i in range(items):
+        r = 3 + i
+        lst += [(f'A{r}', str(i + 1), False), (f'B{r}', f'示例材料第{i + 1}項，規格{i % 7 + 1}', False), (f'C{r}', '只', False),
+                (f'D{r}', i % 5 + 1, False), (f'E{r}', 100 + i, False), (f'F{r}', (i % 5 + 1) * (100 + i), True)]
+    lst += [(f'E{3 + items}', '合計', False), (f'F{3 + items}', 123456, True)]
+    summary = large_sheets(1)[0][0]
+    memo = ('示例說明', [('A1', '示例說明', False), ('A2', '示例內容第二行', False)], [], 'hidden')
+    return [('價目表', lst, [], 'visible'), summary, memo]
+
+
+def pair_o72(env, fmt, variant):
+    """046i: a large O72 workbook with and without empty sheets prepares the same way (proposal, digest, excerpt, decision,
+    scoped packet, verify, route check-inventory)."""
+    tag = f'{variant}_{fmt}'
+    case = {('nt4', 'xlsx'): '9990905', ('nt4', 'xls'): '9990906', ('nh3', 'xlsx'): '9990907', ('nh3', 'xls'): '9990908'}[(variant, fmt)]
+    if variant == 'nt4':
+        sheets, end_row = nt_sheets()
+        with_sheets = [empty('示例空白甲'), sheets[0], empty('示例空白乙', 'hidden'), sheets[1], empty('示例空白丙')]
+    else:
+        sheets, end_row = nh_sheets(), None
+        with_sheets = [empty('示例空白甲'), sheets[0], empty('示例空白乙', 'hidden'), sheets[1], sheets[2]]
+    dw, iw = env.prepare(tag + '_with', env.source(tag + '_with', with_sheets, fmt), '材料清單', case)
+    do, io = env.prepare(tag + '_without', env.source(tag + '_without', sheets, fmt), '材料清單', case)
+    invw, invo = json.loads(iw.read_text(encoding='utf-8')), json.loads(io.read_text(encoding='utf-8'))
+    m, empties = index_map(invw, invo)
+    ident = {i: i for i in m.values()}
+    record(f'{tag}: the builder writes the empty sheets with rows x columns = 0 and in_scope false',
+           len(empties) == (3 if variant == 'nt4' else 2)
+           and all(s['rows'] * s['columns'] == 0 and s['in_scope'] is False for s in invw['sheets'] if s['index'] in empties),
+           [(s['index'], s['rows'], s['columns'], s['in_scope']) for s in invw['sheets']])
+    rw, ro = scope_stage(dw, iw), scope_stage(do, io)
+    pw, po = rw.get('proposal', {}), ro.get('proposal', {})
+    rule = 'BILL1.NOTOTAL.v1' if variant == 'nt4' else 'BILL1.NOHEADER.v1'
+    record(f'{tag}: scope_tool.py: PROPOSED under {rule} for both', rw['tool_code'] == 0 and ro['tool_code'] == 0 and pw.get('status') == 'PROPOSED'
+           and po.get('status') == 'PROPOSED' and pw['bill']['rule'] == po['bill']['rule'] == rule and pw['tool']['version'] == 'cps046i-scope-tool.v4',
+           [rw['tool_code'], rw['tool_err'][-300:], pw.get('bill')])
+    if not pw or not po:
+        return
+    nw, no = norm_proposal(pw, m, empties), norm_proposal(po, ident, set())
+    record(f'{tag}: the proposal equals the one without empty sheets (after removing them)', nw == no, diff_keys(nw, no))
+    if variant == 'nt4':
+        record(f'{tag}: bill sheet and end row (the last content row)', pw['bill']['sheet_index'] == 4 and po['bill']['sheet_index'] == 2
+               and pw['bill']['end_row'] == end_row == po['bill']['end_row'] and pw['bill']['end_cell'] is None, pw['bill'])
+    else:
+        hid = next(s['index'] for s in invw['sheets'] if s['name'] == '示例說明')
+        record(f'{tag}: every non-empty sheet in scope, the hidden memo flagged, no bill', pw['bill']['sheet_index'] is None and pw['bill']['end_row'] is None
+               and [s['index'] for s in pw['sheets'] if s['in_scope']] == sorted(set(m) - empties)
+               and {(f['sheet_index'], f['code']) for f in pw['flags']} >= {(None, 'BILL1_NO_HEADER'), (hid, 'HIDDEN_SHEET')}, [pw['sheets'], pw['flags']])
+    record(f'{tag}: the empty sheets are role other, out of scope, with the empty reason and no flag',
+           all(s['role'] == 'other' and s['in_scope'] is False and s['reason'] == EMPTY_REASON for s in pw['sheets'] if s['index'] in empties)
+           and not any(f['sheet_index'] in empties for f in pw['flags']), [pw['sheets'], pw['flags']])
+    record(f'{tag}: the digest equals the one without empty sheets apart from their entries',
+           norm_digest(rw['digest'], m, empties) == norm_digest(ro['digest'], ident, set()),
+           diff_keys(norm_digest(rw['digest'], m, empties), norm_digest(ro['digest'], ident, set())))
+    record(f'{tag}: the scope reader rules excerpt is byte-identical', rw['excerpt'] == ro['excerpt'])
+    if 'decision' not in rw or 'decision' not in ro:
+        record(f'{tag}: scope_agree.py freezes an admissible decision for both', False, [rw.get('agree_err', '')[-300:], ro.get('agree_err', '')[-300:]])
+        return
+    fw, fo = rw['decision']['scope_fact'], ro['decision']['scope_fact']
+    record(f'{tag}: the frozen scope fact equals the one without empty sheets (after removing them)', fw['bill_rule'] == rule
+           and norm_fact(fw, m, empties) == norm_fact(fo, ident, set()), diff_keys(norm_fact(fw, m, empties), norm_fact(fo, ident, set())))
+    if 'scoped' not in rw or 'scoped' not in ro:
+        record(f'{tag}: make_scoped_inventory.py builds the scoped packet', False, [rw.get('build_err', '')[-300:]])
+        return
+    record(f'{tag}: --verify PASS with the pinned hash; check-inventory on the scoped packet: same result (PASS, scope applied)',
+           rw['verify_code'] == 0 and rw['verify'].get('status') == 'PASS' and rw['check_scoped'] == ro['check_scoped']
+           and rw['check_scoped']['status'] == 'PASS' and rw['check_scoped']['scope'] == 'applied', [rw['verify'].get('problems'), rw['check_scoped']])
+    scw, sco = json.loads(rw['scoped'].read_text(encoding='utf-8')), json.loads(ro['scoped'].read_text(encoding='utf-8'))
+    record(f'{tag}: the scoped packet equals the one without empty sheets after removing them, empty sheets out of scope',
+           norm_inventory(scw, m, empties) == norm_inventory(sco, ident, set()) and all(s['in_scope'] is False for s in scw['sheets'] if s['index'] in empties),
+           diff_keys(norm_inventory(scw, m, empties), norm_inventory(sco, ident, set())))
+    if variant == 'nh3':
+        sw = rw['receipt']['verify']['stats']
+        record(f'{tag}: the whole-workbook projection removes no cell or view', sw['cells_removed'] == 0 and sw['views_removed'] == 0
+               and sw['views_renumbered'] == 0, sw)
+
+
 def refusals(env, lw):
     """The refusals that must not change, and the empty-sheet conditions (no cell, no view)."""
     work = env.work / 'refusals'
@@ -548,6 +640,12 @@ def main():
                 large[(name, fmt)] = fn()
             except Exception as e:          # a preparation failure fails the pair, and the suite
                 record(f'{name}_{fmt}: preparation ran', False, repr(e)[:400])
+    for fmt in ('xlsx', 'xls'):
+        for variant in ('nt4', 'nh3'):
+            try:
+                pair_o72(env, fmt, variant)
+            except Exception as e:
+                record(f'{variant}_{fmt}: preparation ran', False, repr(e)[:400])
     lw = large.get(('large', 'xlsx'))
     if lw:
         refusals(env, lw)

@@ -1,12 +1,12 @@
 {
  "schema": "cps.creator-practice-examples.v1",
- "candidate": "046g",
+ "candidate": "046i",
  "part": "2 of 2: sources, job inputs, quoted range, rows, components, Q, enclosure row, E/F, statuses, scoped packets (R47b-R51, R54, R56-R59); part 1 is SYNTHETIC_NAMING_CASES.json",
  "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
  "all_examples_invented": true,
  "private_project_inputs": false,
  "replaces": "the 046e allocation examples (cps.allocation-examples.draft.v1, R1-R47)",
- "rules": "FIELD_ROLES R47b-R59 (candidate 046g, route v4.3; R56 revised under O30 and after the round-1 review)",
+ "rules": "FIELD_ROLES R47b-R59 (candidate 046i, route v4.4; R59 amended under O72; R56 revised under O30 and after the round-1 review)",
  "resources": {
   "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
   "context:glossary": {
@@ -61,10 +61,10 @@
   "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
   "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
   "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2).",
-  "Scoped packets (A35-A37): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet.",
+  "Scoped packets (A35-A37, A50, A51): the packet carries context:scope (R59). The sheet names, counts and hashes are invented; a scoped-out sheet has no cells in the packet. A50 and A51 show the two O72 bill rules (R59 items 2 and 9).",
   "Enclosure rows (R56; A18, A19, A21, A31-A33, A38-A49): unless a case gives a section heading or analysis-block title, the line is not under one that names a panel, so A comes from the line. Dimensions without a unit are millimetres. Each enclosure row is carried by its own one-row physical_enclosure group whose name and specification equal A and B; no other row carries A or B (O30)."
  ],
- "case_count": 49,
+ "case_count": 51,
  "cases": [
   {
    "id": "A01",
@@ -1887,6 +1887,168 @@
     }
    },
    "reason": "Without its item label <3> and the trailing 設備, the heading's panel name is 盤體, a bare word that names no box, so the heading names no panel and A comes from the line. In the line, the prefix 產品 is dropped, and the segment 箱體, which is only that word, names no box and is dropped as the glossary's enclosure word. In 甲-2 控制箱體, 體 directly follows 箱, text stands before the enclosure word and 體 ends the segment, so the segment names a box whose box noun includes 體: A is 甲-2 控制箱體, cut after 體, with the tag 甲-2 kept. B comes from the W/H/D-labelled dimensions (no unit, so millimetres). C is the glossary's generic enclosure word. Once the prefix, 箱體, the text A took and the dimensions are removed, nothing remains, so D is null with a reason. I is null; the brand cell is empty, so J is the company name."
+  },
+  {
+   "id": "A50",
+   "rule": "R59 item 2 (BILL1.NOTOTAL.v1), R49, R11",
+   "input": {
+    "context:scope": {
+     "bill_rule": "BILL1.NOTOTAL.v1",
+     "bill_sheet_index": 2,
+     "bill_header_row": 2,
+     "end_row": 9,
+     "sheets": [
+      {
+       "index": 1,
+       "name": "示例總表",
+       "role": "summary",
+       "in_scope": false,
+       "content_cells": 20,
+       "reason": "summary: never yields rows (R49)",
+       "linked_analysis_blocks": 0
+      },
+      {
+       "index": 2,
+       "name": "示例材料清單",
+       "role": "bill",
+       "in_scope": true,
+       "content_cells": 30,
+       "reason": "bill: the only sheet with a BILL1 header row and no cell reading exactly 合計 or 總計 below it in a price column; the scope runs to its last content row and R49 ends the quoted range inside it (R59 item 2, O72)",
+       "linked_analysis_blocks": 0
+      },
+      {
+       "index": 3,
+       "name": "示例單價分析",
+       "role": "analysis",
+       "in_scope": false,
+       "content_cells": 2500,
+       "reason": "analysis: not every in-range bill line has no price and no status, so R51 takes no rows from this sheet; a separate analysis sheet lies outside the quoted range (R49, R51, A26)",
+       "linked_analysis_blocks": 0
+      },
+      {
+       "index": 4,
+       "name": "示例資源統計",
+       "role": "resource_statistics",
+       "in_scope": false,
+       "content_cells": 600,
+       "reason": "resource statistics: source check only, never yields rows (guideline section 3)",
+       "linked_analysis_blocks": 0
+      }
+     ]
+    },
+    "packet_cells": "sheet 2 only",
+    "lines": [
+     {
+      "row": 3,
+      "item_no": "1",
+      "description": "產品，電磁接觸器，AC220V",
+      "unit": "只",
+      "quantity": 2,
+      "unit_price": 1500,
+      "amount": 3000
+     },
+     {
+      "row": 4,
+      "item_no": "2",
+      "description": "產品，選擇開關，30mm",
+      "unit": "個",
+      "quantity": 3,
+      "amount": "不含估價"
+     },
+     {
+      "row": 5,
+      "item_no": "3",
+      "description": "溫度計",
+      "unit": "支",
+      "quantity": 1
+     },
+     {
+      "row": 6,
+      "description": "運費",
+      "unit": "式",
+      "quantity": 1,
+      "unit_price": 2000,
+      "amount": 2000
+     },
+     {
+      "row": 8,
+      "item_no": "報價人：示例機電股份有限公司"
+     },
+     {
+      "row": 9,
+      "item_no": "以上單價含運費"
+     }
+    ],
+    "note": "A35's bill sheet without its 合計 row (row 7 is empty) and without the line after the signature: no cell in the 單價 or 複價 column below the header reads 合計 or 總計, so the scope runs to row 9, the last row with content."
+   },
+   "expected": {
+    "rows": [
+     "row 3: C XMC, D AC220V, Q 1500",
+     "row 4: C XCS, D 30mm, I 不含估價, J 不含估價, Q null",
+     "row 6 (運費): C null, D 運費, Q 2000"
+    ],
+    "census": {
+     "row 5": "excluded_supply, reason per R45 (no price and no status)",
+     "row 8": "footer (OUTPUT_CONTRACT: signature lines), as on an unscoped packet",
+     "row 9": "commercial_note (R11), as on an unscoped packet"
+    },
+    "status": "research_draft, not held or partial",
+    "route": "check passes with scope: applied; end_row 9 is the last content row, so no cited cell lies below it"
+   },
+   "reason": "Under BILL1.NOTOTAL.v1 the fact fixes the bill sheet but end_row is only the sheet's last row with content, not a total row, so the scope keeps the whole sheet. The generator decides where the quoted range ends by R49, as on an unscoped packet: no total row exists, so the range ends at the last item line before the signature line, row 6. The cells after it take their roles as on an unscoped packet (R59 item 2), not item 3's excluded_supply: the signature line is footer and the price-inclusion statement is a commercial note (R11)."
+  },
+  {
+   "id": "A51",
+   "rule": "R59 item 9 (BILL1.NOHEADER.v1), R49",
+   "input": {
+    "context:scope": {
+     "bill_rule": "BILL1.NOHEADER.v1",
+     "bill_sheet_index": null,
+     "bill_header_row": null,
+     "end_row": null,
+     "threshold": {
+      "content_cells_literal_or_cached": 2712,
+      "limit": 2500
+     },
+     "sheets": [
+      {
+       "index": 1,
+       "name": "示例價目表",
+       "role": "other",
+       "in_scope": true,
+       "content_cells": 2710,
+       "reason": "whole workbook: no sheet has a BILL1 header row (five or six of its labels), so every sheet except an empty one is in scope and the packet is read as an unscoped packet; the role is a label, not an R49 decision (R59 item 9, O72)",
+       "linked_analysis_blocks": 0
+      },
+      {
+       "index": 2,
+       "name": "示例說明",
+       "role": "other",
+       "in_scope": true,
+       "content_cells": 2,
+       "reason": "whole workbook: no sheet has a BILL1 header row (five or six of its labels), so every sheet except an empty one is in scope and the packet is read as an unscoped packet; the role is a label, not an R49 decision (R59 item 9, O72)",
+       "linked_analysis_blocks": 0
+      }
+     ]
+    },
+    "packet_cells": "both sheets (the whole workbook)",
+    "sheet_1": "a priced list: row 2 reads 序號, 品名規格, 單位, 數量, 單價, 金額 (only four of the six BILL1 labels: 序號 and 品名規格 are not BILL1 words); rows 3-452 are numbered item lines with a unit, a quantity, a unit price and an amount; row 453 holds 合計 in the 單價 column and the total in the 金額 column; row 454 is the signature line 報價人：示例機電股份有限公司",
+    "sheet_2": "an invented memo: 示例說明 / 示例內容第二行"
+   },
+   "expected": {
+    "rows": [
+     "every numbered item line of sheet 1, rows 3-452, as on an unscoped packet (R49, R50)"
+    ],
+    "census": {
+     "sheet 1 row 2": "header",
+     "sheet 1 row 453": "financial_summary (the end row, R49)",
+     "sheet 1 row 454": "footer",
+     "sheet 2": "census roles as on an unscoped packet (for example header and commercial_note)"
+    },
+    "not_expected": "nothing is excluded_supply under R59 item 3, and the scope roles other are not R49 decisions",
+    "route": "check passes with scope: applied; R59_ROW_BELOW_END_ROW is not checked (no end row)"
+   },
+   "reason": "The scope stage could not fix a bill sheet by the BILL1 labels, so the whole workbook went to the generator (owner decision O72). The fact names no bill sheet and no end row, and its roles are labels. The generator reads the packet as an unscoped packet: it finds the bill sheet itself by R49 (the list that carries the sender's prices), ends the range at its 合計 row and gives its lines as rows; every cell of every sheet takes a census role."
   }
  ]
 }

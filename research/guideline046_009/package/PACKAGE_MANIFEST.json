@@ -1,23 +1,23 @@
 {
   "schema": "cps.guideline-package.manifest.v2",
-  "candidate": "046g",
-  "parent_candidate": "046f",
-  "parent_manifest_sha256": "5f5502a7117e734c5a2f999227c6f0a8a95927c7dce959d28f11e11dbb620467",
+  "candidate": "046i",
+  "parent_candidate": "046g",
+  "parent_manifest_sha256": "bf06fae2e3ab0129ecbe6d88a97f00edac9b9cfbe47847eecc11313e5620b25f",
   "status": "FROZEN_FOR_BOUNDED_SOURCE_TRIAL_NOT_DEPLOYED",
-  "target_runtime": "Qualification and use: the Dot operator runtime (owner decisions O36, O37); development trials in the maintainer environment. Every run records the actual model, effort and tools; scores do not carry across models.",
-  "semantic_review": "research/guideline046_007/REVIEW_046g.md",
+  "target_runtime": "Qualification: the maintainer session (owner decision O64). Use: the Dot operator runtime (O36, O37). Every run records the actual model, effort and tools; scores do not carry across models.",
+  "semantic_review": "research/guideline046_009/REVIEW_046i.md",
   "route": {
     "path": "tools/cps046b_route.py",
-    "version": "cps046g-route.v4.3"
+    "version": "cps046i-route.v4.4"
   },
-  "utf8_bytes": 496193,
+  "utf8_bytes": 520353,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 26856,
-      "sha256": "869be9e6f59d71adf54dabc3377bcf43341adf1db743080e00666c70a2aed2bc"
+      "bytes": 29498,
+      "sha256": "fc43fa5c149c34842205402f43c481107973bd96266e8f865c1a9edf49523072"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -36,8 +36,8 @@
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 76620,
-      "sha256": "1f5c8742bfb64610894f7d90ba8e281f1ec6ef3479bccf0a14f70cdcf6375f65"
+      "bytes": 84278,
+      "sha256": "da98ce37169c5730e699e4163441e5371c6a9a78f914e99c4a3f8992c81c2c98"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -51,13 +51,13 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 21541,
-      "sha256": "ae73b8de8b1768333d4c2d4532594b6cfe03048dc7d1337ba2bc7cb2ecbb4f7e"
+      "bytes": 22878,
+      "sha256": "9fab1a2ac14ee610c45736cc14df812a322871e595df70bd0ea7f751dc0315ec"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
-      "bytes": 13117,
-      "sha256": "9de0f06b54545f9730c18aaca05ee8473c95b3a7dccc243063beafab78aa93fe"
+      "bytes": 14125,
+      "sha256": "492d048cff9cda462d35dc347019723ffb904c8fa8367921f55a8ec9f14a65c3"
     },
     {
       "path": "resources/SEMANTIC_RESPONSE.schema.json",
@@ -76,13 +76,13 @@
     },
     {
       "path": "resources/SOURCE_REFERENCE_CONTRACT.md",
-      "bytes": 26416,
-      "sha256": "f2cf308098adf88865961bc5a4341a10ac77daa05377f41a22b0777aa8eeb1d9"
+      "bytes": 27988,
+      "sha256": "bb2e413b384e149606a515ff597f077bc6e50b6542567d89c20df07522f6e50c"
     },
     {
       "path": "resources/SYNTHETIC_ALLOCATION_CASES.json",
-      "bytes": 60636,
-      "sha256": "4ee77d4197bddae5f5ec3a703e4df750cf3cca00c1f67c9702a68b5e4cdda160"
+      "bytes": 67465,
+      "sha256": "ffdc31cd11d66ac1d22328315d7961ab5cda9221472859553a1cc9f615fdfa40"
     },
     {
       "path": "resources/SYNTHETIC_NAMING_CASES.json",
@@ -91,8 +91,8 @@
     },
     {
       "path": "tools/cps046b_route.py",
-      "bytes": 85833,
-      "sha256": "ba8414a063e475aa8a28d348e768361c287ba25739061282b787de55baf1441e"
+      "bytes": 88947,
+      "sha256": "cd0b7cfd9040c701a331d887148dd7b8b28ac32acff70f56f667397b85dfa080"
     }
   ]
 }
