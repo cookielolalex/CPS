@@ -16,6 +16,12 @@ No total row (BILL1.NOTOTAL.v1), positive cases:
   NT6 unpriced lines, a signature line, then an item-like priced line, and an analysis sheet (design finding R3): the
       tool's condition (i) is false and the analysis sheet is out of scope; the digest shows the priced line; a reader
       that follows the template puts the analysis sheet in scope and the case is held.
+  NT7 (046i review finding F2) NT6 without an analysis sheet: no deterministic hold applies (condition (i) is false and
+      R51_ALL_UNPRICED_WITHOUT_ANALYSIS_SHEET is not raised); a reader that follows the template (no analysis sheet:
+      end_row null) holds the case;
+  NTB (review finding S6) a block-labelled total (甲站合計) in the price column and no exact total: BILL1.NOTOTAL.v1; the
+      digest lists the block total and counts exactly the rows it lists, so a reader that follows the template's no-total
+      trigger takes the last content row and freezes FROZEN_AGREED.
   (NT4, NT1 with empty sheets, is in run_empty_sheet_tests.py.)
 No total row, negative cases:
   NTx1 two sheets, each with one six-label header and no total; NTx2 one sheet with two six-label header rows; NTx3 a
@@ -32,7 +38,9 @@ Whole workbook (BILL1.NOHEADER.v1), positive cases:
       agreeing reader freezes FROZEN_AGREED and check-inventory passes (design finding C5).
   (NH3, NH2 with an empty and a hidden sheet, is in run_empty_sheet_tests.py.)
 Whole workbook, negative and boundary cases: NHx1 only a five-of-six header row: HOLD BILL1_CANDIDATES_NOT_ONE; NHx2 NH1
-below the threshold: NOT_APPLIED, rule BILL1.v1, no bill.
+below the threshold: NOT_APPLIED, rule BILL1.v1, no bill; V1J (review finding S6) a BILL1.v1 bill whose 單價 and 複價
+columns lie beyond column J: PROPOSED under BILL1.v1, and the digest shows its header row with four of the six labels and
+more_cells_beyond_column_J, the case the template's 'count only the labels shown' sentence covers.
 Agreement: on NT1 the agreeing reader, a reader whose end row is the last item line, and a reader with nulls; on NH2 the
 agreeing reader, a reader that names a bill sheet, one that leaves a non-empty sheet out, one that puts an empty sheet in
 (NH2 with an empty sheet), and one with nulls and a bill role; a stand-in reader on either rule (not admissible; the
@@ -89,6 +97,18 @@ def bill(n, priced=True, total=False, header=SIX, title='示例工程 詳細價�
     return cells, r - 1
 
 
+def bill_wide(n):
+    """A BILL1.v1 bill whose 單價 and 複價 columns are K and L (beyond the digest's column J), with an exact 合計 in K."""
+    head = ('項次', '項目及說明', '單位', '數量', '規格', '廠牌', '型號', '產地', '交期', '備註', '單價', '複價')
+    cells = [('A1', '示例工程 詳細價目表', False)] + [(c + '2', x, False) for c, x in zip('ABCDEFGHIJKL', head)]
+    for i in range(n):
+        r = 3 + i
+        cells += [(f'A{r}', str(1 + i), False), (f'B{r}', f'示例寬表材料第{1 + i}項', False), (f'C{r}', '只', False), (f'D{r}', i % 5 + 1, False),
+                  (f'K{r}', 100 + i, False), (f'L{r}', (i % 5 + 1) * (100 + i), True)]
+    r = 3 + n
+    return cells + [(f'K{r}', '合計', False), (f'L{r}', 123456, True), (f'A{r + 1}', SIG[0][1], False)]
+
+
 def summary():
     return [('A1', '項次', False), ('B1', '項目及說明', False), ('C1', '複價', False), ('A2', '壹', False), ('B2', '示例詳細表', False),
             ('C2', 900000, True)]
@@ -135,6 +155,8 @@ def workbooks():
     nt5_bill, nt5_last = bill(450, tail=[[('L', '示例欄外備註')]])
     nt6_bill, nt6_last = bill(450, priced=False, tail=[SIG, [('A', '451'), ('B', '示例運費'), ('C', '式'), ('D', 1), ('E', 2000), ('F', 2000)]])
     ntx7_bill, ntx7_last = bill(450, total='合計：', tail=[SIG])
+    nt7_bill, nt7_last = bill(700, priced=False, tail=[SIG, [('A', '701'), ('B', '示例運費'), ('C', '式'), ('D', 1), ('E', 2000), ('F', 2000)]])
+    ntb_bill, ntb_last = bill(450, total='甲站合計', tail=[SIG])
     return {
         'nt1': ([S('總表', summary()), S('詳細表', nt1_bill), S('單價分析', analysis(180, '示例分析項目{}'))],
                 {'status': 'PROPOSED', 'rule': NOTOTAL, 'bill': 2, 'end_row': nt1_last, 'in_scope': [2], 'cond_i': False,
@@ -174,6 +196,12 @@ def workbooks():
                  {'status': 'HOLD', 'rule': V1, 'holds': ['BILL1_CANDIDATES_NOT_ONE']}),
         'nhx2': ([S('單價分析', analysis(40))],
                  {'status': 'NOT_APPLIED', 'rule': V1}),
+        'nt7': ([S('詳細表', nt7_bill)],
+                {'status': 'PROPOSED', 'rule': NOTOTAL, 'bill': 1, 'end_row': nt7_last, 'in_scope': [1], 'cond_i': False}),
+        'ntb': ([S('總表', summary()), S('詳細表', ntb_bill)],
+                {'status': 'PROPOSED', 'rule': NOTOTAL, 'bill': 2, 'end_row': ntb_last, 'in_scope': [2], 'cond_i': False}),
+        'v1j': ([S('總表', summary()), S('詳細表', bill_wide(450))],
+                {'status': 'PROPOSED', 'rule': V1, 'in_scope': [2]}),
     }
 
 
@@ -297,6 +325,7 @@ def checks(fmt, cs):
     """Digest, agreement and build checks on the cases of one format."""
     nt1, nt2, nt3, nt5, nt6, ntx7 = (cs[k] for k in ('nt1', 'nt2', 'nt3', 'nt5', 'nt6', 'ntx7'))
     nh2, nh2e, nh4, nh1 = cs['nh2'], cs['nh2e'], cs['nh4'], cs['nh1']
+    nt7, ntb, v1j = cs['nt7'], cs['ntb'], cs['v1j']
     # NT1: digest additions, reason, agreement, build
     dg = json.loads((nt1['d'] / 'tool' / 'SCOPE_DIGEST.json').read_text(encoding='utf-8'))
     b = next(s for s in dg['sheets'] if s['index'] == 2)
@@ -361,6 +390,34 @@ def checks(fmt, cs):
     code, o, e, _ = agree(ntx7['d'], 'variant_end', reader(ntx7['d'] / 'tool' / 'SCOPE_PROPOSAL.json', ntx7['d'] / 'tool' / 'SCOPE_DIGEST.json', end_row=453))
     record(f'ntx7_{fmt}: a reader that takes the variant total row as the end row holds the case (end_row)', code == 3
            and [x['what'] for x in o.get('differences', [])] == ['end_row'], o)
+    # NT7 (review finding F2): NT6 without an analysis sheet; nothing holds deterministically; the template's reader holds it
+    p7 = nt7['proposal']
+    dg7b = json.loads((nt7['d'] / 'tool' / 'SCOPE_DIGEST.json').read_text(encoding='utf-8'))
+    c7 = next(s for s in dg7b['sheets'] if s['index'] == 1)['counts']
+    record(f'nt7_{fmt}: no analysis sheet and a priced line after the signature line: no hold, the digest shows the priced line',
+           p7['holds'] == [] and p7['r51']['analysis_sheets'] == {} and p7['r51']['by_state']['priced'] == 1
+           and c7['priced_or_not_estimated_line_rows'] == [704] and c7['last_unpriced_no_status_line_row'] == 702, [p7.get('r51'), c7])
+    code, o, e, _ = agree(nt7['d'], 'template_reader', reader(nt7['d'] / 'tool' / 'SCOPE_PROPOSAL.json', nt7['d'] / 'tool' / 'SCOPE_DIGEST.json', end_row=None))
+    record(f'nt7_{fmt}: a reader following the template (no analysis sheet: end_row null) holds the case (end_row)', code == 3
+           and o.get('status') == 'HELD_FOR_OWNER' and [x['what'] for x in o.get('differences', [])] == ['end_row'], o)
+    # NTB (review finding S6): a block-labelled total in the price column is listed and counted; the no-total trigger applies
+    dgb = json.loads((ntb['d'] / 'tool' / 'SCOPE_DIGEST.json').read_text(encoding='utf-8'))
+    tb = next(s for s in dgb['sheets'] if s['index'] == 2)
+    record(f'ntb_{fmt}: the digest lists the block total as the only price-column total row and its count equals the rows listed',
+           tb['price_column_total_rows_count'] == len(tb['price_column_total_rows']) == 1 and tb['price_column_total_rows'][0]['row'] == 453
+           and tb['last_rows'][-1]['row'] == ntb['proposal']['bill']['end_row'] == 454, tb.get('price_column_total_rows_count'))
+    code, o, e, ad = agree(ntb['d'], 'template_reader', reader(ntb['d'] / 'tool' / 'SCOPE_PROPOSAL.json', ntb['d'] / 'tool' / 'SCOPE_DIGEST.json'))
+    record(f'ntb_{fmt}: a reader that takes the last content row (block total only) freezes FROZEN_AGREED under BILL1.NOTOTAL.v1',
+           code == 0 and o.get('status') == 'FROZEN_AGREED' and o.get('admissible') is True, [o, e])
+    # V1J (review finding S6): a BILL1.v1 bill whose price columns lie beyond column J
+    pj = v1j['proposal']
+    dgj = json.loads((v1j['d'] / 'tool' / 'SCOPE_DIGEST.json').read_text(encoding='utf-8'))
+    hj = next(s for s in dgj['sheets'] if s['index'] == 2)['first_header_row']
+    shown = {str(c_['v']).strip() for c_ in hj['cells']}
+    record(f'v1j_{fmt}: BILL1.v1 finds the wide bill; its digest header row shows four of the six labels and more cells beyond column J',
+           pj['bill']['candidates'] == [2] and pj['bill']['sheet_index'] == 2 and pj['bill']['price_columns'] == ['K', 'L']
+           and pj['bill']['end_row'] == 453 and hj['row'] == 2 and hj.get('more_cells_beyond_column_J') == 2
+           and len(shown & {'項次', '項目及說明', '單位', '數量', '單價', '複價'}) == 4, [pj.get('bill'), hj.get('more_cells_beyond_column_J')])
     # NH1
     record(f'nh1_{fmt}: a single analysis sheet: in scope, no linked block, whole-workbook reason',
            nh1['proposal']['sheets'][0]['reason'].startswith('whole workbook:') and nh1['proposal']['r51']['analysis_sheets']['1']['linked_blocks'] == 0

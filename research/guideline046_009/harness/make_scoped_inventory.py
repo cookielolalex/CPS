@@ -111,9 +111,9 @@ def fact_record(decision, decision_sha, route):
                  'cells, and the sheet roles in this fact are labels, not R49 decisions. This fact is never field evidence.')
     else:
         agreed = ('the two agreed on the bill sheet, the R49 end row and every in_scope flag' if payload['bill_rule'] != nototal_rule else
-                  'the two agreed on the bill sheet, that no cell below its header row in its 單價 or 複價 (or 金額) column reads exactly '
-                  '合計 or 總計 (so end_row is its last row with content, not a total row, and R49 decides where the quoted range ends '
-                  'inside it; owner decision O72), and every in_scope flag')
+                  'the tool found no cell below the bill sheet\'s header row in its 單價 or 複價 (or 金額) column reading exactly 合計 '
+                  'or 總計, and the two agreed on the bill sheet, on end_row being its last row with content (not a total row, so R49 '
+                  'decides where the quoted range ends inside it; owner decision O72) and on every in_scope flag')
         basis = ('Scope decision for this scoped packet (FIELD_ROLES R59, candidate 046i). The source preparer computed BILL1 and the '
                  'R51 conditions on the full inventory (harness/scope_tool.py); ' + reader + '; ' + agreed + ' (harness/scope_agree.py), and the '
                  'decision was frozen before generation. This inventory holds only the cells and views of the in-scope sheets. '

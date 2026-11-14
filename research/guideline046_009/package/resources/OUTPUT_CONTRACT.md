@@ -35,7 +35,7 @@ Return one JSON file conforming to `SEMANTIC_RESPONSE.schema.json` (`cps.semanti
    | Item numbers | `item_identifier` | |
    | An in-range line with no price and no status | `excluded_supply` (every cell, including its item number and continuation rows) | "no enclosure and no estimate: not in the quoted supply (R45)", then the condition: price cells empty, or the text they hold |
    | An item-like line after the end row | `excluded_supply` | "outside the quoted range (R49)" |
-   | On a scoped packet: every content cell on a bill-sheet row after the end row (none under `BILL1.NOTOTAL.v1`, where the end row is the last content row and the cells after the R49 range take their unscoped roles; no end row under `BILL1.NOHEADER.v1`) | `excluded_supply` | "outside the quoted range (R49, R59)" |
+   | On a scoped packet: every content cell on a bill-sheet row after the end row (none under `BILL1.NOTOTAL.v1`, where the end row is the last content row and the cells after the R49 range take their unscoped roles, except blocks of priced or not-estimated parents (R59 item 6); no end row under `BILL1.NOHEADER.v1`) | `excluded_supply` | "outside the quoted range (R49, R59)" |
    | An owner-supplied panel line omitted under O10, and the lines inside it (including a not-estimated line inside it) | `excluded_supply` (R50) | name the marker and "owner-supplied panel with no priced line inside the quoted range (R50, provisional O10)" |
    | A no-price, no-status line whose analysis block lies outside the quoted range; its block | `excluded_supply` (the line); `analysis_unlinked` (the block, R46) | per R45 (the line); per R46 (the block) |
    | The parent line of components listed as rows | `section` | "parent of analysis components listed as rows (R51)" |

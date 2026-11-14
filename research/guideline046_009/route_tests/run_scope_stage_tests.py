@@ -13,8 +13,9 @@ tool_no_total_scopes_to_last_content_row (BILL1.NOTOTAL.v1). The zero-candidate 
 header-like row carries five of the six labels (tool_holds_zero_bill1_candidates_five_of_six). New o72_* checks: the
 no-total pipeline (digest additions, agreement and disagreements, build, verify, route), the whole-workbook pipeline
 (BILL1.NOHEADER.v1: every sheet in scope, the scoped inventory equals the full one plus the fact), its agreement cases,
-a stand-in decision on either rule and a hand-edited proposal with an unknown bill rule (PROPOSAL_BILL_RULE). No project
-data is read.
+a stand-in decision on either rule and a hand-edited proposal with an unknown bill rule (PROPOSAL_BILL_RULE). The 046i
+review fix round adds the priced-tail pattern without an analysis sheet (finding F2): no deterministic hold applies, and a
+reader following the template (end_row null) holds the case. No project data is read.
 Usage: python3 -I run_scope_stage_tests.py --work NEWDIR
 """
 import argparse, copy, hashlib, importlib.util, json, subprocess, sys
@@ -107,12 +108,15 @@ def views_for(name, rows, cols, start_id, step=30):
     return out
 
 
-def build_full(blocks=130, bill=None, extra_bill_copy=False, hidden_resource=False, analysis_kw=None, images=None):
-    """Invented full inventory, every sheet in scope; returns (dict, bytes)."""
+def build_full(blocks=130, bill=None, extra_bill_copy=False, hidden_resource=False, analysis_kw=None, images=None, analysis=True, resource_rows=40):
+    """Invented full inventory, every sheet in scope; returns (dict, bytes). analysis=False leaves out the analysis sheet
+    (the resource sheet is then sheet 3; give resource_rows enough rows to stay above the threshold)."""
     bill = bill or F.SCOPED_BILL
     adata, arows = analysis_sheet(blocks, **(analysis_kw or {}))
     specs = [('示例總表', SUMMARY, 12, 4, []), (F.SB, bill, 10, 7, F.SCOPED_BILL_MERGES), ('示例單價分析', adata, arows, 7, []),
-             ('示例資源統計', resource_sheet(40), 40, 10, [])]
+             ('示例資源統計', resource_sheet(resource_rows), resource_rows, 10, [])]
+    if not analysis:
+        specs.pop(2)
     if extra_bill_copy:
         specs.append(('示例材料清單二', bill, 10, 7, F.SCOPED_BILL_MERGES))
     vws, cells, sheets = [], [], []
@@ -260,6 +264,23 @@ def o72_tests(work, h, nb, main_prop, main_dig):
     code, out, err = run(AGREE, '--proposal', w['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', '--digest', w['dir'] / 'tool' / 'SCOPE_DIGEST.json',
                          '--reader', rp_, '--out-dir', work / 'agree_o72_priced_tail')
     record('o72_nototal_priced_tail_reader_puts_analysis_in_scope_holds', code == 3 and [d_['what'] for d_ in jout(out).get('differences', [])] == ['in_scope'], out)
+    # the same pattern with no analysis sheet (046i review finding F2): no deterministic hold applies (condition (i) is false,
+    # no R51_ALL_UNPRICED_WITHOUT_ANALYSIS_SHEET); a reader following the template (no analysis sheet: end_row null) holds the case
+    w2 = pipeline(work, 'o72_priced_tail_no_analysis', build_full(bill=ub, analysis=False, resource_rows=260)[1])
+    wp2 = w2.get('proposal', {})
+    record('o72_nototal_priced_tail_no_analysis_sheet_not_held_by_tool', w2['tool_code'] == 0 and wp2.get('status') == 'PROPOSED'
+           and wp2['bill']['rule'] == 'BILL1.NOTOTAL.v1' and wp2['holds'] == [] and wp2['r51']['condition_i_all_unpriced_no_status'] is False
+           and wp2['r51']['by_state']['priced'] == 1 and wp2['r51']['analysis_sheets'] == {} and [s['role'] for s in wp2['sheets']] == ['summary', 'bill', 'resource_statistics']
+           and [s['index'] for s in wp2['sheets'] if s['in_scope']] == [2], [wp2.get('r51'), w2.get('tool_err', '')[-300:]])
+    P2_, D2_ = w2['dir'] / 'tool' / 'SCOPE_PROPOSAL.json', w2['dir'] / 'tool' / 'SCOPE_DIGEST.json'
+    c2b = next(s for s in json.loads(D2_.read_text(encoding='utf-8'))['sheets'] if s['index'] == 2)['counts'] if D2_.exists() else {}
+    record('o72_nototal_priced_tail_no_analysis_sheet_visible_in_digest', c2b.get('priced_or_not_estimated_line_rows') == [10]
+           and c2b.get('last_unpriced_no_status_line_row') == 6 and 'analysis_blocks' not in c2b, c2b)
+    rp_ = work / 'reader_o72_priced_tail_no_analysis.json'
+    rp_.write_text(json.dumps(reader_for(P2_, D2_, end_row=None), ensure_ascii=False), encoding='utf-8')
+    code, out, err = run(AGREE, '--proposal', P2_, '--digest', D2_, '--reader', rp_, '--out-dir', work / 'agree_o72_priced_tail_no_analysis')
+    record('o72_nototal_priced_tail_no_analysis_sheet_reader_null_end_row_holds', code == 3 and jout(out).get('status') == 'HELD_FOR_OWNER'
+           and [d_['what'] for d_ in jout(out).get('differences', [])] == ['end_row'], out)
     # BILL1.NOHEADER.v1: the bill header with 序號 and 品名規格 carries four of the six labels; no sheet has a header row
     hb = dict(F.SCOPED_BILL)
     hb[(2, 'A')], hb[(2, 'B')] = (T, '序號', False), (T, '品名規格', False)
