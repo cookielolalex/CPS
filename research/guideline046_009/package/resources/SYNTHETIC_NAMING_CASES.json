@@ -1,0 +1,740 @@
+{
+ "schema": "cps.creator-practice-examples.v1",
+ "candidate": "046f",
+ "part": "1 of 2: C, D, I and J (R47b, R52, R53, R55, R58); part 2 is SYNTHETIC_ALLOCATION_CASES.json",
+ "status": "VISIBLE_PROPOSED_EXAMPLES_NOT_RUN_AS_MODEL_TESTS",
+ "all_examples_invented": true,
+ "private_project_inputs": false,
+ "replaces": "the 046e naming examples (cps.naming-examples.draft.v1), superseded for C and D by R52",
+ "rules": "FIELD_ROLES R47b-R58 (candidate 046f, route v4.2)",
+ "resources": {
+  "note": "INVENTED placeholders shared by every case and by EXAMPLE_INVENTORY.json. They are not the owner-reviewed company resources, which are private. context:brand_table is present only in a contract packet (a job without a 材料清單, O17); the cases that use it say \"source: contract\".",
+  "context:glossary": {
+   "generic_prefix_words": [
+    "產品"
+   ],
+   "enclosure_word": "箱體",
+   "category_words": [
+    "電磁開關"
+   ],
+   "abbreviations": {
+    "電磁接觸器": "XMC",
+    "選擇開關": "XCS",
+    "無熔絲開關": "XNB",
+    "指示燈": "XPL"
+   }
+  },
+  "context:brand_table": [
+   {
+    "device": "電磁接觸器",
+    "rating_band": "all ratings",
+    "brand": "示例甲牌",
+    "model": "XM-10"
+   },
+   {
+    "device": "無熔絲開關",
+    "rating_band": "trip rating up to 100AT",
+    "brand": "示例乙牌",
+    "model": "XB-100"
+   }
+  ],
+  "context:company_name": "示例機電股份有限公司",
+  "job_inputs": {
+   "context:case_identity": "EXAMPLE046F",
+   "context:customer_name": "示例縣自來水事業處",
+   "context:project_name": "示例淨水場控制盤更新"
+  },
+  "material_list_columns": [
+   "項次",
+   "品名規格",
+   "單位",
+   "數量",
+   "單價",
+   "複價",
+   "廠牌",
+   "型號",
+   "備註"
+  ]
+ },
+ "assumptions": [
+  "Unless a case says otherwise, the source is the company material list (材料清單, R47b) with the columns listed under resources, so the packet has no brand table (O17); the line lies inside the quoted range (R49) of the bill sheet that carries the prices, and every row carries L, M and N from the job inputs (R48) with K, O, P, G and H null.",
+  "Input cells are the line's own cells: description (a list when the item has continuation rows), unit, quantity, unit_price, amount, brand, model, remarks. A missing key means an empty cell.",
+  "Segments are separated by ，,、；; only (R52). A category chain is a run of segments before the item's own noun that only name a product category: a segment ending in 類, or a word in the glossary's category_words. It is dropped on every line type, but only while a later noun segment remains.",
+  "Expected values list only the fields the case is about; \"row\": false means the line gives no 未填 row and its cells take the stated census role. A row whose C is null has status research_draft with a null reason for C (R57; route v4.1 relaxation, kept in route v4.2)."
+ ],
+ "case_count": 33,
+ "cases": [
+  {
+   "id": "N01",
+   "rule": "R52, R58",
+   "input": {
+    "description": "產品，控制開關類，選擇開關，30mm",
+    "unit": "個",
+    "quantity": 3,
+    "unit_price": 120,
+    "amount": 360
+   },
+   "expected": {
+    "row": true,
+    "C": "XCS",
+    "D": "30mm",
+    "cites": {
+     "C": [
+      "description cell",
+      "context:glossary"
+     ],
+     "D": [
+      "description cell"
+     ]
+    }
+   },
+   "reason": "Equipment line (switch). The glossary prefix 產品 is dropped with its delimiter, 控制開關類 is the category chain (it ends in 類), and the head noun 選擇開關 has a glossary entry, so C is its abbreviation. D is the rest, verbatim. C derived through the glossary cites the description cell and context:glossary (R58)."
+  },
+  {
+   "id": "N02",
+   "rule": "R52",
+   "input": {
+    "description": "產品，計時器類，限時繼電器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 650,
+    "amount": 1300
+   },
+   "expected": {
+    "row": true,
+    "C": "限時繼電器",
+    "D": "AC220V"
+   },
+   "reason": "Equipment line (timer relay). The glossary has no entry for 限時繼電器 and the line has no Latin acronym, so C is the head noun: the first segment after the prefix and the category chain 計時器類."
+  },
+  {
+   "id": "N03",
+   "rule": "R52",
+   "input": {
+    "description": "產品，電錶類，電壓表96角型，附切換開關",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 900,
+    "amount": 900
+   },
+   "expected": {
+    "row": true,
+    "C": "電壓表",
+    "D": "96角型，附切換開關"
+   },
+   "reason": "Equipment line (meter). The head-noun segment 電壓表96角型 carries a digit, so C is cut before the first digit. D is the rest after removing the prefix, the category chain and C's leading noun part; 附切換開關 is not a rating token, so the comma stays (R53)."
+  },
+  {
+   "id": "N04",
+   "rule": "R52, R53",
+   "input": {
+    "description": "產品，按鈕開關(綠)，φ30",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": 90,
+    "amount": 360
+   },
+   "expected": {
+    "row": true,
+    "C": "按鈕開關",
+    "D": "(綠)，φ30"
+   },
+   "reason": "Equipment line (switch) with no category chain, no glossary entry and no Latin acronym. The head-noun segment carries a bracket, so C is cut before it; the bracket and the rest go to D verbatim. (綠) is a colour, not a rating token, so R53 changes nothing here."
+  },
+  {
+   "id": "N05",
+   "rule": "R52, R58",
+   "input": {
+    "description": [
+     "產品，電磁開關，電磁接觸器，AC110V，",
+     "附端子蓋"
+    ],
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC110V，附端子蓋"
+   },
+   "reason": "The continuation row is joined to the description with no separator. 電磁開關 is a category word the glossary lists, so it is the category chain; the head noun 電磁接觸器 has the glossary abbreviation XMC. 附端子蓋 is not a rating token, so its comma stays."
+  },
+  {
+   "id": "N06",
+   "rule": "R52, R53, R55",
+   "input": {
+    "description": "產品，電線電纜類，600V XLPE電纜，3C，2mm²",
+    "unit": "M",
+    "quantity": 120,
+    "unit_price": 45,
+    "amount": 5400
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "600V XLPE電纜，3C 2mm²",
+    "I": null,
+    "J": null,
+    "status": "research_draft"
+   },
+   "reason": "Material line (cable and wire): C is null and D is the description without the generic prefix and the category chain 電線電纜類. Only the comma between the two rating tokens 3C and 2mm² becomes a space (R53). Material lines leave I and J null even when priced (R55)."
+  },
+  {
+   "id": "N07",
+   "rule": "R52",
+   "input": {
+    "description": "產品，PLC模組類，CPU模組，16DI/16DO",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 18000,
+    "amount": 18000
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "CPU模組，16DI/16DO"
+   },
+   "reason": "PLC modules and software are material lines under R52: C null, D the description without the prefix and the category chain PLC模組類. CPU模組 is not a rating token, so the comma stays."
+  },
+  {
+   "id": "N08",
+   "rule": "R52",
+   "input": {
+    "description": "50A 球塞閥",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1200,
+    "amount": 2400
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "50A 球塞閥"
+   },
+   "reason": "A valve written size-first, and any description that starts with a digit, is a material line: C null, D verbatim."
+  },
+  {
+   "id": "N09",
+   "rule": "R52",
+   "input": {
+    "description": "產品，試車調整費",
+    "unit": "式",
+    "quantity": 1,
+    "unit_price": 6000,
+    "amount": 6000
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "試車調整費"
+   },
+   "reason": "Service, labour and fee line: C null; D is the description without the generic prefix."
+  },
+  {
+   "id": "N10",
+   "rule": "R52",
+   "input": {
+    "description": "流量計",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 50000,
+    "amount": 50000
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "流量計",
+    "status": "research_draft"
+   },
+   "reason": "A single-segment description goes to D with C null, even when it names equipment, unless the glossary lists the noun. The glossary has no entry for 流量計."
+  },
+  {
+   "id": "N11",
+   "rule": "R52",
+   "input": {
+    "description": "固定螺絲",
+    "unit": "包",
+    "quantity": 5,
+    "unit_price": 80,
+    "amount": 400
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "固定螺絲"
+   },
+   "reason": "Single-segment description (hardware) without a glossary entry: it goes to D and C is null."
+  },
+  {
+   "id": "N12",
+   "rule": "R52",
+   "input": {
+    "description": "產品，指示燈，AC220V",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": 150,
+    "amount": 600,
+    "remarks": "紅色 另附燈罩",
+    "code": "E-201"
+   },
+   "expected": {
+    "row": true,
+    "C": "XPL",
+    "D": "AC220V"
+   },
+   "reason": "Remarks and code columns never enter C or D, even when they read like a specification; they stay in raw text. 指示燈 is the head noun (no category chain) and has the glossary abbreviation XPL."
+  },
+  {
+   "id": "N13",
+   "rule": "R53, R52",
+   "input": {
+    "description": "產品，無熔絲開關，2P，20AT，(AC，Ics)",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 600,
+    "amount": 600
+   },
+   "expected": {
+    "row": true,
+    "C": "XNB",
+    "D": "2P 20AT AC Ics"
+   },
+   "reason": "Rating tokens: each comma between two rating-like tokens becomes one space and the wrapping brackets around them are dropped."
+  },
+  {
+   "id": "N14",
+   "rule": "R53, R52",
+   "input": {
+    "description": "產品，電磁開關，電磁接觸器，(AC，220V)，附輔助接點",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 1500,
+    "amount": 1500
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC 220V，附輔助接點"
+   },
+   "reason": "R53 applies on every line type, not only breakers: the bracketed rating tokens AC and 220V are joined by a space without their brackets. 附輔助接點 is not a rating token, so the comma before it stays."
+  },
+  {
+   "id": "N15",
+   "rule": "R55, R58, R47b (contract source)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": "XM-10",
+    "J": "示例甲牌",
+    "cites": {
+     "I": [
+      "description cell",
+      "context:brand_table"
+     ],
+     "J": [
+      "description cell",
+      "context:brand_table"
+     ]
+    }
+   },
+   "reason": "Contract job (no 材料清單): a priced equipment line whose own cells state no brand or model takes the brand-table entry for its device type and rating band. The fields cite the description cell and context:brand_table (R58). With a 材料清單 the table is never used (O17)."
+  },
+  {
+   "id": "N16",
+   "rule": "R55, R47b",
+   "input": {
+    "description": "流量計",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 50000,
+    "amount": 50000,
+    "brand": "示例儀器",
+    "model": "FM-100"
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "流量計",
+    "I": "FM-100",
+    "J": "示例儀器",
+    "cites": {
+     "I": [
+      "model cell"
+     ],
+     "J": [
+      "brand cell"
+     ]
+    }
+   },
+   "reason": "A brand or model stated in the line's own cells (the material list's 廠牌 and 型號 columns) is copied. With a 材料清單, I and J come only from its cells (R55, O17). The single-segment description goes to D (R52)."
+  },
+  {
+   "id": "N17",
+   "rule": "R55 boundary (O18, contract source), R53",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，無熔絲開關，3P，225AT",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 9500,
+    "amount": 9500
+   },
+   "expected": {
+    "row": true,
+    "C": "XNB",
+    "D": "3P 225AT",
+    "I": null,
+    "J": "示例乙牌",
+    "cites": {
+     "J": [
+      "description cell",
+      "context:brand_table"
+     ]
+    },
+    "null_reason_I": "the brand table covers 無熔絲開關 only up to 100AT, so no entry gives a model for 225AT; the contract cells state no brand or model"
+   },
+   "reason": "A breaker whose rating no table entry covers takes J = the table's breaker brand (the brand its breaker entries carry; O18 gives them one brand), and I stays null with a reason. The glossary abbreviation still applies to C."
+  },
+  {
+   "id": "N18",
+   "rule": "R52 (O20)",
+   "input": {
+    "description": "產品，自動切換開關(ATS)，3P，160A",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 12000,
+    "amount": 12000
+   },
+   "expected": {
+    "row": true,
+    "C": "ATS",
+    "D": "3P 160A"
+   },
+   "reason": "The glossary has no entry for 自動切換開關, and the source writes the Latin acronym in brackets after the noun, so C is the acronym alone. D is the rest after removing C's segment, with the rating tokens joined by a space (R53)."
+  },
+  {
+   "id": "N19",
+   "rule": "R52 (O20)",
+   "input": {
+    "description": "產品，突波吸收器SPD，3P，40kA",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 4500,
+    "amount": 4500
+   },
+   "expected": {
+    "row": true,
+    "C": "SPD",
+    "D": "3P 40kA"
+   },
+   "reason": "突波吸收器 is a surge protector, one of the equipment families (R52). The digit-free Latin acronym fused to the noun gives C = the acronym alone; D is the rest with the rating tokens joined by a space (R53)."
+  },
+  {
+   "id": "N20",
+   "rule": "R53, R52, R58",
+   "input": {
+    "description": "產品，控制開關類，選擇開關，φ30mm，2a2b",
+    "unit": "個",
+    "quantity": 3,
+    "unit_price": 120,
+    "amount": 360
+   },
+   "expected": {
+    "row": true,
+    "C": "XCS",
+    "D": "φ30mm 2a2b"
+   },
+   "reason": "R53 on a switch line: the comma between the size φ30mm and the contact rating 2a2b becomes one space."
+  },
+  {
+   "id": "N21",
+   "rule": "R55, R47b",
+   "input": {
+    "description": "產品，無熔絲開關，3P，50AT",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 800,
+    "amount": 800,
+    "brand": "示例丙牌",
+    "model": "XB-50"
+   },
+   "expected": {
+    "row": true,
+    "C": "XNB",
+    "D": "3P 50AT",
+    "I": "XB-50",
+    "J": "示例丙牌",
+    "cites": {
+     "I": [
+      "model cell"
+     ],
+     "J": [
+      "brand cell"
+     ]
+    }
+   },
+   "reason": "The material list states the brand and model, so they are copied. With a 材料清單, I and J come only from its cells and the brand table is never used (O17)."
+  },
+  {
+   "id": "N22",
+   "rule": "R52, R58",
+   "input": {
+    "description": "指示燈",
+    "unit": "只",
+    "quantity": 4,
+    "unit_price": 150,
+    "amount": 600
+   },
+   "expected": {
+    "row": true,
+    "C": "XPL",
+    "D": null,
+    "cites": {
+     "C": [
+      "description cell",
+      "context:glossary"
+     ]
+    }
+   },
+   "reason": "A single segment that is a glossary device: C is the abbreviation and D is the rest of the segment, here nothing, so null."
+  },
+  {
+   "id": "N23",
+   "rule": "R55, R47b (contract source)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet)",
+    "description": "流量計",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 50000,
+    "amount": 50000,
+    "remarks": "廠牌：示例儀器 型號：FM-100"
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "流量計",
+    "I": "FM-100",
+    "J": "示例儀器",
+    "cites": {
+     "I": [
+      "remarks cell"
+     ],
+     "J": [
+      "remarks cell"
+     ]
+    }
+   },
+   "reason": "Without a material list the contract is the source. A brand or model stated in the line's own cells, here its remark, is copied and takes precedence over the brand table. The remark supplies I and J but never enters D."
+  },
+  {
+   "id": "N24",
+   "rule": "R52 (segments)",
+   "input": {
+    "description": "電磁接觸器 AC220V",
+    "unit": "只",
+    "quantity": 1,
+    "unit_price": 1500,
+    "amount": 1500
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "cites": {
+     "C": [
+      "description cell",
+      "context:glossary"
+     ]
+    }
+   },
+   "reason": "Segments are separated by ，,、；; only, so this description is one segment. It begins with a glossary device, so C is the abbreviation and D is the rest of the segment (a single glossary segment gives D = the rest, or null). AC220V is not lost."
+  },
+  {
+   "id": "N25",
+   "rule": "R52 (acronym), R53",
+   "input": {
+    "description": "產品，燈具(LED)，AC220V，20W",
+    "unit": "盞",
+    "quantity": 6,
+    "unit_price": 800,
+    "amount": 4800
+   },
+   "expected": {
+    "row": true,
+    "C": "燈具",
+    "D": "(LED)，AC220V 20W"
+   },
+   "reason": "LED names the light source; it is not an acronym of the noun, so it stays in D and does not become C. C is the head noun of a lamp line, cut before the bracket. (LED) is not rating-like, so the comma after it stays; AC220V and 20W are joined by a space (R53)."
+  },
+  {
+   "id": "N26",
+   "rule": "R52 (acronym), R53",
+   "input": {
+    "description": "產品，電力監視器(RS485)，AC110V",
+    "unit": "台",
+    "quantity": 1,
+    "unit_price": 9000,
+    "amount": 9000
+   },
+   "expected": {
+    "row": true,
+    "C": "電力監視器",
+    "D": "(RS485)，AC110V"
+   },
+   "reason": "RS485 is a protocol designation, not a digit-free acronym of the noun: it stays in D. It is not rating-like either (R53), so the comma stays. C is the head noun of a meter line."
+  },
+  {
+   "id": "N27",
+   "rule": "R52 (chain boundary)",
+   "input": {
+    "description": "產品，電磁開關",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1200,
+    "amount": 2400
+   },
+   "expected": {
+    "row": true,
+    "C": null,
+    "D": "電磁開關",
+    "status": "research_draft"
+   },
+   "reason": "A chain segment is dropped only while a later noun segment remains. 電磁開關 is a glossary category word but the last segment, so it stays as the noun. What remains after the prefix is one segment that begins with no glossary device, so C is null and D is the text."
+  },
+  {
+   "id": "N28",
+   "rule": "R55 (contract source, brand only)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "remarks": "廠牌：示例甲牌"
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": "XM-10",
+    "J": "示例甲牌",
+    "cites": {
+     "I": [
+      "description cell",
+      "context:brand_table"
+     ],
+     "J": [
+      "remarks cell"
+     ]
+    }
+   },
+   "reason": "A contract line that states only a brand keeps it in J and takes the missing model from the table entry only when the entry's brand matches. The 電磁接觸器 entry is 示例甲牌, so I = its model. The remark never enters D."
+  },
+  {
+   "id": "N29",
+   "rule": "R55 boundary (contract source, brand only)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "remarks": "廠牌：示例丙牌"
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": null,
+    "J": "示例丙牌",
+    "cites": {
+     "J": [
+      "remarks cell"
+     ]
+    },
+    "null_reason_I": "the brand-table entry for 電磁接觸器 is another brand, so its model is not used; the line states no model"
+   },
+   "reason": "The stated brand does not match the table entry's brand, so the table supplies nothing and I stays null with a reason."
+  },
+  {
+   "id": "N30",
+   "rule": "R55 (contract source, model only)",
+   "input": {
+    "source": "contract (no 材料清單 in the packet, so the packet carries context:brand_table)",
+    "description": "產品，電磁開關，電磁接觸器，AC220V",
+    "unit": "只",
+    "quantity": 2,
+    "unit_price": 1500,
+    "amount": 3000,
+    "remarks": "型號：XM-10"
+   },
+   "expected": {
+    "row": true,
+    "C": "XMC",
+    "D": "AC220V",
+    "I": "XM-10",
+    "J": "示例甲牌",
+    "cites": {
+     "I": [
+      "remarks cell"
+     ],
+     "J": [
+      "description cell",
+      "context:brand_table"
+     ]
+    }
+   },
+   "reason": "A contract line that states only a model takes the brand from the table entry only when the entry's brand matches the model, that is when the entry lists that model. The 電磁接觸器 entry lists XM-10, so J = its brand."
+  },
+  {
+   "id": "N31",
+   "rule": "R52",
+   "input": {
+    "description": "產品，指示燈類，AC220V 指示燈"
+   },
+   "expected": {
+    "C": null,
+    "D": "AC220V 指示燈"
+   },
+   "reason": "After the prefix and the 類 chain one segment remains, so C null and D = the text (R52 rule 3); with more segments, a noun segment whose first token contains a digit is also C null (rule 4 note)."
+  },
+  {
+   "id": "N32",
+   "rule": "R52",
+   "input": {
+    "description": "產品，RS485電力監視器"
+   },
+   "expected": {
+    "C": null,
+    "D": "RS485電力監視器"
+   },
+   "reason": "A noun segment whose first token contains a digit gives C null and D the text (R52)."
+  },
+  {
+   "id": "N33",
+   "rule": "R52/O20",
+   "input": {
+    "description": "產品，自動切換開關(ATS) 3P160A"
+   },
+   "expected": {
+    "C": "ATS",
+    "D": "3P160A"
+   },
+   "reason": "Acronym alone in C; D keeps the rest after the noun and its acronym (R52 rule 2)."
+  }
+ ]
+}

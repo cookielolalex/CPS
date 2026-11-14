@@ -4,13 +4,6 @@ Source-preparation role only. Reads one FULL source inventory (every sheet in sc
 package's FIELD_ROLES.md (to excerpt R47b and R49-R51 for the scope reader). It never reads targets, outputs, evaluator
 files or anything else, and it prints hashes, indexes, roles and counts only, never cell text or sheet names.
 
-Empty sheets (v3, BUGFIX_EMPTY_SHEETS.md). The builders write a sheet with rows x columns = 0 as in_scope false, so a
-full inventory has every NON-EMPTY sheet in scope. A sheet that is out of scope is accepted only when it is empty: rows x
-columns = 0 and no cell or view on it. Any other out-of-scope sheet still refuses the inventory (FULL_INVENTORY_REQUIRED,
-an already-scoped inventory). An empty sheet keeps role other and in_scope false in the proposal (whether or not the
-stage applies), with its own reason, and gets no flag; it is listed in the digest like any other sheet. Every computed
-value of the other sheets is the one the same workbook gives without the empty sheets.
-
 Usage: python3 -I -B scope_tool.py --inventory /abs/FULL/SOURCE_INVENTORY.json --out-dir /abs/NEW_SCOPE_DIR
 
 Writes into the new directory:
@@ -21,8 +14,8 @@ Writes into the new directory:
 Exit 0: PROPOSED or NOT_APPLIED. Exit 4: HOLD (written; the case goes to the owner). Exit 1: refused, nothing written.
 
 Threshold (R59). The stage applies when the full inventory has more than 2,500 content cells that are literal or
-cached-formula cells with a saved value that is not null and not "". Below that every non-empty sheet stays in scope
-and no context:scope is written (status NOT_APPLIED), exactly as in 046f.
+cached-formula cells with a saved value that is not null and not "". Below that every sheet stays in scope and no
+context:scope is written (status NOT_APPLIED), exactly as in 046f.
 
 BILL1.v1 (from the 046f structure study, as the study spells it). Every sheet is considered, hidden ones included. Cell
 text is normalised by removing every whitespace character (str.isspace, which includes U+3000); only text cells
@@ -74,7 +67,7 @@ HERE = Path(__file__).resolve().parent
 PKG = HERE.parent / 'package'
 ROUTE = PKG / 'tools' / 'cps046b_route.py'
 FIELD_ROLES = PKG / 'resources' / 'FIELD_ROLES.md'
-TOOL_VERSION = 'cps046g-scope-tool.v3'      # v2 (046g pass 2): R51 condition (ii) dropped; v3 (2026-11-13): empty sheets
+TOOL_VERSION = 'cps046g-scope-tool.v2'      # v2 (046g pass 2): R51 condition (ii) dropped
 PROPOSAL_SCHEMA = 'cps.scope-proposal.v1'
 DIGEST_SCHEMA = 'cps.scope-digest.v1'
 NAME_WORDS = ('項目及說明', '名稱', '品名', '材料名稱')
@@ -102,7 +95,6 @@ REASONS = {
     'summary': 'summary: never yields rows (R49)',
     'resource_statistics': 'resource statistics: source check only, never yields rows (guideline section 3)',
     'other': 'other: neither the bill sheet nor an analysis sheet that R51 needs; never yields rows (R49)',
-    'empty': 'other: an empty sheet (rows x columns = 0, no cell), which the builders write out of scope; never yields rows (R49)',
 }
 
 
@@ -137,13 +129,6 @@ def letters(n):
         n, k = divmod(n - 1, 26)
         s = chr(65 + k) + s
     return s
-
-
-def empty_sheets(d):
-    """v3: indexes of the empty sheets, rows x columns = 0 with no cell and no view (the builders write them in_scope false)."""
-    used = {c['sheet_index'] for c in d['cells']}
-    viewed = {v['sheet'] for v in d['views']}
-    return {s['index'] for s in d['sheets'] if s['rows'] * s['columns'] == 0 and s['index'] not in used and s['name'] not in viewed}
 
 
 class Sheet:
@@ -498,10 +483,8 @@ def propose(inv_raw, route):
     except (route.Rejected, KeyError, TypeError, ValueError) as e:
         raise Refused('INVENTORY_REJECTED_BY_ROUTE', repr(e)[:300])
     d = inv.d
-    empty = empty_sheets(d)
-    if not all(s['in_scope'] or s['index'] in empty for s in d['sheets']):
-        raise Refused('FULL_INVENTORY_REQUIRED', 'every sheet of the full inventory is in scope (build it with every sheet in scope); '
-                                                 'only an empty sheet (rows x columns = 0, no cell or view) may be out of scope')
+    if not all(s['in_scope'] for s in d['sheets']):
+        raise Refused('FULL_INVENTORY_REQUIRED', 'every sheet of the full inventory is in scope (build it with every sheet in scope)')
     if route.SCOPE_REF in inv.context:
         raise Refused('ALREADY_SCOPED', 'the inventory already carries context:scope')
     has = route.Inventory.has_content
@@ -585,14 +568,12 @@ def propose(inv_raw, route):
                            f"(not 未填 rows, not written on a scoped packet), {nu} of parents with no price and no status "
                            '(those lines are excluded_supply); none gives rows (R51, R59)')
         else:
-            in_scope, reason = False, REASONS['empty' if sh.index in empty else role]
+            in_scope, reason = False, REASONS[role]
         linked = info['linked_blocks'] if (info and not in_scope) else 0
         out_sheets.append({'index': sh.index, 'name': sh.meta['name'], 'role': role, 'visibility': sh.meta['visibility'],
                            'rows': sh.meta['rows'], 'columns': sh.meta['columns'], 'content_cells': len(sh.content),
                            'content_cells_literal_or_cached': sum(1 for c in sh.content.values() if c['state'] in ('literal', 'cached_formula')),
                            'in_scope': in_scope, 'reason': reason, 'linked_analysis_blocks': linked})
-        if sh.index in empty:           # v3: an empty sheet (role other, no cell) gets no flag
-            continue
         if sh.meta['visibility'] != 'visible':
             flag(sh.index, 'HIDDEN_SHEET', visibility=sh.meta['visibility'])
         if role == 'other':
@@ -633,10 +614,9 @@ def propose(inv_raw, route):
         'in_scope_content_cells': sum(s['content_cells'] for s in out_sheets if s['in_scope']) if applies else sum(s['content_cells'] for s in out_sheets),
     }
     if not applies:
-        for s, sh in zip(out_sheets, sheets):
-            s['in_scope'] = sh.index not in empty or bool(sh.meta['in_scope'])   # v3: an empty sheet keeps the packet's flag
-            s['reason'] = (f'scope stage not applied: {litcf} literal or cached-formula content cells, not more than {route.SCOPE_THRESHOLD} (R59)'
-                           if s['in_scope'] else REASONS['empty'])
+        for s in out_sheets:
+            s['in_scope'] = True
+            s['reason'] = f'scope stage not applied: {litcf} literal or cached-formula content cells, not more than {route.SCOPE_THRESHOLD} (R59)'
             s['linked_analysis_blocks'] = 0
         proposal['flags'] = []
         return proposal, None

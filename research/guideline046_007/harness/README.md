@@ -53,7 +53,7 @@ Build one config per job, for its bound source (R47b): the 材料清單 when the
 
 The scope stage is source preparation. It runs after the full packet is built (`make_job_config.py`, the builder with every sheet in scope, then `render_views.py`) and before `prepare_run.py`, and it is frozen before any generation. It never reads targets, outputs or evaluator files. The tools print hashes, indexes, roles and counts, never cell text or sheet names; the digest, the proposal, the reader response, the decision and the scoped inventory hold private source text and stay out of the repository.
 
-1. **Full inventory.** Build the job packet with every sheet in scope and pin `SOURCE_INVENTORY.json` (sha256). This is the *full inventory*. The builders write an empty sheet (rows x columns = 0) as `in_scope: false`; `scope_tool.py` (v3) and `make_scoped_inventory.py` accept such a sheet when it has no cell and no view, keep it out of scope (role `other`, no flag) and refuse any other out-of-scope sheet (`FULL_INVENTORY_REQUIRED`), as before (`BUGFIX_EMPTY_SHEETS.md`, 2026-11-13).
+1. **Full inventory.** Build the job packet with every sheet in scope and pin `SOURCE_INVENTORY.json` (sha256). This is the *full inventory*.
 2. **Scope tool.**
    ```sh
    python3 -I -B research/guideline046_007/harness/scope_tool.py --inventory /abs/FULL/SOURCE_INVENTORY.json --out-dir /abs/new/scope_tool
@@ -100,7 +100,6 @@ Source role, 2026-11-05. `scope_tool.py` (`cps046g-scope-tool.v2`, sha256 `e9190
 - The bill sheet, header row, end row and flags reproduce the study in 5 of 5 cases. 1140304 comes out `NOT_APPLIED` at 2,459 cells (threshold 2,500), so every sheet stays in scope and there is no `context:scope`. The in-range line counts, the analysis block and component counts (189/1,075, 114/614, 31/128, 8/37, 94/488) and the in-scope content cells of the four scoped cases (543, 452, 999, 637) also match the study. There are no hidden sheets, and R51 condition (i) holds in none of the five.
 - 1140607's 3,965 counts literal and cached-formula cells; the study's 3,968 also counts 3 missing-cache cells. The tool attributes its 8 links to code and name (0 by outline path), where the study reports code, name and outline path agreeing on each link; the linked-block count and the parent split are the same, so no flag or scope decision differs. 1140808's 42 cells are consistent with the study's 21 owner-fixed component prices.
 - This is the tool reproducing the study whose rule it implements, on the same five cases. It is not an independent test on other layouts. No tool change followed from it.
-- The tool is now v3 (`cps046g-scope-tool.v3`, 2026-11-13, `BUGFIX_EMPTY_SHEETS.md`). v3 differs from v2 only on an inventory with an out-of-scope empty sheet, which v2 refused. v2 accepted the five study inventories, so none has such a sheet and v3 computes the same values on them; this follows from the code change and was not re-run.
 
 **After the freeze (evaluation role).** For a scoped packet the evaluator also receives the decision and the full inventory. It classifies an unmatched historical row whose source line lies on a scoped-out sheet, or below the declared end row, as *scope loss* and reports it separately (`EVALUATOR_BRIEF_TEMPLATE.md`). Scope loss is never repaired in a scored output.
 
