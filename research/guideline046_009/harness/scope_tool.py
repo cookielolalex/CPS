@@ -1,6 +1,6 @@
-"""Scope stage, step 1 (candidate 046g, FIELD_ROLES R59): deterministic scope proposal and scope digest.
+"""Scope stage, step 1 (candidate 046i, FIELD_ROLES R59): deterministic scope proposal and scope digest.
 
-Source-preparation role only. Reads one FULL source inventory (every sheet in scope, as the builders write it) and the
+Source-preparation role only. Reads one FULL source inventory (every non-empty sheet in scope, as the builders write it) and the
 package's FIELD_ROLES.md (to excerpt R47b and R49-R51 for the scope reader). It never reads targets, outputs, evaluator
 files or anything else, and it prints hashes, indexes, roles and counts only, never cell text or sheet names.
 
@@ -34,7 +34,29 @@ text is normalised by removing every whitespace character (str.isspace, which in
       header row has no 複價, the amount label that (a) accepts);
   (c) at least one price-column cell strictly between the header row and the end row is a number above zero
       (saved_type number, literal or cached formula; booleans excluded).
-Exactly one candidate is the bill sheet. Zero or several candidates: HOLD.
+Exactly one candidate is the bill sheet. Several candidates: HOLD. Zero candidates: HOLD, unless one of the two O72
+cases below applies.
+
+O72 cases (v4, candidate 046i, owner decision O72, FIELD_ROLES R59 items 2 and 9). They are considered only when the
+stage applies (more than 2,500 literal or cached-formula content cells) and no sheet is a BILL1.v1 candidate; at or below
+the threshold the tool computes exactly what v3 computes. The six header labels are the categories of (a); a row carries
+five or all six of them by the number of categories its text cells equal.
+  BILL1.NOTOTAL.v1 (no total row): exactly one sheet S has a row carrying all six labels; S has exactly one such row (a);
+  no other sheet has a row carrying five of them; and (b) fails on S. S is the bill sheet with (a)'s header row and price
+  columns; the end row is S's last row with content (end_cell null); the in-range lines are v1's lines over the rows after
+  the header row up to and including that row. (c) is not required: an unpriced bill goes through R51 condition (i) or to
+  the R51_ALL_UNPRICED_WITHOUT_ANALYSIS_SHEET hold; NO_IN_RANGE_LINES applies as under v1. Flag BILL1_NO_TOTAL_ROW. The
+  digest adds, for S only, the line counts to the last content row, the first 20 rows of priced or not-estimated lines,
+  the last line with no price and no status (lines with other price text count as such, as for the R51 conditions) and
+  the last 3 priced or not-estimated lines with 2 rows of context above each.
+  BILL1.NOHEADER.v1 (no header): no row of any sheet carries five or all six labels. No bill sheet, no end row, no
+  lines (condition (i) false, no R51 hold); every non-empty sheet is in scope with the role computed for a non-bill sheet
+  and a neutral reason (the role is a label, not an R49 decision); an empty sheet stays out of scope. Flag
+  BILL1_NO_HEADER (sheet_index null). The packet is the whole workbook and is read as an unscoped packet (R59 item 9).
+  Every other workbook with zero candidates keeps the v3 hold BILL1_CANDIDATES_NOT_ONE (for example two sheets with an
+  all-six row, a sheet with two such rows, an all-six row with a five-of-six row on another sheet, a sheet whose price
+  column has a total but no positive price, or only five-of-six rows). The bill-rule ids come from the loaded route
+  (SCOPE_BILL_RULE, SCOPE_O72_RULES).
 
 R51 conditions, computed on the full inventory (the route cannot see scoped-out cells):
   Lines. The quoted range runs from the first item-like row below the bill header to the row before the end row. A row
@@ -62,9 +84,9 @@ R51 conditions, computed on the full inventory (the route cannot see scoped-out 
   scoped packets they are not written (R59). Linked blocks on an out-of-scope sheet, whatever their parent's state, are
   counted per sheet as linked_analysis_blocks, which the route warns about (R59_LINKED_ANALYSIS_OUT_OF_SCOPE); the
   sheet's reason and the LINKED_BLOCKS_OUT_OF_SCOPE flag split them by parent state.
-Roles: bill (the BILL1 sheet), resource_statistics (a row with 工項代碼, 人工, 機具 and 材料), analysis (above), summary
+Roles: bill (the BILL1 sheet or the BILL1.NOTOTAL.v1 sheet), resource_statistics (a row with 工項代碼, 人工, 機具 and 材料), analysis (above), summary
 (a row with 項次, a name word, an amount word and no 單價), other. Summary, resource-statistics and other sheets are out
-of scope; an analysis sheet is in scope only under (i).
+of scope; an analysis sheet is in scope only under (i). Under BILL1.NOHEADER.v1 every non-empty sheet is in scope.
 """
 import argparse, hashlib, importlib.util, json, re, sys
 from pathlib import Path
@@ -74,7 +96,7 @@ HERE = Path(__file__).resolve().parent
 PKG = HERE.parent / 'package'
 ROUTE = PKG / 'tools' / 'cps046b_route.py'
 FIELD_ROLES = PKG / 'resources' / 'FIELD_ROLES.md'
-TOOL_VERSION = 'cps046g-scope-tool.v3'      # v2 (046g pass 2): R51 condition (ii) dropped; v3 (2026-11-13): empty sheets
+TOOL_VERSION = 'cps046i-scope-tool.v4'      # v2 (046g pass 2): R51 condition (ii) dropped; v3 (2026-11-13): empty sheets; v4 (046i): O72
 PROPOSAL_SCHEMA = 'cps.scope-proposal.v1'
 DIGEST_SCHEMA = 'cps.scope-digest.v1'
 NAME_WORDS = ('項目及說明', '名稱', '品名', '材料名稱')
@@ -103,6 +125,10 @@ REASONS = {
     'resource_statistics': 'resource statistics: source check only, never yields rows (guideline section 3)',
     'other': 'other: neither the bill sheet nor an analysis sheet that R51 needs; never yields rows (R49)',
     'empty': 'other: an empty sheet (rows x columns = 0, no cell), which the builders write out of scope; never yields rows (R49)',
+    'bill_nototal': ('bill: the only sheet with a BILL1 header row and no cell reading exactly 合計 or 總計 below it in a price column; '
+                     'the scope runs to its last content row and R49 ends the quoted range inside it (R59 item 2, O72)'),
+    'whole': ('whole workbook: no sheet has a BILL1 header row (five or six of its labels), so every sheet except an empty one is in '
+              'scope and the packet is read as an unscoped packet; the role is a label, not an R49 decision (R59 item 9, O72)'),
 }
 
 
@@ -117,7 +143,7 @@ def sha(b):
 
 
 def load_route():
-    spec = importlib.util.spec_from_file_location('cps046g_route_for_scope_tool', ROUTE)
+    spec = importlib.util.spec_from_file_location('cps046i_route_for_scope_tool', ROUTE)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -518,15 +544,35 @@ def propose(inv_raw, route):
 
     def flag(si, code, **detail):
         flags.append({'id': f'F{len(flags) + 1}', 'sheet_index': si, 'code': code, **({'detail': detail} if detail else {})})
-    bill = sheets[[sh.index for sh in sheets].index(cands[0])] if len(cands) == 1 else None
-    if len(cands) != 1:
+    nototal_rule, noheader_rule = route.SCOPE_O72_RULES           # v4 (O72); the ids come from the route
+    rule, o72_sheet = route.SCOPE_BILL_RULE, None
+    if not cands and applies:
+        six = [i for i, r in b1.items() if r['header_rows_all_six']]
+        five = [i for i, r in b1.items() if r['header_rows_five_of_six']]
+        if len(six) == 1 and b1[six[0]]['a'] and not b1[six[0]]['b'] and not [i for i in five if i != six[0]]:
+            rule, o72_sheet = nototal_rule, six[0]            # D2: a unique bill header without a total row
+        elif not six and not five:
+            rule = noheader_rule                              # D4: no header at all: the whole workbook
+    pos = [sh.index for sh in sheets]
+    bill = sheets[pos.index(cands[0])] if len(cands) == 1 else (sheets[pos.index(o72_sheet)] if o72_sheet is not None else None)
+    if len(cands) != 1 and rule == route.SCOPE_BILL_RULE:
         holds.append({'code': 'BILL1_CANDIDATES_NOT_ONE', 'candidates': cands,
                       'note': 'zero or several BILL1 candidates: the case is held for the owner (R59)'})
-    lines, first = [], None
+    lines, first, geo = [], None, None
     if bill is not None:
-        first, lines = bill_lines(bill, b1[bill.index])
+        if rule == nototal_rule:       # the end row is the last row with content; the lines run up to and including it
+            geo = dict(b1[bill.index], end_row=bill.rows[-1], end_cell=None)
+            first, lines = bill_lines(bill, dict(geo, end_row=geo['end_row'] + 1))
+            flag(bill.index, 'BILL1_NO_TOTAL_ROW', header_row=geo['header_row'], end_row=geo['end_row'],
+                 note='no 合計/總計 in a price column below the header (O72)')
+        else:
+            geo = b1[bill.index]
+            first, lines = bill_lines(bill, geo)
         if not lines:
             holds.append({'code': 'NO_IN_RANGE_LINES', 'note': 'the BILL1 range holds no item-like line'})
+    elif rule == noheader_rule:
+        flag(None, 'BILL1_NO_HEADER', sheets_in_scope=sum(1 for sh in sheets if sh.index not in empty),
+             note='no row carries five or six BILL1 header labels (O72)')
     states = {}
     for ln in lines:
         states[ln['state']] = states.get(ln['state'], 0) + 1
@@ -537,7 +583,7 @@ def propose(inv_raw, route):
              note='lines whose price cells hold other text count as unpriced with no status for the R51 conditions')
     roles, per_sheet, analysis_info = {}, [], {}
     for sh in sheets:
-        roles[sh.index] = sheet_role(sh, sh.index in cands)
+        roles[sh.index] = sheet_role(sh, sh.index in cands or sh.index == o72_sheet)
     for sh in sheets:
         if roles[sh.index] != 'analysis':
             continue
@@ -574,7 +620,9 @@ def propose(inv_raw, route):
         role = roles[sh.index]
         info = analysis_info.get(sh.index)
         if role == 'bill':
-            in_scope, reason = True, REASONS['bill']
+            in_scope, reason = True, REASONS['bill_nototal' if rule == nototal_rule else 'bill']
+        elif rule == noheader_rule:     # v4 (R59 item 9): the whole workbook; only an empty sheet stays out of scope
+            in_scope, reason = (False, REASONS['empty']) if sh.index in empty else (True, REASONS['whole'])
         elif role == 'analysis' and cond_i:
             in_scope, reason = True, REASONS['analysis_i']
         elif role == 'analysis':
@@ -613,15 +661,15 @@ def propose(inv_raw, route):
                 nu = info['linked_blocks_of_unpriced_lines']
                 flag(sh.index, 'LINKED_BLOCKS_OUT_OF_SCOPE', blocks=linked, of_priced_or_not_estimated_parents=linked - nu,
                      of_parents_with_no_price_and_no_status=nu)
-    b = b1[bill.index] if bill is not None else None
+    b = geo
     proposal = {
         'schema': PROPOSAL_SCHEMA, 'tool': {'name': 'scope_tool.py', 'version': TOOL_VERSION},
-        'rule': {'scope': route.SCOPE_RULE, 'bill': route.SCOPE_BILL_RULE, 'threshold': route.SCOPE_THRESHOLD},
+        'rule': {'scope': route.SCOPE_RULE, 'bill': rule, 'threshold': route.SCOPE_THRESHOLD},
         'case_id': inv.case_id, 'family_id': inv.family_id, 'full_inventory_sha256': inv.sha256,
         'content_cells_literal_or_cached': litcf, 'content_cells_census': sum(len(sh.content) for sh in sheets), 'applies': applies,
         'status': 'NOT_APPLIED' if not applies else ('HOLD' if holds else 'PROPOSED'),
         'holds': holds if applies else [],
-        'bill': {'rule': route.SCOPE_BILL_RULE, 'candidates': cands, 'near_candidates': near,
+        'bill': {'rule': rule, 'candidates': cands, 'near_candidates': near,
                  'per_sheet': {str(i): {k: r[k] for k in ('a', 'b', 'c', 'candidate')} for i, r in b1.items()},
                  'sheet_index': bill.index if bill is not None else None,
                  'header_row': b['header_row'] if b else None, 'price_columns': b['price_columns'] if b else None,
@@ -651,18 +699,35 @@ def propose(inv_raw, route):
                 st2[ln['state']] = st2.get(ln['state'], 0) + 1
             rc['lines_from_first_item_below_header_to_first_exact_price_column_total'] = {
                 'lines': len(ls), **{k: st2.get(k, 0) for k in ('priced', 'not_estimated', 'other_price_text', 'unpriced_no_status')}}
+        tail = None
+        if rule == nototal_rule and sh.index == o72_sheet:      # v4 (O72): the no-total sheet's lines run to its last content row
+            st2 = {}
+            for ln in lines:
+                st2[ln['state']] = st2.get(ln['state'], 0) + 1
+            rc['lines_from_first_item_below_header_to_last_content_row'] = {
+                'lines': len(lines), **{k: st2.get(k, 0) for k in ('priced', 'not_estimated', 'other_price_text', 'unpriced_no_status')}}
+            pn = [ln['row'] for ln in lines if ln['state'] in ('priced', 'not_estimated')]
+            un = [ln['row'] for ln in lines if ln['state'] in unpriced]
+            rc['priced_or_not_estimated_line_rows'] = pn[:20]
+            rc['last_unpriced_no_status_line_row'] = un[-1] if un else None
+            tail = [{'row': r, 'context': [render(sh, x) for x in sh.rows[max(0, sh.rows.index(r) - 2): sh.rows.index(r) + 1]]} for r in pn[-3:]]
         if sh.index in analysis_info:
             x = analysis_info[sh.index]
             rc['analysis_blocks'] = {k: x[k] for k in ('blocks', 'empty_frames', 'components', 'linked_blocks', 'links_by',
                                                        'linked_blocks_by_parent_state', 'linked_blocks_of_unpriced_lines',
                                                        'name_prefix_only_blocks')}
-        dsheets.append(digest_sheet(sh, rc))
+        ds = digest_sheet(sh, rc)
+        if tail is not None:
+            ds['priced_or_not_estimated_lines_tail'] = tail
+        dsheets.append(ds)
     digest = {'schema': DIGEST_SCHEMA, 'case_id': inv.case_id, 'full_inventory_sha256': inv.sha256,
               'tool': {'name': 'scope_tool.py', 'version': TOOL_VERSION},
               'note': ('Excerpt of the full source inventory for the scope reader (FIELD_ROLES R59). Cells are shown with their address, '
                        'saved type, saved value and, when not literal, state; rows are capped at column J. The counts were computed '
                        'by the scope tool on the full inventory; links are blocks sharing a code, name or outline path with a line '
-                       'between the first item-like row below the first header and the first exact 合計/總計 price-column row.'),
+                       'between the first item-like row below the first header and the first exact 合計/總計 price-column row.'
+                       + (' On a sheet with a bill header and no exact 合計/總計 price-column row, the lines run to its last content row.'
+                          if rule == nototal_rule else '')),
               'sheets': dsheets}
     return proposal, digest
 
@@ -683,7 +748,7 @@ def main(argv=None):
         files = {}
         if digest is not None:
             rules = extract_rules(FIELD_ROLES.read_text(encoding='utf-8'))
-            excerpt = ('# Scope reader rules excerpt (candidate 046g)\n\nCopied verbatim from `package/resources/FIELD_ROLES.md` '
+            excerpt = ('# Scope reader rules excerpt (candidate 046i)\n\nCopied verbatim from `package/resources/FIELD_ROLES.md` '
                        f'(sha256 {sha(FIELD_ROLES.read_bytes())}): R47b and R49-R51.\n\n' + '\n\n'.join(rules) + '\n').encode('utf-8')
             dbytes = (json.dumps(digest, ensure_ascii=False, indent=1, allow_nan=False) + '\n').encode('utf-8')
             files['SCOPE_DIGEST.json'] = dbytes

@@ -1,4 +1,4 @@
-"""CPS source-reference checker and carrier adapter, route v4.3 for candidate 046g (stdlib only).
+"""CPS source-reference checker and carrier adapter, route v4.4 for candidate 046i (stdlib only).
 v4 implements owner decision O13 (FIELD_ROLES R48, job inputs): L, M and N may be proven by
 context references alone (context:case_identity, context:customer_name, context:project_name);
 such proofs become selection_evidence in the carrier, and the Python writer port accepts
@@ -59,6 +59,16 @@ harness/make_scoped_inventory.py writes from a frozen SCOPE_DECISION.json:
   the frozen v4.2 on every fixture. The writer port is byte-identical to v4.2's, so the portable writer's
   pinned v4.2 port validates v4.3 carriers unchanged.
 
+v4.4 (candidate 046i, FIELD_ROLES R59 items 2 and 9, owner decision O72) changes only check (a) and where check (b)
+applies. The fact's bill_rule may also be BILL1.NOTOTAL.v1 (a bill sheet without a total row: end_row must equal the
+bill sheet's last row with content cells in the inventory) or BILL1.NOHEADER.v1 (a whole-workbook packet:
+bill_sheet_index, bill_header_row and end_row null, no sheet with role bill, every sheet in scope exactly when
+rows x columns > 0, every role summary, analysis, resource_statistics or other, no linked analysis blocks; check (b) is
+not applied). A BILL1.v1 fact, and any fact whose schema, rule or agreement is wrong, is checked exactly as in v4.3,
+with the same messages. Everything else is v4.3: the route tests compare v4.4 with the frozen v4.3
+(research/guideline046_007) on every 046g fixture and mutation, with and without context:scope, apart from the version
+string, and keep the writer-port section byte-identical to v4.2's.
+
 Writer port (validate_carrier_port) relaxations against the archived writer004 validateCarrier,
 documented in PORT_RELAXATIONS and removable with strict=True (exact writer004 semantics):
   - o13_m_n_selection_evidence: selection_evidence accepted for L, M and N (writer004: L only,
@@ -89,7 +99,7 @@ import argparse, copy, hashlib, json, math, re, sys
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = 'cps046g-route.v4.3'
+VERSION = 'cps046i-route.v4.4'
 RESPONSE_SCHEMA = 'cps.semantic-source-refs.v2'
 INVENTORY_SCHEMA = 'cps.source-inventory.cells.v2'
 PROFILE = 'cached-cell-raw-scalar-text.v2'
@@ -133,6 +143,8 @@ SCOPE_REF = 'context:scope'
 SCOPE_FACT_SCHEMA = 'cps.scope-fact.v1'
 SCOPE_RULE = 'R59'
 SCOPE_BILL_RULE = 'BILL1.v1'
+SCOPE_O72_RULES = ('BILL1.NOTOTAL.v1', 'BILL1.NOHEADER.v1')     # v4.4 (046i, owner decision O72): no total row; no header
+SCOPE_BILL_RULES = (SCOPE_BILL_RULE,) + SCOPE_O72_RULES
 SCOPE_THRESHOLD = 2500
 SCOPE_AGREEMENT = 'tool_and_reader_agreed'
 SCOPE_IN_ROLES = ('bill', 'analysis')
@@ -751,8 +763,13 @@ def scope_fact(inv, rep):
         return invalid('the value is not strict JSON', error=str(e))
     if not isinstance(d, dict) or set(d) != set(SCOPE_FACT_KEYS):
         return invalid('exact keys required', expected=list(SCOPE_FACT_KEYS))
-    if (d['schema'], d['rule'], d['bill_rule'], d['agreement']) != (SCOPE_FACT_SCHEMA, SCOPE_RULE, SCOPE_BILL_RULE, SCOPE_AGREEMENT):
+    nototal_rule, noheader_rule = SCOPE_O72_RULES
+    o72 = ((d['schema'], d['rule'], d['agreement']) == (SCOPE_FACT_SCHEMA, SCOPE_RULE, SCOPE_AGREEMENT)
+           and isinstance(d['bill_rule'], str) and d['bill_rule'] in SCOPE_O72_RULES)          # v4.4 (O72)
+    if not o72 and (d['schema'], d['rule'], d['bill_rule'], d['agreement']) != (SCOPE_FACT_SCHEMA, SCOPE_RULE, SCOPE_BILL_RULE, SCOPE_AGREEMENT):
         return invalid('schema, rule, bill rule or agreement', expected=[SCOPE_FACT_SCHEMA, SCOPE_RULE, SCOPE_BILL_RULE, SCOPE_AGREEMENT])
+    noheader = o72 and d['bill_rule'] == noheader_rule
+    nototal = o72 and d['bill_rule'] == nototal_rule
     th = d['threshold']
     if not (isinstance(th, dict) and set(th) == {'content_cells_literal_or_cached', 'limit'} and th['limit'] == SCOPE_THRESHOLD
             and _count(th['content_cells_literal_or_cached']) and th['content_cells_literal_or_cached'] > SCOPE_THRESHOLD):
@@ -760,9 +777,14 @@ def scope_fact(inv, rep):
     for k in ('digest_sha256', 'full_inventory_sha256', 'decision_sha256'):
         if not isinstance(d[k], str) or not HEX64_RE.fullmatch(d[k]):
             return invalid('sha256 required', key=k)
-    for k in ('bill_sheet_index', 'bill_header_row', 'end_row'):
-        if not _count(d[k]) or d[k] < 1:
-            return invalid('positive integer required', key=k)
+    if noheader:        # v4.4: a whole-workbook fact fixes no bill sheet, header row or end row
+        for k in ('bill_sheet_index', 'bill_header_row', 'end_row'):
+            if d[k] is not None:
+                return invalid('null required under BILL1.NOHEADER.v1', key=k)
+    else:
+        for k in ('bill_sheet_index', 'bill_header_row', 'end_row'):
+            if not _count(d[k]) or d[k] < 1:
+                return invalid('positive integer required', key=k)
     sheets = d['sheets']
     if not isinstance(sheets, list) or not sheets:
         return invalid('sheets must be a nonempty list')
@@ -784,16 +806,31 @@ def scope_fact(inv, rep):
             if diff:
                 problems.append({'problem': 'sheet differs from the inventory', 'sheet': s['index'], 'keys': diff})
     for s in sheets:
-        if s['role'] not in (SCOPE_IN_ROLES if s['in_scope'] else SCOPE_OUT_ROLES):
+        allowed = SCOPE_OUT_ROLES if noheader else (SCOPE_IN_ROLES if s['in_scope'] else SCOPE_OUT_ROLES)     # v4.4: no bill role
+        if s['role'] not in allowed:
             problems.append({'problem': 'role not allowed for this in_scope flag', 'sheet': s['index'], 'role': s['role'],
-                             'allowed': list(SCOPE_IN_ROLES if s['in_scope'] else SCOPE_OUT_ROLES)})
+                             'allowed': list(allowed)})
     bills = [s for s in sheets if s['role'] == 'bill']
-    if len(bills) != 1 or bills[0]['index'] != d['bill_sheet_index'] or not bills[0]['in_scope']:
+    if noheader:        # v4.4 (R59 item 9): the whole workbook; only an empty sheet is out of scope
+        if bills:
+            problems.append({'problem': 'no sheet has role bill under BILL1.NOHEADER.v1', 'bill_roles': [s['index'] for s in bills]})
+        wrong = [s['index'] for s in sheets if s['in_scope'] != (s['rows'] * s['columns'] > 0)]
+        if wrong:
+            problems.append({'problem': 'under BILL1.NOHEADER.v1 a sheet is in scope exactly when it is not empty', 'sheets': wrong})
+        linked_ = [s['index'] for s in sheets if s['linked_analysis_blocks'] != 0]
+        if linked_:
+            problems.append({'problem': 'under BILL1.NOHEADER.v1 no sheet records linked analysis blocks', 'sheets': linked_})
+    elif len(bills) != 1 or bills[0]['index'] != d['bill_sheet_index'] or not bills[0]['in_scope']:
         problems.append({'problem': 'exactly one in-scope sheet has role bill and it is bill_sheet_index', 'bill_roles': [s['index'] for s in bills],
                          'bill_sheet_index': d['bill_sheet_index']})
     elif not d['bill_header_row'] < d['end_row'] <= bills[0]['rows']:
         problems.append({'problem': 'bill_header_row < end_row <= the bill sheet rows', 'bill_header_row': d['bill_header_row'],
                          'end_row': d['end_row'], 'rows': bills[0]['rows']})
+    elif nototal:       # v4.4 (R59 item 2): without a total row the scope runs to the bill sheet's last row with content
+        last = max((c['row'] for c in inv.cells.values() if c['sheet_index'] == d['bill_sheet_index'] and Inventory.has_content(c)), default=None)
+        if d['end_row'] != last:
+            problems.append({'problem': "under BILL1.NOTOTAL.v1 end_row is the bill sheet's last row with content", 'end_row': d['end_row'],
+                             'last_content_row': last})
     counts, out_cells = {}, {}
     out_index = {s['index'] for s in sheets if not s['in_scope']}
     for c in inv.cells.values():
@@ -1302,7 +1339,7 @@ def _check(inv, resp_raw, rep):
             locator(inv, refs + [x for x in extra if x not in refs], w + '.basis_location', rep)
     for cid in sorted(component_ids - set(linked)):
         rep.bad('COMPONENT_LINK_REQUIRED', cid)
-    if scope is not None:       # v4.3 (R59, check (b)): nothing is cited from a bill-sheet row below the declared end row
+    if scope is not None and scope['bill_sheet_index'] is not None:     # v4.3 (R59, check (b)); v4.4: not on a whole-workbook fact
         for ref in sorted(used, key=lambda x: (inv.cells[x]['sheet_index'],) + inv.rc(x)):
             c = inv.cells[ref]
             if c['sheet_index'] == scope['bill_sheet_index'] and c['row'] > scope['end_row']:

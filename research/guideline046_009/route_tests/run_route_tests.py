@@ -1,4 +1,4 @@
-"""Actual-route tests for candidates 046b-046g (route v4.3) with invented fixtures only.
+"""Actual-route tests for candidates 046b-046i (route v4.4) with invented fixtures only.
 
 Route: response -> tools/cps046b_route.py (check/convert) -> archived writer004
 validate_carrier_v4.mjs (byte-identical original, @oai/artifact-tool import stubbed)
@@ -19,6 +19,14 @@ scope: applied|not_applied. Without the fact, v4.3 is compared with
 the frozen v4.2 file (research/guideline046_006, sha256 pinned below) on every fixture and mutation: violations,
 warnings, exit codes, carriers and census ledgers must be identical apart from the version string and the scope field;
 the writer-port section of the two files must be byte-identical.
+Route v4.4 (candidate 046i, FIELD_ROLES R59 items 2 and 9, owner decision O72): the fact's bill_rule may also be
+BILL1.NOTOTAL.v1 (end_row = the bill sheet's last content row) or BILL1.NOHEADER.v1 (a whole-workbook packet: three
+nulls, no bill role, every sheet in scope exactly when rows x columns > 0, no linked blocks, check (b) not applied). The
+v4.3-vs-v4.2 comparisons above run unchanged with the current route. v4.4 is also compared with the frozen v4.3 file
+(research/guideline046_007, sha256 pinned below) on every fixture and mutation that v4.3 knows, with and without
+context:scope: violations, warnings, exit codes, carriers, census ledgers and receipts must be identical apart from the
+version string. The writer-port section and the CONTENT_ROLES line must equal v4.3's; the frozen v4.3 rejects every O72
+fact (R59_SCOPE_FACT_INVALID), so no older consumer misreads one.
 Writer-port parity fuzz against node writer004:
   - validate_carrier_port(strict=True) must equal writer004 on every carrier;
   - every divergence of the default (relaxed) port must be classified into a documented
@@ -51,7 +59,9 @@ JOB_CONFIG = HERE.parent / 'harness' / 'make_job_config.py'
 EXAMPLE_RESP = PKG / 'resources' / 'EXAMPLE_RESPONSE.json'
 ROUTE_V42 = HERE.parents[1] / 'guideline046_006' / 'package' / 'tools' / 'cps046b_route.py'      # frozen 046f route
 ROUTE_V42_SHA = '9db8033b8cb4fab6add87f60ba8b37e1994af6ff7f0559f305e892936df4811d'
-VERSION_V42, VERSION_V43 = 'cps046f-route.v4.2', 'cps046g-route.v4.3'
+VERSION_V42, VERSION_V43, VERSION_V44 = 'cps046f-route.v4.2', 'cps046g-route.v4.3', 'cps046i-route.v4.4'
+ROUTE_V43 = HERE.parents[1] / 'guideline046_007' / 'package' / 'tools' / 'cps046b_route.py'      # frozen 046g route (release 4c40004)
+ROUTE_V43_SHA = 'ba8414a063e475aa8a28d348e768361c287ba25739061282b787de55baf1441e'
 
 
 def _rows(c):
@@ -274,7 +284,7 @@ def main():
                     'v41_null_C_research_draft_no_reason': 'invalid', 'v41_null_C_research_draft_blank_reason': 'invalid',
                     'v41_null_C_research_draft_reason_with_refs': 'invalid', 'v41_null_C_status_partial': 'invalid',
                     'v41_Q_unverified_amount_not_unit_price': 'invalid', 'v41_Q_unverified_text_cell': 'field_must_be_null',
-                    'v41_Q_unverified_as_text': 'invalid'}.get(mu['name'], 'invalid' if mu['name'].startswith(('v42_', 'v43_')) else None)
+                    'v41_Q_unverified_as_text': 'invalid'}.get(mu['name'], 'invalid' if mu['name'].startswith(('v42_', 'v43_', 'v44_')) else None)
         ok = code == 1 and mu['expected_code'] in codes and (want_cat is None or cats.get(mu['expected_code']) == want_cat)
         c2, out2, _ = route('convert', '--inventory', str(minv), '--response', str(fx / mu['file']), '--out-dir', str(work / ('mut_' + mu['name'])))
         refused = c2 == 1 and not (work / ('mut_' + mu['name']) / 'carrier.json').exists() and (work / ('mut_' + mu['name']) / 'CENSUS_LEDGER.json').exists()
@@ -335,7 +345,7 @@ def main():
     jv = fx / 'valid_response_job_inputs.json'
     code, out, _ = route('check', '--inventory', str(jinv), '--response', str(jv))
     jrep = json.loads(out)
-    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == VERSION_V43
+    record('v4_job_inputs_check_pass_with_O13_warning', code == 0 and jrep['status'] == 'PASS' and jrep['route'] == route_mod.VERSION == VERSION_V44
            and [w['code'] for w in jrep['warnings']] == ['O13_SELECTION_EVIDENCE_M_N'] and jrep['warnings'][0]['detail']['count'] == 18,
            jrep['violations'][:5] or jrep['warnings'])
     record('v42_job_packet_policy_checks_applied', jrep.get('policy_checks') == 'applied', jrep.get('policy_checks'))
@@ -351,7 +361,7 @@ def main():
         return set(e) == {'selection_evidence', 'transformation'} and json.loads(e['selection_evidence'])['context'][0]['value'] == r['values'][COLS.index(k)]
     record('v4_M_N_L_selection_evidence_from_job_inputs', all(sel(r, k) for r in jall for k in 'LMN')
            and all(r['values'][12] == ctxv['context:customer_name'] and r['values'][13] == ctxv['context:project_name'] for r in jall)
-           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == VERSION_V43
+           and len(jcarrier['components']) == 2 and jcarrier['metadata']['adapter'] == VERSION_V44
            and all(r['values'][k] is None for r in jall for k in (10, 14, 15))
            and [r['id'] for r in jcarrier['items'] if r['group_id'] is not None] == ['R001'])
     record('v42_receipt_reports_policy_checks', jrec.get('policy_checks') == 'applied', jrec.get('policy_checks'))
@@ -387,7 +397,7 @@ def main():
         record(f'v4_port_rejects_selection_evidence_on_{col}', port_code(bad) == 'SELECTION_ONLY_ENGINEERING_ID')
 
     # ------------------------------------------------ route v4.1 relaxations (a) R57, (b) O16 Q, (c) R56 one-member group
-    record('v41_route_version_and_documented_port_relaxations', route_mod.VERSION == VERSION_V43
+    record('v41_route_version_and_documented_port_relaxations', route_mod.VERSION == VERSION_V44
            and set(route_mod.PORT_RELAXATIONS) == {'o13_m_n_selection_evidence', 'r57_null_c_research_draft', 'o16_q_unverified_adoption'}
            and route_mod.SELECTION_COLS == ('L', 'M', 'N') and route_mod.WRITER004_SELECTION_COLS == ('L',))
     v41 = {}
@@ -825,7 +835,7 @@ def main():
            and srep.get('policy_checks') == 'applied' and [w['code'] for w in srep['warnings']] == ['R59_LINKED_ANALYSIS_OUT_OF_SCOPE'], srep)
     code, out, _ = route('check', '--inventory', str(sinv), '--response', str(sresp))
     srep = json.loads(out)
-    record('v43_scoped_valid_check_pass', code == 0 and srep['status'] == 'PASS' and srep['route'] == VERSION_V43, srep['violations'][:5])
+    record('v43_scoped_valid_check_pass', code == 0 and srep['status'] == 'PASS' and srep['route'] == VERSION_V44, srep['violations'][:5])
     record('v43_scoped_check_reports_scope_applied', srep.get('scope') == 'applied' and srep.get('policy_checks') == 'applied', srep.get('scope'))
     record('v43_c_linked_analysis_warning_on_check', [w['code'] for w in srep['warnings']] == ['R59_LINKED_ANALYSIS_OUT_OF_SCOPE', 'O13_SELECTION_EVIDENCE_M_N',
            'R57_NULL_C_RESEARCH_DRAFT', 'O16_Q_UNVERIFIED_ADOPTION'] and srep['warnings'][0]['detail']['sheets'] == [{'sheet': 3, 'linked_analysis_blocks': 1}]
@@ -845,7 +855,7 @@ def main():
         (work / 'scoped_placeholder.json').write_text(json.dumps(placeholder_copy(sc), ensure_ascii=False), encoding='utf-8')
         c1, r1x = node_validate(wd, work / 'scoped_placeholder.json')
         ok = (srec.get('scope') == 'applied' and srec.get('policy_checks') == 'applied' and srec['export_mode_required'] == 'v2'
-              and c1 == 0 and route_mod.validate_carrier_port(sc) is True and sc['metadata']['adapter'] == VERSION_V43
+              and c1 == 0 and route_mod.validate_carrier_port(sc) is True and sc['metadata']['adapter'] == VERSION_V44
               and len(sc['source']['views']) == 1 and [x['id'] for x in sc['items']] == ['R001', 'R002', 'R003'] and sc['components'] == []
               and sum(n['kind'] == 'excluded_supply' for n in sc['nonitems']) == 13)
     record('v43_scoped_convert_receipt_scope_applied_and_writer004_placeholder_pass', ok)
@@ -889,9 +899,9 @@ def main():
         if 'scope' in d:
             if d.pop('scope') != scope_expected:
                 return None
-        return json.loads(json.dumps(d, ensure_ascii=False).replace(VERSION_V43, VERSION_V42))
+        return json.loads(json.dumps(d, ensure_ascii=False).replace(VERSION_V44, VERSION_V42))
     pairs = [(inv, valid), (jinv, fx / 'valid_response_job_inputs.json')] + [
-        (fx / mu.get('inventory', 'fixture_inventory.json'), fx / mu['file']) for mu in idx if not mu['name'].startswith('v43_')]
+        (fx / mu.get('inventory', 'fixture_inventory.json'), fx / mu['file']) for mu in idx if not mu['name'].startswith(('v43_', 'v44_'))]
     pairs += [(fx / i_, fx / r_) for i_, r_ in (('fixture_inventory_verified.json', 'valid_response_verified_Q.json'),
                                                 ('fixture_inventory.json', 'valid_response_r57_null_c.json'),
                                                 ('fixture_inventory.json', 'valid_response_q_unverified.json'),
@@ -927,11 +937,11 @@ def main():
             if name == 'CENSUS_LEDGER.json':
                 same = same and b42 == b43
             elif name == 'carrier.json':
-                same = same and b42 == b43.replace(VERSION_V43.encode(), VERSION_V42.encode())
+                same = same and b42 == b43.replace(VERSION_V44.encode(), VERSION_V42.encode())
             else:       # the receipt pins the carrier bytes, whose only difference is the version string
                 n43 = norm_out(b43.decode('utf-8'), 'not_applied')
                 if n43 is not None and 'carrier_sha256' in n43:
-                    n43['carrier_sha256'] = sha((o43 / 'carrier.json').read_bytes().replace(VERSION_V43.encode(), VERSION_V42.encode()))
+                    n43['carrier_sha256'] = sha((o43 / 'carrier.json').read_bytes().replace(VERSION_V44.encode(), VERSION_V42.encode()))
                 same = same and norm_out(b42.decode('utf-8'), None) == n43
         if not same:
             diff_conv.append(r_.name)
@@ -949,6 +959,142 @@ def main():
            and all(getattr(r42, n) == getattr(route_mod, n) for n in names)
            and all(getattr(r42, n).pattern == getattr(route_mod, n).pattern for n in regexes)
            and all(inspect.getsource(getattr(r42, n)) == inspect.getsource(getattr(route_mod, n)) for n in helpers))
+
+    # ------------------------------------------------ route v4.4 (candidate 046i, FIELD_ROLES R59 items 2 and 9, owner decision O72)
+    NOW = ['O13_SELECTION_EVIDENCE_M_N', 'R57_NULL_C_RESEARCH_DRAFT', 'O16_Q_UNVERIFIED_ADOPTION']
+    o72_valid = (('nototal', 'fixture_inventory_scoped_nototal.json', 'valid_response_scoped_nototal.json'),
+                 ('nototal_cites_last_content_row', 'fixture_inventory_scoped_nototal.json', 'valid_response_scoped_nototal_row10.json'),
+                 ('whole', 'fixture_inventory_whole.json', 'valid_response_whole.json'),
+                 ('whole_cites_other_sheet', 'fixture_inventory_whole.json', 'valid_response_whole_cites_sheet2.json'))
+    for tag in ('scoped_nototal', 'whole'):
+        code, out, _ = route('check-inventory', '--inventory', str(fx / f'fixture_inventory_{tag}.json'))
+        r_ = json.loads(out)
+        record(f'v44_{tag}_inventory_check_pass_scope_applied', code == 0 and r_['status'] == 'PASS' and r_['scope'] == 'applied'
+               and r_['policy_checks'] == 'applied' and r_['warnings'] == [] and r_['route'] == VERSION_V44, r_['violations'][:3])
+    for tag, i_, r_n in o72_valid:
+        code, out, _ = route('check', '--inventory', str(fx / i_), '--response', str(fx / r_n))
+        r_ = json.loads(out)
+        record(f'v44_{tag}_check_pass', code == 0 and r_['status'] == 'PASS' and r_['scope'] == 'applied' and [w['code'] for w in r_['warnings']] == NOW,
+               [r_['violations'][:3], r_['warnings']])
+    for tag, i_, r_n in o72_valid[::2]:
+        o = work / f'v44_{tag}_out'
+        code, out, _ = route('convert', '--inventory', str(fx / i_), '--response', str(fx / r_n), '--out-dir', str(o))
+        ok = code == 0
+        if ok:
+            c_ = json.loads((o / 'carrier.json').read_text(encoding='utf-8'))
+            rc_ = json.loads((o / 'ADAPTER_RECEIPT.json').read_text(encoding='utf-8'))
+            (work / f'v44_{tag}_placeholder.json').write_text(json.dumps(placeholder_copy(c_), ensure_ascii=False), encoding='utf-8')
+            c1, _ = node_validate(wd, work / f'v44_{tag}_placeholder.json')
+            try:
+                route_mod.validate_carrier_port(c_, strict=True)
+                strict_code = None
+            except route_mod.WriterReject as e:
+                strict_code = e.code
+            ok = (rc_.get('scope') == 'applied' and rc_['export_mode_required'] == 'v2' and c1 == 0 and route_mod.validate_carrier_port(c_) is True
+                  and strict_code in ('SELECTION_ONLY_ENGINEERING_ID', 'UNRESOLVED_ITEM_MUST_BE_HELD') and c_['metadata']['adapter'] == VERSION_V44
+                  and [x['id'] for x in c_['items']] == (['R001', 'R002', 'R003'] if tag == 'nototal' else ['R001', 'R002']))
+        record(f'v44_{tag}_convert_carried_writer004_placeholder_pass_strict_port_classified', ok)
+    v44_mut = [mu for mu in idx if mu['name'].startswith('v44_')]
+    record('v44_mutations_cover_each_check', {mu['expected_code'] for mu in v44_mut} == {'R59_SCOPE_FACT_INVALID', 'R59_SCOPE_FACT_MISMATCH', 'R59_SCOPE_FACT_CITED'}
+           and len(v44_mut) >= 15, len(v44_mut))
+    want_problem = {'v44_nototal_end_row_not_last_content_row': ["under BILL1.NOTOTAL.v1 end_row is the bill sheet's last row with content"],
+                    'v44_nototal_two_bills': ['role not allowed for this in_scope flag', 'exactly one in-scope sheet has role bill and it is bill_sheet_index'],
+                    'v44_whole_role_bill': ['role not allowed for this in_scope flag', 'no sheet has role bill under BILL1.NOHEADER.v1'],
+                    'v44_whole_nonempty_sheet_out_of_scope': ['under BILL1.NOHEADER.v1 a sheet is in scope exactly when it is not empty'],
+                    'v44_whole_empty_sheet_in_scope': ['under BILL1.NOHEADER.v1 a sheet is in scope exactly when it is not empty'],
+                    'v44_whole_linked_blocks': ['under BILL1.NOHEADER.v1 no sheet records linked analysis blocks'],
+                    'v44_whole_bill_index_not_null': ['null required under BILL1.NOHEADER.v1'],
+                    'v44_whole_header_row_not_null': ['null required under BILL1.NOHEADER.v1'],
+                    'v44_whole_end_row_not_null': ['null required under BILL1.NOHEADER.v1'],
+                    'v44_nototal_null_end_row': ['positive integer required']}
+    bad_p = {}
+    for mu in v44_mut:
+        if mu['expected_code'] == 'R59_SCOPE_FACT_CITED':
+            continue
+        code, out, _ = route('check-inventory', '--inventory', str(fx / mu['inventory']))
+        vs = [v for v in json.loads(out)['violations'] if v['code'] == mu['expected_code']]
+        got = [p_['problem'] for p_ in vs[0]['detail']['problems']] if vs and mu['expected_code'] == 'R59_SCOPE_FACT_MISMATCH' else \
+            [vs[0]['detail']['problem']] if vs else None
+        if code != 1 or (mu['name'] in want_problem and got != want_problem[mu['name']]):
+            bad_p[mu['name']] = got
+    record('v44_fact_defects_reject_check_inventory_with_the_stated_problem', not bad_p, bad_p)
+    # a stand-in agreement or an unknown bill rule gets v4.3's exact detail
+    v43_detail = {'problem': 'schema, rule, bill rule or agreement', 'expected': ['cps.scope-fact.v1', 'R59', 'BILL1.v1', 'tool_and_reader_agreed']}
+    det = {}
+    for n_ in ('v44_unknown_bill_rule', 'v44_whole_stand_in_agreement', 'v44_nototal_stand_in_agreement'):
+        mu = next(x for x in idx if x['name'] == n_)
+        v = json.loads(route('check-inventory', '--inventory', str(fx / mu['inventory']))[1])['violations'][0]
+        det[n_] = {k: v['detail'].get(k) for k in ('problem', 'expected')}
+    record('v44_stand_in_and_unknown_rule_keep_v43_detail', all(x == v43_detail for x in det.values()), det)
+    # the whole-workbook packet has no end row: check (b) is not applied, so no cell of any sheet is "below the end row"
+    code, out, _ = route('check', '--inventory', str(fx / 'fixture_inventory_whole.json'), '--response', str(fx / 'valid_response_whole_cites_sheet2.json'))
+    record('v44_whole_no_row_below_end_row_check', code == 0 and not any(v['code'] == 'R59_ROW_BELOW_END_ROW' for v in json.loads(out)['violations']))
+    # v4.4 = frozen v4.3 on every fixture and mutation v4.3 knows, with and without context:scope (apart from the version string)
+    v43_ok = sha(ROUTE_V43.read_bytes()) == ROUTE_V43_SHA
+    record('v44_frozen_v43_route_pinned', v43_ok, sha(ROUTE_V43.read_bytes()))
+    def norm43(text):
+        return json.loads(text.replace(VERSION_V44, VERSION_V43))
+    pairs43 = [(inv, valid), (jinv, fx / 'valid_response_job_inputs.json'), (sinv, sresp)] + [
+        (fx / i_, fx / r_) for i_, r_ in (('fixture_inventory_scoped_nolink.json', 'valid_response_scoped_nolink.json'),
+                                          ('fixture_inventory_scoped_end6.json', 'valid_response_scoped_end6.json'),
+                                          ('fixture_inventory_verified.json', 'valid_response_verified_Q.json'),
+                                          ('fixture_inventory.json', 'valid_response_r57_null_c.json'),
+                                          ('fixture_inventory.json', 'valid_response_q_unverified.json'),
+                                          ('fixture_inventory_partial.json', 'valid_response_q_partial.json'),
+                                          ('fixture_inventory_jobs.json', 'valid_response_relaxed_all.json'),
+                                          ('fixture_inventory.json', 'valid_response_one_member_group.json'))] + [
+        (fx / mu.get('inventory', 'fixture_inventory.json'), fx / mu['file']) for mu in idx if not mu['name'].startswith('v44_')] + [(EXAMPLE_INV, EXAMPLE_RESP)]
+    d43c, d43i = [], []
+    for i_, r_ in pairs43:
+        a43 = run([sys.executable, '-I', str(ROUTE_V43), 'check', '--inventory', str(i_), '--response', str(r_)])
+        a44 = route('check', '--inventory', str(i_), '--response', str(r_))
+        if a43[0] != a44[0] or json.loads(a43[1]) != norm43(a44[1]):
+            d43c.append(r_.name)
+    for i_ in sorted({i_ for i_, _ in pairs43}):
+        a43 = run([sys.executable, '-I', str(ROUTE_V43), 'check-inventory', '--inventory', str(i_)])
+        a44 = route('check-inventory', '--inventory', str(i_))
+        if a43[0] != a44[0] or json.loads(a43[1]) != norm43(a44[1]):
+            d43i.append(i_.name)
+    n_scoped = sum(1 for i_, _ in pairs43 if 'context:scope' in i_.read_text(encoding='utf-8'))
+    record('v44_check_identical_to_frozen_v43_on_every_v43_fixture_and_mutation', v43_ok and not d43c and len(pairs43) >= 150 and n_scoped >= 30,
+           {'pairs': len(pairs43), 'with_scope_fact': n_scoped, 'differ': d43c[:10]})
+    record('v44_check_inventory_identical_to_frozen_v43', v43_ok and not d43i, d43i[:10])
+    d43v = []
+    conv43 = [(inv, valid), (jinv, fx / 'valid_response_job_inputs.json'), (EXAMPLE_INV, EXAMPLE_RESP), (sinv, sresp),
+              (fx / 'fixture_inventory_scoped_end6.json', fx / 'valid_response_scoped_end6.json'), (inv, fx / 'mut_dropped_item.json'),
+              (fx / 'inv_v43_row_below_end_boundary.json', fx / 'mut_v43_row_below_end_boundary.json'), (sinv, fx / 'mut_v43_scope_cited_anchor.json')]
+    for k, (i_, r_) in enumerate(conv43):
+        o43, o44 = work / f'diff43v_{k}', work / f'diff44v_{k}'
+        c43 = run([sys.executable, '-I', str(ROUTE_V43), 'convert', '--inventory', str(i_), '--response', str(r_), '--out-dir', str(o43)])[0]
+        c44 = route('convert', '--inventory', str(i_), '--response', str(r_), '--out-dir', str(o44))[0]
+        f43, f44 = sorted(x.name for x in o43.iterdir()), sorted(x.name for x in o44.iterdir())
+        same = c43 == c44 and f43 == f44
+        for name in f43 if same else []:
+            b43, b44 = (o43 / name).read_bytes(), (o44 / name).read_bytes()
+            if name == 'CENSUS_LEDGER.json':
+                same = same and b43 == b44
+            elif name == 'carrier.json':
+                same = same and b43 == b44.replace(VERSION_V44.encode(), VERSION_V43.encode())
+            else:       # the receipt pins the carrier bytes, whose only difference is the version string
+                n44 = norm43(b44.decode('utf-8'))
+                if 'carrier_sha256' in n44:
+                    n44['carrier_sha256'] = sha((o44 / 'carrier.json').read_bytes().replace(VERSION_V44.encode(), VERSION_V43.encode()))
+                same = same and json.loads(b43) == n44
+        if not same:
+            d43v.append(f'{k}:{r_.name}')
+    record('v44_convert_carrier_ledger_receipt_identical_to_frozen_v43', v43_ok and not d43v, d43v)
+    # the frozen v4.3 rejects every O72 fact (D8: no older consumer misreads one)
+    rej = []
+    for i_n in ('fixture_inventory_scoped_nototal.json', 'fixture_inventory_whole.json'):
+        c43, out43, _ = run([sys.executable, '-I', str(ROUTE_V43), 'check-inventory', '--inventory', str(fx / i_n)])
+        if c43 != 1 or [v['code'] for v in json.loads(out43)['violations']] != ['R59_SCOPE_FACT_INVALID']:
+            rej.append(i_n)
+    record('v44_frozen_v43_rejects_o72_facts', v43_ok and not rej, rej)
+    # C7: the writer-port section and the CONTENT_ROLES line equal v4.3's (stage0_record parses CONTENT_ROLES by regex)
+    def content_roles_line(path):
+        return [x for x in path.read_text(encoding='utf-8').split('\n') if x.startswith('CONTENT_ROLES')]
+    record('v44_port_section_and_content_roles_line_equal_v43', v43_ok and port_section(ROUTE_V43) == port_section(ROUTE)
+           and content_roles_line(ROUTE_V43) == content_roles_line(ROUTE) == ["CONTENT_ROLES = ('demand_content', 'analysis_content')"])
 
     summary = {'route': route_mod.VERSION, 'tests': len(results), 'passed': sum(r['pass'] for r in results),
                'failed': [r for r in results if not r['pass']], 'fixtures_invented': True,

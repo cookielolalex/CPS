@@ -1,4 +1,4 @@
-"""Scope stage, step 3 (candidate 046g, FIELD_ROLES R59): agreement of the scope tool and the scope reader.
+"""Scope stage, step 3 (candidate 046i, FIELD_ROLES R59): agreement of the scope tool and the scope reader.
 
 Source-preparation role only. Reads the tool's SCOPE_PROPOSAL.json, the SCOPE_DIGEST.json it pinned and the scope
 reader's response (SCOPE_READER_PROMPT_TEMPLATE.md, schema cps.scope-reader-response.v1). Prints hashes, indexes and
@@ -19,8 +19,16 @@ A decision is admissible for a generation admission only when the reader is a fr
 (reader.kind fresh_context_scope_reader with a nonblank observed model); any other reader kind (for example an
 engineering stand-in) gives admissible false. The context:scope payload records the agreement as
 tool_and_reader_agreed only for an admissible decision, and as tool_and_stand_in_agreed otherwise (046g round 1,
-review item S13); route v4.3 accepts only the first (R59_SCOPE_FACT_INVALID), so a stand-in decision can never become
-a generation packet.
+review item S13); route v4.3 and v4.4 accept only the first (R59_SCOPE_FACT_INVALID), so a stand-in decision can never
+become a generation packet.
+
+046i (owner decision O72, FIELD_ROLES R59 items 2 and 9). The proposal's bill.rule must be one of the route's
+SCOPE_BILL_RULES: under BILL1.NOHEADER.v1 its bill sheet, header row and end row are null, under BILL1.v1 and
+BILL1.NOTOTAL.v1 they are positive integers; anything else is refused (PROPOSAL_BILL_RULE, exit 1; the scope tool never
+writes such a proposal). The comparisons are unchanged, so a whole-workbook proposal agrees only with a reader whose
+bill_sheet_index and end_row are null and whose in_scope flags equal the tool's (every non-empty sheet in scope). Under
+BILL1.NOHEADER.v1 the reader gives role bill to no sheet; under the other two rules the v3 check runs verbatim (role bill
+on exactly the sheet it names). The context:scope payload's bill_rule and bill_header_row are the proposal's.
 """
 import argparse, hashlib, importlib.util, json, sys
 from datetime import datetime, timezone
@@ -49,7 +57,7 @@ def sha(b):
 
 
 def load_route():
-    spec = importlib.util.spec_from_file_location('cps046g_route_for_scope_agree', ROUTE)
+    spec = importlib.util.spec_from_file_location('cps046i_route_for_scope_agree', ROUTE)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -99,6 +107,12 @@ def decide(proposal_raw, digest_raw, reader_raw, route):
     if proposal['status'] != 'PROPOSED':
         raise Refused('PROPOSAL_NOT_PROPOSED', {'status': proposal['status'],
                       'note': 'NOT_APPLIED: the packet is the full inventory, no scope stage; HOLD: the case goes to the owner'})
+    b = proposal.get('bill')
+    nohdr = isinstance(b, dict) and b.get('rule') == route.SCOPE_O72_RULES[1]
+    if not (isinstance(b, dict) and isinstance(b.get('rule'), str) and b['rule'] in route.SCOPE_BILL_RULES
+            and all((b.get(k) is None) if nohdr else posint(b.get(k)) for k in ('sheet_index', 'header_row', 'end_row'))):
+        raise Refused('PROPOSAL_BILL_RULE', {'expected': list(route.SCOPE_BILL_RULES),
+                      'note': 'bill sheet, header row and end row null under BILL1.NOHEADER.v1, positive integers otherwise'})
     digest_sha = sha(digest_raw)
     if proposal['digest'] is None or proposal['digest']['sha256'] != digest_sha:
         raise Refused('DIGEST_SHA256_MISMATCH')
@@ -119,7 +133,7 @@ def decide(proposal_raw, digest_raw, reader_raw, route):
     role_diffs = [{'sheet': s['index'], 'tool': t['role'], 'reader': s['role']} for s, t in zip(reader['sheets'], proposal['sheets'])
                   if s['role'] != t['role']]
     bill_role = [s['index'] for s in reader['sheets'] if s['role'] == 'bill']
-    if bill_role != [reader['bill_sheet_index']]:
+    if (bill_role != []) if nohdr else (bill_role != [reader['bill_sheet_index']]):     # 046i: no bill role on a whole workbook
         diffs.append({'what': 'reader_bill_role', 'reader_bill_roles': bill_role, 'reader_bill_sheet_index': reader['bill_sheet_index'],
                       'note': 'the reader must give role bill to exactly the sheet it names'})
     hashes = {'full_inventory_sha256': proposal['full_inventory_sha256'], 'proposal_sha256': sha(proposal_raw),
@@ -134,7 +148,7 @@ def decide(proposal_raw, digest_raw, reader_raw, route):
                                         'note': 'the scope tool and the scope reader disagree; no tie-break run; the owner decides (R59)'},
                                        **common, differences=diffs)
     admissible = reader['reader']['kind'] == READER_KIND and bool(reader['reader']['model'].strip())
-    fact = {'schema': route.SCOPE_FACT_SCHEMA, 'rule': route.SCOPE_RULE, 'bill_rule': route.SCOPE_BILL_RULE,
+    fact = {'schema': route.SCOPE_FACT_SCHEMA, 'rule': route.SCOPE_RULE, 'bill_rule': proposal['bill']['rule'],
             'threshold': {'content_cells_literal_or_cached': proposal['content_cells_literal_or_cached'], 'limit': route.SCOPE_THRESHOLD},
             'bill_sheet_index': proposal['bill']['sheet_index'], 'bill_header_row': proposal['bill']['header_row'],
             'end_row': proposal['bill']['end_row'],

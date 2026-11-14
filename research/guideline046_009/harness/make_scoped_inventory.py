@@ -1,4 +1,4 @@
-"""Scope stage, step 4 (candidate 046g, FIELD_ROLES R59): build or verify the scoped inventory.
+"""Scope stage, step 4 (candidate 046i, FIELD_ROLES R59): build or verify the scoped inventory.
 
 Source-preparation role only. The scoped inventory is a projection of the FULL inventory under a frozen
 SCOPE_DECISION.json (scope_agree.py). Prints hashes and counts only.
@@ -37,6 +37,11 @@ removed cells and views (exactly those of out-of-scope sheets), the existing con
 appended context:scope (equal to the decision's payload plus decision_sha256), the census invariant, both
 serializations, the full-inventory hash against the decision and, with --expect-scoped-sha256, the scoped hash against
 the pinned value. Exit 0 PASS, 2 FAIL.
+
+046i (owner decision O72, FIELD_ROLES R59 items 2 and 9): only the fact's basis text depends on the decision's bill rule
+(BILL1.v1, BILL1.NOTOTAL.v1 or BILL1.NOHEADER.v1). Under BILL1.NOHEADER.v1 every non-empty sheet is in scope, so the
+projection removes no cell or view, the view-id map is the identity and the scoped inventory equals the full inventory
+record by record except the appended context:scope.
 """
 import argparse, hashlib, importlib.util, json, shutil, sys
 from pathlib import Path
@@ -60,7 +65,7 @@ def sha(b):
 
 
 def load_route():
-    spec = importlib.util.spec_from_file_location('cps046g_route_for_scoped_inventory', ROUTE)
+    spec = importlib.util.spec_from_file_location('cps046i_route_for_scoped_inventory', ROUTE)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -93,14 +98,27 @@ def fact_record(decision, decision_sha, route):
     payload = dict(decision['scope_fact'], decision_sha256=decision_sha)
     payload = {k: payload[k] for k in route.SCOPE_FACT_KEYS}
     reader = ('a fresh-context scope reader decided from the scope digest alone' if payload['agreement'] == route.SCOPE_AGREEMENT else
-              'a reader that is not a fresh-context scope reader (an engineering stand-in: not admissible, and route v4.3 rejects '
+              'a reader that is not a fresh-context scope reader (an engineering stand-in: not admissible, and route v4.4 rejects '
               'this fact) decided from the scope digest alone')
-    basis = ('Scope decision for this scoped packet (FIELD_ROLES R59, candidate 046g). The source preparer computed BILL1 and the '
-             'R51 conditions on the full inventory (harness/scope_tool.py); ' + reader + '; the two agreed on the bill sheet, the '
-             'R49 end row and every in_scope flag (harness/scope_agree.py), and the '
-             'decision was frozen before generation. This inventory holds only the cells and views of the in-scope sheets. '
-             'Scoped-out sheets are not missing or unreadable sources and are no reason to hold; no field, proof, raw selection, '
-             'link or review reason may cite or reconstruct them. This fact is never field evidence.')
+    nototal_rule, noheader_rule = route.SCOPE_O72_RULES
+    if payload['bill_rule'] == noheader_rule:          # 046i (O72, R59 item 9): the whole workbook
+        basis = ('Scope decision for this packet (FIELD_ROLES R59 item 9, candidate 046i, owner decision O72). The source preparer '
+                 'found no row with five or six of the six BILL1 header labels on any sheet of the full inventory (harness/scope_tool.py); '
+                 + reader + '; the two agreed that no sheet has a bill header row, so the scope stage fixed no bill sheet and no end '
+                 'row, and that every sheet except an empty one (rows x columns = 0) is in scope (harness/scope_agree.py), and the '
+                 'decision was frozen before generation. This inventory holds the whole workbook; an empty sheet has no cell and stays '
+                 'out of scope. Read it as an unscoped packet: R49-R51 decide the bill sheet, the quoted range and the rows from the '
+                 'cells, and the sheet roles in this fact are labels, not R49 decisions. This fact is never field evidence.')
+    else:
+        agreed = ('the two agreed on the bill sheet, the R49 end row and every in_scope flag' if payload['bill_rule'] != nototal_rule else
+                  'the two agreed on the bill sheet, that no cell below its header row in its 單價 or 複價 (or 金額) column reads exactly '
+                  '合計 or 總計 (so end_row is its last row with content, not a total row, and R49 decides where the quoted range ends '
+                  'inside it; owner decision O72), and every in_scope flag')
+        basis = ('Scope decision for this scoped packet (FIELD_ROLES R59, candidate 046i). The source preparer computed BILL1 and the '
+                 'R51 conditions on the full inventory (harness/scope_tool.py); ' + reader + '; ' + agreed + ' (harness/scope_agree.py), and the '
+                 'decision was frozen before generation. This inventory holds only the cells and views of the in-scope sheets. '
+                 'Scoped-out sheets are not missing or unreadable sources and are no reason to hold; no field, proof, raw selection, '
+                 'link or review reason may cite or reconstruct them. This fact is never field evidence.')
     return {'ref': route.SCOPE_REF, 'namespace': FACT_NAMESPACE, 'value': dump(payload), 'basis': basis,
             'authority_pins': [{'label': 'frozen scope decision (SCOPE_DECISION.json)', 'sha256': decision_sha},
                                {'label': 'full source inventory (all sheets in scope)', 'sha256': payload['full_inventory_sha256']},

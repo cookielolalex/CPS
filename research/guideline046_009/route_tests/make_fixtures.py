@@ -27,6 +27,11 @@ warning), end row 6 (the boundary: row 6 is cited and passes) and one v43 mutati
 R59_SCOPE_FACT_CITED mutations (context:scope cited in a proof, raw selection, anchor or group) and two controls on the
 job packet without the fact (noscope_*), which keep their v4.2 codes. The scope-stage tests
 (run_scope_stage_tests.py) import SCOPED_BILL, scoped_job_facts and scoped_response from this module.
+Route v4.4 (candidate 046i, owner decision O72; FIELD_ROLES R59 items 2 and 9) adds, after every earlier fixture (whose
+bytes are unchanged): fixture_inventory_scoped_nototal.json (the scoped fixture's bill sheet without its 合計 cell, fact
+BILL1.NOTOTAL.v1 with end row 10, the last content row; SYNTHETIC_ALLOCATION_CASES A50) and fixture_inventory_whole.json
+(a whole-workbook packet, fact BILL1.NOHEADER.v1: a priced list with four of the six BILL1 labels, a memo sheet and an
+empty sheet out of scope; A51), their valid responses, two citing variants and one v44 mutation per new check.
 """
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -845,6 +850,231 @@ def scoped_fixtures(enc, index):
     inv_mut('v43_out_of_scope_cell_present', mm, cell_swap=True)
 
 
+# ---------------------------------------------------------------- route v4.4 (046i, owner decision O72): no total row; whole workbook
+NOTOTAL_BILL = {k: v for k, v in SCOPED_BILL.items() if k != (7, 'E')}      # SCOPED_BILL without its 合計 cell (scope-stage NT1)
+NOTOTAL_REASON = ('bill: the only sheet with a BILL1 header row and no 合計 or 總計 below it in a price column; the scope runs to its '
+                  'last content row and R49 ends the quoted range inside it (R59 item 2, O72)')
+WHOLE_REASON = ('whole workbook: no sheet has a BILL1 header row (five or six of its labels), so every sheet except an empty one is in '
+                'scope and the packet is read as an unscoped packet; the role is a label, not an R49 decision (R59 item 9, O72)')
+EMPTY_REASON = 'other: an empty sheet (rows x columns = 0, no cell), which the builders write out of scope; never yields rows (R49)'
+WL = '示例價目表'
+WHOLE_LIST = {      # SYNTHETIC_ALLOCATION_CASES A51: four of the six BILL1 labels (序號 and 品名規格 are not BILL1 words)
+    (1, 'A'): (T, '示例淨水場控制盤更新 價目表', False),
+    **{(2, c): (T, v, False) for c, v in zip('ABCDEF', ['序號', '品名規格', '單位', '數量', '單價', '金額'])},
+    (3, 'A'): (T, '1', False), (3, 'B'): (T, '產品，電磁接觸器，AC220V', False), (3, 'C'): (T, '只', False),
+    (3, 'D'): (N, 2.0, False), (3, 'E'): (N, 1500.0, False), (3, 'F'): (N, 3000.0, True),
+    (4, 'A'): (T, '2', False), (4, 'B'): (T, '示例配線材料', False), (4, 'C'): (T, '式', False),
+    (4, 'D'): (N, 1.0, False), (4, 'E'): (N, 800.0, False), (4, 'F'): (N, 800.0, True),
+    (5, 'E'): (T, '合計', False), (5, 'F'): (N, 3800.0, True),
+    (6, 'A'): (T, '報價人：示例機電股份有限公司', False),
+}
+WHOLE_MEMO = {(1, 'A'): (T, '示例說明', False), (2, 'A'): (T, '示例內容第二行', False)}
+NOTOTAL_SPECS = [(1, '示例總表', 'summary', None, 12, 4, [], 20, 'summary: never yields rows (R49)'),
+                 (2, SB, 'bill', NOTOTAL_BILL, 10, 7, SCOPED_BILL_MERGES, None, NOTOTAL_REASON),
+                 (3, '示例單價分析', 'analysis', None, 400, 7, [], 2500, SCOPED_ANALYSIS_OUT),
+                 (4, '示例資源統計', 'resource_statistics', None, 120, 10, [], 600,
+                  'resource statistics: source check only, never yields rows (guideline section 3)')]
+WHOLE_SPECS = [(1, WL, 'other', WHOLE_LIST, 6, 6, ['A1:F1'], None, WHOLE_REASON),
+               (2, '示例說明', 'other', WHOLE_MEMO, 2, 1, [], None, WHOLE_REASON),
+               (3, '示例空白', 'other', {}, 0, 0, [], None, EMPTY_REASON)]
+
+
+def _content(data):
+    return sum(1 for v in data.values() if v[1] is not None and v[1] != '')
+
+
+def o72_payload(specs, flags, rule, bill, header, end, **over):
+    h = lambda t: hashlib.sha256(t.encode('utf-8')).hexdigest()
+    sheets = [{'index': i, 'name': n, 'role': role, 'visibility': 'visible', 'rows': r, 'columns': c,
+               'content_cells': _content(data) if data is not None else cc, 'in_scope': flags[i], 'reason': reason, 'linked_analysis_blocks': 0}
+              for i, n, role, data, r, c, _, cc, reason in specs]
+    d = {'schema': 'cps.scope-fact.v1', 'rule': 'R59', 'bill_rule': rule,
+         'threshold': {'content_cells_literal_or_cached': 3001, 'limit': 2500},
+         'bill_sheet_index': bill, 'bill_header_row': header, 'end_row': end, 'sheets': sheets,
+         'digest_sha256': h('invented scope digest'), 'full_inventory_sha256': h('invented full inventory'),
+         'decision_sha256': h('invented scope decision'), 'agreement': 'tool_and_reader_agreed'}
+    d.update(over)
+    return d
+
+
+def o72_inventory(specs, flags, payload, fact_value=None):
+    """An invented packet with the given sheets; cells and one view for every in-scope sheet with rows x columns > 0."""
+    vws = []
+    for i, n, _, data, r, c, _, _, _ in specs:
+        if flags[i] and r * c:
+            vws.append({'id': len(vws) + 1, 'sheet': n, 'range': f'A1:{letters(c)}{r}'})
+    cells = []
+    for i, n, _, data, r, c, mg, _, _ in specs:
+        if flags[i] and r * c:
+            cells += sheet_cells(i, n, data, r, c, mg, vws)
+    fake_sha = hashlib.sha256(b'invented O72 fixture workbook bytes').hexdigest()
+    sheets = [{'index': i, 'name': n, 'visibility': 'visible', 'rows': r, 'columns': c, 'merges': mg if flags[i] else [],
+               'formula_records': sum(1 for v in (data or {}).values() if v[2]) if flags[i] else 0, 'in_scope': flags[i]}
+              for i, n, _, data, r, c, mg, _, _ in specs]
+    value = fact_value if fact_value is not None else json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+    scope_fact = {'ref': 'context:scope', 'namespace': 'cps.source_prep.scope', 'value': value,
+                  'basis': 'Invented scope decision for route testing (FIELD_ROLES R59, O72); not a real scope stage.',
+                  'authority_pins': [{'label': 'invented scope decision', 'sha256': fake_sha}]}
+    inv = {'schema': 'cps.source-inventory.cells.v2', 'case_id': SCOPED_CASE, 'family_id': SCOPED_CASE,
+           'representation_profile': 'cached-cell-raw-scalar-text.v2',
+           'source': {'source_id': 'S', 'format': 'cached_xlsx', 'bytes': 2048, 'sha256': fake_sha, 'adoption_status': 'unverified',
+                      'adoption_basis': 'Invented O72 fixture; no real material list.',
+                      'reader': {'name': 'invented', 'version': '0', 'biff_format': None, 'formula_expressions_available': False},
+                      'carrier_source': {'kind': 'cached_xlsx', 'path': 'X:\\Fixtures\\invented\\fixture-material-list.xlsx',
+                                         'sha256': fake_sha, 'views': vws}},
+           'sheets': sheets,
+           'views': [dict(v, image={'file': f"view_{v['id']:02d}.png", 'bytes': 1, 'sha256': fake_sha}) for v in vws],
+           'external_links': [], 'cells': cells,
+           'context_facts': scoped_job_facts(SCOPED_CASE) + [scope_fact],
+           'limitations': ['Invented O72 fixture inventory for route v4.4 tests only (FIELD_ROLES R59 items 2 and 9).']}
+    return inv, serialize(inv).encode('utf-8')
+
+
+NOTOTAL_FLAGS = {1: False, 2: True, 3: False, 4: False}
+WHOLE_FLAGS = {1: True, 2: True, 3: False}
+
+
+def nototal_payload(**over):
+    return o72_payload(NOTOTAL_SPECS, NOTOTAL_FLAGS, 'BILL1.NOTOTAL.v1', 2, 2, 10, **over)
+
+
+def whole_payload(flags=None, **over):
+    return o72_payload(WHOLE_SPECS, flags or WHOLE_FLAGS, 'BILL1.NOHEADER.v1', None, None, None, **over)
+
+
+def nototal_response(inv_sha):
+    """Valid response on the no-total packet (A50): rows 3, 4 and 6; R49 ends the range at row 6, the last item line before the
+    signature line; the cells after it take their roles as on an unscoped packet (R59 item 2)."""
+    r = scoped_response(inv_sha)
+    S = 'cell:S2!'
+    roles = [x for x in r['source_roles'] if x['role'] not in ('financial_summary', 'excluded_supply') or x['reason'].startswith('no enclosure')]
+    roles += [{'role': 'financial_summary', 'refs': [S + 'F7'], 'reason': 'unlabelled total after the last item line (R11)'},
+              {'role': 'financial_summary', 'refs': [S + 'A8', S + 'F8'], 'reason': 'negotiated total after the quoted range (R11)'},
+              {'role': 'footer', 'refs': [S + 'A9'], 'reason': 'signature line'},
+              {'role': 'excluded_supply', 'refs': [S + x for x in ('A10', 'B10', 'C10', 'D10', 'E10', 'F10')],
+               'reason': 'outside the quoted range (R49): an item line after the signature line'}]
+    r['source_roles'] = roles
+    r['limitations'] = ['Invented no-total scoped fixture response (FIELD_ROLES R59 item 2, owner decision O72).']
+    return r
+
+
+def whole_response(inv_sha):
+    """Valid response on the whole-workbook packet (A51): the generator found the priced list itself (R49); rows 3 and 4."""
+    S, M_ = 'cell:S1!', 'cell:S2!'
+    r = scoped_response(inv_sha)
+    a, c = copy.deepcopy(r['items'][0]), copy.deepcopy(r['items'][2])
+    def resheet(x):
+        return json.loads(json.dumps(x, ensure_ascii=False).replace('cell:S2!', S))
+    a = resheet(a)
+    c = resheet(c)
+    c['id'] = 'R002'
+    c['values'][3], c['values'][4], c['values'][5], c['values'][16] = '示例配線材料', '式', 1, 800
+    c['proofs'].update(C=nul('Material line with no glossary device: C is null (R52).'),
+                       D=nn([S + 'B4'], 'copied description', 'material line: D is the description (R52)'),
+                       E=nn([S + 'C4'], 'copied', 'unit cell'), F=nn([S + 'D4'], 'copied', 'quantity cell'),
+                       I=nul('No model stated in the line\'s own cells (R55, O17).'), J=nul('No brand stated in the line\'s own cells (R55, O17).'),
+                       Q=nn([S + 'E4'], 'copied unit price', 'priced line: Q is its unit price (R54)'))
+    c['raw_refs'] = raw(desc=[S + 'B4'], unit=[S + 'C4'], qty=[S + 'D4'], price=[S + 'E4'], amount=[S + 'F4'], reasons={'remarks': 'remarks cell is empty'})
+    c['anchor_refs'] = [S + 'A4']
+    r['items'] = [a, c]
+    r['source_roles'] = [
+        {'role': 'header', 'refs': [S + 'A1'] + [S + x + '2' for x in 'ABCDEF'], 'reason': 'title and column headers'},
+        {'role': 'item_identifier', 'refs': [S + 'A3', S + 'A4'], 'reason': 'item numbers'},
+        {'role': 'demand_content', 'refs': [S + x + y for y in '34' for x in 'BCDEF'], 'reason': 'item description, unit, quantity, price and amount cells'},
+        {'role': 'financial_summary', 'refs': [S + 'E5', S + 'F5'], 'reason': 'end row of the quoted range (R49)'},
+        {'role': 'footer', 'refs': [S + 'A6'], 'reason': 'signature line'},
+        {'role': 'header', 'refs': [M_ + 'A1'], 'reason': 'memo title'},
+        {'role': 'commercial_note', 'refs': [M_ + 'A2'], 'reason': 'memo text'}]
+    r['limitations'] = ['Invented whole-workbook fixture response (FIELD_ROLES R59 item 9, owner decision O72).']
+    return r
+
+
+def o72_fixtures(enc, index):
+    """Route v4.4 (owner decision O72): no-total and whole-workbook fixture packets, valid responses and one mutation per new check."""
+    _, nraw = o72_inventory(NOTOTAL_SPECS, NOTOTAL_FLAGS, nototal_payload())
+    (OUT / 'fixture_inventory_scoped_nototal.json').write_bytes(nraw)
+    nbase = nototal_response(hashlib.sha256(nraw).hexdigest())
+    (OUT / 'valid_response_scoped_nototal.json').write_bytes(enc(nbase))
+    # citing the last content row passes: under BILL1.NOTOTAL.v1 end_row is the last content row (route check (b))
+    r10 = copy.deepcopy(nbase)
+    S = 'cell:S2!'
+    cells10 = [S + x for x in ('A10', 'B10', 'C10', 'D10', 'E10', 'F10')]
+    r10['source_roles'] = [x for x in r10['source_roles'] if not set(x['refs']) & set(cells10)]
+    r10['source_roles'] += [{'role': 'item_identifier', 'refs': [S + 'A10'], 'reason': 'item number'},
+                            {'role': 'demand_content', 'refs': cells10[1:], 'reason': 'item cells (route test only)'}]
+    x = copy.deepcopy(r10['items'][0])
+    x['id'] = 'R004'
+    x['values'][2], x['values'][3], x['values'][5], x['values'][16] = None, '產品，無熔絲開關，3P，50AT', 1, 900
+    x['proofs'].update(C=nul('no glossary device'), D=nn([S + 'B10'], 'copied', 'description'), E=nn([S + 'C10'], 'copied', 'unit cell'),
+                       F=nn([S + 'D10'], 'copied', 'quantity cell'), Q=nn([S + 'E10'], 'copied', 'unit price'))
+    x['raw_refs'] = raw(desc=[S + 'B10'], unit=[S + 'C10'], qty=[S + 'D10'], price=[S + 'E10'], amount=[S + 'F10'], reasons={'remarks': 'empty'})
+    x['anchor_refs'] = [S + 'A10']
+    r10['items'].append(x)
+    (OUT / 'valid_response_scoped_nototal_row10.json').write_bytes(enc(r10))
+    _, wraw = o72_inventory(WHOLE_SPECS, WHOLE_FLAGS, whole_payload())
+    (OUT / 'fixture_inventory_whole.json').write_bytes(wraw)
+    wbase = whole_response(hashlib.sha256(wraw).hexdigest())
+    (OUT / 'valid_response_whole.json').write_bytes(enc(wbase))
+    # a response citing a cell of the other in-scope sheet passes on the whole-workbook packet (an item on sheet 2, route test only)
+    w2 = copy.deepcopy(wbase)
+    y = copy.deepcopy(w2['items'][1])
+    M2 = 'cell:S2!A2'
+    y['id'] = 'R003'
+    y['values'][3], y['values'][4], y['values'][5], y['values'][16] = '示例內容第二行', None, None, None
+    y['proofs'].update(D=nn([M2], 'copied description', 'route test only'), E=nul('no unit cell'), F=nul('no quantity cell'),
+                       Q=nul('no price on this line'))
+    y['raw_refs'] = raw(desc=[M2], reasons={'unit': 'no unit cell', 'quantity': 'no quantity cell', 'unit_price': 'no price cell',
+                                            'amount': 'no amount cell', 'remarks': 'no remarks cell'})
+    y['anchor_refs'] = [M2]
+    w2['items'].append(y)
+    w2['source_roles'] = [x for x in w2['source_roles'] if x['refs'] != [M2]]
+    w2['source_roles'].append({'role': 'demand_content', 'refs': [M2], 'reason': 'memo line cited by R003 (route test only)'})
+    (OUT / 'valid_response_whole_cites_sheet2.json').write_bytes(enc(w2))
+
+    def inv_mut(name, code, specs, flags, payload, base_fn, fact_value=None):
+        _, vraw = o72_inventory(specs, flags, payload, fact_value)
+        (OUT / f'inv_{name}.json').write_bytes(vraw)
+        (OUT / f'mut_{name}.json').write_bytes(enc(base_fn(hashlib.sha256(vraw).hexdigest())))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': code, 'inventory': f'inv_{name}.json'})
+    def nsheet(i, **o):
+        d = nototal_payload()
+        d['sheets'][i].update(o)
+        return d
+    def wsheet(i, flags=None, **o):
+        d = whole_payload(flags)
+        d['sheets'][i].update(o)
+        return d
+    bad, mm = 'R59_SCOPE_FACT_INVALID', 'R59_SCOPE_FACT_MISMATCH'
+    NS, NF, WS, WF = NOTOTAL_SPECS, NOTOTAL_FLAGS, WHOLE_SPECS, WHOLE_FLAGS
+    inv_mut('v44_nototal_end_row_not_last_content_row', mm, NS, NF, nototal_payload(end_row=9), nototal_response)
+    inv_mut('v44_nototal_two_bills', mm, NS, NF, nsheet(2, role='bill'), nototal_response)
+    inv_mut('v44_nototal_stand_in_agreement', bad, NS, NF, nototal_payload(agreement='tool_and_stand_in_agreed'), nototal_response)
+    inv_mut('v44_nototal_null_end_row', bad, NS, NF, nototal_payload(end_row=None), nototal_response)
+    inv_mut('v44_whole_bill_index_not_null', bad, WS, WF, whole_payload(bill_sheet_index=1), whole_response)
+    inv_mut('v44_whole_header_row_not_null', bad, WS, WF, whole_payload(bill_header_row=2), whole_response)
+    inv_mut('v44_whole_end_row_not_null', bad, WS, WF, whole_payload(end_row=5), whole_response)
+    inv_mut('v44_whole_role_bill', mm, WS, WF, wsheet(0, role='bill'), whole_response)
+    inv_mut('v44_whole_nonempty_sheet_out_of_scope', mm, WS, {1: True, 2: False, 3: False},
+            whole_payload({1: True, 2: False, 3: False}), whole_response)
+    inv_mut('v44_whole_empty_sheet_in_scope', mm, WS, {1: True, 2: True, 3: True}, whole_payload({1: True, 2: True, 3: True}), whole_response)
+    inv_mut('v44_whole_linked_blocks', mm, WS, WF, wsheet(0, linked_analysis_blocks=1), whole_response)
+    inv_mut('v44_unknown_bill_rule', bad, WS, WF, whole_payload(bill_rule='BILL1.NOHEADER.v2'), whole_response)
+    inv_mut('v44_whole_stand_in_agreement', bad, WS, WF, whole_payload(agreement='tool_and_stand_in_agreed'), whole_response)
+    def wcite(name, f):
+        r = copy.deepcopy(wbase)
+        f(r)
+        (OUT / f'mut_{name}.json').write_bytes(enc(r))
+        index.append({'name': name, 'file': f'mut_{name}.json', 'expected_code': 'R59_SCOPE_FACT_CITED', 'inventory': 'fixture_inventory_whole.json'})
+    wcite('v44_whole_scope_cited_proof', lambda r: r['items'][0]['proofs']['D'].update(refs=['cell:S1!B3', 'context:scope']))
+    def ncite(r):
+        r['items'][0]['proofs']['D'].update(refs=['cell:S2!B3', 'context:scope'])
+    r = copy.deepcopy(nbase)
+    ncite(r)
+    (OUT / 'mut_v44_nototal_scope_cited_proof.json').write_bytes(enc(r))
+    index.append({'name': 'v44_nototal_scope_cited_proof', 'file': 'mut_v44_nototal_scope_cited_proof.json', 'expected_code': 'R59_SCOPE_FACT_CITED',
+                  'inventory': 'fixture_inventory_scoped_nototal.json'})
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     inv, inv_raw = build_inventory('unverified')
@@ -989,6 +1219,7 @@ def main():
     var('too_many_nonitems', 'WRITER_WOULD_REJECT_NONITEMS_REQUIRED', {'extra_sheet': True}, big_roles)
     var('long_header_census', 'WRITER_WOULD_REJECT_STRING_REQUIRED', {'overrides': {(1, 'A'): (T, '題' * 29990, False)}}, lambda r: None)
     scoped_fixtures(enc, index)          # route v4.3 (R59)
+    o72_fixtures(enc, index)             # route v4.4 (046i, owner decision O72)
     (OUT / 'MUTATIONS.json').write_text(json.dumps({'expected_canonical': EXPECT_CANON, 'mutations': index}, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps({'mutations': len(index)}))
 
