@@ -113,6 +113,21 @@ Two independent reviews of the build as committed at `7566eb9` (a semantic revie
 - The `BILL1.v1` identity is proven at tool level. The reader-template changes reach `BILL1.v1` readers too (D12, F4); only the RQ7 probe tests them with real readers.
 - Inherited case ids (F6): the harness README's validation table and R59's design-decision paragraph keep 046g's published study case ids; no new case id was added.
 
+### Fix-round proof (2026-11-14; invented data only; work folders outside the repository)
+
+| Run | Result | Notes |
+|---|---|---|
+| Route suite `route_tests/run_route_tests.py` (writer004 parity, node 22) | 317/317 | The route is unchanged (`cd0b7cfd…`); the text changes of the fix round do not reach it. |
+| Scope-stage suite `route_tests/run_scope_stage_tests.py` | 95/95 | The 92 earlier checks unchanged (`o72_nototal_basis` passes on the reworded basis); 3 new for finding F2 (the priced tail without an analysis sheet: no tool hold; the digest shows the priced line; a reader with a null end row holds the case). |
+| Empty-sheet suite `route_tests/run_empty_sheet_tests.py` | 106/106 | Unchanged. |
+| O72 suite `route_tests/run_o72_tests.py` | 102/102 | The 86 earlier checks unchanged; 8 new in each format: NT7 (F2), NTB (S6, block total) and V1J (S6, column J). |
+| Identity comparison (build script outside the repository, each tree named by argument) | 0 differences | 152 invented inputs: the build's 150 plus V1J in `.xlsx` and `.xls`. None has a new pattern; C's proposals are 73 `PROPOSED`, 23 `NOT_APPLIED` and 56 `HOLD`, all under `BILL1.v1`. B3 (the reviewed empty-sheet tree) against C: 7,251 common files, 3,987 byte-identical, 3,264 equal under S1–S7, 0 different, none missing. B2 (046g) against C: 3,487 files, 2,109 byte-identical, 1,378 equal under S1–S7, 0 different. Negative control (a changed end row and a changed header label in one copied output tree): 0 differing files before, 32 after. |
+| Runner suite `deploy/run/test_cps_job.py`, run (i) | 249/249 (357.1 s) | The admitted test file unmodified (sha256 `c8fcd491…`), in a local clone of the fix-round tree (never pushed); it exercises the restored 046g. |
+| Runner suite, run (ii) | 249/249 (352.0 s) | The derived test file (sha256 `999a6b1d9e142b7179fe1e8f5f2154825305e00ad10c5d2a82c300856bc397b8`; the 7-line diff above), committed in a second local clone. |
+| Runner-level check of the O72 cases (scratch driver outside the repository) | 64/64 | The build's 48 checks plus NT7 and NTB in `.xlsx` and `.xls`: real runner v4 `prepare` ends `NEXT: SCOPE_READER` under `BILL1.NOTOTAL.v1`; an agreeing invented reader ends `scope-finish` with `NEXT: GENERATE` (on NT7 this is the F2 risk that only the reader catches); NT7's reader with a null end row and NTB's disagreeing reader end with `NEXT: OWNER_DECISION`. |
+
+The RQ7 probe jobs (NT1S, NT2, NH2, V1S, NT7, V1J, `.xlsx`) were staged by the real runner `prepare` to `NEXT: SCOPE_READER` with the fix-round template; no reader or generator was launched. `finish` was not run on an O72 packet, and the toolkit suites were not run (they need the re-pinned toolkit).
+
 ## Pre-registered expectations for the structure-only re-run (design §5.6)
 
 Written before the run. The re-run uses the frozen 046i harness. Its record is read only if the `scope_tool.py` sha256 it records equals the value frozen at C5 (design finding C3).
