@@ -10,7 +10,7 @@
     "path": "tools/cps046b_route.py",
     "version": "cps046i-route.v4.4"
   },
-  "utf8_bytes": 520353,
+  "utf8_bytes": 520371,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
@@ -51,8 +51,8 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 22878,
-      "sha256": "9fab1a2ac14ee610c45736cc14df812a322871e595df70bd0ea7f751dc0315ec"
+      "bytes": 22896,
+      "sha256": "4ca8a194904c0e6f0cce1512059c5548d4bc22c4a77524abddb7be7e5c9c3383"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
