@@ -162,3 +162,15 @@ Each Google Drive connector call from the maintainer's session carries at most a
 - **O71, "Small records".**
   - After the qualification runs, the small records of each run go to the maintainer-only Drive folder, compressed into parts under 3 MB: the response, the carrier, the delivered workbook, the run and generation records, and `FROZEN.json`. The hash anchors go there too.
   - Page images and full transcripts stay on the container only.
+
+## Two system limits found before qualification (O72, 2026-11-14)
+
+The rehearsal and a deterministic prepare dry run on the 36 qualification inputs found two limits. Both stopped jobs before any AI context opened.
+- **Empty sheets (a harness bug).** The inventory builders mark empty sheets out of scope, and the 046g scope tool refused any inventory that was partly out of scope. A workbook with an empty sheet therefore stopped at prepare. This affected 4 of the 36 sources. The fix is in the harness, with tests and an independent review (ADMIT_WITH_FIXES).
+- **Scope holds (a limit of the scope method).** 5 of the 36 large material lists end in a scope-tool HOLD. Four of them are pool cases. Four have a unique bill-sheet header row but no total row, and one has no recognisable header row. Under the frozen rules a HOLD goes to the owner and is scored as an empty carrier, so qualification would certainly fail.
+- **O72, "Generic rule fix".**
+  - A unique bill-sheet header with no total row scopes to that sheet, down to its last content row. The scope reader must still agree.
+  - A workbook with no header row at all goes to the generator unscoped.
+  - The change is made as a new candidate version, with an independent review, a re-freeze, route and scope tests, and a re-run rehearsal.
+  - The same rule applies in everyday use.
+  - No historical answer was opened, the change follows input structure only, and the pool is unchanged.
