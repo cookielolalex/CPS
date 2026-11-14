@@ -10,14 +10,14 @@
     "path": "tools/cps046b_route.py",
     "version": "cps046i-route.v4.4"
   },
-  "utf8_bytes": 520371,
+  "utf8_bytes": 521181,
   "manifest_self_excluded": true,
   "deployment_approved": false,
   "files": [
     {
       "path": "CPS_GUIDELINE.md",
-      "bytes": 29498,
-      "sha256": "fc43fa5c149c34842205402f43c481107973bd96266e8f865c1a9edf49523072"
+      "bytes": 29559,
+      "sha256": "8eda92ba84a52b608e8462be4c4bb29575436564eb0c1655a6e2c51f2ce7a2eb"
     },
     {
       "path": "resources/COLUMNS.json",
@@ -36,8 +36,8 @@
     },
     {
       "path": "resources/FIELD_ROLES.md",
-      "bytes": 84278,
-      "sha256": "da98ce37169c5730e699e4163441e5371c6a9a78f914e99c4a3f8992c81c2c98"
+      "bytes": 84964,
+      "sha256": "84906686e75fe187e727851d9854a2194a6896db96cc88170568a1c4390c9122"
     },
     {
       "path": "resources/NAME_POLICY.json",
@@ -51,8 +51,8 @@
     },
     {
       "path": "resources/OUTPUT_CONTRACT.md",
-      "bytes": 22896,
-      "sha256": "4ca8a194904c0e6f0cce1512059c5548d4bc22c4a77524abddb7be7e5c9c3383"
+      "bytes": 22959,
+      "sha256": "3d5b991e9a642765068b4cb268bfafe6e4daba4602e37ea678047e8113284cd4"
     },
     {
       "path": "resources/REVIEW_CHECKLIST.md",
